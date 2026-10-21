@@ -21,7 +21,8 @@ export async function exportPDF(scene, options = {}) {
 
   const { jsPDF } = await import('jspdf');
   const pdf = new jsPDF({ orientation, unit: 'in', format: [size.w, size.h] });
-  const canvas = await renderSceneToCanvas(scene, options);
+  // A PDF page is always opaque: a transparent PNG setting does not reach it (JPEG has no alpha).
+  const canvas = await renderSceneToCanvas(scene, { ...options, background: 'white' });
   const imgData = canvas.toDataURL('image/jpeg', 0.93);
 
   // Letterbox: fit the map image within the PDF page preserving its aspect ratio

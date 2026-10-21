@@ -12,7 +12,7 @@ import { buildLegendItems, resolveTemplateZones } from '../templates/technicalRe
 import { resolveNI43101Zones } from '../templates/technicalReportTemplate';
 import { resolveSidePanelZones } from '../templates/sidePanelTemplate';
 import { getThemeTokens } from '../utils/themeTokens';
-import { applyLegendCustomization, groupLegendItems } from '../utils/legendCustomization.js';
+import { applyLegendCustomization, groupLegendItems, noteInLegend } from '../utils/legendCustomization.js';
 import { getMapFrame, scaleBarHeight } from '../utils/coordinateFrame.js';
 import CoordinateFrameOverlay from './CoordinateFrameOverlay.jsx';
 import { fitProjectToTemplate } from '../utils/frameMapForTemplate';
@@ -368,6 +368,7 @@ export default function ReadOnlyMapStage({ project, onExportReady }) {
                 </div>
               )}
             </div>
+            {noteInLegend(layout, legendItems) && <div className="legend-note">{layout.footerText}</div>}
           </div>
         </div>
       )}
@@ -408,7 +409,7 @@ export default function ReadOnlyMapStage({ project, onExportReady }) {
       )}
 
       {/* Footer */}
-      {layout.templateId !== 'ni_43101_technical' && layout.footerText && layout.footerEnabled !== false && (
+      {layout.templateId !== 'ni_43101_technical' && layout.footerText && layout.footerEnabled !== false && !noteInLegend(layout, legendItems) && (
         <div className="template-zone" style={{ ...zoneStyle(resolvedZones.footer), zIndex: 408, height: layout.footerHeightPx || resolvedZones.footer?.height }}>
           <div className="template-card footer-card">{layout.footerText}</div>
         </div>

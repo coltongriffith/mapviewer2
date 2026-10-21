@@ -15,21 +15,22 @@ const LAYERS_NOTE = 'scene.png and annotations.png are transparent and stack (sc
 // opts.svg (off by default): annotations.svg as well, the annotation layer with live text. The overlay is drawn a
 // second time, through the recorder (drawlist.js), and written out by annotations-svg.js: one chunk, fetched only
 // then. Without it the ZIP holds the same files, and the PNGs are drawn exactly as before.
-async function annotationsSVG(f) {
+async function annotationsSVG(f, X) {
   const svg = await import('./annotations-svg.js');
   let rec = null;
-  H.figureCanvas('3d', 'annotations', (ctx) => (rec = svg.createRecorder(ctx)).ctx);
+  H.figureCanvas('3d', 'annotations', (ctx) => (rec = svg.createRecorder(ctx)).ctx, X);
   const fonts = await svg.fontFaceCss(rec.list), list = (a) => a.join(', ') || 'none';
   const note = `Exploration Maps 3D annotations, ${f.w} × ${f.h} px, over scene.png. Fonts embedded: ${list(fonts.embedded)}; named only: ${list(fonts.referenced)}.${rec.unsupported.size ? ` Not carried: ${list([...rec.unsupported])}.` : ''}`;
   return { text: svg.toSVG(rec, { width: f.w, height: f.h, fontCss: fonts.css, title: `${H.S.title}: annotations`, note }), fonts };
 }
 export async function exportLayers(opts = {}) {
   if (!H.G) throw new Error('Nothing to export yet: add a collar file and an assay file.');
-  const f = H.format(), fig = H.figureCanvas;
+  // opts.background "transparent" (and opts.shadow) as for EM3D.exportPNG: every PNG layer, and the SVG without the footer band.
+  const f = H.format(), X = H.xopts(opts), fig = (v, l) => H.figureCanvas(v, l, undefined, X);
   H.status(`Preparing layers at ${f.w} × ${f.h} px…`);
   const bytes = async (c) => new Uint8Array(await (await canvasBlob(c)).arrayBuffer());
   const png = { figure: await bytes(fig('3d')), scene: await bytes(fig('3d', 'scene')), annotations: await bytes(fig('3d', 'annotations')), section: await bytes(fig('section')) };
-  const svg = opts.svg ? await annotationsSVG(f) : null;
+  const svg = opts.svg ? await annotationsSVG(f, X) : null;
   const layers = svg ? { ...LAYER_FILES, annotationsSvg: 'annotations.svg', note: `${LAYERS_NOTE} annotations.svg is annotations.png with live text, at the same size.` } : { ...LAYER_FILES, note: LAYERS_NOTE };
   const settings = { ...H.getState(), layers, exportedAt: new Date().toISOString() };
   const zip = zipSync({

@@ -46,7 +46,13 @@ const BUDGETS = {
   // editor keeps the shared leader geometry the overlay must draw (elbow,
   // curve, anchor mark), the Auto-arrange action, the overlap list and the
   // leader/anchor-mark controls; ~1.0 KiB.
-  maxJsChunkGzipKb: 148,
+  // 148 → 148.3 (Oct 2026, measured 147.99 configured): hole-ID labels at their collar (#307) pass the layout
+  // version and callout font to the lazy scorer and draw a pushed label's leader (~+0.07 kB in App), which left
+  // 6 B of the ±20 B chunk-hash churn.
+  // 148.3 → 148.6 (Oct 2026, export options, measured 148.32 configured, ~+0.33 kB): legend height and note-in-legend
+  // sizing must stay in App because the editor's live legend box uses the same template code as the exporter, plus
+  // the lazy ExportBackground hook (owner-requested 2D transparent/standalone).
+  maxJsChunkGzipKb: 148.6,
   initialJsGzipKb: 75,
   initialAuthJsGzipKb: 135,
   // The former configured check omitted VITE_ADMIN_EMAIL, which pruned the
@@ -93,7 +99,17 @@ const BUDGETS = {
   // and /3d are unchanged (App +7 B and /3d page +0.05 kB of chunk-hash churn and the shared run finder).
   // 914.3 → 914.5 (measured 914.16): components averaged over the equivalent's own samples, the reload on import
   // and roll-back, and the cut-off tolerance (review fixes, all in the lazy results chunk).
-  totalAuthJsGzipKb: 914.5,
+  // 914.5 → 915.6 (Oct 2026, measured 915.31 configured / 848.21 plain on top of drill database 2C): 2D hole-ID
+  // labels at their own collar (layoutAlgorithm 3, #307). The rules are in the lazy scorer (utils/calloutScorer.js,
+  // ~+0.9 kB: ID labels measured in the callout font and sized to it, tried beside their collar, a leader when pushed
+  // out, the ambiguity check, the crowded-first retry, and placed labels kept clear of intercept cards); the editor
+  // chunk only passes the layout version and font and draws a pushed label's leader (~+0.07 kB).
+  // 915.6 → 917.1 (Oct 2026, export options merged over drill database 2B and #307, measured 916.80): /3d's
+  // transparent background, drop shadow toggle and Map use (+0.6 kB on the page, mapuse.js lazy; see threeDJsGzipKb)
+  // and the 2D export options: the footer note always exported (its wrapping and the free-strip fallback in the lazy
+  // renderScene chunk), Standalone's note in the legend, the fitted legend for new maps, the blank-basemap transparent
+  // toggle (a lazy ExportBackground chunk) and the Map use and Fit controls (the lazy LegendEditor chunk).
+  totalAuthJsGzipKb: 917.1,
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
@@ -110,7 +126,9 @@ const BUDGETS = {
   // 838.0 → 838.7 (Oct 2026, measured 838.32): the drill CSV reader's structure checks, as totalAuthJsGzipKb above.
   // 838.7 → 847.2 (Oct 2026, measured 846.93): the drill results section, as totalAuthJsGzipKb above.
   // 847.2 → 847.4 (measured 847.05): the results review fixes, as totalAuthJsGzipKb above.
-  totalJsGzipKb: 847.4,
+  // 847.4 → 848.5 (measured 848.21): hole-ID labels at their collar, as totalAuthJsGzipKb above.
+  // 848.5 → 850.0 (measured 849.70): the export options, as totalAuthJsGzipKb above.
+  totalJsGzipKb: 850.0,
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the
   // totals above. /3d carries three.js (~109 kB gzip) and its editor.
@@ -173,7 +191,19 @@ const BUDGETS = {
   // instead of reloading). The Display checkboxes and terrain selects now use the generic data-ext binding (-0.16 kB).
   // 170.1 → 170.6 (Oct 2026, round 5D merged over drill database 2A, measured 170.33, configured 170.36): the two
   // entries above add up; neither adds the other's code.
-  threeDJsGzipKb: 170.6,
+  // 170.6 → 170.9 (Oct 2026, drill database 2B, measured 170.56, configured 170.57): the drillSource hooks and the
+  // hole-path switch (+0.18 kB); 170.6 left ~30 B, inside chunk-hash churn.
+  // 170.9 → 170.95 (Oct 2026, published figure versions 5A merged over 2B, measured 170.62, configured 170.63, + ~0.3):
+  // the four EM3D.account version names and the gap note skipped over a published version (+0.03 kB); the rest is lazy.
+  // 170.95 → 171.6 (Oct 2026, export options, measured 171.21, configured 171.24, merged over figure versions 5A): a transparent background for exportPNG and the
+  // layers ZIP (no scene colour, section paper or footer band; drawn synchronously, so in the page), the drop shadow
+  // setting and its export override, the Export step's Background select, exports that wait for the layers they
+  // need (pending setMapUse and module loads), and the hooks for Map use (the footer's notes and credits moved out,
+  // the details atop the legend card, EM3D.setMapUse, the saved settings). The standalone block is lazy (mapuse.js).
+  // 171.6 → 171.7 (Oct 2026, claim map inset merged over export options, measured 171.40, configured 171.42, + ~0.3):
+  // the hooks for Find claims (the lazy import, EM3D.findClaims and the panel button), insetStyle "claims" and the
+  // claims' registry credit in the footer (+0.12 kB); the rest is lazy (claims.js, tags.js).
+  threeDJsGzipKb: 171.7,
   // /3d's own modules fetched on first use (the geology, geophysics and tag layers, the account
   // client). They never load with the page or the app, so they sit outside the page and app totals.
   // 32 → 34 (Oct 2026, round 4): per-hole tags, grouped pending tags, callouts beside or bracketed on their
@@ -226,14 +256,36 @@ const BUDGETS = {
   // design version 5 or with the grid on), section.js +0.55 (pad-merged and staggered section IDs, grade-ranked holes),
   // overlays.js +0.3 (claims outlined in the inset), shapes.js +0.2 (views: both, 3D or section), the callout editor's
   // second published line with its own depths and stale-wording note (+0.2) and the location inset's outline hook in tags.js.
-  // 104.5 → 110.5 (Oct 2026, claim map inset, measured 109.99, configured 110.21, + 0.3): claims.js (~4.45 kB with
+  // 104.5 → 109.0 (Oct 2026, drill database 2B on top of round 5D, measured 108.5, configured 108.7): figures that take their holes
+  // from a property's drill database (property-data.js, ~3.7 kB: the property picker, the current rows read 1,000 at a
+  // time and written as the files an upload would be, the snapshot the figure records, the newer-imports notice and
+  // Update) and minimum-curvature paths for their surveyed holes (min-curvature.js with shared/desurvey.js, 0.64 kB);
+  // account-core.js gains the button, the hook and the check on open (+0.15 kB). Fetched only on "From property drill
+  // database" or for a figure that used it. The page gains the hooks (drillSource, the path switch; +0.18 kB, inside
+  // its budget); App and the totals are unchanged.
+  // 109.0 → 109.3 (review fixes, measured 108.79, configured 109.02): the newer-data notice is cleared when another figure
+  // opens and Update checks it still belongs to the figure on screen; collars in more than one coordinate system are
+  // refused with their counts (~0.2 kB in property-data.js, account-core.js +0.02).
+  // 109.3 → 114.6 (Oct 2026, published figure versions 5A merged over drill database 2B, measured 114.04, configured
+  // 114.27, + 0.3; +5.25 kB over 2B's 109.02): versions.js (~4.7 kB: Publish version with its label and release date, the
+  // Versions list, a version opened read-only with its banner, Download PNG, "Start a new figure from this version" and
+  // "Back to the current figure" (left out when the live figure is gone or out of reach), the plain-words refusals),
+  // fetched only from "Versions…" in My 3D maps, the EM3D.account version methods or a ?version= link that reads the
+  // version on its own; and its hooks in account-core.js (~0.55 kB: saveProject refusing while a version is open, the
+  // change notices ignored, the lazy loader, the menu button, the ?version= boot, and opening a version clearing 2B's
+  // drill notice and pending Update, with no drill check while it is shown). Neither adds the other's code.
+  // 114.6 → 115.7 (Oct 2026, export options, measured 115.19, configured 115.42, merged over figure versions 5A): mapuse.js (~1 kB: a standalone map's details, sources
+  // and notes as the top section of the legend card), fetched only for a standalone figure; desk.js passes the
+  // background to every layer.
+  // 115.7 → 121.7 (Oct 2026, claim map inset merged over export options, measured 121.13, configured 121.36, + 0.3;
+  // +5.9 kB over export options' 115.42, as on its own branch where it took 104.5 → 110.5): claims.js (~4.45 kB with
   // shared/claimSearch.js: "Find claims" by holder, numbers or name and "Claims around the model" through the 2D
   // app's /api/claims and /api/bc-claims, added as area overlays with role "claims" and the registry's credit;
   // fetched only on the first click on Find claims or EM3D.findClaims), tags.js +1.4 (insetStyle "claims": the claim
   // map fitted to the block and the project's claims, tenure labels where they fit, the north arrow and scale bar
   // shared with the location inset) and overlays.js +0.15 (role, group and credit; the footer credit). The page
   // gains only the hooks (+0.12 kB, inside its budget).
-  threeDLazyJsGzipKb: 110.5,
+  threeDLazyJsGzipKb: 121.7,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.
@@ -241,7 +293,9 @@ const BUDGETS = {
   teamsJsGzipKb: 10,
   adminAuthJsGzipKb: 150,
   adminJsGzipKb: 85,
-  editorAuthJsGzipKb: 335,
+  // 335 → 335.3 (Oct 2026, measured 334.98): the same ~0.07 kB in App, as maxJsChunkGzipKb above.
+  // 335.3 → 335.6 (Oct 2026, export options, measured 335.30): the same App code as maxJsChunkGzipKb above.
+  editorAuthJsGzipKb: 335.6,
   editorJsGzipKb: 270,
   claimsAuthJsGzipKb: 355,
   claimsJsGzipKb: 290,
