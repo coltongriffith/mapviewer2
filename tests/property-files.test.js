@@ -8,10 +8,11 @@ import { library, guessKind, staleRefs, safeName, sha256Hex, formatBytes, librar
 
 const ORG = 'org-1', PROP = 'prop-1';
 const property = { id: PROP, org_id: ORG };
-let calls, rpcResult, uploadError;
+let calls, rpcResult, uploadError, listed;
 const sb = {
   rpc: async (fn, args) => {
     calls.push({ rpc: fn, args });
+    if (fn === 'list_property_files' && listed) return { data: listed, error: null };
     return rpcResult instanceof Error ? { data: null, error: { message: rpcResult.message } } : { data: rpcResult, error: null };
   },
   storage: {
@@ -36,7 +37,7 @@ const lib = library(sb);
 const file = (name, text, type = 'text/csv') => new File([text], name, { type });
 const hex = (t) => createHash('sha256').update(t).digest('hex');
 
-beforeEach(() => { calls = []; rpcResult = null; uploadError = null; });
+beforeEach(() => { calls = []; rpcResult = null; uploadError = null; listed = null; });
 
 describe('helpers', () => {
   it('guesses the kind and drill role from the file name', () => {
@@ -91,25 +92,33 @@ describe('library client', () => {
     const [up, rec] = calls;
     const [bucket, path, opts] = up.upload;
     expect(bucket).toBe('property-files');
-    expect(path).toMatch(new RegExp(`^${ORG}/${PROP}/[0-9a-f-]{36}/v1/Rails_collars.csv$`));
+    expect(path).toMatch(new RegExp(`^${ORG}/${PROP}/[0-9a-f-]{36}/v1/[0-9a-f]{8}-Rails_collars.csv$`));
     expect(opts).toEqual({ upsert: false, contentType: 'text/csv' });
     expect(rec).toEqual({ rpc: 'add_property_file_version', args: {
       p_property: PROP, p_file: path.split('/')[2], p_name: 'Rails collars.csv', p_kind: 'drill', p_role: 'collars',
       p_path: path, p_bytes: 10, p_sha256: hex('HoleID,E,N'), p_note: null } });
   });
 
-  it('uploads a new version into the next folder, keeping the file\'s name', async () => {
-    rpcResult = { file_id: 'f1', version: 3, unchanged: false };
+  it('uploads a new version into the next folder of the current version, keeping the file\'s name', async () => {
+    rpcResult = { file_id: 'f1', version: 4, unchanged: false };
+    // This page listed v2; someone has since uploaded v3.
+    listed = [{ id: 'f1', name: 'assays.csv', version: 3, sha256: hex('v3'), path: 'x' }];
     const existing = { id: 'f1', name: 'assays.csv', version: 2, sha256: hex('old') };
-    await lib.upload({ property, file: file('assays-v3.csv', 'new'), existing, note: 'Batch 7' });
-    expect(calls[0].upload[1]).toBe(`${ORG}/${PROP}/f1/v3/assays-v3.csv`);
-    expect(calls[1].args).toMatchObject({ p_file: 'f1', p_name: 'assays.csv', p_path: `${ORG}/${PROP}/f1/v3/assays-v3.csv`, p_note: 'Batch 7' });
+    await lib.upload({ property, file: file('assays-v4.csv', 'new'), existing, note: 'Batch 7' });
+    const up = calls.find((c) => c.upload), rec = calls.find((c) => c.rpc === 'add_property_file_version');
+    expect(up.upload[1]).toMatch(new RegExp(`^${ORG}/${PROP}/f1/v4/[0-9a-f]{8}-assays-v4.csv$`));
+    expect(rec.args).toMatchObject({ p_file: 'f1', p_name: 'assays.csv', p_path: up.upload[1], p_note: 'Batch 7' });
   });
 
-  it('skips an upload identical to the current version', async () => {
-    const existing = { id: 'f1', name: 'assays.csv', version: 2, sha256: hex('same') };
-    expect(await lib.upload({ property, file: file('assays.csv', 'same'), existing })).toEqual({ fileId: 'f1', version: 2, unchanged: true });
-    expect(calls).toEqual([]);
+  it('skips an upload identical to the current version, checked against a fresh listing', async () => {
+    listed = [{ id: 'f1', name: 'assays.csv', version: 3, sha256: hex('same'), path: 'x' }];
+    const existing = { id: 'f1', name: 'assays.csv', version: 2, sha256: hex('older') };
+    expect(await lib.upload({ property, file: file('assays.csv', 'same'), existing })).toEqual({ fileId: 'f1', version: 3, unchanged: true });
+    expect(calls.some((c) => c.upload)).toBe(false);
+    // Identical to the version this page saw, but not to the current one: a new version.
+    listed = [{ id: 'f1', name: 'assays.csv', version: 3, sha256: hex('v3'), path: 'x' }];
+    rpcResult = { file_id: 'f1', version: 4, unchanged: false };
+    expect((await lib.upload({ property, file: file('assays.csv', 'older'), existing })).version).toBe(4);
   });
 
   it('refuses files over 100 MB before uploading, and reports a failed upload', async () => {
@@ -118,10 +127,10 @@ describe('library client', () => {
     uploadError = { message: 'new row violates row-level security policy' };
     await expect(lib.upload({ property, file: file('a.csv', 'x') })).rejects.toThrow(/do not have permission/);
     expect(calls.some((c) => c.rpc)).toBe(false);
-    // A retry finds its own earlier upload already there.
+    // Another upload's object is never adopted as this one's.
     uploadError = { message: 'The resource already exists' };
-    rpcResult = { file_id: 'f9', version: 1, unchanged: false };
-    expect((await lib.upload({ property, file: file('a.csv', 'x') })).fileId).toBe('f9');
+    await expect(lib.upload({ property, file: file('a.csv', 'x') })).rejects.toThrow();
+    expect(calls.some((c) => c.rpc === 'add_property_file_version')).toBe(false);
   });
 
   it('signs downloads, reads text and soft-deletes', async () => {

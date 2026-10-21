@@ -115,16 +115,21 @@ export function library(sb) {
       if (!file) throw new Error('Choose a file to upload.');
       if (file.size > MAX_BYTES) throw libraryError('too large');
       const hash = await sha256Hex(await file.arrayBuffer());
-      if (existing && existing.sha256 === hash) return { fileId: existing.id, version: existing.version, unchanged: true };
-      const fileId = existing?.id || crypto.randomUUID();
-      const version = (existing?.version || 0) + 1;
-      const path = `${property.org_id}/${property.id}/${fileId}/v${version}/${safeName(file.name)}`;
+      // Compare against the file as it is now, not as this page last listed it.
+      const cur = existing && (await this.list(property.id)).find((f) => f.id === existing.id);
+      if (existing && !cur) throw libraryError('NOT_FOUND');
+      if (cur && cur.sha256 === hash) return { fileId: cur.id, version: cur.version, unchanged: true };
+      const fileId = cur?.id || crypto.randomUUID();
+      const version = (cur?.version || 0) + 1;
+      // Each upload gets its own object, so two editors racing for the same version
+      // never share bytes: the second one's record is refused as a version conflict.
+      const tag = crypto.randomUUID().slice(0, 8);
+      const path = `${property.org_id}/${property.id}/${fileId}/v${version}/${tag}-${safeName(file.name)}`;
       const { error } = await store().upload(path, file, { upsert: false, contentType: file.type || 'application/octet-stream' });
-      // A retry after the RPC failed finds its own earlier upload there.
-      if (error && !/exists|duplicate/i.test(error.message || '')) throw libraryError(error);
+      if (error) throw libraryError(error);
       const guess = guessKind(file.name);
       const r = await rpc('add_property_file_version', {
-        p_property: property.id, p_file: fileId, p_name: existing?.name || file.name,
+        p_property: property.id, p_file: fileId, p_name: cur?.name || file.name,
         p_kind: kind || guess.kind, p_role: guess.role, p_path: path, p_bytes: file.size, p_sha256: hash, p_note: note || null,
       });
       return { fileId: r.file_id, version: r.version, unchanged: !!r.unchanged };

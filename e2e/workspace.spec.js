@@ -171,7 +171,7 @@ test('the data library lists, adds, versions, downloads and deletes files', asyn
   await expect(region.getByLabel('Kind of data')).toHaveValue('drill');
   await region.getByRole('button', { name: 'Upload', exact: true }).click();
   await expect(region.getByText('Added Rails collars.csv.')).toBeVisible();
-  expect(fake.uploads[0]).toMatch(new RegExp(`^${ORG}/${PROP}/[0-9a-f-]{36}/v1/Rails_collars\\.csv$`));
+  expect(fake.uploads[0]).toMatch(new RegExp(`^${ORG}/${PROP}/[0-9a-f-]{36}/v1/[0-9a-f]{8}-Rails_collars\\.csv$`));
   const added = fake.rpc.find((c) => c.fn === 'add_property_file_version').args;
   expect(added).toMatchObject({ p_property: PROP, p_name: 'Rails collars.csv', p_kind: 'drill', p_role: 'collars', p_path: fake.uploads[0], p_bytes: 32 });
   expect(added.p_sha256).toMatch(/^[0-9a-f]{64}$/);
@@ -182,14 +182,14 @@ test('the data library lists, adds, versions, downloads and deletes files', asyn
   await region.getByRole('button', { name: 'Upload a new version of assays.csv' }).click();
   await (await chooser).setFiles({ name: 'assays-batch7.csv', mimeType: 'text/csv', buffer: Buffer.from('HoleID,From,To,Cu\nR-1,0,2,0.4\n') });
   await expect(region.getByText('Uploaded version 3 of assays.csv.')).toBeVisible();
-  expect(fake.uploads[1]).toBe(`${ORG}/${PROP}/${FILE}/v3/assays-batch7.csv`);
+  expect(fake.uploads[1]).toMatch(new RegExp(`^${ORG}/${PROP}/${FILE}/v3/[0-9a-f]{8}-assays-batch7\\.csv$`));
   await expect(table.getByRole('row', { name: /assays\.csv.*v3/ })).toBeVisible();
   const download = page.waitForEvent('download');
   await page.route('https://example.supabase.co/storage/v1/object/sign/property-files/**', (route) => (route.request().method() === 'GET'
     ? route.fulfill({ status: 200, headers: { 'content-disposition': 'attachment; filename="assays.csv"' }, body: 'HoleID' }) : route.fallback()));
   await region.getByRole('button', { name: 'Download assays.csv' }).click();
   expect((await download).suggestedFilename()).toBe('assays.csv');
-  expect(fake.signed).toEqual([`${ORG}/${PROP}/${FILE}/v3/assays-batch7.csv`]);
+  expect(fake.signed).toEqual([fake.uploads[1]]);
 
   page.once('dialog', (d) => d.accept());
   await region.getByRole('button', { name: 'Delete assays.csv' }).click();
