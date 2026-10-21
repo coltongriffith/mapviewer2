@@ -449,11 +449,12 @@ html.em3d-embed .share-credit:hover { text-decoration: underline; }
       <section>
         <h3>Intercept callouts</h3>
         <div class="grid2">
-          <label class="field"><span>Number shown</span><input type="number" id="co-count" min="0" max="8"></label>
-          <label class="field"><span>Minimum length (m)</span><input type="number" id="co-min" min="1"></label>
-          <label class="field"><span>Broad cut-off</span><input type="number" id="co-cut" step="any"></label>
-          <label class="field"><span>"incl." cut-off</span><input type="number" id="co-incl" step="any"></label>
-          <label class="field" style="grid-column:1/-1"><span>Also show in callouts</span><select id="value-col2"></select></label>
+          <label class="field" style="grid-column:1/-1"><span>Callouts from</span><select id="co-mode" data-ext="style.calloutMode"><option value="calculated">Calculated from the assays</option><option value="published">Published results table</option><option value="manual">Holes I pick (fixed depths)</option></select></label>
+          <label class="field" data-co-calc><span>Number shown</span><input type="number" id="co-count" min="0" max="8"></label>
+          <label class="field" data-co-calc><span>Minimum length (m)</span><input type="number" id="co-min" min="1"></label>
+          <label class="field" data-co-calc><span>Broad cut-off</span><input type="number" id="co-cut" step="any"></label>
+          <label class="field" data-co-calc><span>"incl." cut-off</span><input type="number" id="co-incl" step="any"></label>
+          <label class="field" style="grid-column:1/-1" data-co-calc><span>Also show in callouts</span><select id="value-col2"></select></label>
           <label class="field" style="grid-column:1/-1"><span>Callouts go</span><select id="co-place"><option value="column">In a column at the left</option><option value="beside">Beside each hole</option><option value="bracket">As a bracket on the hole</option></select></label>
         </div>
         <p class="muted" style="margin-top:6px">Drag a callout on the preview to move it; its leader follows.</p>
@@ -714,6 +715,7 @@ JavaScript API (run in the page console or via your agent's evaluate tool):
   EM3D.addFiles([{name, text}])   CSV or OBJ text. The file name helps detect the type:
                                   collars, surveys, assays, topography, or a .obj model shape.
                                   lib: {libFileId, version} marks a file from the property's data library
+                                  role: "published" adds a table of published results (never detected)
   EM3D.setBrand({company, title, subtitle, footnote, primary, accent, credit})
                                   colours as hex, e.g. primary: "#0b3954"
   EM3D.setLogo(dataUrl)           Promise. Also picks primary and accent from the logo
@@ -736,6 +738,10 @@ JavaScript API (run in the page console or via your agent's evaluate tool):
                  legend: {merge: "auto" | "one" | "separate", pos: {main | lithology | geophys: "auto" |
                    "tl" | "tr" | "bl" | "br" | {x, y}}} (cards' top-left, 0-1 of the frame; drag them too),
                  coPlacement: "column" | "beside" | "bracket" (where callouts go),
+                 calloutMode: "calculated" (default: the top intervals from the assays and cut-offs) |
+                   "published" (the approved rows of a file whose type is "Published results": each at
+                   its own From-To, whatever the cut-offs; await EM3D.layersReady() after switching) |
+                   "manual" (only the holes ticked with setCallout, each at the depths it had when ticked),
                  blockMargin (m around the drilling, null = auto), blockExtent: {x0, x1, y0, y1, z0} or null,
                  designOptIn: ["sampledIntercepts", ...] (a figure saved before design version 2 keeps
                    its earlier look, getState().design; this takes newer rules one by one, e.g. callouts
@@ -755,7 +761,15 @@ JavaScript API (run in the page console or via your agent's evaluate tool):
                                   perspective; u 0-1 left to right seen from outside, v 0 (base) to 1 (terrain)
   EM3D.updateWallLabel(id, {...}) EM3D.removeWallLabel(id)
   EM3D.setCallout(holeId, {show, line1, line2, incl: false, placement: "column" | "beside" | "bracket",
-                  x, y})   null resets a field; x, y place the box (0-1 of the frame), its leader follows
+                  x, y})   null resets a field; x, y place the box (0-1 of the frame), its leader follows.
+                                  In published mode the id is a result ID; line1 rewords that result only, and
+                                  stays with the depths it was written for (getState().callouts.published:
+                                  records, problems such as a published length that disagrees with To - From)
+  Published results table: a CSV with Result ID, Hole ID, From, To and Approved text (or Published length,
+                                  Grade, Analyte, Unit), optional Parent result (an "incl." interval inside it),
+                                  Release date, Source and Approval status. Never detected on its own: set the
+                                  file's type to Published results (getProject keeps it); it feeds no colours,
+                                  histograms or shells
   EM3D.undo() / EM3D.redo()       Promises. Step through the settings history (Ctrl/Cmd+Z, Shift+Ctrl/Cmd+Z)
   EM3D.history()                  Promise: {entries: [{label, at}], current}; the History button lists them
   EM3D.setStyle({displayCutoff})  intervals below it draw as the plain trace (null: all); callouts unchanged
@@ -817,7 +831,12 @@ Example: a branded news-release figure from pasted CSVs
   EM3D.setBrand({company: "Star Copper", title: "STAR PROJECT · RAILS ZONE", subtitle: "3D drilling, looking northeast"})
   EM3D.setStyle({valueCol: "Cu_pct", coCount: 4})
   EM3D.setFigureSize("release"); EM3D.setCamera({view: "a"})
-  EM3D.exportPNG({view: "3d"})</script>
+  EM3D.exportPNG({view: "3d"})
+
+Whole projects (to keep or move a figure):
+  EM3D.getProject()               { v: 1, settings, camera, files: [{name, text, role, cols}] }
+  EM3D.loadProject(project)       Promise. Reopens a getProject() result exactly
+  EM3D.getThumbnail(320)          small JPEG data URL of the preview</script>
 <!-- API notes for the geology, geophysics and hole-tag layers (shown with EM3D.help()). -->
 <script type="text/plain" id="ext-help">Geology, geophysics and hole tags (Promises; each resolves with the state):
   Lithology/alteration file: Hole ID, From, To, Code (and optional Description), CSV or in a ZIP.

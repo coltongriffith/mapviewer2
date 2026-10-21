@@ -1,6 +1,6 @@
-// File roles for the optional figure layers: lithology/alteration logs and geophysics points.
-// Small and loaded with the page, because a file's role is decided the moment it is added;
-// the layers themselves (geology.js, geophys.js) load on first use.
+// File roles for the optional figure layers: lithology/alteration logs and geophysics points, and the
+// published-results (release) table. Small and loaded with the page, because a file's role is decided the
+// moment it is added; the layers themselves (geology.js, geophys.js, published-results.js) load on first use.
 
 const norm = (h) => String(h).toLowerCase().replace(/[\s\-.()/#]+/g, '_').replace(/^_+|_+$/g, '');
 const LITHO_NAME = /^(lith|litho|lithology|lith_code|lithcode|lithology_code|rock|rock_type|rocktype|rock_code|geology|geol|geol_code|unit|unit_code|formation|fm|alteration|alt|alt_code|alteration_code|alt_type|domain|code|zone|log_code)$/;
@@ -47,6 +47,9 @@ export function parseXYZ(text) {
 export function refineRole(entry, role, name) {
   const { header, rows, cols } = entry, n = header.map(norm), used = new Set(Object.values(cols));
   const has = (...k) => k.every((x) => cols[x] !== undefined);
+  // A table of published results is never read as assays (its composites would colour the holes and feed the
+  // shell), and never taken for a release table either: it waits, unrecognised, for the user to say so.
+  if (has('hole', 'from', 'to') && n.some((h) => RELEASE_HINT.test(h))) { entry.hint = 'published'; return 'unknown'; }
   if (has('hole', 'from', 'to')) {
     const cand = n.map((h, i) => ({ h, i })).filter(({ h, i }) => !used.has(i) && LITHO_NAME.test(h));
     const code = cand.find(({ i }) => share(rows, i, (v) => !isNum(v)) > 0.5) || cand.find(({ h }) => /lith|alt|geol|rock|unit|code/.test(h));
@@ -79,3 +82,7 @@ export function refineRole(entry, role, name) {
   }
   return role;
 }
+
+// Published results ("Published results" role, published-results.js): a release table is only ever one by the
+// user's choice, and its columns are mapped then. A file that looks like one is held back from the assays.
+const RELEASE_HINT = /^(result_?id|approved_?text|approval_?status|release_?date|published_\w+)$/;
