@@ -274,7 +274,11 @@ const BUDGETS = {
   // 114.6 → 115.7 (Oct 2026, export options, measured 115.19, configured 115.42, merged over figure versions 5A): mapuse.js (~1 kB: a standalone map's details, sources
   // and notes as the top section of the legend card), fetched only for a standalone figure; desk.js passes the
   // background to every layer.
-  threeDLazyJsGzipKb: 115.7,
+  // 115.7 → 119.8 (Oct 2026, drill crew, measured 119.24, configured 119.46, + 0.3): crew.js (~4.0 kB: a toy drill
+  // rig and crew built from three.js primitives already in the vendor chunk, placed on a levelled pad at the collar,
+  // the idle motion and EM3D.setCrew), fetched only for a figure that turns the crew on. The page gains the hooks
+  // (+0.15 kB, inside its budget); the totals are unchanged.
+  threeDLazyJsGzipKb: 119.8,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.

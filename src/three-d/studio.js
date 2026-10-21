@@ -1735,7 +1735,7 @@ function loop(now) {
     camera.position.lerpVectors(tween.from, tween.to, e); controls.target.lerpVectors(tween.fromT, tween.toT, e); if (k >= 1) tween = null; }
   controls.update(); if (ortho()) camera.updateProjectionMatrix(); hazeNow();
   if (G && S.view === '3d') { camera.updateMatrixWorld(); if (!G.ribbonView || camera.getWorldDirection(tmpV).dot(G.ribbonView) < 0.99998) { placeRibbons(); faceWalls(); } }
-  if (S.view === '3d') { foot(S.dropShadow); renderer.render(scene, camera); drawOverlay(ov.getContext('2d'), DPR, false); syncCamUI(); }
+  if (S.view === '3d') { foot(S.dropShadow); EXT.crew?.tick(now); renderer.render(scene, camera); drawOverlay(ov.getContext('2d'), DPR, false); syncCamUI(); }
   requestAnimationFrame(loop);
 }
 // One export canvas at the chosen size. layer "scene" is the WebGL render alone on transparent;
@@ -1750,7 +1750,7 @@ function figureCanvas(view, layer = 'figure', wrap = (c) => c, o = {}) {
   clearBg = o.background === 'transparent';
   try {
     if (view === 'section') { ctx.scale(f.w / W, f.h / H); drawSection(ctx, W, H, true); return out; }
-    const k = f.w / W; tween = null; controls.update(); camera.updateProjectionMatrix(); hazeNow(); placeRibbons(); faceWalls();
+    const k = f.w / W; tween = null; controls.update(); camera.updateProjectionMatrix(); hazeNow(); placeRibbons(); faceWalls(); EXT.crew?.tick(); // EXT hook: the crew's fixed pose
     if (layer !== 'annotations') {
       const bg = scene.background; if (layer === 'scene' || clearBg) scene.background = null; // the renderer has alpha, so this clears to transparent
       foot(o.shadow ?? S.dropShadow); renderer.setPixelRatio(k); renderer.setSize(W, H, false); renderer.render(scene, camera);
@@ -2301,14 +2301,15 @@ Object.assign(S, {
   geophys: { mode: 'off', lines: 'auto', ramp: 'geophys', log: null, min: null, max: null, opacity: 0.85, faces: 'far', search: null, width: null, property: null, label: null, unit: null, note: 'Geophysics: illustrative inversion model' },
   tags: { at: 'toe', style: 'dark', status: {}, fadePrevious: false, newLabel: '', prevLabel: 'Previously released', plannedLabel: 'Planned', groups: [], autoGroup: false, groupRadius: 140, emphasis: 'auto', highlight: {}, highlightNew: true, idMode: 'auto', showId: {}, showTag: {}, hideRows: [], pending: 'collar' },
   histograms: false, insetStyle: 'plan', overlays: [], shapes: [], // overlays.js, shapes.js
+  crew: { on: false, at: 'auto', scale: 1, heading: null }, // the drill rig and crew at the pad (crew.js)
 });
-const EXT = {}, extLoading = {}, EXT_IMPORT = { geology: () => import('./geology.js'), geophys: () => import('./geophys.js'), tags: () => import('./tags.js'), look: () => import('./look.js'), section: () => import('./section.js'), type: () => import('./typography.js'), overlays: () => import('./overlays.js'), shapes: () => import('./shapes.js'), sections: () => import('./sections.js'), plan: () => import('./plan.js'), desurvey: () => import('./min-curvature.js'), mapuse: () => import('./mapuse.js') };
+const EXT = {}, extLoading = {}, EXT_IMPORT = { geology: () => import('./geology.js'), geophys: () => import('./geophys.js'), tags: () => import('./tags.js'), look: () => import('./look.js'), section: () => import('./section.js'), type: () => import('./typography.js'), overlays: () => import('./overlays.js'), shapes: () => import('./shapes.js'), sections: () => import('./sections.js'), plan: () => import('./plan.js'), desurvey: () => import('./min-curvature.js'), mapuse: () => import('./mapuse.js'), crew: () => import('./crew.js') };
 const hasRole = (r) => files.some((f) => f.role === r);
 // Holes from a property's drill database follow their surveys by minimum curvature (shared/desurvey.js).
 const mcWanted = () => !!S.drillSource && hasRole('survey'), mcPath = (h) => h.surveyed && mcWanted() && !!EXT.desurvey;
 function extWanted() {
   const gp = S.geophys.mode !== 'off' && hasRole('geophys'), t = S.tags;
-  return { look: S.shell.enabled || ortho() || S.scene.haze > 0 || (uses(S, 'clearLeaders') && S.labels.some((l) => l.arrow)), geology: (S.geology.enabled && hasRole('litho')) || Object.keys(S.geology.images || {}).length > 0 || gp, geophys: gp, section: !!(S.section || S.sections) || uses(S, 'padIds'), sections: !!S.sections, plan: uses(S, 'planView') || S.grid, mapuse: S.mapInfo.use === 'standalone', overlays: S.overlays.length > 0 || hasRole('overlay'), shapes: S.shapes.length > 0, desurvey: mcWanted(),
+  return { look: S.shell.enabled || ortho() || S.scene.haze > 0 || (uses(S, 'clearLeaders') && S.labels.some((l) => l.arrow)), geology: (S.geology.enabled && hasRole('litho')) || Object.keys(S.geology.images || {}).length > 0 || gp, geophys: gp, section: !!(S.section || S.sections) || uses(S, 'padIds'), sections: !!S.sections, plan: uses(S, 'planView') || S.grid, mapuse: S.mapInfo.use === 'standalone', crew: !!S.crew?.on, overlays: S.overlays.length > 0 || hasRole('overlay'), shapes: S.shapes.length > 0, desurvey: mcWanted(),
     tags: t.at !== 'toe' || t.fadePrevious || t.idMode === 'key' || (t.idMode !== 'all' && (project?.holes?.length || 0) > 12) || Object.keys(t.showId).length > 0 || Object.keys(t.showTag || {}).length > 0 || t.emphasis === 'key' || Object.keys(t.highlight || {}).length > 0
       || S.coPlacement !== 'column' || Object.values(coMap()).some((o) => o.placement || o.x !== undefined) || (S.pendingLabels && t.pending === 'collar' && !!project?.holes?.some(isPending)) || t.autoGroup || t.groups.length > 0 || Object.keys(t.status).length > 0 || S.histograms || S.insetStyle !== 'plan' || S.labels.some((l) => l.kind === 'stat') };
 }
@@ -2340,7 +2341,7 @@ async function extReady() {
 function extScene() {
   if (Object.entries(extWanted()).some(([k, v]) => v && !EXT[k])) { extReady().catch((e) => status(e.message)); return; }
   if (!G) return;
-  EXT.geophys?.syncCurtains(); faceWalls(); EXT.tags?.placeHistograms(); EXT.tags?.syncInset(); EXT.tags?.syncHoles(); EXT.overlays?.sync(); EXT.sections?.sync(); EXT.plan?.sync();
+  EXT.geophys?.syncCurtains(); faceWalls(); EXT.tags?.placeHistograms(); EXT.tags?.syncInset(); EXT.tags?.syncHoles(); EXT.overlays?.sync(); EXT.sections?.sync(); EXT.plan?.sync(); EXT.crew?.sync();
 }
 const extView = () => { if (G) EXT.geology?.syncFaces(); };
 const extRestyle = () => { if (G) { EXT.geophys?.syncCurtains(); faceWalls(); EXT.tags?.syncHoles(); EXT.sections?.sync(); } };
@@ -2379,16 +2380,16 @@ function extStyle(o) {
 }
 function extState() {
   const imgs = (g) => ({ ...structuredClone({ ...g, images: undefined }), images: Object.fromEntries(Object.keys(g.images || {}).map((k) => [k, true])) });
-  return { geology: EXT.geology ? EXT.geology.state() : imgs(S.geology), geophys: EXT.geophys ? EXT.geophys.state() : structuredClone(S.geophys), tags: EXT.tags ? EXT.tags.state() : { ...structuredClone(S.tags), histograms: S.histograms, insetStyle: S.insetStyle } };
+  return { geology: EXT.geology ? EXT.geology.state() : imgs(S.geology), geophys: EXT.geophys ? EXT.geophys.state() : structuredClone(S.geophys), tags: EXT.tags ? EXT.tags.state() : { ...structuredClone(S.tags), histograms: S.histograms, insetStyle: S.insetStyle }, crew: EXT.crew ? EXT.crew.state() : structuredClone(S.crew) };
 }
 function renderExtUI() {
   document.querySelectorAll('[data-ext]').forEach((el) => { const [g, k] = el.dataset.ext.split('.'), v = g === 'style' || g === 'view' ? S[k] : S[g][k]; if (el.type === 'checkbox') el.checked = !!v; else el.value = v; });
-  [['geology', 'geo-ui'], ['geophys', 'gp-ui'], ['tags', 'tag-ui'], ['section', 'sec-holes'], ['overlays', 'ov-ui'], ['shapes', 'shape-ui'], ['sections', 'sec-tabs'], ['mapuse', 'mapinfo-ui']].forEach(([k, id]) => { if (EXT[k]) EXT[k].renderUI($(id)); });
+  [['geology', 'geo-ui'], ['geophys', 'gp-ui'], ['tags', 'tag-ui'], ['section', 'sec-holes'], ['overlays', 'ov-ui'], ['shapes', 'shape-ui'], ['sections', 'sec-tabs'], ['mapuse', 'mapinfo-ui'], ['crew', 'crew-ui']].forEach(([k, id]) => { if (EXT[k]) EXT[k].renderUI($(id)); });
   document.querySelectorAll('[data-secmode]').forEach((b) => b.setAttribute('aria-pressed', String((b.dataset.secmode === 'chosen') === !!S.section?.holes)));
 }
 document.querySelectorAll('[data-ext]').forEach((el) => el.addEventListener('change', () => {
   const [g, k] = el.dataset.ext.split('.'), v = el.type === 'checkbox' ? el.checked : el.value;
-  Promise.resolve().then(() => (g === 'style' ? setStyle({ [k]: v }, false) : g === 'imagery' ? setStyle({ imagery: { [k]: +v } }, false) : g === 'scene' ? setScene({ [k]: el.type === 'range' ? +v : v }) : g === 'view' ? setView({ [k]: v }) : EXT_API[{ geology: 'setGeology', geophys: 'setGeophys', tags: 'setTags', mapInfo: 'setMapUse' }[g]]({ [k]: v }))).catch((e) => status(e.message));
+  Promise.resolve().then(() => (g === 'style' ? setStyle({ [k]: v }, false) : g === 'imagery' ? setStyle({ imagery: { [k]: +v } }, false) : g === 'scene' ? setScene({ [k]: el.type === 'range' ? +v : v }) : g === 'view' ? setView({ [k]: v }) : EXT_API[{ geology: 'setGeology', geophys: 'setGeophys', tags: 'setTags', mapInfo: 'setMapUse', crew: 'setCrew' }[g]]({ [k]: v }))).catch((e) => status(e.message));
 }));
 $('stat-add').addEventListener('click', () => {
   const title = $('stat-title').value.trim(); if (!title) { status('Type the stat box title first.'); $('stat-title').focus(); return; }
@@ -2415,6 +2416,7 @@ const EXT_API = {
     renderLabelList(); schedulePublish(); status(`Stat box "${L.text}" added. Drag it on the preview to place it.`); return id;
   },
   async setMapUse(o = {}) { (await extLoad('mapuse')).set(o); await extReady(); return getState(); },
+  async setCrew(o = {}) { (await extLoad('crew')).set(o); await extReady(); return getState(); },
   layersReady: async () => { await extReady(); return getState(); },
   async setFigureStyle(style, meta) { await (await extLoad('type')).setFigureStyle(style, meta); return getState(); },
 };
