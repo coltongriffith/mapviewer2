@@ -378,21 +378,27 @@ export const ORANGE = ['#f6efb4', '#f1dd3a', '#f7ae5c', '#e65a10'];
 export const orangeClass = (v, b) => (v < b[0] ? 0 : v < b[1] ? 1 : v < b[3] ? 2 : 3);
 // The intervals as bars on a face: consecutive assays merged (length-weighted) to at least w metres, w the larger of
 // 2 m, the usual assay length, and what draws about 2.5 px thick in the export; a gap in the sampling starts a new bar.
-export function mergeInts(ints, col, w) {
+// max: the merged bar takes the highest grade of its group (spikes, so peaks survive) rather than the length-weighted mean.
+export function mergeInts(ints, col, w, max = false) {
   const out = []; let cur = null;
   ints.forEach((it) => {
     const v = it.vals[col]; if (!Number.isFinite(v)) { cur = null; return; }
     if (cur && Math.abs(it.from - cur.to) > 1e-6) cur = null;
-    if (!cur) { cur = { from: it.from, to: it.from, s: 0 }; out.push(cur); }
-    cur.s += v * (it.to - it.from); cur.to = it.to; if (cur.to - cur.from >= w - 1e-9) cur = null;
+    if (!cur) { cur = { from: it.from, to: it.from, s: 0, m: -Infinity }; out.push(cur); }
+    cur.s += v * (it.to - it.from); cur.m = Math.max(cur.m, v); cur.to = it.to; if (cur.to - cur.from >= w - 1e-9) cur = null;
   });
-  return out.map((c) => ({ from: c.from, to: c.to, v: c.s / (c.to - c.from) }));
+  return out.map((c) => ({ from: c.from, to: c.to, v: max ? c.m : c.s / (c.to - c.from) }));
 }
-function displayInts(h, col, G) {
+// A hole's bars on a face and its scale in export px per metre. Spikes: one per assay, merged (keeping the peak) only
+// where an interval would draw under about 1.5 px; bars: merged to a display interval as above.
+function displayInts(h, col, G, spikes) {
   const ls = h.ints.map((it) => it.to - it.from).sort((a, b) => a - b), med = ls[Math.floor(ls.length / 2)] || 2, mid = h.len / 2;
   const p = h.posAt(mid), q = h.posAt(Math.min(h.len, mid + 10)), a = H.proj(G.V(p.x, p.y, p.z)), b = H.proj(G.V(q.x, q.y, q.z)), ppm = Math.hypot(b[0] - a[0], b[1] - a[1]) / 10 * H.exportScale();
-  return mergeInts(h.ints, col, Math.max(2, med, ppm > 0 ? 2.5 / ppm : 0));
+  return { ppm, list: spikes ? mergeInts(h.ints, col, ppm > 0 ? 1.5 / ppm : 0, true) : mergeInts(h.ints, col, Math.max(2, med, ppm > 0 ? 2.5 / ppm : 0)) };
 }
+// A spike's length (style "spikes"), in parts of the face's width: linear in grade, the top colour limit at 4%, up to
+// 7%, and a short tick (0.4%) for the lowest so the baseline reads as one.
+export const spikeLength = (v, top) => Math.max(0.004, Math.min(0.07, 0.04 * v / (top || 1)));
 export function placeHistograms() {
   const G = H.G, S = H.S, B = S.block?.hist, face = B?.side === 'face', over = S.block?.traces === 'overlay';
   if (!G || !S.histograms || !S.valueCol) { if (hist.mesh) hist.mesh.visible = false; if (hist.halo) hist.halo.visible = false; return; }
@@ -401,7 +407,8 @@ export function placeHistograms() {
     hist.mesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }), cap);
     hist.mesh.frustumCulled = false; hist.mesh.renderOrder = 2; H.root.add(hist.mesh); hist.G = G; hist.halo = null;
   }
-  if (face && B.halo !== false && !hist.halo) {
+  const spikes = face && B.style === 'spikes';
+  if (face && B.halo !== false && !spikes && !hist.halo) {
     hist.halo = new THREE.InstancedMesh(hist.mesh.geometry, new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false }), hist.mesh.instanceMatrix.count);
     hist.halo.frustumCulled = false; H.root.add(hist.halo);
   }
@@ -416,20 +423,23 @@ export function placeHistograms() {
   const pal = face && B.palette === 'orange', r = H.traceR(), off = face ? 0 : 2.4 * r, Lmax = face ? frontLen(view) * 0.055 * (B.length || 1) : G.diag * 0.1, mx = new THREE.Matrix4(), side = new THREE.Vector3(), nrm = new THREE.Vector3(), col = new THREE.Color(), white = new THREE.Color('#ffffff');
   const cut = (v) => S.displayCutoff !== null && S.displayCutoff !== undefined && v < S.displayCutoff;
   let n = 0, hn = 0;
-  H.project.holes.filter(holeOn).forEach((h) => (face ? displayInts(h, S.valueCol, G) : h.ints.map((it) => ({ from: it.from, to: it.to, v: it.vals[S.valueCol] }))).forEach((it) => {
+  const fl = face && frontLen(view);
+  H.project.holes.filter(holeOn).forEach((h) => { const D = face ? displayInts(h, S.valueCol, G, spikes) : { list: h.ints.map((it) => ({ from: it.from, to: it.to, v: it.vals[S.valueCol] })) }; D.list.forEach((it) => {
     const v = it.v, bi = H.binIndex(v); if (pal ? !Number.isFinite(v) || cut(v) : !(bi >= 1) || cut(v)) return;
     const a = h.posAt(it.from), b = h.posAt(it.to), va = G.V(a.x, a.y, a.z), vb = G.V(b.x, b.y, b.z), dir = vb.clone().sub(va), len = dir.length(); if (len < 1e-6) return; dir.divideScalar(len);
     if (face) { side.copy(along).addScaledVector(dir, -along.dot(dir)); if (side.lengthSq() < 1e-6) side.copy(right); side.normalize(); if (side.dot(right) < 0) side.negate(); } // in the face's plane, screen-right
     else { side.crossVectors(dir, view); if (side.lengthSq() < 1e-8) side.copy(right); side.normalize(); if (side.dot(right) > 0) side.negate(); } // screen-left of the trace
     nrm.crossVectors(side, dir).normalize(); if (nrm.dot(view) > 0) nrm.negate();
-    const t = face ? histLength(v, pal ? vlo / 2 : vlo, vmax, B.scale === 'log') : v / vmax, L = Math.max(pal ? 0.5 * r : r, Lmax * Math.min(1, t)), c = va.add(vb).multiplyScalar(0.5).addScaledVector(side, off + L / 2), th = len * (face ? 0.8 : 0.98);
+    // Spikes: thin (about 1.9 px in the export, under 70% of the interval, so gaps show) and linear in grade.
+    const t = face ? histLength(v, pal ? vlo / 2 : vlo, vmax, B.scale === 'log') : v / vmax, L = spikes ? fl * spikeLength(v, S.bins[3]) * (B.length || 1) : Math.max(pal ? 0.5 * r : r, Lmax * Math.min(1, t));
+    const c = va.add(vb).multiplyScalar(0.5).addScaledVector(side, off + L / 2), th = spikes ? Math.min(len * 0.7, D.ppm > 0 ? 1.9 / D.ppm : len * 0.7) : len * (face ? 0.8 : 0.98);
     mx.makeBasis(side.clone().multiplyScalar(L), dir.clone().multiplyScalar(th), nrm).setPosition(c);
     hist.mesh.setMatrixAt(n, mx); col.set(pal ? ORANGE[orangeClass(v, S.bins)] : H.BIN_COLORS[bi]); if (fade(h)) col.lerp(white, 0.55); hist.mesh.setColorAt(n, col); n++;
     // No halo on the lowest grades (orange palette), which would read as a band along the hole.
-    if (hist.halo && hn < hist.halo.instanceMatrix.count && (!pal || v >= S.bins[0])) { const e = 0.3 * r; mx.makeBasis(side.clone().multiplyScalar(L + 2 * e), dir.clone().multiplyScalar(len + 2 * e), nrm).setPosition(c.addScaledVector(nrm, -0.2 * r)); hist.halo.setMatrixAt(hn++, mx); }
-  }));
+    if (hist.halo && !spikes && hn < hist.halo.instanceMatrix.count && (!pal || v >= S.bins[0])) { const e = 0.3 * r; mx.makeBasis(side.clone().multiplyScalar(L + 2 * e), dir.clone().multiplyScalar(len + 2 * e), nrm).setPosition(c.addScaledVector(nrm, -0.2 * r)); hist.halo.setMatrixAt(hn++, mx); }
+  }); });
   hist.mesh.count = n; hist.mesh.visible = true; hist.mesh.instanceMatrix.needsUpdate = true; if (hist.mesh.instanceColor) hist.mesh.instanceColor.needsUpdate = true;
-  if (hist.halo) { hist.halo.count = hn; hist.halo.visible = face && B.halo !== false; hist.halo.instanceMatrix.needsUpdate = true; }
+  if (hist.halo) { hist.halo.count = hn; hist.halo.visible = face && B.halo !== false && !spikes; hist.halo.instanceMatrix.needsUpdate = true; }
 }
 
 // ---------- location inset: satellite or topographic tiles around the property ----------

@@ -261,7 +261,9 @@ const BUDGETS = {
   // and its legend rows, bars merged to a display interval and capped at the front face's width, larger unit names
   // in their own darker hue on the front face only, the bare page (credits alone), brackets kept off the bars' side,
   // and the tubes kept hidden by the plan view's sync while the block draws its traces (~1.4 kB, all lazy).
-  threeDLazyJsGzipKb: 121.1,
+  // 121.1 → 121.4 (Oct 2026, round 5E spikes, measured 120.88, configured 121.11): the block section's grade spikes
+  // (hist.style "spikes": one thin spike per assay, linear in grade, merged only below ~1.5 px keeping the peak; ~0.27 kB).
+  threeDLazyJsGzipKb: 121.4,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.

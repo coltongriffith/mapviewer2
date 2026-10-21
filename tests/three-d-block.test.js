@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { roundBelow, depthTicks, extentAround, init, setBlock, setHolesShown, BLOCK, assayRows } from '../src/three-d/block.js';
-import { histLength, bracketLines, mergeInts, orangeClass, ORANGE } from '../src/three-d/tags.js';
+import { histLength, bracketLines, mergeInts, orangeClass, ORANGE, spikeLength } from '../src/three-d/tags.js';
 import { fadeAt, blurMasked, unitInk } from '../src/three-d/geology.js';
 import { withDefaults } from '../src/three-d/design-version.js';
 
@@ -76,6 +76,19 @@ describe('bars, brackets and faces', () => {
     const ints = [[0, 1, 1], [1, 2, 3], [2, 3, 0.5], [3, 4, 0.5], [6, 8, 2], [8, 9, NaN], [9, 10, 4]].map(([from, to, v]) => ({ from, to, vals: { cu: v } }));
     expect(mergeInts(ints, 'cu', 2)).toEqual([{ from: 0, to: 2, v: 2 }, { from: 2, to: 4, v: 0.5 }, { from: 6, to: 8, v: 2 }, { from: 9, to: 10, v: 4 }]);
     expect(mergeInts(ints, 'cu', 1).length).toBe(6); // already as long: one bar per assay
+  });
+  it('keeps one spike per assay, merging only sub-pixel intervals and then keeping the peak', () => {
+    const ints = [[0, 0.5, 0.1], [0.5, 1, 0.9], [1, 1.5, 0.2], [1.5, 2, 0.3]].map(([from, to, v]) => ({ from, to, vals: { cu: v } }));
+    expect(mergeInts(ints, 'cu', 0, true)).toHaveLength(4); // wide enough on screen: every assay its own spike
+    expect(mergeInts(ints, 'cu', 1, true)).toEqual([{ from: 0, to: 1, v: 0.9 }, { from: 1, to: 2, v: 0.3 }]); // the peak survives
+    expect(mergeInts(ints, 'cu', 1)[0].v).toBeCloseTo(0.5, 9); // bars average instead
+  });
+  it('makes spikes linear in grade: the top colour limit at 4% of the face, at most 7%, a tick for the lowest', () => {
+    expect(spikeLength(0.5, 0.5)).toBeCloseTo(0.04, 9);
+    expect(spikeLength(0.25, 0.5)).toBeCloseTo(0.02, 9);
+    expect(spikeLength(0.8, 0.5)).toBeCloseTo(0.064, 9);
+    expect(spikeLength(3, 0.5)).toBe(0.07);
+    expect(spikeLength(0, 0.5)).toBe(0.004);
   });
   it('colours the bars in four orange classes from the colour limits, the legend the same', () => {
     const b = [0.05, 0.1, 0.2, 0.5];

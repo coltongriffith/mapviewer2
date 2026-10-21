@@ -15,14 +15,15 @@
 //     page: "bare"      the block alone on white: no title block, compass or notes, the credits small; "clean": no
 //                       title block while the block carries a heading; or "full",
 //     hist: { side: "face" (in the front face's plane) | "screen", scale: "linear" | "log", halo, length,
-//             palette: "orange" (four classes, pale yellow to deep orange, as the reference) | "bins" } }.
+//             palette: "orange" (four classes, pale yellow to deep orange, as the reference) | "bins",
+//             style: "spikes" (one thin spike per assay, linear in grade, as the reference) | "bars" } }.
 import { fitLine } from './section-geometry.js';
 import { ORANGE } from './tags.js';
 
 let H, S;
 export function init(host) { H = host; S = host.S; }
 
-export const BLOCK = { furniture: true, traces: 'overlay', brackets: 'plain', page: 'bare', hist: { side: 'face', scale: 'log', halo: true, length: 1, palette: 'orange' } };
+export const BLOCK = { furniture: true, traces: 'overlay', brackets: 'plain', page: 'bare', hist: { side: 'face', style: 'spikes', scale: 'linear', halo: false, length: 1, palette: 'orange' } };
 const FACES = ['S', 'E', 'N', 'W'], RAD = Math.PI / 180, LOOK = { S: 0, E: 270, N: 180, W: 90 }; // looking at each face from outside
 const dx2 = (g) => (g.b[0] - g.a[0]) ** 2 + (g.b[1] - g.a[1]) ** 2;
 const at = (g, u) => [g.a[0] + (g.b[0] - g.a[0]) * u, g.a[1] + (g.b[1] - g.a[1]) * u];
@@ -62,6 +63,7 @@ function patch(b, o) {
     if (h.side !== undefined) { if (!['face', 'screen'].includes(h.side)) throw new Error('hist.side must be "face" (in the face\'s plane) or "screen".'); x.side = h.side; }
     if (h.scale !== undefined) { if (!['linear', 'log'].includes(h.scale)) throw new Error('hist.scale must be "linear" or "log".'); x.scale = h.scale; }
     if (h.halo !== undefined) x.halo = !!h.halo;
+    if (h.style !== undefined) { if (!['spikes', 'bars'].includes(h.style)) throw new Error('hist.style must be "spikes" (one thin spike per assay) or "bars" (merged bars).'); x.style = h.style; }
     if (h.palette !== undefined) { if (!['orange', 'bins'].includes(h.palette)) throw new Error('hist.palette must be "orange" (pale yellow to deep orange) or "bins" (the figure\'s grade colours).'); x.palette = h.palette; }
     if (h.length !== undefined) { const v = +h.length; if (!Number.isFinite(v)) throw new Error('hist.length must be a number, 0.3-3 (1: the usual length).'); x.length = Math.max(0.3, Math.min(3, v)); }
     b.hist = x;
@@ -314,6 +316,7 @@ export function renderUI(el) {
       <label class="check"><input type="checkbox" data-bk="traces" ${b.traces === 'overlay' ? 'checked' : ''}>Thin traces over the faces</label><label class="check"><input type="checkbox" data-bk="brackets" ${b.brackets === 'plain' ? 'checked' : ''}>Plain brackets</label>
       </div>
     <div class="grid2" style="margin-top:6px"><label class="field"><span>Page</span><select data-bs="page">${[['bare', 'The block alone (credits only)'], ['clean', 'No title block'], ['full', 'Title block, compass and notes']].map(([v, t]) => `<option value="${v}" ${b.page === v ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+      <label class="field"><span>Bar shape</span><select data-bh="style"><option value="spikes" ${hb.style === 'spikes' ? 'selected' : ''}>A spike per assay</option><option value="bars" ${hb.style !== 'spikes' ? 'selected' : ''}>Merged bars</option></select></label>
       <label class="field"><span>Bar colours</span><select data-bh="palette"><option value="orange" ${hb.palette === 'orange' ? 'selected' : ''}>Orange ramp</option><option value="bins" ${hb.palette !== 'orange' ? 'selected' : ''}>The grade colours</option></select></label></div>
     <div class="grid2" style="margin-top:6px"><label class="field"><span>Grade bars</span><select data-bh="side"><option value="face" ${hb.side === 'face' ? 'selected' : ''}>On the front face</option><option value="screen" ${hb.side !== 'face' ? 'selected' : ''}>Facing the camera</option></select></label>
       <label class="field"><span>Bar length</span><select data-bh="scale"><option value="linear" ${hb.scale !== 'log' ? 'selected' : ''}>By grade</option><option value="log" ${hb.scale === 'log' ? 'selected' : ''}>By grade, log scale</option></select></label></div>

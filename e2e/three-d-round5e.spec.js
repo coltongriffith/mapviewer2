@@ -56,7 +56,7 @@ test('the block section preset sets an opaque block of the chosen holes, its fur
   // The news-release size (3:2), as the reference figure: the side face has room for the legend.
   const st = await page.evaluate(async (holes) => { window.EM3D.setFigureSize('release'); return window.EM3D.applyPreset('blockSection', { holes }); }, HOLES);
   expect(st.holesShown).toEqual(HOLES);
-  expect(st.block).toMatchObject({ furniture: true, traces: 'overlay', brackets: 'plain', page: 'bare', hist: { side: 'face', scale: 'log', palette: 'orange' } });
+  expect(st.block).toMatchObject({ furniture: true, traces: 'overlay', brackets: 'plain', page: 'bare', hist: { side: 'face', style: 'spikes', scale: 'linear', halo: false, palette: 'orange' } });
   expect(st.geology).toMatchObject({ enabled: true, faces: 'all', opacity: 1, labelStyle: 'caps', blend: 1, fade: 0.3 });
   expect(st.tags).toMatchObject({ at: 'collar', style: 'plain', idMode: 'all', emphasis: 'none', histograms: true });
   expect(st.display).toMatchObject({ coPlacement: 'bracket', ribbons: false, inset: false });
@@ -159,6 +159,21 @@ test('the block\'s traces stay over the faces: the tubes stay hidden after the c
   const scenes = r.map((z) => Buffer.from(unzipSync(Buffer.from(z.split(',')[1], 'base64'))['scene.png']).toString('base64'));
   expect(scenes[0] === scenes[1]).toBe(true);
   expect(scenes[2] === scenes[1]).toBe(false); // with the tubes back, they show
+});
+
+test('the grade bars as spikes (the preset) or merged bars, and back to the same figure', async ({ page }) => {
+  await open3d(page);
+  await withLogs(page);
+  const r = await page.evaluate(async (holes) => {
+    const E = window.EM3D; await E.applyPreset('blockSection', { holes });
+    await E.setBlock({}); const spikes = E.exportPNG({ view: '3d' }); // rebuilt once, as each change below rebuilds (the camera kept to its rounded state)
+    const st = await E.setBlock({ hist: { style: 'bars', scale: 'log', halo: true } }); const bars = E.exportPNG({ view: '3d' });
+    let bad = null; try { await E.setBlock({ hist: { style: 'dots' } }); } catch (e) { bad = e.message; }
+    await E.setBlock({ hist: { style: 'spikes', scale: 'linear', halo: false } });
+    return { style: st.block.hist.style, differs: bars !== spikes, same: E.exportPNG({ view: '3d' }) === spikes, bad };
+  }, HOLES);
+  expect(r).toMatchObject({ style: 'bars', differs: true, same: true });
+  expect(r.bad).toMatch(/hist.style must be/);
 });
 
 test('a hidden hole leaves the section too, chosen or not: no trace, bars or ID', async ({ page }) => {
