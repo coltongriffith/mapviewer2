@@ -124,7 +124,7 @@ function drawIdPills(ctx, K, { placed, occ, W, H: Hh }) {
     return { hole: h, st, pri, x: s[0], y: s[1] - 4 * u, w: ctx.measureText(h.id).width + 14 * u, h: 20 * u };
   }).filter(Boolean).sort((a, b) => a.pri - b.pri || a.x - b.x);
   const collars = H.project.holes.map((h) => { const s = H.proj(H.G.V(h.c.x, h.c.y, h.c.z)); return [s[0] - 6 * u, s[1] - 6 * u, s[0] + 6 * u, s[1] + 6 * u]; });
-  const res = placePills(items, [...placed, ...occ.filter((b) => b[3] - b[1] < Hh * 0.5), ...collars], { W, H: Hh, unit: u, pad: 3 * u, drop: true });
+  const res = placePills(items, [...placed, ...occ.filter((b) => b[3] - b[1] < Hh * 0.5), ...collars, ...bracketBoxes(H.shownCallouts(), u)], { W, H: Hh, unit: u, pad: 3 * u, drop: true });
   res.forEach((p) => drawn.add(p.st));
   // Leaders first, then every pill, so no leader crosses a pill.
   res.forEach((p) => {
@@ -238,7 +238,7 @@ export const splitCallouts = (items) => ({ col: items.filter((it) => placementOf
 export function drawFree(ctx, K, items, { lay, W, H: Hh, hits }) {
   const S = H.S, { u } = K;
   // The brackets' lines first, so a box set beside its hole keeps off them.
-  items.filter((it) => placementOf(it) === 'bracket').forEach(({ c }) => { for (let k = 0; k <= 8; k++) { const p = c.h.posAt(c.ic.broad.from + c.ic.broad.len * k / 8), q = H.proj(H.G.V(p.x, p.y, p.z)); lay.add([q[0] - 12 * u, q[1] - 4 * u, q[0] + 12 * u, q[1] + 4 * u]); } });
+  bracketBoxes(items.map((it) => it.c), u).forEach((b) => lay.add(b));
   // Brackets go first (they sit on their hole); the boxes beside a hole then keep clear of their text.
   items.slice().sort((a, b) => (placementOf(b) === 'bracket') - (placementOf(a) === 'bracket')).forEach((it) => {
     const o = S.coOverrides[it.c.h.id] || {}, free = placementOf(it) === 'free';
@@ -251,6 +251,13 @@ export function drawFree(ctx, K, items, { lay, W, H: Hh, hits }) {
     const box = free ? lay.add(cands[0]) : lay.place(cands, Infinity) || lay.add(least());
     H.drawCallout(ctx, K, box[0], box[1], it.c, M, s); hits.push({ kind: 'callout', id: it.c.h.id, box });
   });
+}
+// Small boxes along each bracket's line (callouts drawn as a bracket on their hole): the pills and the boxes
+// beside a hole keep off them.
+function bracketBoxes(cs, u) {
+  return cs.filter((c) => placementOf({ c }) === 'bracket').flatMap((c) => Array.from({ length: 9 }, (_, k) => {
+    const p = c.h.posAt(c.ic.broad.from + c.ic.broad.len * k / 8), q = H.proj(H.G.V(p.x, p.y, p.z)); return [q[0] - 12 * u, q[1] - 4 * u, q[0] + 12 * u, q[1] + 4 * u];
+  }));
 }
 // A bracket along the reported interval, a hair to the side of the hole, with the hole ID and the grade
 // text beside it (the side with room).

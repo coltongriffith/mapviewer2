@@ -5,7 +5,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { composite, collarGroups, autoCell, autoSearch } from './shell-core.js';
 import { METAL_DEFAULTS, defaultUnit, priceUnit, eqFactors, eqFormula, eqValue } from './metal-eq.js';
 import { isXYZ, parseXYZ, refineRole } from './roles.js';
-import { makeLayout, isClick, legendRows as binRows, wrapNotes, shouldMerge, routeLeader, hits as boxHits } from './layout.js';
+import { makeLayout, isClick, legendRows as binRows, wrapNotes, shouldMerge, leaderSpot, hits as boxHits } from './layout.js';
 import { DESIGN_VERSION, FEATURES, uses, withDefaults } from './design-version.js';
 import { intercept, calloutText, avgOver } from './intercepts.js';
 
@@ -170,6 +170,8 @@ const S = {              // style
   // (ao), haze (0-1) and the light or dark presentation theme. projection: perspective or orthographic.
   // edge: the block's outline colour (crisp near-black; grey before round 5).
   scene: { sunAz: 315, sunAlt: 40, shadow: 0.35, ao: 0.5, haze: 0, theme: 'light', edge: '#1e1d26' }, projection: 'perspective',
+  // autoLabels: a label whose arrow cannot run straight or bend once moves near its tip (unless dragged).
+  autoLabels: true,
   // Satellite imagery tone: saturation, contrast, warmth (-1 cool to 1 warm) and shaded-relief blend (0-1).
   imagery: { saturation: 1.05, contrast: 1.12, warmth: 0.25, relief: 0.55 },
 };
@@ -1497,14 +1499,19 @@ function freeSpot(L) {
   return spots.find(([x, y]) => { const bx = [x * W - bw / 2 - pad, y * H - bh / 2 - pad, x * W + bw / 2 + pad, y * H + bh / 2 + pad];
     return bx[0] > 0 && bx[2] < W && !overlayOcc.some((b) => !(bx[2] < b[0] || bx[0] > b[2] || bx[3] < b[1] || bx[1] > b[3])); }) || [0.5, 0.5];
 }
-function drawLabels(ctx, K, forExport, obst = []) {
+function drawLabels(ctx, K, forExport, obst = [], area = [0, 0, W, H]) {
   const { u } = K, hits = [];
   S.labels.forEach((L) => {
     if (L.kind === 'stat') { extStat(ctx, K, L, hits, forExport); return; } // EXT hook: stat boxes
-    const cx = L.x * W, cy = L.y * H, { title, lines, lh, padY, bw, bh } = labelSize(ctx, K, L), box = [cx - bw / 2, cy - bh / 2, cx + bw / 2, cy + bh / 2];
+    const { title, lines, lh, padY, bw, bh } = labelSize(ctx, K, L), [tx, ty] = L.arrow ? tipAt(L) : [];
+    // An arrow's leader runs straight or bends once around the cards, their text and the markers (layout.js);
+    // where it cannot, the label moves near its tip, off the block, unless it was dragged there (pinned).
+    const x0 = L.x * W, y0 = L.y * H, others = obst.filter((b) => Math.abs(b[0] - (x0 - bw / 2)) > 0.5 || Math.abs(b[1] - (y0 - bh / 2)) > 0.5);
+    const { at: [cx, cy], pts } = L.arrow ? leaderSpot([x0, y0], [tx, ty], [bw, bh], others, { frame: area, soft: [blockBox()], pad: 5 * u, unit: u, pinned: L.pinned || S.autoLabels === false }) : { at: [x0, y0] };
+    const box = [cx - bw / 2, cy - bh / 2, cx + bw / 2, cy + bh / 2];
     if (L.arrow) {
-      // Routed around the cards, their text and the markers (layout.js); the head points along the last leg.
-      const [tx, ty] = tipAt(L), pts = routeLeader([cx, cy], [tx, ty], obst, 5 * u, [0, 0, W, H]), [qx, qy] = pts[1], dx = qx - cx, dy = qy - cy, d = Math.hypot(tx - cx, ty - cy);
+      while (pts.length > 2 && Math.hypot(tx - pts[pts.length - 2][0], ty - pts[pts.length - 2][1]) < 30 * u) pts.splice(-2, 1); // no bend at the head
+      const [qx, qy] = pts[1], dx = qx - cx, dy = qy - cy, d = Math.hypot(tx - cx, ty - cy);
       if (d > 4 * u) {
         const t = Math.min(bw / 2 / (Math.abs(dx) || 1e-9), bh / 2 / (Math.abs(dy) || 1e-9)), l0 = Math.hypot(dx, dy) || 1, [px, py] = pts[pts.length - 2], hl = 13 * u, ang = Math.atan2(ty - py, tx - px);
         const line = [[cx + dx * Math.min(1, t) + dx / l0 * 5 * u, cy + dy * Math.min(1, t) + dy / l0 * 5 * u], ...pts.slice(1, -1), [tx - Math.cos(ang) * hl * 0.8, ty - Math.sin(ang) * hl * 0.8]];
@@ -1526,7 +1533,7 @@ function drawLabels(ctx, K, forExport, obst = []) {
     });
     setSpacing(ctx, 0); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     if (!forExport) {
-      hits.push({ id: L.id, kind: 'label', box: [box[0] - 4, box[1] - 4, box[2] + 4, box[3] + 4] });
+      hits.push({ id: L.id, kind: 'label', at: [cx, cy], box: [box[0] - 4, box[1] - 4, box[2] + 4, box[3] + 4] });
       // Handles while laying out: a dashed frame says "drag me"; a ring marks the arrow tip.
       if (currentStep === 'layout') {
         ctx.setLineDash([4 * u, 3 * u]); ctx.strokeStyle = 'rgba(31,120,168,0.7)'; ctx.lineWidth = u; ctx.strokeRect(box[0] - 3 * u, box[1] - 3 * u, bw + 6 * u, bh + 6 * u); ctx.setLineDash([]);
@@ -1655,7 +1662,7 @@ function drawOverlay(ctx, k, forExport) {
   // ticks) are drawn now, those pushed out by something more important left out.
   if (S.elevTicks) drawElevTicks(ctx, K, headBottom, footTop, lay, leaders);
   lay.flush();
-  drawLabels(ctx, K, forExport, occ.filter((b) => b[2] - b[0] < W - 1 && (b[2] - b[0] > 18 * u || b[3] - b[1] > 18 * u)));
+  drawLabels(ctx, K, forExport, occ.filter((b) => b[2] - b[0] < W - 1 && (b[2] - b[0] > 18 * u || b[3] - b[1] > 18 * u)), [0, headBottom, W, footTop]);
   if (!forExport) { overlayOcc = occ.slice(); labelHits = labelHits.concat(hits); } // legends and callouts drag too
   ctx.restore();
 }
@@ -2287,7 +2294,7 @@ function labelPatch(L, o) {
   if (o.text !== undefined) { const t = String(o.text).trim(); if (!t) throw new Error('A label needs some text.'); L.text = t.slice(0, 200); }
   if (o.size !== undefined) { if (!LABEL_SIZES.includes(o.size)) throw new Error('size must be "title" or "normal".'); L.size = o.size; }
   if (o.x !== undefined) L.x = clamp01(o.x, L.x); if (o.y !== undefined) L.y = clamp01(o.y, L.y);
-  if (o.arrow !== undefined) L.arrow = !!o.arrow;
+  if (o.arrow !== undefined) L.arrow = !!o.arrow; if (o.pinned !== undefined) L.pinned = !!o.pinned;
   if (o.rows !== undefined && L.kind === 'stat') L.rows = (Array.isArray(o.rows) ? o.rows : [o.rows]).map((r) => String(r).trim().slice(0, 120)).filter(Boolean).slice(0, 12); // EXT hook
   if (o.ax !== undefined) L.ax = clamp01(o.ax, L.ax); if (o.ay !== undefined) L.ay = clamp01(o.ay, L.ay);
 }
@@ -2390,7 +2397,7 @@ frameEl.addEventListener('pointerdown', (e) => {
     return;
   }
   const L = S.labels.find((l) => l.id === hit.h.id); if (!L) return;
-  e.stopPropagation(); e.preventDefault();
+  e.stopPropagation(); e.preventDefault(); if (hit.h.at) [L.x, L.y] = [hit.h.at[0] / W, hit.h.at[1] / H]; // where it was drawn
   if (hit.h.kind === 'tip') { [L.ax, L.ay] = tipAt(L).slice(0, 2).map((v, i) => clamp01(v / (i ? H : W), 0.5)); L.aw = null; } // dragged on the frame, anchored on release
   labelDrag = { L, tip: hit.h.kind === 'tip', dx: hit.x - (hit.h.kind === 'tip' ? L.ax : L.x) * W, dy: hit.y - (hit.h.kind === 'tip' ? L.ay : L.y) * H, pid: e.pointerId };
   try { frameEl.setPointerCapture(e.pointerId); } catch { /* synthetic events */ }
@@ -2403,9 +2410,9 @@ frameEl.addEventListener('pointermove', (e) => {
   }
   if (labelDrag.make) { labelDrag.L = labelDrag.make(); labelDrag.make = null; extScene(); }
   const r = frameEl.getBoundingClientRect(), x = clamp01((e.clientX - r.left - labelDrag.dx) / W, 0.5), y = clamp01((e.clientY - r.top - labelDrag.dy) / H, 0.5);
-  if (labelDrag.tip) { labelDrag.L.ax = x; labelDrag.L.ay = y; } else { labelDrag.L.x = x; labelDrag.L.y = y; }
+  if (labelDrag.tip) { labelDrag.L.ax = x; labelDrag.L.ay = y; } else { labelDrag.L.x = x; labelDrag.L.y = y; labelDrag.moved = true; }
 }, true);
-const endDrag = () => { press = null; if (labelDrag) { if (labelDrag.tip) anchorTip(labelDrag.L); if (labelDrag.wall) renderWallLabelList(); if (labelDrag.kind) renderLegendUI(); labelDrag = null; schedulePublish(); } };
+const endDrag = () => { press = null; if (labelDrag) { if (labelDrag.tip) anchorTip(labelDrag.L); else if (labelDrag.moved && labelDrag.pid !== undefined) labelDrag.L.pinned = true; if (labelDrag.wall) renderWallLabelList(); if (labelDrag.kind) renderLegendUI(); labelDrag = null; schedulePublish(); } };
 frameEl.addEventListener('pointerup', endDrag, true); frameEl.addEventListener('pointercancel', endDrag, true);
 // A click on or near the preview never moves the camera: the orbit controls on the canvas see no movement
 // until the press has gone 4 px and lasted 150 ms (isClick). The wheel zooms only when it starts over the
@@ -2451,6 +2458,9 @@ const host = () => (extHost ||= {
   S, get G() { return G; }, get project() { return project; }, get root() { return root; }, get api() { return EXT_API; }, files: () => files, digest: (f) => fileDigest(f), geo: () => geo,
   get INK() { return INK; }, get MUTED() { return MUTED; }, get RULE() { return RULE; }, paper, pri, shell, shellList, dropShell, exportScale: () => FORMATS[S.format].w / W,
   frame: () => [W, H], aim, controls, getCam, setCamera, blockOverflow, scene,
+  // What painted unit names keep clear of: the holes and collars on screen, and the pills, cards and labels last drawn.
+  labelObstacles: () => ({ pts: project.holes.flatMap((h) => h.path.filter((p, i) => i % 2 === 0).map((p) => proj(G.V(p.x, p.y, p.z)))), boxes: overlayOcc.filter((b) => b[2] - b[0] < W - 1) }),
+  viewKey: () => { const c = getCam(); return `${Math.round(c.azimuth / 5)}|${Math.round(c.plunge / 5)}|${Math.round(c.zoom / 10)}|${overlayOcc.length}|${W}`; },
   camera, renderer, proj, sectionEnds, faceGeom, textOn, roundRect, fitText, esc, BIN_COLORS, binIndex, traceR, calloutLines, shownCallouts, isPending, setSpacing, drawCallout, brandTone, figureCanvas, exportLayers, canvasBlob,
   mosaic, zoomFor, lon2t, lat2t, IMG_URL, IMAGERY_CREDIT, status, redraw: () => { extScene(); drawSectionView(); schedulePublish(); },
 });

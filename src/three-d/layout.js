@@ -41,6 +41,7 @@ export function segHits(p, q, b, pad = 0) {
   }
   return true;
 }
+const pathLen = (pts) => pts.reduce((t, p, i) => t + (i ? Math.hypot(p[0] - pts[i - 1][0], p[1] - pts[i - 1][1]) : 0), 0);
 const inside = (pt, b) => pt[0] >= b[0] && pt[0] <= b[2] && pt[1] >= b[1] && pt[1] <= b[3];
 // A leader from `from` to `to` that keeps off the boxes (cards, their text, markers): straight when clear,
 // else the shortest route bending once or twice just outside the corners of the boxes in the way. Boxes
@@ -50,11 +51,31 @@ export function routeLeader(from, to, boxes, pad = 0, frame = null) {
   if (clear(from, to)) return [from, to];
   const ok = (p) => !bs.some((b) => inside(p, [b[0] - pad, b[1] - pad, b[2] + pad, b[3] + pad])) && (!frame || inside(p, frame));
   const corners = bs.flatMap((b) => [[b[0] - 2 * pad, b[1] - 2 * pad], [b[2] + 2 * pad, b[1] - 2 * pad], [b[2] + 2 * pad, b[3] + 2 * pad], [b[0] - 2 * pad, b[3] + 2 * pad]]).filter(ok);
-  const len = (pts) => pts.reduce((s, p, i) => s + (i ? Math.hypot(p[0] - pts[i - 1][0], p[1] - pts[i - 1][1]) : 0), 0);
-  let best = null; const take = (pts) => { if (!best || len(pts) < len(best)) best = pts; };
+  let best = null; const take = (pts) => { if (!best || pathLen(pts) < pathLen(best)) best = pts; };
   corners.forEach((c) => { if (clear(from, c) && clear(c, to)) take([from, c, to]); });
   if (!best) corners.forEach((c) => { if (clear(from, c)) corners.forEach((d) => { if (d !== c && clear(c, d) && clear(d, to)) take([from, c, d, to]); }); });
   return best || [from, to];
+}
+
+// Where a label with an arrow sits: where it is when its leader runs straight or with one bend, at most 1.4
+// times the straight distance; else (unless pinned: dragged there by hand) a spot around the tip, inside the
+// frame and clear of the boxes, whose leader does: off `soft` (the block) if it can be, straight if it can be,
+// then the nearest. A pinned label keeps its
+// spot and a straight or one-bend leader, even across a box. Returns { at, pts }.
+export function leaderSpot(at, tip, [bw, bh], boxes, { frame, soft = [], pad = 0, unit = 1, pinned = false } = {}) {
+  const lead = (c) => { const pts = routeLeader(c, tip, boxes, pad, frame); return pts.length <= 3 && pathLen(pts) <= 1.4 * Math.hypot(tip[0] - c[0], tip[1] - c[1]) ? pts : null; };
+  const own = lead(at); if (own) return { at, pts: own };
+  const kept = () => { const pts = routeLeader(at, tip, boxes, pad, frame); return { at, pts: pts.length <= 3 ? pts : [at, tip] }; };
+  if (pinned) return kept();
+  let best = null;
+  for (const r of [110, 170, 240, 340, 460]) for (let a = 0; a < 360; a += 30) {
+    const t = a * Math.PI / 180, c = [tip[0] + Math.cos(t) * (r * unit + bw / 2), tip[1] + Math.sin(t) * (r * unit + bh / 2)], b = [c[0] - bw / 2, c[1] - bh / 2, c[0] + bw / 2, c[1] + bh / 2];
+    if ((frame && !(b[0] >= frame[0] + pad && b[1] >= frame[1] + pad && b[2] <= frame[2] - pad && b[3] <= frame[3] - pad)) || boxes.some((o) => hits(b, o, pad))) continue;
+    const pts = lead(c); if (!pts) continue;
+    const score = (soft.some((o) => hits(b, o)) ? 2e6 : 0) + (pts.length > 2 ? 1e6 : 0) + Math.hypot(c[0] - at[0], c[1] - at[1]); // off the block, straight, near
+    if (!best || score < best.score) best = { at: c, pts, score };
+  }
+  return best ? { at: best.at, pts: best.pts } : kept();
 }
 
 // Pill placement: each { x, y, w, h } (anchor and size) tries spots above, beside and further out, and

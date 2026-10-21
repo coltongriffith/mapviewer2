@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { segHits, routeLeader, placePills } from '../src/three-d/layout.js';
+import { segHits, routeLeader, placePills, leaderSpot } from '../src/three-d/layout.js';
 import { modeFilter, dropSpecks, refine, patches, labelSpots } from '../src/three-d/geology.js';
 import { windOutward, shellOpacity, shade, patchScene } from '../src/three-d/look.js';
 import { buildShell } from '../src/three-d/shell-mesh.js';
@@ -20,6 +20,16 @@ describe('leaders keep off cards', () => {
   });
   it('ignores a box holding the arrow tip (the label points into it)', () => {
     expect(routeLeader([0, 0], [100, 0], [[90, -10, 110, 10]])).toEqual([[0, 0], [100, 0]]);
+  });
+  it('moves a label whose leader would detour, unless it was dragged there', () => {
+    const wall = [200, 0, 220, 380], opts = { frame: [0, 0, 600, 400], pad: 2 }; // a tall card between label and tip
+    const moved = leaderSpot([100, 200], [300, 200], [60, 20], [wall], opts);
+    expect(moved.at).not.toEqual([100, 200]);
+    expect(moved.pts.length).toBeLessThanOrEqual(3);
+    for (let i = 1; i < moved.pts.length; i++) expect(segHits(moved.pts[i - 1], moved.pts[i], wall)).toBe(false);
+    const pinned = leaderSpot([100, 200], [300, 200], [60, 20], [wall], { ...opts, pinned: true });
+    expect(pinned.at).toEqual([100, 200]); expect(pinned.pts).toEqual([[100, 200], [300, 200]]); // straight, across the card
+    expect(leaderSpot([100, 200], [300, 200], [60, 20], [], opts)).toEqual({ at: [100, 200], pts: [[100, 200], [300, 200]] });
   });
   it('prefers a pill spot whose leader does not cross a section marker', () => {
     const marker = [90, 40, 110, 60]; // straight above the collar

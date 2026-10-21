@@ -337,24 +337,45 @@ function geologyCanvas(key, a, b) {
   const hit = planeClasses(key, a, b), cols = colorsNow(), ck = `${cols.join()}|${cfg().texture}|${cfg().contacts}`;
   if (!hit.base || hit.ck !== ck) { hit.base = fill(hit, cols); hit.ck = ck; hit.lk = null; }
   if (key === 'section' || cfg().labels === false) return hit.base;
-  // Unit names in about 22 px type in the export, mirrored on a face seen from inside the block.
-  const G = H.G, len = Math.hypot(b[0] - a[0], b[1] - a[1]), ht = G.zmax - G.B.z0, c = G.V((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, G.B.z0 + ht / 2), p0 = H.proj(c), p1 = H.proj(c.clone().setY(c.y + 10 * H.S.vex));
-  const pxm = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) / 10 * H.exportScale(), size = Math.min(ht * 0.06, Math.max(ht * 0.015, 22 / (pxm || 1))), bucket = Math.round(Math.log(size) / Math.log(1.2));
-  const mirror = faceWanted('far', key), lk = `${ck}|${bucket}|${mirror}|${cfg().legend.map((e) => e.name).join()}`;
-  if (hit.lk !== lk) { hit.canvas = labelCanvas(hit, cols, 1.2 ** bucket, len, ht, mirror); hit.lk = lk; }
+  // Unit names in about 22 px type in the export, mirrored on a face seen from inside the block; none on a
+  // face seen nearly edge-on (under 300 px across in the export, foreshortened to under 45%, or receding so
+  // steeply that its names would slope by more than about 30°).
+  const G = H.G, len = Math.hypot(b[0] - a[0], b[1] - a[1]), ht = G.zmax - G.B.z0, zm = G.B.z0 + ht / 2, at = (u, z) => H.proj(G.V(a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, z));
+  const p0 = at(0.5, zm), p1 = at(0.5, zm + 10), pv = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) / 10, e0 = at(0, zm), e1 = at(1, zm), ph = Math.hypot(e1[0] - e0[0], e1[1] - e0[1]) / len, k = H.exportScale();
+  if (ph * len * k < 300 || ph < 0.45 * pv / H.S.vex || Math.abs(e1[1] - e0[1]) > 0.6 * Math.abs(e1[0] - e0[0])) return hit.base; // and none sloping steeply
+  const size = Math.min(ht * 0.06, Math.max(ht * 0.015, 22 / (pv * k || 1))), bucket = Math.round(Math.log(size) / Math.log(1.2));
+  const mirror = faceWanted('far', key), lk = `${ck}|${bucket}|${mirror}|${cfg().legend.map((e) => e.name).join()}|${H.viewKey()}`;
+  if (hit.lk !== lk) { hit.canvas = labelCanvas(hit, cols, 1.2 ** bucket, len, ht, mirror, { at, ph, pv }); hit.lk = lk; }
   return hit.canvas;
 }
-function labelCanvas(hit, cols, size, len, ht, mirror) {
+// Each name goes where it fits inside its unit's largest patch and lies farthest from the holes, collars,
+// pills and cards over the face (as last drawn); a unit with no clear spot goes unnamed.
+function labelCanvas(hit, cols, size, len, ht, mirror, scr) {
   const c = document.createElement('canvas'), { nx, ny, f } = hit; c.width = hit.base.width; c.height = hit.base.height;
   const g = c.getContext('2d'), kx = c.width / len, ky = c.height / ht, names = cache.fold.classes.map((code) => (code === OTHER ? null : cfg().legend.find((e) => e.code === code)?.name || code));
+  const { pts, boxes } = H.labelObstacles(), zt = H.G.zmax;
   g.drawImage(hit.base, 0, 0); g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = `600 ${size * kx}px "Source Sans 3", "Segoe UI", sans-serif`;
   labelSpots(hit.cls, nx, ny, len / nx, ht / ny).forEach(({ c: cl, spots }) => {
     if (!names[cl] || !cols[cl]) return;
-    const hw = g.measureText(names[cl]).width / kx / 2 + size * 0.3, ri = Math.ceil(hw / (len / nx)), rj = Math.ceil(size * 0.75 / (ht / ny));
-    const fits = ({ i, j }) => { for (let q = j - rj; q <= j + rj; q++) for (let p = i - ri; p <= i + ri; p++) if (p < 0 || q < 0 || p >= nx || q >= ny || hit.cls[q * nx + p] !== cl) return false; return true; };
-    const deep = spots.filter((p) => p.depth >= size * 0.6), step = Math.max(1, Math.floor(deep.length / 300)), at = deep.find((p, k) => k % step === 0 && fits(p)); if (!at) return;
-    g.save(); g.translate((at.i + 0.5) * f, (at.j + 0.5) * f); g.scale(mirror ? -1 : 1, ky / kx);
-    g.fillStyle = `#${rgbOf(cols[cl]).map((v) => Math.round(v * 0.45).toString(16).padStart(2, '0')).join('')}`; g.fillText(names[cl], 0, 0); g.restore();
+    // On one line, else on two (split at the space nearest the middle), so a name fits between the holes.
+    const words = names[cl].split(' '), cut = words.reduce((bk, w, i) => (i && Math.abs(words.slice(0, i).join(' ').length - names[cl].length / 2) < Math.abs(words.slice(0, bk).join(' ').length - names[cl].length / 2) ? i : bk), 1);
+    for (const lines of [[names[cl]], ...(words.length > 1 ? [[words.slice(0, cut).join(' '), words.slice(cut).join(' ')]] : [])]) {
+      const hw = Math.max(...lines.map((t) => g.measureText(t).width)) / kx / 2 + size * 0.3, hh = size * (0.75 + 0.55 * (lines.length - 1)), ri = Math.ceil(hw / (len / nx)), rj = Math.ceil(hh / (ht / ny));
+      const fits = ({ i, j }) => { for (let q = j - rj; q <= j + rj; q++) for (let p = i - ri; p <= i + ri; p++) if (p < 0 || q < 0 || p >= nx || q >= ny || hit.cls[q * nx + p] !== cl) return false; return true; };
+      const sw = (hw - size * 0.2) * scr.ph + 3, sh = hh * 0.75 * scr.pv + 3; // the text's own box on screen, a hair wider
+      const room = ({ i, j }) => { // screen distance from the name's box to the nearest obstacle; negative: covered
+        const [x, y] = scr.at((i + 0.5) / nx, zt - (j + 0.5) / ny * ht), box = [x - sw, y - sh, x + sw, y + sh];
+        if (boxes.some((o) => !(box[2] < o[0] || box[0] > o[2] || box[3] < o[1] || box[1] > o[3]))) return -1;
+        let d = Infinity; for (const [px, py] of pts) d = Math.min(d, Math.max(Math.abs(px - x) - sw, Math.abs(py - y) - sh)); return d;
+      };
+      const deep = spots.filter((p) => p.depth >= hh * 0.8), step = Math.max(1, Math.floor(deep.length / 300));
+      let best = null; for (let n = 0, k = 0; k < deep.length && n < 80; k += step) { const p = deep[k]; if (!fits(p)) continue; n++; const r = room(p); if (r > 0 && (!best || r > best.r)) best = { ...p, r }; }
+      if (!best) continue;
+      g.save(); g.translate((best.i + 0.5) * f, (best.j + 0.5) * f); g.scale(mirror ? -1 : 1, ky / kx);
+      g.fillStyle = `#${rgbOf(cols[cl]).map((v) => Math.round(v * 0.45).toString(16).padStart(2, '0')).join('')}`;
+      lines.forEach((t, i) => g.fillText(t, 0, (i - (lines.length - 1) / 2) * size * 1.1 * kx)); g.restore();
+      return;
+    }
   });
   return c;
 }
