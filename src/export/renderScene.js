@@ -25,9 +25,32 @@ import { screenScale } from '../utils/stageScale.js';
 import { tileLayerCredits } from '../utils/rasterOverlay.js';
 import { getMapFrame, scaleFrame, computeGridTicks, projectionLabel, FRAME_FONT, FRAME_FONT_PX } from '../utils/coordinateFrame.js';
 import { fillPatternSpec, hasFillPattern } from '../../shared/fillPattern.js';
+import { diagnostic } from '../../shared/figureDiagnostics.js';
 
-let _exportWarnings = [];
-export function getExportWarnings() { return _exportWarnings; }
+// One export's findings: the warning strings the export status line has always
+// shown, and the same findings as structured diagnostics (shared/
+// figureDiagnostics.js). Each render works on a shallow copy of the scene that
+// carries its own context, so two exports in flight cannot mix their warnings;
+// pass options.exportContext to read them back.
+export function createExportContext() { return { warnings: [], diagnostics: [] }; }
+let _lastExportContext = createExportContext();
+// Compatibility wrapper for the single-export UI: the warnings of the export
+// started most recently, as the module-global accumulator used to return.
+export function getExportWarnings() { return _lastExportContext.warnings; }
+function withExportContext(scene, options) {
+  const exportContext = options?.exportContext || createExportContext();
+  _lastExportContext = exportContext;
+  return { ...scene, exportContext };
+}
+// text and action are joined exactly as the warning strings always were.
+function warn(scene, code, text, action = '', extra = {}) {
+  const ctx = scene?.exportContext;
+  if (!ctx) return;
+  ctx.warnings.push(action ? `${text} — ${action}` : text);
+  ctx.diagnostics.push(diagnostic({ code, severity: 'warning', message: text, action, ...extra }));
+}
+// A finding for the publication check only; the status line stays as it was.
+function note(scene, d) { scene?.exportContext?.diagnostics.push(diagnostic(d)); }
 
 // Kept in step with SATELLITE_INSET_CLASS in components/SatelliteInset.jsx.
 // Deliberately duplicated rather than imported: that module pulls in Leaflet and
@@ -152,7 +175,7 @@ export function getTileImages(container) {
     .filter((tile) => tile.href && tile.width > 0 && tile.height > 0);
 }
 
-function loadImage(src, crossOrigin = null, timeoutMs = 8000) {
+export function loadImage(src, crossOrigin = null, timeoutMs = 8000) {
   return new Promise((resolve, reject) => {
     const el = new Image();
     const timer = setTimeout(() => reject(new Error('timeout')), timeoutMs);
@@ -342,7 +365,7 @@ function geometryToSvg(map, feature, style, scale, patterns = null) {
   if (type === 'MultiPoint') return coords.map((coord) => geometryToSvg(map, { geometry: { type: 'Point', coordinates: coord } }, style, scale)).join('');
   return '';
 }
-function getOverlayMetrics(scene) {
+export function getOverlayMetrics(scene) {
   const id = scene.template?.id || scene.project.layout?.templateId;
   if (id === 'ni_43101_technical') {
     return resolveNI43101Zones(scene.template, scene.project.layout || {}, { width: scene.width, height: scene.height });
@@ -381,7 +404,7 @@ function drawSidebarPanelCanvas(ctx, scene, scale) {
 }
 function drawRoundedRect(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
 
-function getTheme(scene) {
+export function getTheme(scene) {
   const layout = scene?.project?.layout || {};
   const base = getThemeTokens(layout.themeId || 'investor_clean');
   const { accentColor, titleBgColor, titleFgColor, panelBgColor, panelFgColor } = layout;
@@ -437,7 +460,7 @@ function toSvgFill(color, def = '#ffffff') {
 
 
 /** Word-wrap text to fit within maxWidth px, returns array of line strings */
-function wrapText(ctx, text, maxWidth) {
+export function wrapText(ctx, text, maxWidth) {
   if (!text) return [];
   // A hard line break is honoured first; each paragraph then wraps to width.
   return String(text).split('\n').flatMap((para) => {
@@ -650,6 +673,19 @@ function legendRowLayout(items, layout, y, scale) {
   });
   return rows;
 }
+// Entry rows past the panel's bottom edge, which the clip hides.
+function legendOverflowRows(rows, bottom, scale) {
+  return rows.filter((r) => r.item && r.y + LEGEND_ROW.pitch * scale * 0.75 > bottom);
+}
+// The legend as the export lays it out, for the preflight: rows the panel
+// clips, and the label and heading sizes (1x px, before legendFontScale).
+export function legendLayoutReport(scene) {
+  const layout = scene.project.layout || {};
+  const { legend } = getOverlayMetrics(scene); const items = layout.legendItems || [];
+  if (layout.showLegend === false || !items.length || !legend?.width || !legend?.height) return null;
+  const rows = legendRowLayout(items, layout, legend.top, 1);
+  return { zone: legend, rows, hidden: legendOverflowRows(rows, legend.top + legend.height, 1), labelPx: 13, headingPx: LEGEND_ROW.headingFont };
+}
 async function drawLegendCanvas(ctx, scene, scale) {
   if (scene.project.layout?.showLegend === false) return;
   const theme = getTheme(scene);
@@ -675,8 +711,8 @@ async function drawLegendCanvas(ctx, scene, scale) {
   const rowsLaidOut = legendRowLayout(items, scene.project.layout, y, scale);
   // Never clip rows silently: the panel is clipped like the editor's, but a
   // row that falls outside it is reported with the export.
-  const hiddenRows = rowsLaidOut.filter((r) => r.item && r.y + LEGEND_ROW.pitch * scale * 0.75 > y + h).length;
-  if (hiddenRows) _exportWarnings.push(`${hiddenRows} legend row${hiddenRows === 1 ? '' : 's'} did not fit the legend panel — enlarge it or switch the legend to compact`);
+  const hiddenRows = legendOverflowRows(rowsLaidOut, y + h, scale).length;
+  if (hiddenRows) warn(scene, 'legend-truncated', `${hiddenRows} legend row${hiddenRows === 1 ? '' : 's'} did not fit the legend panel`, 'enlarge it or switch the legend to compact', { bounds: legend });
   rowsLaidOut.forEach(({ heading, item, y: rowY }) => {
     if (heading) {
       ctx.fillStyle = theme.mutedText || theme.bodyText;
@@ -1048,7 +1084,7 @@ export function serializeOverlaySvg(svg, width, height) {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(new XMLSerializer().serializeToString(clone))}`;
 }
 
-async function drawSatelliteInsetCanvas(ctx, x, y, w, h, scale) {
+async function drawSatelliteInsetCanvas(ctx, x, y, w, h, scale, scene = null) {
   const container = document.querySelector(SATELLITE_INSET_SELECTOR);
   if (!container) return false;
   const rect = container.getBoundingClientRect();
@@ -1102,14 +1138,14 @@ async function drawSatelliteInsetCanvas(ctx, x, y, w, h, scale) {
           (sb.width / ss) * k, (sb.height / ss) * k,
         );
       } else {
-        _exportWarnings.push('satellite inset outline could not be embedded');
+        warn(scene, 'asset-missing', 'satellite inset outline could not be embedded', '', { elementId: 'inset' });
       }
     }
   }
 
   ctx.restore();
   if (!drew) {
-    _exportWarnings.push('satellite inset tiles could not be embedded');
+    warn(scene, 'imagery-tile-failed', 'satellite inset tiles could not be embedded', '', { elementId: 'inset' });
     return false;
   }
   return true;
@@ -1124,12 +1160,12 @@ async function drawInsetCanvas(ctx, scene, scale) {
   const innerX = x + 10 * scale, innerY = y + 30 * scale, innerW = w - 20 * scale, innerH = h - 56 * scale;
   const customInset = insetMode === 'custom_image' && insetImage;
   if (customInset) {
-    const img = await new Promise((resolve, reject) => { const el = new Image(); el.onload = () => resolve(el); el.onerror = reject; el.src = insetImage; }).catch(() => { _exportWarnings.push('inset image could not be embedded'); return null; });
+    const img = await new Promise((resolve, reject) => { const el = new Image(); el.onload = () => resolve(el); el.onerror = reject; el.src = insetImage; }).catch(() => { warn(scene, 'asset-missing', 'inset image could not be embedded', '', { elementId: 'inset', bounds: zone }); return null; });
     if (img) { ctx.save(); drawRoundedRect(ctx, innerX, innerY, innerW, innerH, 8 * scale); ctx.clip(); const lb = fitRect(img.naturalWidth || innerW, img.naturalHeight || innerH, innerW, innerH); ctx.drawImage(img, innerX + lb.x, innerY + lb.y, lb.w, lb.h); ctx.restore(); }
     return;
   }
   if (insetMode === 'satellite_locator') {
-    const ok = await drawSatelliteInsetCanvas(ctx, innerX, innerY, innerW, innerH, scale);
+    const ok = await drawSatelliteInsetCanvas(ctx, innerX, innerY, innerW, innerH, scale, scene);
     if (ok) {
       ctx.fillStyle = theme.insetMuted; ctx.font = `${11 * scale}px Arial`; ctx.textBaseline = 'alphabetic';
       // Same fallback chain the preview uses in LocatorInset: the detected
@@ -1178,7 +1214,7 @@ function drawFooterCanvas(ctx, scene, scale) {
 // the frame edge could overlap in the PNG.
 // Panels (legend, inset, logo, title…) are obstacles for automatic cards, the
 // same zones the editor passes, and any card still overlapping one is reported.
-function placeCallouts(scene, scale) {
+export function placeCallouts(scene, scale) {
   const layout = scene.project.layout || {};
   const obstacles = panelObstacles(getOverlayMetrics(scene), layout);
   // A project saved before the scored layout (no layoutAlgorithm) keeps the
@@ -1188,14 +1224,14 @@ function placeCallouts(scene, scale) {
   const colliding = placed.filter((c) => c.collidesWith?.length);
   if (colliding.length) {
     const what = [...new Set(colliding.flatMap((c) => c.collidesWith))].slice(0, 3).join(', ');
-    _exportWarnings.push(`${colliding.length} callout${colliding.length === 1 ? '' : 's'} overlap${colliding.length === 1 ? 's' : ''} ${what} — drag ${colliding.length === 1 ? 'it' : 'them'} clear or move the panel`);
+    warn(scene, 'callout-collision', `${colliding.length} callout${colliding.length === 1 ? '' : 's'} overlap${colliding.length === 1 ? 's' : ''} ${what}`, `drag ${colliding.length === 1 ? 'it' : 'them'} clear or move the panel`, colliding.length === 1 ? { elementId: colliding[0].id, bounds: colliding[0] } : {});
   }
   return placed.map((c) => ({
     ...c, left: c.left * scale, top: c.top * scale, width: c.width * scale, height: c.height * scale,
     anchorPx: { x: c.anchorPx.x * scale, y: c.anchorPx.y * scale },
   }));
 }
-function fitText(ctx, text, maxWidth) {
+export function fitText(ctx, text, maxWidth) {
   if (!text || ctx.measureText(text).width <= maxWidth) return text;
   let t = text;
   while (t.length > 0 && ctx.measureText(t + '…').width > maxWidth) t = t.slice(0, -1);
@@ -1226,6 +1262,30 @@ function drawCalloutLeaderCanvas(ctx, c, scale) {
   }
 }
 
+// A card's text as the canvas sets it: wrapped lines, block heights and the
+// height the card grows to. Shared with the preflight, which measures with the
+// same ctx.measureText so its overflow findings match the PNG.
+export function calloutCardMetrics(ctx, c, scale, calloutFont, hasLogo) {
+  const fontSize = (c.style?.fontSize || 12) * scale;
+  const subtextSize = Math.max(9, (c.style?.fontSize || 12) - 2) * scale;
+  const paddingX = (c.style?.paddingX ?? Math.max(4, Math.min(10, (c.width || 160) * 0.06))) * scale;
+  // A plain callout is transparent but padded like any card, as in the
+  // editor (CalloutsOverlay) and estimateBox.
+  const maxTextW = c.width - paddingX * 2;
+  ctx.font = `700 ${fontSize}px ${calloutFont}`;
+  const titleLines = wrapText(ctx, c.text || '', maxTextW);
+  const titleLineH = fontSize * 1.2;
+  ctx.font = `${subtextSize}px ${calloutFont}`;
+  const subtextLines = c.subtext ? wrapText(ctx, c.subtext, maxTextW) : [];
+  const subtextLineH = subtextSize * 1.3;
+  const titleBlockH = titleLines.length * titleLineH;
+  const subBlockH = subtextLines.length ? subtextLines.length * subtextLineH + 4 * scale : 0;
+  const logo = hasLogo ? calloutLogoSize(c, maxTextW / scale) : null;
+  const logoBlockH = logo ? (logo.h + logo.gap) * scale : 0;
+  const needed = (c.style?.paddingY || 8) * scale * 2 + logoBlockH + titleBlockH + subBlockH;
+  return { fontSize, subtextSize, paddingX, maxTextW, titleLines, titleLineH, subtextLines, subtextLineH, titleBlockH, subBlockH, logo, logoBlockH, needed };
+}
+
 export async function drawCalloutsCanvas(ctx, scene, scale) {
   const calloutFont = `${scene.project.layout?.fonts?.callout || 'Inter'}, Arial, sans-serif`;
   const placed = placeCallouts(scene, scale);
@@ -1237,7 +1297,7 @@ export async function drawCalloutsCanvas(ctx, scene, scale) {
   const logoImgs = new Map();
   await Promise.all(placed.filter((c) => c.logo?.image && c.type !== 'badge').map(async (c) => {
     const img = await new Promise((resolve) => { const el = new Image(); el.onload = () => resolve(el); el.onerror = () => resolve(null); el.src = c.logo.image; });
-    if (img) logoImgs.set(c.id, img); else _exportWarnings.push('a callout logo could not be embedded');
+    if (img) logoImgs.set(c.id, img); else warn(scene, 'asset-missing', 'a callout logo could not be embedded', '', { elementId: c.id });
   }));
   placed.forEach((c) => {
     const theme = getTheme(scene);
@@ -1270,33 +1330,16 @@ export async function drawCalloutsCanvas(ctx, scene, scale) {
       return;
     }
 
-    const fontSize = (c.style?.fontSize || 12) * scale;
-    const subtextSize = Math.max(9, (c.style?.fontSize || 12) - 2) * scale;
     ctx.setLineDash([]);
-    const paddingX = (c.style?.paddingX ?? Math.max(4, Math.min(10, (c.width || 160) * 0.06))) * scale;
     const align = c.style?.textAlign === 'center' ? 'center' : 'left';
+    ctx.save();
+    const { fontSize, subtextSize, paddingX, titleLines, titleLineH, subtextLines, subtextLineH, titleBlockH, subBlockH, logo, logoBlockH, needed } = calloutCardMetrics(ctx, c, scale, calloutFont, logoImgs.has(c.id));
     const textX = align === 'center'
       ? c.left + c.width / 2
       : c.left + paddingX;
-    // A plain callout is transparent but padded like any card, as in the
-    // editor (CalloutsOverlay) and estimateBox.
-    const maxTextW = c.width - paddingX * 2;
-
-    ctx.save();
-    ctx.font = `700 ${fontSize}px ${calloutFont}`;
-    const titleLines = wrapText(ctx, c.text || '', maxTextW);
-    const titleLineH = fontSize * 1.2;
-    ctx.font = `${subtextSize}px ${calloutFont}`;
-    const subtextLines = c.subtext ? wrapText(ctx, c.subtext, maxTextW) : [];
-    const subtextLineH = subtextSize * 1.3;
-    const titleBlockH = titleLines.length * titleLineH;
-    const subBlockH = subtextLines.length ? subtextLines.length * subtextLineH + 4 * scale : 0;
-    const logo = logoImgs.has(c.id) ? calloutLogoSize(c, maxTextW / scale) : null;
-    const logoBlockH = logo ? (logo.h + logo.gap) * scale : 0;
     // The editor's card grows to fit its text (min-height = the estimate); the
     // export clipped overflowing text to the estimated box instead.
     if (c.type !== 'plain') {
-      const needed = (c.style?.paddingY || 8) * scale * 2 + logoBlockH + titleBlockH + subBlockH;
       if (needed > c.height) c.height = needed;
       ctx.restore(); ctx.save();
       drawRoundedRect(ctx, c.left, c.top, c.width, c.height, radius); ctx.fillStyle = c.style?.background || theme.calloutFill; ctx.fill(); ctx.strokeStyle = c.style?.border || theme.calloutBorder; ctx.lineWidth = 1 * scale; ctx.stroke();
@@ -1360,10 +1403,10 @@ export function imageMarkerBox(marker, point, scale) {
   const pad = marker.plate ? 6 * scale : 0;
   return { x: point.x - w / 2, y: point.y - h / 2, w, h, pad };
 }
-async function drawImageMarkerCanvas(ctx, marker, point, scale) {
+async function drawImageMarkerCanvas(ctx, marker, point, scale, scene = null) {
   if (!marker.image) return;
   const img = await new Promise((resolve) => { const el = new Image(); el.onload = () => resolve(el); el.onerror = () => resolve(null); el.src = marker.image; });
-  if (!img) { _exportWarnings.push('a placed logo could not be embedded'); return; }
+  if (!img) { warn(scene, 'asset-missing', 'a placed logo could not be embedded', '', { elementId: marker.id }); return; }
   const b = imageMarkerBox(marker, point, scale);
   ctx.save();
   ctx.globalAlpha = marker.opacity ?? 1;
@@ -1405,7 +1448,7 @@ async function drawMarkersCanvas(ctx, scene, scale) {
     }
 
     if (marker.type === 'image') {
-      await drawImageMarkerCanvas(ctx, marker, point, scale);
+      await drawImageMarkerCanvas(ctx, marker, point, scale, scene);
       drawMarkerLabelCanvas(ctx, scene, marker, point, scale);
       continue;
     }
@@ -1634,7 +1677,7 @@ function polygonLabelGeometry(scene, poly, pts, scale) {
 
 // The coordinate frame in export pixels, or null when this layout has none.
 // NI 43-101 always has one; any other template has one when the layout asks.
-function exportFrame(scene, scale) {
+export function exportFrame(scene, scale) {
   const f = scaleFrame(getMapFrame(scene.project.layout || {}, { width: scene.width, height: scene.height }, { sidebarFrac: scene.template?.sidebarFrac }), scale);
   if (!f) return null;
   return { mapLeft: f.left, mapTop: f.top, mapRight: f.right, mapBottom: f.bottom, area: f.area, frame: f };
@@ -1935,12 +1978,22 @@ function drawDistanceLinesCanvas(ctx, scene, scale) {
 // while Inter was still downloading set its text in Arial — narrower glyphs,
 // different wraps, callout boxes sized for the wrong font. Bounded, so a font
 // that never arrives cannot hang the export.
+// Resolves { timedOut, missing }: the families still not loaded are a finding
+// for the publication check, not a reason to wait longer.
 export async function ensureExportFonts(scene, timeoutMs = 3000) {
   const fonts = typeof document !== 'undefined' ? document.fonts : null;
-  if (!fonts?.load) return;
+  if (!fonts?.load) return { timedOut: false, missing: [] };
   const families = new Set(['Inter', ...Object.values(scene?.project?.layout?.fonts || {})].filter((f) => typeof f === 'string' && f));
   const loads = [...families].flatMap((family) => ['400', '700'].map((w) => fonts.load(`${w} 12px "${family}"`).catch(() => null)));
-  await Promise.race([Promise.all(loads).then(() => fonts.ready), new Promise((r) => setTimeout(r, timeoutMs))]);
+  let timer;
+  const timedOut = await Promise.race([Promise.all(loads).then(() => fonts.ready).then(() => false), new Promise((r) => { timer = setTimeout(() => r(true), timeoutMs); })]);
+  clearTimeout(timer);
+  // check() is true for a family with no web font at all (a system font).
+  const missing = [...families].filter((f) => { try { return fonts.check?.(`400 12px "${f}"`) === false; } catch { return false; } });
+  if (timedOut || missing.length) {
+    note(scene, { code: 'font-timeout', severity: 'warning', message: missing.length ? `font ${missing.join(', ')} had not loaded when the export was drawn` : 'fonts were still loading when the export was drawn', action: 'text may be set in a fallback font: check the connection and export again' });
+  }
+  return { timedOut, missing };
 }
 
 // An SVG names its fonts but carries none, so any viewer without Montserrat,
@@ -1985,7 +2038,7 @@ async function embeddedFontCss(scene) {
       }));
       return out.join('');
     } catch {
-      _exportWarnings.push(`font ${family} could not be embedded in the SVG — viewers without it installed will substitute another font`);
+      warn(scene, 'font-not-embedded', `font ${family} could not be embedded in the SVG`, 'viewers without it installed will substitute another font');
       return '';
     }
   }));
@@ -1993,8 +2046,8 @@ async function embeddedFontCss(scene) {
   return blocks.join('').trim();
 }
 
-export async function renderSceneToCanvas(scene, options = {}) {
-  _exportWarnings = [];
+export async function renderSceneToCanvas(sourceScene, options = {}) {
+  const scene = withExportContext(sourceScene, options);
   await ensureExportFonts(scene);
   const scale = resolveExportScale(scene, options);
   const canvas = document.createElement('canvas'); canvas.width = Math.round(scene.width * scale); canvas.height = Math.round(scene.height * scale); const ctx = canvas.getContext('2d');
@@ -2121,11 +2174,16 @@ async function drawTilesCanvas(ctx, scene, scale) {
     ctx.clip();
   }
   const tiles = getTileImages(scene.container);
-  for (const tile of tiles) {
-    const img = await loadImage(tile.href, 'anonymous').catch(() => null);
-    if (!img) continue;
+  // Fetched together and drawn in order: one slow tile host costs one timeout,
+  // not one per tile, and the picture is the same as drawing them one by one.
+  const images = await Promise.all(tiles.map((tile) => loadImage(tile.href, 'anonymous').catch(() => null)));
+  tiles.forEach((tile, i) => {
+    const img = images[i];
+    if (!img) return;
     ctx.save(); ctx.globalAlpha = tile.opacity; ctx.drawImage(img, tile.x * scale, tile.y * scale, tile.width * scale, tile.height * scale); ctx.restore();
-  }
+  });
+  const failed = images.filter((img) => !img).length;
+  if (failed) note(scene, { code: 'imagery-tile-failed', message: `${failed} of ${tiles.length} imagery tile${tiles.length === 1 ? '' : 's'} could not be drawn`, action: 'wait for the map to finish loading, or try another basemap' });
   if (f) ctx.restore();
 }
 // Where a georeferenced image sits in export pixels, from the same bounds
@@ -2216,7 +2274,7 @@ async function drawLogoCanvas(ctx, scene, scale) {
   const inRail = scene.project.layout?.templateId === 'side_panel';
   const logoPlain = inRail || scene.project.layout?.logoTransparent;
   if (!logoPlain) drawPanelRect(ctx, x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.logoFill, theme.logoBorder, scale);
-  const img = await new Promise((resolve, reject) => { const el = new Image(); el.onload = () => resolve(el); el.onerror = reject; el.src = logo; }).catch(() => { _exportWarnings.push('logo could not be embedded'); return null; });
+  const img = await new Promise((resolve, reject) => { const el = new Image(); el.onload = () => resolve(el); el.onerror = reject; el.src = logo; }).catch(() => { warn(scene, 'asset-missing', 'logo could not be embedded', '', { elementId: 'logo', bounds: zone }); return null; });
   if (img) {
     // Aspect-fit: scale to fill available space preserving ratio, centered (mirrors SVG preserveAspectRatio="xMidYMid meet")
     const pad = logoPlain ? 0 : padding;
@@ -2268,7 +2326,7 @@ async function renderBasemapImageSvg(scene, scale) {
     const pngDataUrl = canvas.toDataURL('image/png', 1.0);
     return `<image href="${escapeXml(pngDataUrl)}" x="0" y="0" width="${width}" height="${height}" preserveAspectRatio="none" />`;
   } catch {
-    _exportWarnings.push('basemap omitted from SVG (CORS restriction on tile server)');
+    warn(scene, 'imagery-tile-failed', 'basemap omitted from SVG (CORS restriction on tile server)');
     return '';
   }
 }
@@ -2635,13 +2693,13 @@ async function renderSatelliteInsetImageSvg(scene, scale) {
   canvas.width = innerW; canvas.height = innerH;
   const ctx = canvas.getContext('2d');
   if (!ctx) return null;
-  const ok = await drawSatelliteInsetCanvas(ctx, 0, 0, innerW, innerH, scale);
+  const ok = await drawSatelliteInsetCanvas(ctx, 0, 0, innerW, innerH, scale, scene);
   if (!ok) return null;
   try {
     return canvas.toDataURL('image/png');
   } catch {
     // A tainted canvas means a tile came back without CORS headers.
-    _exportWarnings.push('satellite inset could not be embedded in the SVG');
+    warn(scene, 'asset-missing', 'satellite inset could not be embedded in the SVG', '', { elementId: 'inset' });
     return null;
   }
 }
@@ -2782,9 +2840,9 @@ export function renderCalloutsSvg(scene, scale, svgDefs) {
   return `${leaders.length ? `<g id="em-callout-leaders">${leaders.join('')}</g>` : ''}\n${cards.join('\n')}`;
 }
 
-export async function renderSceneToSvg(scene, options = {}) {
+export async function renderSceneToSvg(sourceScene, options = {}) {
+  const scene = withExportContext(sourceScene, options);
   await ensureExportFonts(scene);
-  _exportWarnings = [];
   const scale = resolveExportScale(scene, options); const width = Math.round(scene.width * scale), height = Math.round(scene.height * scale);
   const isNI = scene.template?.id === 'ni_43101_technical';
   const basemapImage = await renderBasemapImageSvg(scene, scale);
