@@ -257,6 +257,7 @@ export function renameLegendHeading(derivedItems, layout = {}, from, to) {
 // 24 px per entry and 20 px per heading, ×0.75 for the compact legend) plus a
 // 12 px bottom margin. A dragged legend height is never allowed below this,
 // so no entry is clipped in an export.
+// A standalone map's note (below) counts too.
 export function legendContentHeight(items, layout = {}) {
   const density = layout?.legendCompact ? 0.75 : 1;
   let h = 0;
@@ -264,5 +265,34 @@ export function legendContentHeight(items, layout = {}) {
     if (group.heading) h += 20 * density;
     h += group.items.length * 24 * density;
   }
-  return items && items.length ? Math.ceil(40 + h + 12) : 0;
+  return items && items.length ? Math.ceil(40 + h + 12 + legendNoteHeight(legendNoteLines(layout, legendWidthFor(layout, items)))) : 0;
 }
+
+// The legend panel's height: a dragged height (never below the entries); else fitted to the entries
+// (layout.legendFit: new maps, or a saved map that ticks "Fit legend to its entries"); else the older
+// estimate the template passes, which leaves room below the last row, so a saved map keeps its legend.
+export function legendPanelHeight(items, layout = {}, estimate = 0) {
+  const content = legendContentHeight(items, layout);
+  if (layout?.legendHeightPx != null) return Math.max(60, content, Math.min(900, layout.legendHeightPx));
+  if (!items?.length) return 0;
+  return layout?.legendFit ? Math.min(900, content) : estimate + legendNoteHeight(legendNoteLines(layout, legendWidthFor(layout, items)));
+}
+
+// Map use (layout.mapUse): a "standalone" map carries its footer note (the source or disclaimer line) in the
+// legend, under the entries, instead of a footer strip; a presentation map (the default) keeps the footer.
+// The note is wrapped by an estimate of its 11 px text width, so the panel height, the editor's legend card
+// and both exporters agree. Not for the side-panel template, whose footer has its own row.
+export const LEGEND_NOTE = { font: 11, line: 14, top: 8, charW: 5.4, pad: 32 };
+export const noteInLegend = (layout = {}) => layout?.mapUse === 'standalone' && !!layout.footerText && layout.footerEnabled !== false && layout.templateId !== 'side_panel';
+export function legendNoteLines(layout = {}, width = 300) {
+  if (!noteInLegend(layout)) return [];
+  const max = Math.max(12, Math.floor((width - LEGEND_NOTE.pad) / LEGEND_NOTE.charW)), out = [];
+  let line = '';
+  String(layout.footerText).split(/\s+/).filter(Boolean).forEach((w) => {
+    const next = line ? `${line} ${w}` : w;
+    if (line && next.length > max) { out.push(line); line = w; } else line = next;
+  });
+  if (line) out.push(line);
+  return out;
+}
+export const legendNoteHeight = (lines) => (lines.length ? LEGEND_NOTE.top + lines.length * LEGEND_NOTE.line : 0);

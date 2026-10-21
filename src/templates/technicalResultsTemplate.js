@@ -1,5 +1,5 @@
 import { ROLE_LABELS, POINT_ROLES } from '../projectState';
-import { legendRowCount, legendWidthFor, legendContentHeight } from '../utils/legendCustomization.js';
+import { legendRowCount, legendWidthFor, legendPanelHeight } from '../utils/legendCustomization.js';
 import { TICK_MARGIN } from '../utils/coordinateFrame.js';
 import { hasVisibleFeatures, layerGeometryKind } from '../utils/featureIdentity.js';
 import { isClassified, classLegendItems } from '../utils/classification.js';
@@ -149,9 +149,8 @@ export function resolveTemplateZones(template, layout, mapSize, legendItems) {
   // A dragged height is honoured up to 900 px but never below what the entries
   // need: it used to cap at 500 and let the rest scroll, so the export clipped
   // the last rows of a long legend.
-  const legendHeight = layout?.legendHeightPx != null
-    ? Math.max(60, legendContentHeight(resolvedLegendItems, layout), Math.min(900, layout.legendHeightPx))
-    : legendHeightFor(layout, legendRowCount(resolvedLegendItems, layout));
+  // Without one: fitted to the entries (layout.legendFit), else the older estimate (legendPanelHeight).
+  const legendHeight = legendPanelHeight(resolvedLegendItems, layout, legendHeightFor(layout, legendRowCount(resolvedLegendItems, layout)));
   const legendWidth = legendWidthFor(layout, resolvedLegendItems);
   const logoScale = Math.max(0.7, Math.min(1.2, Number(layout?.logoScale || 1)));
   const insetScale = Math.max(0.8, Math.min(1.2, Number(layout?.insetScale || 1)));
@@ -227,11 +226,19 @@ export function resolveTemplateZones(template, layout, mapSize, legendItems) {
 
   const { title: titleZone, logo: logoZone, inset: insetZone, northArrow: northArrowZone, scaleBar: scaleBarZone, legend: legendZone } = zones;
 
-  // Footer: bottom-center strip, hidden if it collides with anything below
-  const footerZone = clampZone({ bottom: safe.bottom, left: BASE_ZONES.footer.left, width: BASE_ZONES.footer.width, height: BASE_ZONES.footer.height }, safe, width, height);
-  if (intersects(legendZone, footerZone) || intersects(scaleBarZone, footerZone) || intersects(northArrowZone, footerZone)) {
-    footerZone.width = 0;
-    footerZone.height = 0;
+  // Footer: bottom-center strip. Where it would collide with the legend, scale bar or north arrow (the
+  // standard layout's legend at the bottom left always did, so the note never showed), it takes the free
+  // stretch of the bottom edge between the bottom corners' cards instead; hidden only when that is under
+  // 160 px (the export then prints the note with the source credit: renderScene creditLinesFor).
+  let footerZone = clampZone({ bottom: safe.bottom, left: BASE_ZONES.footer.left, width: BASE_ZONES.footer.width, height: BASE_ZONES.footer.height }, safe, width, height);
+  const below = [legendZone, scaleBarZone, northArrowZone];
+  if (below.some((z) => intersects(z, footerZone))) {
+    const top = footerZone.top, low = [...below, insetZone, logoZone, titleZone].filter((z) => z.width && z.height && z.top + z.height > top);
+    const lo = Math.max(safe.left, ...low.filter((z) => z.left + z.width / 2 < width / 2).map((z) => z.left + z.width + 10));
+    const hi = Math.min(width - safe.right, ...low.filter((z) => z.left + z.width / 2 >= width / 2).map((z) => z.left - 10));
+    // As wide as the note needs (12 px text, estimated), up to the free stretch.
+    const want = Math.max(BASE_ZONES.footer.width, Math.round(String(layout?.footerText || '').length * 5.6 + 28));
+    footerZone = hi - lo >= 160 ? { top, left: lo, width: Math.min(want, hi - lo), height: footerZone.height } : { ...footerZone, width: 0, height: 0 };
   }
 
   return {

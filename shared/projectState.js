@@ -185,6 +185,9 @@ export function createInitialProjectState() {
       legendWidth: 'standard',
       legendWidthPx: 300,
       legendHeightPx: null,
+      // New maps fit the legend to its entries; a saved map without the field keeps
+      // the older, roomier estimate until "Fit to entries" is ticked.
+      legendFit: true,
       legendTransparent: false,
       logoWidthPx: 168,
       logoHeightPx: 74,

@@ -17,7 +17,7 @@ import { exportCreditLines } from '../utils/claimProvenance';
 import { referenceOverlayCredits } from '../utils/referenceOverlayCredits.js';
 import { featureKey, visibleGeojson } from '../utils/featureIdentity.js';
 import { getFeatureStyle as resolveFeatureStyle, canDissolve } from '../utils/featureStyle.js';
-import { groupLegendItems, isNearWhite, LIGHT_SWATCH_EDGE } from '../utils/legendCustomization.js';
+import { groupLegendItems, isNearWhite, LIGHT_SWATCH_EDGE, legendNoteLines, legendWidthFor, noteInLegend, LEGEND_NOTE } from '../utils/legendCustomization.js';
 import { isBracket, distanceLineLabel, bracketTicks, bracketLabelAnchor } from '../utils/distanceLine.js';
 import { pickScaleBar } from '../utils/scaleBar.js';
 import { resolvePointSymbol, symbolPath } from '../utils/pointSymbol.js';
@@ -800,7 +800,15 @@ async function drawLegendCanvas(ctx, scene, scale) {
       ctx.fillStyle = theme.bodyText; ctx.font = `${13 * scale * lfs}px ${legendFont}`; ctx.textBaseline = 'middle'; ctx.fillText(fitText(ctx, item.label || 'Layer', w - lp - (LEGEND_ROW.labelX + 10) * scale), x + lp + LEGEND_ROW.labelX * scale, rowY + LEGEND_ROW.labelCentreY * scale);
     }
   });
+  ctx.fillStyle = theme.mutedText || theme.bodyText; ctx.font = `${LEGEND_NOTE.font * scale}px ${legendFont}`; ctx.textBaseline = 'top';
+  legendNote(scene, y + h, scale).forEach(([t, ty]) => ctx.fillText(t, x + lp, ty));
   ctx.restore();
+}
+// A standalone map's footer note in the legend (utils/legendCustomization.js legendNoteLines), lines and their
+// tops, set at the bottom of the panel: the panel's height counts them (legendContentHeight).
+function legendNote(scene, bottom, scale) {
+  const layout = scene.project.layout || {}, lines = legendNoteLines(layout, legendWidthFor(layout, layout.legendItems || []));
+  return lines.map((t, i) => [t, bottom - (12 + (lines.length - i) * LEGEND_NOTE.line) * scale]);
 }
 
 function drawNorthArrowCanvas(ctx, scene, scale) {
@@ -1209,7 +1217,7 @@ async function drawInsetCanvas(ctx, scene, scale) {
 export function exportFooterBox(scene) {
   const layout = scene.project.layout || {};
   const templateId = scene.template?.id || layout.templateId;
-  if (!layout.footerText || layout.footerEnabled === false || templateId === 'ni_43101_technical') return null;
+  if (!layout.footerText || layout.footerEnabled === false || templateId === 'ni_43101_technical' || noteInLegend(layout)) return null; // a standalone map's note is in the legend
   const zone = getOverlayMetrics(scene).footer;
   if (!zone || !zone.width || !zone.height) return null;
   return { left: zone.left, top: zone.top, width: zone.width, height: layout.footerHeightPx || zone.height, text: layout.footerText };
@@ -2065,7 +2073,9 @@ export async function renderSceneToCanvas(sourceScene, options = {}) {
   const scale = resolveExportScale(scene, options);
   const canvas = document.createElement('canvas'); canvas.width = Math.round(scene.width * scale); canvas.height = Math.round(scene.height * scale); const ctx = canvas.getContext('2d');
   const mapBg = scene.project.layout?.basemap === 'blank' ? (scene.project.layout?.blankBg || '#ffffff') : '#ffffff';
-  ctx.fillStyle = mapBg; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  // options.background "transparent" (a PNG over a blank basemap): no page fill, so the map's own layers and
+  // panels sit on transparency. Tile basemaps cover the frame anyway; the PDF always passes an opaque page.
+  if (options.background !== 'transparent') { ctx.fillStyle = mapBg; ctx.fillRect(0, 0, canvas.width, canvas.height); }
   const isNI = scene.template?.id === 'ni_43101_technical';
   const isSP = scene.template?.id === 'side_panel';
   await drawTilesCanvas(ctx, scene, scale); await drawRastersCanvas(ctx, scene, scale); drawRegionHighlightsCanvas(ctx, scene, scale); await drawVectorsCanvas(ctx, scene, scale); drawEllipsesCanvas(ctx, scene, scale); drawPolygonsCanvas(ctx, scene, scale); await drawMarkersCanvas(ctx, scene, scale); await drawCalloutsCanvas(ctx, scene, scale); drawDistanceLinesCanvas(ctx, scene, scale);
@@ -2104,13 +2114,19 @@ export async function renderSceneToCanvas(sourceScene, options = {}) {
 const CREDIT_FONT_PX = 7.5;
 const CREDIT_LINE_PX = 9.5;
 
-function creditLinesFor(scene) {
+export function creditLinesFor(scene) {
   // Layer provenance first — it is about the map's subject. The reference
   // overlays are backdrop, and say what the extra colours under the claims are.
+  // Last, the map's own footer note when the layout has no footer strip for it
+  // (no room along the bottom, or a template without one): the note is always
+  // exported. A standalone map has it in the legend instead.
+  const layout = scene.project?.layout || {};
+  const note = layout.footerText && layout.footerEnabled !== false && !noteInLegend(layout) && !exportFooterBox(scene) ? [layout.footerText] : [];
   return [
     ...exportCreditLines(scene.project?.layers || []),
-    ...referenceOverlayCredits(scene.project?.layout?.referenceOverlays),
+    ...referenceOverlayCredits(layout.referenceOverlays),
     ...tileLayerCredits(scene.project?.layers || []),
+    ...note,
   ];
 }
 
@@ -2595,8 +2611,9 @@ export function renderLegendSvg(scene, scale, svgDefs) {
   // a legend set to transparent came out with a filled card behind it.
   const panel = scene.project.layout?.legendTransparent
     ? '' : svgRect(x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.panelFill, theme.panelBorder, scale);
-  const titleSize = 15 * scale * lfs;
-  return `<g id="em-legend" class="em-panel" clip-path="url(#${clipId})">${panel}${svgPanelAccentLeft(x, y, h, theme, scale)}<text x="${x + lp}" y="${baselineFromTop(y + 14 * scale, titleSize)}" fill="${theme.panelTitle}" font-family="${legendFont}" font-size="${titleSize}" font-weight="700">${escapeXml(scene.project.layout?.legendTitle || 'Legend')}</text>${rows}</g>`;
+  const titleSize = 15 * scale * lfs, noteSize = LEGEND_NOTE.font * scale;
+  const note = legendNote(scene, y + h, scale).map(([t, ty]) => `<text class="em-legend-note" x="${x + lp}" y="${baselineFromTop(ty, noteSize)}" fill="${theme.mutedText || theme.bodyText}" font-family="${legendFont}" font-size="${noteSize}">${escapeXml(t)}</text>`).join('');
+  return `<g id="em-legend" class="em-panel" clip-path="url(#${clipId})">${panel}${svgPanelAccentLeft(x, y, h, theme, scale)}<text x="${x + lp}" y="${baselineFromTop(y + 14 * scale, titleSize)}" fill="${theme.panelTitle}" font-family="${legendFont}" font-size="${titleSize}" font-weight="700">${escapeXml(scene.project.layout?.legendTitle || 'Legend')}</text>${rows}${note}</g>`;
 }
 function renderNorthArrowSvg(scene, scale, svgDefs) {
   if (scene.project.layout?.showNorthArrow === false) return '';
@@ -2892,7 +2909,7 @@ export async function renderSceneToSvg(sourceScene, options = {}) {
   const mapContent = `${mapContentGroup}${panels}${renderSourceCreditSvg(scene, scale)}${watermark}`;
 
   const defsBlock = svgDefs.length ? `<defs>${svgDefs.join('')}</defs>` : '';
-  return `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${defsBlock}<rect width="100%" height="100%" fill="${scene.project.layout?.basemap === 'blank' ? (scene.project.layout?.blankBg || '#ffffff') : '#ffffff'}" />${mapContent}</svg>`;
+  return `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${defsBlock}${options.background === 'transparent' ? '' : `<rect width="100%" height="100%" fill="${scene.project.layout?.basemap === 'blank' ? (scene.project.layout?.blankBg || '#ffffff') : '#ffffff'}" />`}${mapContent}</svg>`;
 }
 export function downloadCanvas(filename, canvas) {
   canvas.toBlob((blob) => {

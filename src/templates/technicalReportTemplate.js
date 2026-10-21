@@ -1,5 +1,5 @@
 import { ROLE_LABELS, POINT_ROLES } from '../projectState';
-import { legendRowCount, legendWidthFor, legendContentHeight } from '../utils/legendCustomization.js';
+import { legendRowCount, legendWidthFor, legendPanelHeight } from '../utils/legendCustomization.js';
 import { hasVisibleFeatures, layerGeometryKind } from '../utils/featureIdentity.js';
 import { isClassified, classLegendItems } from '../utils/classification.js';
 import { hasDrillTraces } from '../utils/drillTraces.js';
@@ -184,9 +184,8 @@ export function resolveNI43101Zones(template, layout, mapSize, legendItems) {
   // A dragged height is honoured up to 900 px but never below what the entries
   // need: it used to cap at 500 and let the rest scroll, so the export clipped
   // the last rows of a long legend.
-  const legendHeight = layout?.legendHeightPx != null
-    ? Math.max(60, legendContentHeight(resolvedLegendItems, layout), Math.min(900, layout.legendHeightPx))
-    : legendHeightFor(layout, legendRowCount(resolvedLegendItems, layout));
+  // Without one: fitted to the entries (layout.legendFit), else the older estimate (legendPanelHeight).
+  const legendHeight = legendPanelHeight(resolvedLegendItems, layout, legendHeightFor(layout, legendRowCount(resolvedLegendItems, layout)));
   const legendWidth = legendWidthFor(layout, resolvedLegendItems);
 
   const insetScale = Math.max(0.8, Math.min(1.2, Number(layout?.insetScale || 1)));

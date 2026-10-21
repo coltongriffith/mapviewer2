@@ -88,7 +88,7 @@ import { CLAIM_NAME_CAVEAT } from './utils/claimProvenance';
 import { OVERLAY_DESCRIPTIONS } from './utils/referenceOverlayCredits.js';
 import { BASEMAPS, BASEMAP_KEYS, basemapThumb, basemapConfig } from './utils/basemapConfig.js';
 import { insetStyle, insetStylePatch } from './utils/insetStyle';
-import { applyLegendCustomization, groupLegendItems, renameLegendHeading } from './utils/legendCustomization.js';
+import { applyLegendCustomization, groupLegendItems, renameLegendHeading, noteInLegend } from './utils/legendCustomization.js';
 import { getMapFrame, projectionLabel, scaleBarHeight } from './utils/coordinateFrame.js';
 import { pickScaleBar } from './utils/scaleBar.js';
 import CoordinateFrameOverlay from './components/CoordinateFrameOverlay.jsx';
@@ -6024,7 +6024,8 @@ export default function App({ initialAction = null }) {
               <input id="f-title-size-4189" type="range" min="0.6" max="1.5" step="0.05" value={project.layout.titleFontScale ?? 1} onChange={(e) => updateLayout({ titleFontScale: parseFloat(e.target.value) })} />
               <span className="range-value">{Math.round((project.layout.titleFontScale ?? 1) * 100)}%</span>
             </div>
-            <div className="control-row"><label htmlFor="f-footer-disclaimer-5214">Footer / Disclaimer</label><input id="f-footer-disclaimer-5214" value={localFooterText} onChange={(e) => { const val = e.target.value; setLocalFooterText(val); metaDirtyRef.current.footerText = true; clearTimeout(footerTextDebounceRef.current); footerTextDebounceRef.current = setTimeout(() => { updateLayout({ footerText: val }); metaDirtyRef.current.footerText = false; }, 300); }} placeholder="e.g. For internal use only" /></div>
+            <div className="control-row"><label htmlFor="f-footer-disclaimer-5214">Footer / Disclaimer</label><input id="f-footer-disclaimer-5214" value={localFooterText} onChange={(e) => { const val = e.target.value; setLocalFooterText(val); metaDirtyRef.current.footerText = true; clearTimeout(footerTextDebounceRef.current); footerTextDebounceRef.current = setTimeout(() => { updateLayout({ footerText: val }); metaDirtyRef.current.footerText = false; }, 300); }} placeholder="e.g. Source: company drilling database" /></div>
+            <div className="control-row"><label htmlFor="f-map-use">Map use</label><select id="f-map-use" value={project.layout.mapUse || 'presentation'} onChange={(e) => updateLayout({ mapUse: e.target.value })}><option value="presentation">Presentation figure</option><option value="standalone">Standalone map (footer note in the legend)</option></select></div>
             <div className="control-row inline-2">
               <div><label htmlFor="f-map-date-5216">Map Date</label><input id="f-map-date-5216" value={localMapDate} onChange={(e) => { const val = e.target.value; setLocalMapDate(val); metaDirtyRef.current.mapDate = true; clearTimeout(mapDateDebounceRef.current); mapDateDebounceRef.current = setTimeout(() => { updateLayout({ mapDate: val }); metaDirtyRef.current.mapDate = false; }, 300); }} placeholder="e.g. April 2025" /></div>
               <div><label htmlFor="f-project-5217">Project #</label><input id="f-project-5217" value={localProjectNumber} onChange={(e) => { const val = e.target.value; setLocalProjectNumber(val); metaDirtyRef.current.projectNumber = true; clearTimeout(projectNumberDebounceRef.current); projectNumberDebounceRef.current = setTimeout(() => { updateLayout({ projectNumber: val }); metaDirtyRef.current.projectNumber = false; }, 300); }} placeholder="e.g. P-2024-01" /></div>
@@ -6199,6 +6200,7 @@ export default function App({ initialAction = null }) {
             <div className="element-visibility-row">
               <label className="toggle-row"><input type="checkbox" checked={project.layout.showLegend !== false} onChange={(e) => updateLayout({ showLegend: e.target.checked })} /><span>Show legend</span></label>
               <label className="toggle-row"><input type="checkbox" checked={!project.layout.legendTransparent} onChange={(e) => updateLayout({ legendTransparent: !e.target.checked })} /><span>Legend box</span></label>
+              <label className="toggle-row"><input type="checkbox" checked={!!project.layout.legendFit} onChange={(e) => updateLayout({ legendFit: e.target.checked, legendHeightPx: null })} /><span>Fit to entries</span></label>
             </div>
             <div className="control-row"><label htmlFor="f-legend-title-5208">Legend Title</label><input id="f-legend-title-5208" value={localLegendTitle} onChange={(e) => { const val = e.target.value; setLocalLegendTitle(val); metaDirtyRef.current.legendTitle = true; clearTimeout(legendTitleDebounceRef.current); legendTitleDebounceRef.current = setTimeout(() => { updateLayout({ legendTitle: val }); metaDirtyRef.current.legendTitle = false; }, 300); }} placeholder="Legend" /></div>
             <div className="control-row slider">
@@ -7371,6 +7373,12 @@ export default function App({ initialAction = null }) {
                 <input type="checkbox" checked={pubCheck} onChange={(e) => setPubCheck(e.target.checked)} />
                 <span>Publication check before download</span>
               </label>
+              {project.layout.basemap === 'blank' && (
+                <label className="toggle-row">
+                  <input type="checkbox" checked={project.layout.exportSettings?.background === 'transparent'} onChange={(e) => updateLayout({ exportSettings: { background: e.target.checked ? 'transparent' : 'white' } })} />
+                  <span>Transparent background (PNG and SVG; PDF stays white)</span>
+                </label>
+              )}
               {exportError && <div className="export-error-msg">{exportError}</div>}
             </div>
           </section>
@@ -7693,6 +7701,7 @@ export default function App({ initialAction = null }) {
                   </div>
                 ))}
               </div>
+              {noteInLegend(project.layout) && <div className="legend-note">{project.layout.footerText}</div>}
             </div>
             {makeResizeHandles(project.layout.legendCorner || 'bl', {
               elemId: 'legend', startW: resolvedZones.legend?.width ?? project.layout.legendWidthPx ?? 300, startH: project.layout.legendHeightPx ?? resolvedZones.legend?.height ?? 168,
@@ -7735,7 +7744,7 @@ export default function App({ initialAction = null }) {
             })}
           </div>
         )}
-        {project.layout.templateId !== 'ni_43101_technical' && project.layout.footerText && project.layout.footerEnabled !== false ? (
+        {project.layout.templateId !== 'ni_43101_technical' && project.layout.footerText && project.layout.footerEnabled !== false && !noteInLegend(project.layout) ? (
           <div className="template-zone" style={{ ...zoneStyle(resolvedZones.footer), zIndex: 408, height: project.layout.footerHeightPx || resolvedZones.footer?.height, opacity: dragging?.id === 'footer' ? 0.3 : 1 }} onMouseDown={makeDragHandler('footer', resolvedZones.footer?.width ?? 260, project.layout.footerHeightPx || resolvedZones.footer?.height || 28)}>
             <div className="template-card footer-card">{project.layout.footerText}</div>
             <button className="panel-delete-btn" title="Hide disclaimer" onClick={() => updateLayout({ footerEnabled: false })}>×</button>
