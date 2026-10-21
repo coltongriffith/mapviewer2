@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { lazyGuarded } from '../utils/preloadGuard';
 import { geojsonBounds, unionBounds } from '../utils/geometry';
 import { detectRegion } from '../utils/detectRegion';
 import { visibleGeojson } from '../utils/featureIdentity.js';
-const SatelliteInset = React.lazy(() => import('./SatelliteInset'));
+const SatelliteInset = lazyGuarded(() => import('./SatelliteInset'));
 
 const REFERENCE_PRESETS = {
   province_state: { label: 'Project in State', expand: 3.8 },

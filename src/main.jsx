@@ -9,6 +9,10 @@ import RecoveryGate from "./components/RecoveryGate";
 import { captureAttribution } from "./utils/attribution";
 import { inject } from "@vercel/analytics";
 import { installErrorReporting } from "./utils/errorReporter";
+import { installPreloadGuard } from "./utils/preloadGuard";
+
+// A tab left open across a deploy reloads once for the new build (unless it has unsaved work).
+installPreloadGuard();
 
 // Record first-touch acquisition context immediately, before any deep-link
 // effect strips the query string, so signup_completed can be attributed.

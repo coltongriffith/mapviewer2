@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
+import { lazyGuarded } from '../utils/preloadGuard';
 import RegistrySearch from './RegistrySearch';
 import { US_CLAIMS_ENABLED } from '../utils/jurisdictions';
 
-const ClaimsFileUpload = React.lazy(() => import('./ClaimsFileUpload'));
+const ClaimsFileUpload = lazyGuarded(() => import('./ClaimsFileUpload'));
 
 export default function AddClaimsModal({ onClose, onImport, onCSVFile, defaultPath = null, initialProvince = null, initialQuery = '', autoSearch = false }) {
   const [path, setPath] = useState(defaultPath); // null | 'registry' | 'upload'

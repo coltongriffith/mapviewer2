@@ -75,7 +75,10 @@ const BUDGETS = {
   // 891.0 → 894.0 (Oct 2026, measured 893.7): the shared figure style (shared/figureStyle.js: versioned spec and
   // its validation) and the brand kit's style-only / full-template apply with the 2D and 3D adapters
   // (shared/brandKit.js), one 2.5 kB chunk shared by the editor and /3d's lazy typography adapter.
-  totalAuthJsGzipKb: 894.0,
+  // 894.0 → 894.1 (Oct 2026, measured 894.06): the stale-chunk guard in the entry (src/utils/preloadGuard.js:
+  // reload once after a deploy, or with unsaved work a notice and lazyGuarded parts that render a note
+  // instead of unmounting the editor), ~0.35 kB in the main chunk; App itself shrank ~10 B.
+  totalAuthJsGzipKb: 894.1,
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
@@ -85,7 +88,9 @@ const BUDGETS = {
   // 819 → 826 (measured 824.8): the publication check, as totalAuthJsGzipKb above.
   // 826 → 825.5 (Oct 2026, after the /3d trim below; measured 825.2): lowered to what ships, plus 0.3.
   // 825.5 → 828.5 (measured 828.2): the figure style and brand kit style apply, as totalAuthJsGzipKb above.
-  totalJsGzipKb: 828.5,
+  // 828.5 → 828.8 (measured 828.5 in CI): the stale-chunk reload guard and lazyGuarded wrapper in the main entry
+  // (~0.3 kB); chunk-hash churn alone moves this total by about ±20 B, so 828.5 left no room.
+  totalJsGzipKb: 828.8,
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the
   // totals above. /3d carries three.js (~109 kB gzip) and its editor.

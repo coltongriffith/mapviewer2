@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
+import { lazyGuarded } from '../utils/preloadGuard';
 import { useClaims } from '../hooks/useClaims';
 import { trackSearch, trackEvent } from '../utils/track';
 import {
@@ -12,7 +13,7 @@ import { claimNamePrefix, sourceCredit, CLAIM_NAME_CAVEAT } from '../utils/claim
 import { claimNotices } from '../utils/claimNotices';
 import ClaimNoticeStrip from './ClaimNoticeStrip';
 import ClaimRequestForm from './ClaimRequestForm';
-const ClaimSearchHelp = React.lazy(() => import('./FeedbackModal'));
+const ClaimSearchHelp = lazyGuarded(() => import('./FeedbackModal'));
 import { clusterFeatures, clusterLabels } from '../utils/featureClusters.js';
 
 // ── Spatial clustering helpers ─────────────────────────────────────────────
