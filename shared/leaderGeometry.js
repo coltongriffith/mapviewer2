@@ -42,7 +42,8 @@ export function leaderGeometry(anchorPx, box, shape = 'straight', scale = 1) {
 }
 
 // The point the leader leaves the anchor towards, which orients an arrowhead.
-export const leaderTangentFrom = (g) => g.bend || g.end;
+// A bend on the anchor (a level or upright leader) gives no direction: use the end.
+export const leaderTangentFrom = (g) => (g.bend && (g.bend.x !== g.start.x || g.bend.y !== g.start.y) ? g.bend : g.end);
 
 // The path as SVG `d`; the canvas exporter traces the same three points.
 export function leaderSvgD(g) {

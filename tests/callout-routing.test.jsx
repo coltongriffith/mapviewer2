@@ -4,7 +4,7 @@ import React from 'react';
 import { render, waitFor } from '@testing-library/react';
 import { resolveCalloutBoxes, intersects, panelObstacles } from '../src/utils/calloutLayout.js';
 import { resolveScoredBoxes, autoArrangeCallouts, leaderOf, lineHitsRect, crossings } from '../src/utils/calloutScorer.js';
-import { leaderGeometry, leaderEndpoint, leaderSvgD, anchorMark } from '../shared/leaderGeometry.js';
+import { leaderGeometry, leaderEndpoint, leaderSvgD, anchorMark, leaderTangentFrom } from '../shared/leaderGeometry.js';
 import { renderCalloutsSvg, drawCalloutsCanvas } from '../src/export/renderScene.js';
 import { resolveTemplateZones, technicalResultsTemplate } from '../src/templates/technicalResultsTemplate.js';
 import { createInitialProjectState } from '../shared/projectState.js';
@@ -336,4 +336,14 @@ describe('editor, SVG and canvas draw one leader path', () => {
       }
     });
   }
+});
+
+describe('leader tangent on a level leader', () => {
+  it('points at the end when the bend sits on the anchor', () => {
+    const box = { left: 200, top: 80, width: 100, height: 40 };
+    for (const shape of ['elbow', 'curve']) {
+      const g = leaderGeometry({ x: 100, y: 100 }, box, shape);
+      expect(leaderTangentFrom(g)).not.toEqual(g.start);
+    }
+  });
 });
