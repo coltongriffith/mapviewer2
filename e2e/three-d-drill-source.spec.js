@@ -11,7 +11,7 @@ test.use({
     ...(process.env.PLAYWRIGHT_CHROMIUM_PATH ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH } : {}),
   },
 });
-test.setTimeout(150_000);
+test.setTimeout(300_000); // three loads and reopens of 2,500 assays under software WebGL
 
 const uid = '00000000-0000-4000-8000-0000000004d1';
 const user = { id: uid, email: 'drill@example.test', role: 'authenticated', aud: 'authenticated', created_at: '2026-10-01T00:00:00Z', email_confirmed_at: '2026-10-01T00:00:00Z', user_metadata: {}, app_metadata: {} };
@@ -150,7 +150,7 @@ test('a figure takes its holes from the property drill database, keeps them, and
 
   // Reopened with nothing new: no notice.
   await open3d(page, `/3d?project=${saved.id}`);
-  await expect(page.locator('#acct-note')).toHaveText(/^Saved /);
+  await expect(page.locator('#acct-note')).toHaveText(/^Saved /, { timeout: 60_000 }); // a reopen downloads and rebuilds the figure
   await expect.poll(() => fake.requests.filter((r) => r.endsWith('/drill_import_batches')).length).toBeGreaterThan(2);
   await expect(page.locator('#drill-notice')).toBeHidden();
 
@@ -161,13 +161,13 @@ test('a figure takes its holes from the property drill database, keeps them, and
   const pagesBefore = fake.drillPages.length;
   await open3d(page, `/3d?project=${saved.id}`);
   const notice = page.locator('#drill-notice');
-  await expect(notice).toBeVisible();
+  await expect(notice).toBeVisible({ timeout: 60_000 });
   await expect(notice).toContainText('New drill data since this figure (1 new hole, 210 assays) —');
   st = await state(page);
   expect(st.project).toMatchObject({ holes: 12, intervals: 2520 });
   expect(st.drillSource.latestBatchId).toBe(B(4));
   expect(fake.drillPages.length).toBe(pagesBefore); // only the import list was read
-  await expect(page.locator('#acct-note')).toHaveText(/^Saved /);
+  await expect(page.locator('#acct-note')).toHaveText(/^Saved /, { timeout: 60_000 }); // a reopen downloads and rebuilds the figure
   const kept = await exportBoth(page);
   // Dismissed: the figure stays exactly as approved.
   await notice.getByRole('button', { name: 'Keep the drill data this figure has' }).click();
@@ -178,7 +178,7 @@ test('a figure takes its holes from the property drill database, keeps them, and
 
   // Offered again on the next open; Update re-reads the property and keeps the figure's camera and style.
   await open3d(page, `/3d?project=${saved.id}`);
-  await expect(notice).toBeVisible();
+  await expect(notice).toBeVisible({ timeout: 60_000 });
   const cam = (await state(page)).camera;
   await notice.getByRole('button', { name: 'Update' }).click();
   await expect(notice).toBeHidden();
@@ -199,7 +199,7 @@ test('a figure made from files is untouched: no drill source, no drill reads, no
   fake.rows.set(id, { id, user_id: uid, name: 'OLD FIGURE', settings: { ...snapshot, files }, file_paths: [], thumbnail: null, created_at: at, updated_at: at, deleted_at: null, org_id: null, property_id: null });
   await page.addInitScript(([k, s]) => localStorage.setItem(k, JSON.stringify(s)), [AUTH_KEY, session]);
   await open3d(page, `/3d?project=${id}`);
-  await expect(page.locator('#acct-note')).toHaveText(/^Saved /);
+  await expect(page.locator('#acct-note')).toHaveText(/^Saved /, { timeout: 60_000 }); // a reopen downloads and rebuilds the figure
   const st = await state(page);
   expect(st.drillSource).toBeNull();
   expect(st.files.map((f) => f.name)).toEqual(LEGACY.files.map((f) => f.name));

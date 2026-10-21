@@ -17,7 +17,20 @@ test.describe.configure({ timeout: 150_000 }); // several full-size exports unde
 const OVERLAYS = readFileSync('tests/fixtures/three-d/example-ridge-overlays.geojson', 'utf8');
 const RELEASE = readFileSync('tests/fixtures/three-d/published-results.csv', 'utf8');
 
+// Google Fonts does not always answer the same stylesheet: now and then it points Source Sans 3 at another font
+// file (/l/font?kit=…), whose glyph edges rasterize differently. Figures exported from two page loads are compared
+// byte for byte below, so a page keeps the first stylesheet it was given (the font files are then the same too).
+const fontCss = new WeakMap();
+async function pinFonts(page) {
+  if (fontCss.has(page)) return;
+  fontCss.set(page, null);
+  await page.route('https://fonts.googleapis.com/css2?**', async (route) => {
+    if (!fontCss.get(page)) { const r = await route.fetch(); const { 'content-encoding': _e, 'content-length': _l, ...headers } = r.headers(); fontCss.set(page, { status: r.status(), headers, body: await r.body() }); }
+    await route.fulfill(fontCss.get(page));
+  });
+}
 async function open3d(page) {
+  await pinFonts(page);
   await page.route('**/api/track', (r) => r.fulfill({ status: 204 }));
   await page.goto('/3d');
   await page.waitForFunction(() => window.EM3D?.getState().ready);
