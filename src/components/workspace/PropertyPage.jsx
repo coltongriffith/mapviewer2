@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../../hooks/useAuth.jsx';
 import {
   resolveProperty, updateProperty, listPropertyMaps, listPropertyFigures, listPersonalFigures,
@@ -6,6 +6,8 @@ import {
   moveFigureToPersonal, permissions, setActiveWorkspaceId, formatWhen,
 } from '../../utils/workspace';
 import { listCloudProjects } from '../../utils/cloudStorage';
+import { supabase } from '../../lib/supabase';
+import { library, FILE_KINDS, guessKind, kindLabel, formatBytes } from '../../utils/propertyFiles';
 import { createPortfolio } from '../../utils/tenureMonitor';
 import { jurisdictionLabel } from '../../utils/jurisdictions';
 import {
@@ -21,6 +23,7 @@ const TABS = [
   { id: 'maps', label: 'Maps' },
   { id: 'figures', label: '3D figures' },
   { id: 'claims', label: 'Claims' },
+  { id: 'data', label: 'Data library' },
   { id: 'activity', label: 'Activity' },
 ];
 
@@ -225,6 +228,103 @@ function ClaimsTab({ property, perms, userId, onOpenTenureMonitor }) {
   );
 }
 
+/** A button that opens a file picker; `onFile(file)` gets the choice. */
+function FileButton({ label, className = 'btn', disabled, onFile, ariaLabel }) {
+  const ref = useRef(null);
+  return (
+    <>
+      <button type="button" className={className} disabled={disabled} aria-label={ariaLabel} onClick={() => ref.current?.click()}>{label}</button>
+      <input ref={ref} type="file" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) onFile(f); }} />
+    </>
+  );
+}
+
+// The property's shared data files. 3D figures in this property pick files
+// from here, and offer to update when a newer version is uploaded.
+function DataTab({ property, perms }) {
+  const lib = useMemo(() => (supabase ? library(supabase) : null), []);
+  const [files, setFiles] = useState(null);
+  const [error, setError] = useState(null);
+  const [note, setNote] = useState(null);
+  const [busy, setBusy] = useState(null); // a file id, or 'new'
+  const [pending, setPending] = useState(null); // { file, kind } waiting for Upload
+  const load = useCallback(async () => {
+    try {
+      if (!lib) throw new Error('The data library is not available on this site right now.');
+      setFiles(await lib.list(property.id));
+    } catch (e) { setError(e.message); setFiles((f) => f || []); }
+  }, [lib, property.id]);
+  useEffect(() => { load(); }, [load]);
+  const run = async (key, fn) => {
+    setBusy(key); setError(null); setNote(null);
+    try { await fn(); } catch (e) { setError(e.message); } finally { setBusy(null); }
+  };
+  const upload = (file, existing = null, kind = null) => run(existing?.id || 'new', async () => {
+    const r = await lib.upload({ property, file, existing, kind });
+    setNote(r.unchanged ? `${file.name} is identical to version ${r.version} of ${existing.name}, so nothing new was saved.`
+      : existing ? `Uploaded version ${r.version} of ${existing.name}.` : `Added ${file.name}.`);
+    setPending(null);
+    await load();
+  });
+  return (
+    <section aria-label="Data library">
+      <ErrorNote error={error} onDismiss={() => setError(null)} />
+      <p className="dash-muted" style={{ marginBottom: 12 }}>
+        Shared data for this property: drill collars, surveys, assays and logs, claims and targets, geophysics and documents.
+        3D figures in this property use these files and offer to update when a new version is uploaded.
+      </p>
+      {perms.edit && (pending ? (
+        <form className="ws-row" style={{ marginBottom: 14 }} onSubmit={(e) => { e.preventDefault(); upload(pending.file, null, pending.kind); }}>
+          <span className="ws-list-main"><b>{pending.file.name}</b><small>{formatBytes(pending.file.size)}</small></span>
+          <select aria-label="Kind of data" value={pending.kind} onChange={(e) => setPending({ ...pending, kind: e.target.value })}>
+            {FILE_KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
+          </select>
+          <button type="submit" className="btn primary" disabled={busy === 'new'}>{busy === 'new' ? 'Uploading…' : 'Upload'}</button>
+          <button type="button" className="btn" onClick={() => setPending(null)}>Cancel</button>
+        </form>
+      ) : (
+        <div className="ws-row" style={{ marginBottom: 14 }}>
+          <FileButton label="+ Add a file" className="btn primary" onFile={(file) => setPending({ file, kind: guessKind(file.name).kind })} />
+        </div>
+      ))}
+      {note && <p className="ws-ok" role="status" style={{ marginBottom: 12 }}>{note}</p>}
+      {files === null ? <p className="dash-muted">Loading the data library…</p> : files.length === 0 ? (
+        <p className="dash-muted">No data files in this property yet.</p>
+      ) : (
+        <div className="ws-table-wrap">
+          <table className="ws-table" aria-label="Data files">
+            <thead><tr><th>Name</th><th>Kind</th><th>Version</th><th>Updated</th><th>By</th><th><span className="dash-sr-only">Actions</span></th></tr></thead>
+            <tbody>
+              {files.map((f) => (
+                <tr key={f.id}>
+                  <td><b>{f.name}</b><br /><small className="dash-muted">{formatBytes(f.bytes)}{f.note ? ` · ${f.note}` : ''}</small></td>
+                  <td>{kindLabel(f.kind)}{f.role ? ` · ${f.role}` : ''}</td>
+                  <td>v{f.version}</td>
+                  <td>{formatWhen(f.updatedAt)}</td>
+                  <td>{f.by || '—'}</td>
+                  <td>
+                    <div className="ws-row" style={{ flexWrap: 'nowrap', justifyContent: 'flex-end', whiteSpace: 'nowrap' }}>
+                      <button type="button" className="dash-link" aria-label={`Download ${f.name}`} disabled={!!busy}
+                        onClick={() => run(f.id, async () => { window.location.assign(await lib.downloadUrl(f.path, f.name)); })}>Download</button>
+                      {perms.edit && <FileButton label={busy === f.id ? 'Uploading…' : 'New version'} className="dash-link" disabled={!!busy}
+                        ariaLabel={`Upload a new version of ${f.name}`} onFile={(file) => upload(file, f)} />}
+                      {perms.deleteFile && (
+                        <button type="button" className="dash-link" aria-label={`Delete ${f.name}`} disabled={!!busy}
+                          onClick={() => window.confirm(`Delete ${f.name}? Figures that already use it keep their copy.`)
+                            && run(f.id, async () => { await lib.remove(f.id); await load(); })}>Delete</button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function PropertyPage({ orgSlug = null, slug, onExit, onOpenDashboard, onOpenWorkspace, onOpenProperty, onOpenMap, onNewMap, onOpenTenureMonitor }) {
   const { user } = useAuth();
   const ws = useWorkspaces();
@@ -324,6 +424,7 @@ export default function PropertyPage({ orgSlug = null, slug, onExit, onOpenDashb
               ))}
               {tab === 'maps' && <MapsTab property={property} perms={perms} onOpenMap={onOpenMap} onNewMap={onNewMap} />}
               {tab === 'figures' && <FiguresTab property={property} perms={perms} userId={user?.id} />}
+              {tab === 'data' && <DataTab property={property} perms={perms} />}
               {tab === 'claims' && <ClaimsTab property={property} perms={perms} userId={user?.id} onOpenTenureMonitor={onOpenTenureMonitor} />}
               {tab === 'activity' && <section className="dash-panel"><ActivityFeed orgId={property.org_id} propertyId={property.id} /></section>}
             </div>
