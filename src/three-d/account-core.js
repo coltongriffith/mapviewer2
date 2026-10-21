@@ -175,9 +175,16 @@ const checkLibrary = () => { if (current?.home?.propertyId) lib().then((m) => m.
 // Frozen, labelled copies of the saved figure, opened read-only (versions.js, on first use).
 let frozen = null; // the published version on screen, read-only
 let verP = null;
+// A version on screen is a different figure: the live figure's newer-data notices and pending updates go
+// (drill database, data library), and none comes back while it is shown (see drillFigure).
+function setFrozen(v) {
+  frozen = v;
+  if (v) { resetDrill(); const n = $('lib-notice'); if (n) n.hidden = true; }
+  renderNote();
+}
 const ver = () => (verP ||= import('./versions.js').then((m) => {
   m.init({ client, current: () => current, dirty: () => dirty, canPublish: () => !!current && (!current.home || canEdit(current.home.role)), say,
-    frozen: () => frozen, setFrozen: (v) => { frozen = v; renderNote(); }, reopen, detach, saveAsNew: (name) => openDialog('name', { name }) });
+    frozen: () => frozen, setFrozen, reopen, detach, saveAsNew: (name) => openDialog('name', { name }) });
   return m;
 }).catch((err) => { verP = null; throw err; }));
 export const publishVersion = (o) => ver().then((m) => m.publish(o));
@@ -188,6 +195,18 @@ async function reopen(id) {
   try { const res = await openProject(id); setUrlProject(res.id); settle(); say(`Back to “${res.name}” as last saved.`); return res; } catch (err) { detach(); say(err.message); throw err; }
 }
 function detach() { current = null; dirty = true; setUrlProject(null); renderNote(); }
+
+// ── Property drill database ─────────────────────────────────────────────────
+// Any member can take a figure's holes from a property's drill database; a
+// figure that did is told of newer imports when it opens (property-data.js).
+// The figure its notice may act on: none while a published version is on screen, so a check still reading
+// when the version opened never shows, and Update never rewrites the version.
+export const drillFigure = (figure, version) => (version ? null : figure);
+let drillP = null;
+const drill = () => (drillP ||= import('./property-data.js').then((m) => { m.init({ client, current: () => drillFigure(current, frozen), say, listHomes }); return m; })
+  .catch((err) => { drillP = null; throw err; }));
+const resetDrill = () => drillP?.then((m) => m.reset(), () => {}); // a notice belongs to the figure it was shown for
+const checkDrill = () => { if (!frozen && studio().getState().drillSource?.kind === 'property') drill().then((m) => m.check()).catch(() => { /* the figure is fine as it is */ }); };
 
 export async function listProjects() {
   await requireUser('see your saved 3D maps');
@@ -292,6 +311,7 @@ export async function saveProject(name, existingId, dest = null, { force = false
 
 export async function openProject(id) {
   await requireUser('open your saved 3D maps');
+  resetDrill();
   const sb = await client();
   let project, row;
   try {
@@ -318,7 +338,7 @@ export async function openProject(id) {
     throw Object.assign(plain(`That 3D map could not be opened (${err.message}). The figure you had is back.`, err), { plain: true });
   }
   current = { id: row.id, name: row.name, savedAt: row.updated_at, home: await homeOf(row) };
-  checkLibrary();
+  checkLibrary(); checkDrill();
   return { ...current, state: em.getState() };
 }
 
@@ -520,6 +540,9 @@ async function doSave(name, id, dest = null, opts) {
 }
 
 function renderButtons() {
+  // "From property drill database" for a member of a company property.
+  const d = $('drill-add');
+  if (d) { if (!user) { d.hidden = true; $('drill-pick').hidden = true; } else listHomes().then(({ properties }) => { d.hidden = !user || !properties.length; }); }
   const s = $('acct-save'); if (!s) return;
   s.disabled = busy;
   s.title = user ? `Save to your account (${navigator.platform?.startsWith('Mac') ? '⌘' : 'Ctrl'}+S)` : 'Sign in and save this figure to your account';
@@ -607,7 +630,7 @@ async function onMenuClick(e) {
   else if (act === 'save-prop') { toggleMenu(false); openDialog('name', { asNew: Boolean(current), toProperty: true }); }
   else if (act === 'signout') {
     try { await signOut(); } catch { /* local sign-out still clears */ }
-    user = null; current = null; setUrlProject(null); renderNote(); renderButtons(); renderMenu();
+    user = null; current = null; resetDrill(); setUrlProject(null); renderNote(); renderButtons(); renderMenu();
     say('Signed out. The figure on screen is unchanged.');
   }
 }
@@ -642,6 +665,7 @@ function wire() {
     if (pending) { clearTimeout(pendingT); pendingT = setTimeout(() => stashWork(pending), 1500); }
   });
 
+  $('drill-add')?.addEventListener('click', () => drill().then((m) => m.toggle()).catch(() => say('Could not load the property drill database. Check your connection and try again.')));
   $('lib-add')?.addEventListener('click', () => lib().then((m) => m.toggle()).catch(() => say('Could not load the property library. Check your connection and try again.')));
 
   $('acct-use-password').addEventListener('click', () => {

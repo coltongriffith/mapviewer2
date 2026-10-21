@@ -6,9 +6,11 @@ import { screenScale } from '../utils/stageScale.js';
 
 export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSelect, onMove, onUpdate, onConflicts, fontFamily, zones, layout }) {
   const [tick, setTick] = useState(0);
-  // The scored layout (layout.layoutAlgorithm >= 2) is a lazy chunk; until it
-  // arrives, or if it cannot load, the legacy placement is drawn.
-  const scored = layout?.layoutAlgorithm >= 2;
+  // The scored layout (layout.layoutAlgorithm >= 2; 3 adds collar-tight ID
+  // labels) is a lazy chunk; until it arrives, or if it cannot load, the
+  // legacy placement is drawn.
+  const algorithm = layout?.layoutAlgorithm;
+  const scored = algorithm >= 2;
   const [scorer, setScorer] = useState(null);
   const [editingField, setEditingField] = useState(null);
   const [snapGuides, setSnapGuides] = useState([]);
@@ -72,8 +74,8 @@ export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSe
   // the editor moved off the legend is off the legend in the PNG too.
   const obstacles = useMemo(() => panelObstacles(zones, layout || {}), [zones, layout]);
   const placed = useMemo(
-    () => (scored && scorer ? scorer.resolveScoredBoxes : resolveCalloutBoxes)(callouts, map, { obstacles }),
-    [callouts, map, tick, obstacles, scored, scorer],
+    () => (scored && scorer ? scorer.resolveScoredBoxes : resolveCalloutBoxes)(callouts, map, { obstacles, algorithm, font: fontFamily }),
+    [callouts, map, tick, obstacles, scored, algorithm, scorer, fontFamily],
   );
   // Cards still in conflict, for the editor's list. Keyed so the parent only
   // hears about a change.
@@ -91,7 +93,7 @@ export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSe
           const style = callout.style || {};
           return (
             <React.Fragment key={`${callout.id}-leader`}>
-              {(callout.type === 'leader' || callout.type === 'boxed') ? (() => {
+              {(callout.type === 'leader' || callout.type === 'boxed' || callout.pushLeader) ? (() => {
                 // shared/leaderGeometry.js: the path every exporter draws.
                 const g = leaderGeometry(callout.anchorPx, callout, style.leaderShape);
                 const color = style.border || '#102640';
@@ -120,7 +122,7 @@ export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSe
         return (
           <div
             key={callout.id}
-            className={`map-callout ${callout.type} ${selectedCalloutId === callout.id ? 'selected' : ''} ${callout.collidesWith ? 'collides' : ''}`}
+            className={`map-callout ${callout.type} ${callout.fit ? 'fit' : ''} ${selectedCalloutId === callout.id ? 'selected' : ''} ${callout.collidesWith ? 'collides' : ''}`}
             title={callout.collidesWith ? `Overlaps ${callout.collidesWith.join(', ')} — drag it clear` : undefined}
             style={{
               position: 'absolute',
