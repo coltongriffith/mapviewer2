@@ -191,6 +191,10 @@ export function createInitialProjectState() {
       logoTransparent: true,
       insetWidthPx: 244,
       insetHeightPx: 190,
+      // Scored callout layout (src/utils/calloutScorer.js). New projects only:
+      // a saved project without the field keeps the legacy placement until
+      // the user runs Auto-arrange.
+      layoutAlgorithm: 2,
       exportSettings: {
         pixelRatio: 2,
         filename: 'exploration-maps-export',

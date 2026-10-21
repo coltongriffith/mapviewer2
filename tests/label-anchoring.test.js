@@ -5,6 +5,7 @@ import {
   isAnchorOrphaned, featureCentroid, haversineKm, clusterLabels, reanchorCalloutsForLayer,
 } from '../src/utils/featureClusters.js';
 import { geojsonCenter } from '../src/utils/geometry.js';
+import { autoArrangeCallouts, resolveScoredBoxes } from '../src/utils/calloutScorer.js';
 
 // A label's leader line has to land on ground the layer actually covers.
 //
@@ -356,6 +357,29 @@ describe('re-anchoring labels after a trim', () => {
     const after = project(c.anchor.lat, c.anchor.lng);
     expect(after.x + c.offset.x).toBeCloseTo(before.x + dragged.offset.x, 6);
     expect(after.y + c.offset.y).toBeCloseTo(before.y + dragged.offset.y, 6);
+  });
+
+  it('a data refresh, Auto-arrange and a reload keep pinned boxes and every anchor', () => {
+    // The scored layout writes offsets only. A dragged (pinned) box is never
+    // moved by it, and no callout's anchor or id changes.
+    const map = {
+      getSize: () => ({ x: 1e6, y: 1e6 }),
+      latLngToContainerPoint: ([lat, lng]) => { const p = project(lat, lng); return { x: p.x + 130000, y: p.y + 60000 }; },
+    };
+    const dragged = { id: 'c1', layerId: 'l1', anchor: overNorth, isManualPosition: true, offset: { x: 40, y: -25 }, type: 'leader', text: 'Block' };
+    const single = { id: 'c2', layerId: 'l1', featureId: 'TENURE_NUMBER_ID:4', anchor: { lat: 55.0, lng: -120.0 }, offset: { x: 20, y: -18 }, type: 'leader', text: 'CELL 4' };
+    const refreshed = reanchorCalloutsForLayer([dragged, single], trimmed, project);
+    const arranged = autoArrangeCallouts(refreshed, map);
+    expect(arranged[0]).toBe(refreshed[0]);
+    expect(arranged.map((c) => c.id)).toEqual(['c1', 'c2']);
+    expect(arranged[1].anchor).toBe(single.anchor);
+    expect(arranged[1].featureId).toBe(single.featureId);
+    const reloaded = JSON.parse(JSON.stringify(arranged));
+    expect(resolveScoredBoxes(reloaded, map)).toEqual(resolveScoredBoxes(arranged, map));
+    const pinned = resolveScoredBoxes(reloaded, map).find((c) => c.id === 'c1');
+    const at = map.latLngToContainerPoint([refreshed[0].anchor.lat, refreshed[0].anchor.lng]);
+    expect(pinned.left).toBeCloseTo(at.x + refreshed[0].offset.x, 6);
+    expect(pinned.top).toBeCloseTo(at.y + refreshed[0].offset.y, 6);
   });
 
   it('still fixes the line when no map is available to reproject', () => {
