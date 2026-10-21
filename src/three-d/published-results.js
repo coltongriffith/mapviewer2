@@ -13,7 +13,7 @@
 // and is flagged; neither is picked silently.
 // A result whose parentResultId names another result on the same hole, and lies inside it, is an "incl."
 // interval: its own record, ribbon and wording, drawn as the second line of its parent's callout.
-// Edited wording (S.pubOverrides[resultId].line1) belongs to that result and to the depths it was written
+// Edited wording (S.pubOverrides[resultId].line1, and line2 for the callout's second line) belongs to that result and to the depths it was written
 // for (at: [fromM, toM]); if the result's depths change, the approved text shows and the panel says why.
 
 export const RECORD_VERSION = 1;
@@ -146,25 +146,32 @@ export function headline(r) {
 // The depths wording was written for: a result's [fromM, toM]; a calculated callout's [from, to] and any
 // "incl." [from, to]. tie() keeps them with the wording (setCallout), a hand-picked hole those it was ticked at.
 export const icAt = (ic) => ic && [ic.broad.from, ic.broad.from + ic.broad.len, ...(ic.incl ? [ic.incl.from, ic.incl.from + ic.incl.len] : [])];
+// A published result's two lines each keep their own depths (at for line1, at2 for line2), so rewording one never
+// makes the other's wording, written for depths the result no longer has, count again.
 export function tie(cur, o, mode, at) {
   const manual = mode === 'manual';
+  if (mode === 'published') { if (at && o.line1 !== undefined) cur.at = at; if (at && o.line2 !== undefined) cur.at2 = at; return; }
   if (manual && o.show === false) delete cur.at;
   else if (at && !(manual && cur.at) && (o.line1 !== undefined || o.line2 !== undefined || (manual && cur.show))) cur.at = at;
 }
 export const atOf = (results, id) => { const r = results.find((x) => x.resultId === id); return r ? [r.fromM, r.toM] : null; };
 export const stale = (o, r) => !o.at || Math.abs(o.at[0] - r.fromM) > TOL || Math.abs(o.at[1] - r.toM) > TOL;
+export const stale2 = (o, r) => stale({ at: o.at2 }, r); // the second line's own depths
 export function textOf(r, ov = {}) { const o = ov[r.resultId] || {}; return o.line1 && !stale(o, r) ? { l1: o.line1, l1b: '' } : headline(r); }
+// The second line is the "incl." results, or the wording typed for it (ov[resultId].line2, kept like line1).
 export function pubLines(c, ov = {}) {
-  const top = textOf(c.pub, ov), kids = c.kids.map((r) => { const t = textOf(r, ov), s = t.l1 + t.l1b; return /^incl/i.test(s) ? s : `incl. ${s}`; });
-  return { l1: top.l1, l1b: top.l1b, l2: kids.length ? kids.join('; ') : null };
+  const top = textOf(c.pub, ov), o = ov[c.pub.resultId] || {}, kids = c.kids.map((r) => { const t = textOf(r, ov), s = t.l1 + t.l1b; return /^incl/i.test(s) ? s : `incl. ${s}`; });
+  return { l1: top.l1, l1b: top.l1b, l2: o.line2 && !stale2(o, c.pub) ? o.line2 : kids.length ? kids.join('; ') : null };
 }
 // Wording kept but not drawn: written for other depths, or for a result no longer in the tables.
 export function staleNotes(results, ov = {}) {
   const byId = new Map(results.map((r) => [r.resultId, r]));
-  return Object.entries(ov).filter(([, o]) => o.line1).map(([id, o]) => {
+  return Object.entries(ov).filter(([, o]) => o.line1 || o.line2).flatMap(([id, o]) => {
     const r = byId.get(id);
-    if (!r) return `Your wording for ${id} is kept, but no result ${id} is in the tables.`;
-    return stale(o, r) ? `${id}: your wording was written for ${o.at ? `${m(o.at[0])}–${m(o.at[1])} m` : 'other depths'}; the result is now ${m(r.fromM)}–${m(r.toM)} m, so its approved text is shown. Retype it to keep yours.` : null;
+    if (!r) return [`Your wording for ${id} is kept, but no result ${id} is in the tables.`];
+    const was = (at) => (at ? `${m(at[0])}–${m(at[1])} m` : 'other depths'), now = `the result is now ${m(r.fromM)}–${m(r.toM)} m`;
+    return [o.line1 && stale(o, r) && `${id}: your wording was written for ${was(o.at)}; ${now}, so its approved text is shown. Retype it to keep yours.`,
+      o.line2 && stale2(o, r) && `${id}: your second line was written for ${was(o.at2)}; ${now}, so the automatic second line is shown. Retype it to keep yours.`];
   }).filter(Boolean);
 }
 

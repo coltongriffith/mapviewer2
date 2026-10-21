@@ -1,9 +1,10 @@
 // Holes in the section for Exploration Maps 3D: EM3D.setSection and the "Chosen holes" list in the section
 // panel, loaded the first time the section has chosen holes or a line of its own. S.section is
 // { holes: [ids], a, b }: the chosen holes and the line's ends (studio.js sectionEnds, drawSection).
-import { lineThrough } from './section-geometry.js';
-import { fitSection } from './section-fit.js';
-export { offText } from './section-fit.js'; // the section's labels (studio.js drawSection)
+import { lineThrough, secFrame } from './section-geometry.js';
+import { fitSection, gradeRank } from './section-fit.js';
+import { uses } from './design-version.js';
+export { offText, padMerge, crowded, gradeRank } from './section-fit.js'; // the section's labels (studio.js drawSection)
 import { isClick } from './layout.js';
 
 let H, down = null;
@@ -31,8 +32,13 @@ function ordered() {
   return H.project.holes.map((h, i) => [h, rank(h), i]).sort((a, b) => a[1] - b[1] || a[2] - b[2]).map(([h]) => h);
 }
 // The holes to start with: the key holes near the current line, else the callout holes.
+// Design version 5: the holes within the width ranked by grade and nearness (section-fit.js gradeRank).
 function starting() {
   const S = H.S, [A, B] = H.sectionEnds(), L = Math.hypot(B.x - A.x, B.y - A.y) || 1, off = (p) => Math.abs(((p.x - A.x) * (A.y - B.y) + (p.y - A.y) * (B.x - A.x)) / L);
+  if (uses(S, 'padIds')) {
+    const inW = H.project.holes.filter((h) => h.path.some((p) => off(p) <= S.secW)), r = gradeRank(secFrame(A, B), inW, S.secW, S.valueCol);
+    if (inW.length > 1) return inW.sort((a, b) => r.get(a) - r.get(b)).slice(0, 6).map((h) => h.id);
+  }
   const key = ordered().slice(0, 12), near = key.filter((h) => h.path.some((p) => off(p) <= S.secW));
   return (near.length > 1 ? near : key).slice(0, 6).map((h) => h.id);
 }

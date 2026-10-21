@@ -9,6 +9,7 @@ import { makeLayout, isClick, legendRows as binRows, wrapNotes, shouldMerge, hit
 import { DESIGN_VERSION, FEATURES, uses, withDefaults } from './design-version.js';
 import { intercept, calloutText, avgOver, ribbonPieces } from './intercepts.js';
 import { fitLine, lineThrough, secFrame, toSection, lerp, clipSlab, clipPath, cleanSection } from './section-geometry.js';
+import { watchVersion } from './version-check.js';
 
 const $ = (id) => document.getElementById(id);
 // ============================================================
@@ -127,7 +128,7 @@ const S = {              // style
   title: 'EXAMPLE RIDGE · MAIN ZONE', subtitle: '3D drilling model, looking northeast',
   valueCol: null, valueLabel: '', bins: [0.1, 0.2, 0.3, 0.5], coCount: 5, coMin: 20, coCut: 0.2, coIncl: 0.5,
   secAz: 135, secW: 75, section: null, sections: null, secActive: null, surf: 1, walls: true, ids: true, inset: true, logo: null, meshes: {}, // section: { holes: chosen IDs, a, b: the line's ends } (section.js); sections: named ones, the active one mirrored here (sections.js)
-  ribbons: true, traceWidth: 1.4, pendingLabels: true, pendingNoAssays: false, valueCol2: null, elevTicks: true,
+  ribbons: true, traceWidth: 1.4, pendingLabels: true, pendingNoAssays: false, valueCol2: null, elevTicks: true, grid: true, // grid: eastings and northings in a plan view (plan.js)
   terrain: 'natural', terrainSource: 'auto', vex: 1, crs: null, labels: [],
   collarFit: 'collars', blockStyle: 'glass', wallLabels: [], lockView: false,
   // Intervals below displayCutoff draw as the plain trace (null: all). eq: the metal-equivalent
@@ -932,7 +933,7 @@ function placeRibbons() {
   };
   if (S.ribbons) callouts.forEach(({ h, ic }) => { put(0, h, ic.broad.from, ic.broad.from + ic.broad.len); inclsOf(ic).forEach((x) => put(1, h, x.from, x.from + x.len)); });
   G.ribbons.forEach((rb, k) => { rb.count = n[k]; rb.instanceMatrix.needsUpdate = true; });
-  EXT.tags?.placeHistograms(); // EXT hook: grade histogram bars
+  EXT.tags?.placeHistograms(); EXT.plan?.sync(); // EXT hook: grade histogram bars; the tubes hidden in a plan view
 }
 // The display cut-off: intervals below it draw as the plain trace. Callouts are unaffected.
 const intervalShown = (it) => { const v = it.vals[S.valueCol]; return Number.isFinite(v) && !(S.displayCutoff !== null && v < S.displayCutoff); };
@@ -1276,8 +1277,11 @@ function cardSize(ctx, K, secs) {
     if (s.title) { font(700, 13); w = Math.max(w, ctx.measureText(s.title).width + 24 * u); h += 19 * u; }
     s.rows.forEach((r) => { h += ((r.h || 19) + (r.sep ? 6 : 0)) * u; if (r.label) { font(400, r.mono ? 12 : 13, r.mono); w = Math.max(w, ctx.measureText(r.label).width + 56 * u); } });
   });
-  return [Math.min(w, 280 * u), h + 6 * u];
+  w = Math.min(w, 280 * u); if (uses(S, 'legendWrap')) secs.forEach((s) => s.rows.forEach((r) => { if (r.label) { font(400, r.mono ? 12 : 13, r.mono); h += (rowLines(ctx, r.label, w - 56 * u).length - 1) * 14 * u; } }));
+  return [w, h + 6 * u];
 }
+// A legend name in lines: cut short to fit, or (design version 5) wrapped to a second line first.
+const rowLines = (ctx, t, max) => { const L = uses(S, 'legendWrap') && ctx.measureText(t).width > max && wrapNotes([t], (x) => ctx.measureText(x).width, max, 99); return L?.length > 1 ? [fitText(ctx, L[0], max), fitText(ctx, L.slice(1).join(' '), max)] : [fitText(ctx, t, max)]; };
 function drawCard(ctx, K, x, y, w, h, secs) {
   const { u, font } = K; let yy = y + 12 * u;
   ctx.fillStyle = paper(0.96); ctx.strokeStyle = RULE; ctx.lineWidth = u; roundRect(ctx, x, y, w, h, 5 * u); ctx.fill(); ctx.stroke();
@@ -1288,7 +1292,7 @@ function drawCard(ctx, K, x, y, w, h, secs) {
     s.rows.forEach((r) => {
       if (r.sep) yy += 6 * u;
       if (r.full) r.full(ctx, K, x + 12 * u, yy, w - 24 * u);
-      else { r.draw(ctx, x + 12 * u, yy + 9.5 * u, u); font(400, r.mono ? 12 : 13, r.mono); ctx.fillStyle = INK; ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.fillText(fitText(ctx, r.label, w - 56 * u), x + 44 * u, yy + 9.5 * u); }
+      else { r.draw(ctx, x + 12 * u, yy + 9.5 * u, u); font(400, r.mono ? 12 : 13, r.mono); ctx.fillStyle = INK; ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; rowLines(ctx, r.label, w - 56 * u).forEach((t, k) => { ctx.fillText(t, x + 44 * u, yy + (9.5 + 14 * k) * u); yy += k * 14 * u; }); }
       yy += (r.h || 19) * u;
     });
   });
@@ -1462,10 +1466,11 @@ function drawOverlay(ctx, k, forExport) {
   // Collars and hole IDs. occ collects what is drawn, so the scale bar and new labels can keep clear of it.
   const placed = wallLabelBoxes(), idBoxes = [], occ = [], hits = [];
   EXT.overlays?.draw(ctx, K, occ); // EXT hook: map overlays, under the collars
+  const PV = EXT.plan?.begin(ctx, K); // EXT hook: a plan view's grid and interval bars (plan.js), under the collars
   project.holes.forEach((h) => {
     const [cx, cy] = proj(G.V(h.c.x, h.c.y, h.c.z)), e = h.path[h.path.length - 1], [ex, ey] = proj(G.V(e.x, e.y, e.z));
     ctx.beginPath(); ctx.arc(cx, cy, 5 * u, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 2.4 * u; ctx.strokeStyle = EXT.tags?.highlightOf(h) || '#142126'; if (h.prov || h.planned) ctx.setLineDash([2.5 * u, 2 * u]); ctx.stroke(); ctx.setLineDash([]);
-    occ.push([cx - 8 * u, cy - 8 * u, cx + 8 * u, cy + 8 * u]);
+    occ.push([cx - 8 * u, cy - 8 * u, cx + 8 * u, cy + 8 * u]); if (PV?.ids) return; // EXT hook: plan.js places them
     // EXT hook: key holes only (the default past 12 holes, when tags.js decides), and no ID where a pill is.
     if (!S.ids || (EXT.tags ? !EXT.tags.idShown(h) || (S.tags.at === 'collar' && EXT.tags.tagShown(h)) : S.tags.at === 'collar' || (S.tags.idMode !== 'all' && project.holes.length > 12))) return;
     const ang = Math.atan2(ey - cy, ex - cx), flip = Math.abs(ang) > Math.PI / 2, r = 26 * u, box = [ex - r, ey - r, ex + r, ey + r];
@@ -1481,6 +1486,7 @@ function drawOverlay(ctx, k, forExport) {
     const tw = ctx.measureText(h.id).width, x0 = ex + Math.cos(ang) * 6 * u, y0 = ey + Math.sin(ang) * 6 * u, x1 = x0 + Math.cos(ang) * tw, y1 = y0 + Math.sin(ang) * tw;
     idBoxes.push([Math.min(x0, x1) - 8 * u, Math.min(y0, y1) - 8 * u, Math.max(x0, x1) + 8 * u, Math.max(y0, y1) + 8 * u]);
   });
+  PV?.ids?.(ctx, K, placed, idBoxes);
   EXT.shapes?.draw(ctx, K, occ); EXT.sections?.draw(ctx, K, occ); // EXT hook: shapes, over the collars; the letters on fences
   const pend = S.pendingLabels && S.tags.pending !== 'collar' ? project.holes.filter(isPending) : []; // EXT hook: or one tag per group at the collars (tags.js)
   if (pend.length) {
@@ -1507,6 +1513,7 @@ function drawOverlay(ctx, k, forExport) {
   if (S.inset && !EXT.tags?.drawInset(ctx, K, { W, top: logo.bottom + 16 * u, occ })) {
     const iw = (narrow ? 118 : 150) * u, sc = iw / Math.max(G.bw, G.bh), bw = G.bw * sc, bh = G.bh * sc, ix = W - m - iw, iy = logo.bottom + 16 * u, P = (x, y) => [ix + (iw - bw) / 2 + (x - G.B.x0) * sc, iy + (G.B.y1 - y) * sc];
     ctx.fillStyle = paper(); ctx.strokeStyle = RULE; ctx.lineWidth = u; roundRect(ctx, ix - 8 * u, iy - 8 * u, iw + 16 * u, bh + 34 * u, 5 * u); ctx.fill(); ctx.stroke(); occ.push([ix - 8 * u, 0, W, iy + bh + 26 * u]);
+    EXT.overlays?.inset(ctx, P, u, [ix + (iw - bw) / 2, iy, bw, bh]); // EXT hook: claims outlined
     ctx.strokeStyle = pri(); ctx.lineWidth = 1.4 * u; ctx.strokeRect(ix + (iw - bw) / 2, iy, bw, bh);
     project.holes.forEach((h) => { ctx.strokeStyle = '#7c898c'; ctx.lineWidth = u; ctx.beginPath(); h.path.forEach((p, i) => { const [X, Y] = P(p.x, p.y); i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); }); ctx.stroke();
       const [X, Y] = P(h.c.x, h.c.y), on = S.section?.holes?.includes(h.id), r = (on ? 2.6 : 1.5) * u; ctx.fillStyle = on ? S.accent : INK; ctx.fillRect(X - r, Y - r, 2 * r, 2 * r); }); // chosen section holes in the accent
@@ -1534,7 +1541,7 @@ function drawOverlay(ctx, k, forExport) {
     const box = p?.x !== undefined ? lay.add(at(Math.max(0, Math.min(W - w, p.x * W)), Math.max(0, Math.min(H - h, p.y * H)))) : corner[p] ? lay.add(corner[p]) : lay.place(cands, Infinity, null, soft) || lay.add(cands[0]);
     drawCard(ctx, K, box[0], box[1], w, h, secs); hits.push({ kind: 'legend', id: key, box }); cardBoxes.push(box); prev = box;
   });
-  drawScaleBar(ctx, K, footTop, lay); // after the legends, so it keeps clear of them
+  drawScaleBar(ctx, K, footTop, lay); PV?.labels(ctx, K, lay); // after the legends, so it keeps clear of them; the grid's numbers clear of it
   // Orientation, bottom left: north arrow plus view direction
   occ.push([0, footTop - 60 * u, m + 160 * u, footTop]);
   const cam = getCam(), ox = m + 22 * u, oy = footTop - 34 * u, T = controls.target, n0 = proj(T), n1 = proj(T.clone().add(new THREE.Vector3(0, 0, -G.diag * 0.1)));
@@ -1546,8 +1553,9 @@ function drawOverlay(ctx, k, forExport) {
   ctx.restore();
   font(700, 10); ctx.fillStyle = pri(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('N', ox + Math.cos(ang) * 29 * u, oy + Math.sin(ang) * 29 * u);
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-  font(600, 13); ctx.fillStyle = INK; ctx.fillText(`Looking ${pad3(cam.azimuth)}°`, ox + 36 * u, oy - 2 * u);
-  font(400, 12, true); ctx.fillStyle = MUTED; ctx.fillText(`plunge ${cam.plunge}°${S.vex !== 1 ? ` · VE ${S.vex}×` : ''}`, ox + 36 * u, oy + 14 * u);
+  const [t1, t2] = PV?.foot || [`Looking ${pad3(cam.azimuth)}°`, `plunge ${cam.plunge}°${S.vex !== 1 ? ` · VE ${S.vex}×` : ''}`];
+  font(600, 13); ctx.fillStyle = INK; ctx.fillText(t1, ox + 36 * u, oy - 2 * u);
+  font(400, 12, true); ctx.fillStyle = MUTED; ctx.fillText(t2, ox + 36 * u, oy + 14 * u);
   // Intercept callouts, left column between the title and the orientation box
   // Each box goes level with its hole where it can: stacked downward, then pulled up from the bottom.
   // Only if they still do not fit is the lowest-ranked callout dropped (ranking: metal in the interval).
@@ -1663,11 +1671,17 @@ function drawSection(ctx, Wc, Hc, forExport) {
   const tagY = (i) => Y(profile[i][1]) - 24 * u;
   if (clean && shown.length) {
     const lh = 15 * u, gap = 10 * u, lo = (narrow ? m : ml) + 4 * u, hi = Wc - m;
-    let labs = shown.map(({ h, runs }) => { const sub = chosen && EXT.section ? EXT.section.offText(F, h.path) : ''; /* EXT hook: section.js */ font(600, 12, true); const tw = ctx.measureText(h.id).width; font(400, 11); return { h, at: XY(runs[0][0]), sub, tw, bw: tw + (sub ? ctx.measureText(` ${sub}`).width : 0) + 6 * u }; }), room = (hi - lo) * 0.8;
+    // EXT hook (section.js, design version 5): IDs of one pad merged, crowded ones in two rows; on a line of its own
+    // (addSection through holes) the IDs kept by grade near the line.
+    const X = uses(S, 'padIds') && EXT.section, near = X && !chosen && S.section?.a && X.gradeRank(F, shown.map((x) => x.h), w, S.valueCol);
+    let labs = shown.map(({ h, runs }) => ({ h, t: h.id, at: XY(runs[0][0]), sub: chosen && EXT.section ? EXT.section.offText(F, h.path) : '' })); // EXT hook: section.js
+    if (X) labs = X.padMerge(labs);
+    labs.forEach((l) => { font(600, 12, true); l.tw = ctx.measureText(l.t).width; font(400, 11); l.bw = l.tw + (l.sub ? ctx.measureText(` ${l.sub}`).width : 0) + 6 * u; });
+    let rows = X && X.crowded(labs, gap) ? 2 : 1, room = (hi - lo) * 0.8 * rows;
     // Within the width, one row with some slack: the callout holes, then pending holes, then those nearest the line.
-    if (!chosen) { const key = (l) => (cos.some((it) => it.c.h === l.h) ? 0 : isPending(l.h) ? 1 : 2) + Math.min(0.9, Math.abs(pr(l.h.c).off) / w / 4); labs = labs.sort((p, q) => key(p) - key(q)).filter((l) => (room -= l.bw + gap) >= 0); }
+    if (!chosen) { const key = (l) => (cos.some((it) => it.c.h === l.h) ? 0 : isPending(l.h) ? 1 : 2) + (near ? near.get(l.h) : Math.min(0.9, Math.abs(pr(l.h.c).off) / w / 4)); labs = labs.sort((p, q) => key(p) - key(q)).filter((l) => (room -= l.bw + gap) >= 0); }
     labs.sort((p, q) => p.at[0] - q.at[0]);
-    let rows = 1; while (chosen && rows < 3 && labs.reduce((t, l) => t + l.bw + gap, 0) > rows * (hi - lo)) rows++;
+    while (chosen && rows < 3 && labs.reduce((t, l) => t + l.bw + gap, 0) > rows * (hi - lo)) rows++;
     const base = Math.max(Math.min(...profile.map(([, z]) => Y(z))) - 40 * u, headBottom + 12 * u + rows * (lh + 6 * u));
     for (let r = 0; r < rows; r++) {
       // Labels that would overlap join a group centred on their holes, kept inside the frame.
@@ -1680,8 +1694,8 @@ function drawSection(ctx, Wc, Hc, forExport) {
     }
     ctx.strokeStyle = MUTED; ctx.lineWidth = 0.8 * u; ctx.beginPath(); labs.forEach((l) => { ctx.moveTo(l.x + l.bw / 2, l.y + lh); ctx.lineTo(l.at[0], l.at[1] - 2 * u); }); ctx.stroke();
     ctx.textBaseline = 'middle'; ctx.lineWidth = 4 * u; ctx.strokeStyle = paper(0.95);
-    labs.forEach(({ h, sub, tw, x, y }) => {
-      font(600, 12, true); ctx.strokeText(h.id, x + 3 * u, y + lh / 2); ctx.fillStyle = INK; ctx.fillText(h.id, x + 3 * u, y + lh / 2);
+    labs.forEach(({ t, sub, tw, x, y }) => {
+      font(600, 12, true); ctx.strokeText(t, x + 3 * u, y + lh / 2); ctx.fillStyle = INK; ctx.fillText(t, x + 3 * u, y + lh / 2);
       if (sub) { font(400, 11); ctx.strokeText(` ${sub}`, x + 3 * u + tw, y + lh / 2); ctx.fillStyle = MUTED; ctx.fillText(` ${sub}`, x + 3 * u + tw, y + lh / 2); }
     });
     ctx.textBaseline = 'alphabetic';
@@ -1758,9 +1772,15 @@ $('export-layers').addEventListener('click', () => exportLayers({ download: true
 // 8b. Send to the design desk (the Teams enquiry, with the figure and layers attached)
 // ============================================================
 // The desk lives in desk.js, loaded on first use: the form's submit or EM3D.sendToDesignDesk.
-// A page cached from before a deploy may ask for a lazy chunk that is gone: reload once (not again within a
-// minute, so it can never loop).
+// A page left open across a deploy: version-check.js offers the new version (never reloading by itself). One
+// that asks for a lazy chunk that is gone reloads once (not again within a minute, so it can never loop),
+// unless there is work on screen that a reload would lose: then it says so and leaves the reload to the user.
+const unsaved = () => !usingSample || HIST?.state().entries.length > 1;
+const newVersion = () => { $('ver-save').hidden = !unsaved(); $('ver').hidden = false; };
+$('ver-reload').addEventListener('click', () => location.reload()); $('ver-x').addEventListener('click', () => { $('ver').hidden = true; });
+watchVersion(newVersion);
 addEventListener('vite:preloadError', (e) => {
+  if (unsaved()) { newVersion(); return; }
   try { const k = 'em3d.reloadedAt'; if (Date.now() - (+sessionStorage.getItem(k) || 0) < 60000) return; sessionStorage.setItem(k, String(Date.now())); } catch { return; }
   e.preventDefault(); location.reload();
 });
@@ -1952,7 +1972,7 @@ function setStyle(o = {}, render = true) {
     S.valueCol2 = v;
   }
   if (S.valueCol2 === S.valueCol) S.valueCol2 = null;
-  ['walls', 'ids', 'inset', 'ribbons', 'pendingLabels', 'pendingNoAssays', 'elevTicks', 'lockView'].forEach((k) => { if (o[k] !== undefined) S[k] = !!o[k]; });
+  ['walls', 'ids', 'inset', 'ribbons', 'pendingLabels', 'pendingNoAssays', 'elevTicks', 'lockView', 'grid'].forEach((k) => { if (o[k] !== undefined) S[k] = !!o[k]; });
   extStyle(o); // EXT hook: histograms, insetStyle
   if (o.calloutMode !== undefined) { if (!['calculated', 'published', 'manual'].includes(o.calloutMode)) throw new Error('calloutMode must be "calculated", "published" or "manual".'); S.calloutMode = o.calloutMode; }
   if (o.coPlacement !== undefined) { if (!['column', 'beside', 'bracket'].includes(o.coPlacement)) throw new Error('coPlacement must be "column" (left column), "beside" (a box beside each hole) or "bracket" (a bracket on the hole with the grade beside it).'); S.coPlacement = o.coPlacement; extScene(); }
@@ -2083,17 +2103,7 @@ $('auto-bins').addEventListener('click', () => { setStyle({ autoBins: true }); s
 [['co-cut', 'coCut'], ['co-incl', 'coIncl'], ['co-count', 'coCount'], ['co-min', 'coMin'], ['sec-w', 'secW']].forEach(([id, key]) =>
   $(id).addEventListener('change', (e) => { const v = parseFloat(e.target.value); if (Number.isFinite(v)) setStyle({ [key]: v }); }));
 $('sec-az').addEventListener('input', (e) => { setStyle({ secAz: +e.target.value }, false); $('sec-az-out').textContent = `${pad3(S.secAz)}°`; });
-$('opt-walls').addEventListener('change', (e) => setStyle({ walls: e.target.checked }, false));
-$('opt-ids').addEventListener('change', (e) => setStyle({ ids: e.target.checked }, false));
-$('opt-inset').addEventListener('change', (e) => setStyle({ inset: e.target.checked }, false));
-$('opt-ribbons').addEventListener('change', (e) => setStyle({ ribbons: e.target.checked }, false));
-$('opt-pending').addEventListener('change', (e) => setStyle({ pendingLabels: e.target.checked }, false));
-$('opt-pending-none').addEventListener('change', (e) => setStyle({ pendingNoAssays: e.target.checked }, false));
-$('opt-elev').addEventListener('change', (e) => setStyle({ elevTicks: e.target.checked }, false));
-$('terrain').addEventListener('change', (e) => setStyle({ terrain: e.target.value }, false));
-$('terrain-src').addEventListener('change', (e) => setStyle({ terrainSource: e.target.value }, false));
-$('block-style').addEventListener('change', (e) => setStyle({ blockStyle: e.target.value }, false));
-$('collar-fit').addEventListener('change', (e) => setStyle({ collarFit: e.target.value }, false));
+// The Display checkboxes and the terrain selects call setStyle through their data-ext="style.<key>" (section 10b).
 $('vex').addEventListener('change', (e) => { setStyle({ verticalExaggeration: +e.target.value }, false); $('vex-out').textContent = `${S.vex}×`; });
 $('vex').addEventListener('input', (e) => { $('vex-out').textContent = `${e.target.value}×`; });
 function renderCRS() {
@@ -2269,13 +2279,13 @@ Object.assign(S, {
   tags: { at: 'toe', style: 'dark', status: {}, fadePrevious: false, newLabel: '', prevLabel: 'Previously released', plannedLabel: 'Planned', groups: [], autoGroup: false, groupRadius: 140, emphasis: 'auto', highlight: {}, highlightNew: true, idMode: 'auto', showId: {}, showTag: {}, hideRows: [], pending: 'collar' },
   histograms: false, insetStyle: 'plan', overlays: [], shapes: [], // overlays.js, shapes.js
 });
-const EXT = {}, extLoading = {}, EXT_IMPORT = { geology: () => import('./geology.js'), geophys: () => import('./geophys.js'), tags: () => import('./tags.js'), look: () => import('./look.js'), section: () => import('./section.js'), type: () => import('./typography.js'), overlays: () => import('./overlays.js'), shapes: () => import('./shapes.js'), sections: () => import('./sections.js'), desurvey: () => import('./min-curvature.js') };
+const EXT = {}, extLoading = {}, EXT_IMPORT = { geology: () => import('./geology.js'), geophys: () => import('./geophys.js'), tags: () => import('./tags.js'), look: () => import('./look.js'), section: () => import('./section.js'), type: () => import('./typography.js'), overlays: () => import('./overlays.js'), shapes: () => import('./shapes.js'), sections: () => import('./sections.js'), plan: () => import('./plan.js'), desurvey: () => import('./min-curvature.js') };
 const hasRole = (r) => files.some((f) => f.role === r);
 // Holes from a property's drill database follow their surveys by minimum curvature (shared/desurvey.js).
 const mcWanted = () => !!S.drillSource && hasRole('survey'), mcPath = (h) => h.surveyed && mcWanted() && !!EXT.desurvey;
 function extWanted() {
   const gp = S.geophys.mode !== 'off' && hasRole('geophys'), t = S.tags;
-  return { look: S.shell.enabled || ortho() || S.scene.haze > 0 || (uses(S, 'clearLeaders') && S.labels.some((l) => l.arrow)), geology: (S.geology.enabled && hasRole('litho')) || Object.keys(S.geology.images || {}).length > 0 || gp, geophys: gp, section: !!(S.section || S.sections), sections: !!S.sections, overlays: S.overlays.length > 0 || hasRole('overlay'), shapes: S.shapes.length > 0, desurvey: mcWanted(),
+  return { look: S.shell.enabled || ortho() || S.scene.haze > 0 || (uses(S, 'clearLeaders') && S.labels.some((l) => l.arrow)), geology: (S.geology.enabled && hasRole('litho')) || Object.keys(S.geology.images || {}).length > 0 || gp, geophys: gp, section: !!(S.section || S.sections) || uses(S, 'padIds'), sections: !!S.sections, plan: uses(S, 'planView') || S.grid, overlays: S.overlays.length > 0 || hasRole('overlay'), shapes: S.shapes.length > 0, desurvey: mcWanted(),
     tags: t.at !== 'toe' || t.fadePrevious || t.idMode === 'key' || (t.idMode !== 'all' && (project?.holes?.length || 0) > 12) || Object.keys(t.showId).length > 0 || Object.keys(t.showTag || {}).length > 0 || t.emphasis === 'key' || Object.keys(t.highlight || {}).length > 0
       || S.coPlacement !== 'column' || Object.values(coMap()).some((o) => o.placement || o.x !== undefined) || (S.pendingLabels && t.pending === 'collar' && !!project?.holes?.some(isPending)) || t.autoGroup || t.groups.length > 0 || Object.keys(t.status).length > 0 || S.histograms || S.insetStyle !== 'plan' || S.labels.some((l) => l.kind === 'stat') };
 }
@@ -2292,7 +2302,7 @@ const host = () => (extHost ||= {
   renderShellUI, renderEq, renderExtUI, renderLegendUI, FORMATS, setFigureSize, updateLabel, removeLabel, updateWallLabel, removeWallLabel,
   metalCols, unitOf, setEquivalent, getChecks, setProvisional,
   step: () => currentStep, renderFiles, sectionChanged: () => { refresh.secSet = true; restyle(); renderStyle(); schedulePublish(); },
-  fonts(s) { if (s) SANS = s; return SANS; }, buildWallLabels, tagLabel, intervalShown, load: (k) => extLoad(k),
+  fonts(s) { if (s) SANS = s; return SANS; }, buildWallLabels, tagLabel, intervalShown, load: (k) => extLoad(k), ext: (k) => EXT[k],
 });
 const extLoad = (k) => (extLoading[k] ||= EXT_IMPORT[k]().then((m) => { m.init(host()); EXT[k] = m; return m; }));
 async function extReady() {
@@ -2307,7 +2317,7 @@ async function extReady() {
 function extScene() {
   if (Object.entries(extWanted()).some(([k, v]) => v && !EXT[k])) { extReady().catch((e) => status(e.message)); return; }
   if (!G) return;
-  EXT.geophys?.syncCurtains(); faceWalls(); EXT.tags?.placeHistograms(); EXT.tags?.syncInset(); EXT.tags?.syncHoles(); EXT.overlays?.sync(); EXT.sections?.sync();
+  EXT.geophys?.syncCurtains(); faceWalls(); EXT.tags?.placeHistograms(); EXT.tags?.syncInset(); EXT.tags?.syncHoles(); EXT.overlays?.sync(); EXT.sections?.sync(); EXT.plan?.sync();
 }
 const extView = () => { if (G) EXT.geology?.syncFaces(); };
 const extRestyle = () => { if (G) { EXT.geophys?.syncCurtains(); faceWalls(); EXT.tags?.syncHoles(); EXT.sections?.sync(); } };
@@ -2417,7 +2427,7 @@ function getState() {
       imagery: realT.img ? (realT.img.ok ? `z${realT.img.z}, ${realT.img.tiles} tiles` : `failed: ${realT.img.error}`) : null, imageryShown: imageryShown(), note: G?.terrainNote || null, credits: G ? terrainCredits(true) : [] },
     camera: G ? getCam() : null, scene: { ...S.scene, projection: S.projection }, section: { secAz: S.secAz, secW: S.secW, lookingAz: ((S.secAz - 90) % 360 + 360) % 360, holes: S.section?.holes || null, ends: S.section?.a ? [S.section.a, S.section.b] : null },
     labels: S.labels.map((l) => ({ ...l })), wallLabels: S.wallLabels.map((l) => ({ ...l })),
-    display: { walls: S.walls, ids: S.ids, inset: S.inset, surface: S.surf, ribbons: S.ribbons, traceWidth: S.traceWidth, pendingLabels: S.pendingLabels, pendingNoAssays: S.pendingNoAssays, elevTicks: S.elevTicks, displayCutoff: S.displayCutoff, lockView: S.lockView, imagery: { ...S.imagery }, legend: structuredClone(S.legend), coPlacement: S.coPlacement, blockMargin: S.blockMargin, blockExtent: S.blockExtent && { ...S.blockExtent } }, meshes: S.meshes,
+    display: { walls: S.walls, ids: S.ids, inset: S.inset, surface: S.surf, ribbons: S.ribbons, traceWidth: S.traceWidth, pendingLabels: S.pendingLabels, pendingNoAssays: S.pendingNoAssays, elevTicks: S.elevTicks, grid: S.grid, displayCutoff: S.displayCutoff, lockView: S.lockView, imagery: { ...S.imagery }, legend: structuredClone(S.legend), coPlacement: S.coPlacement, blockMargin: S.blockMargin, blockExtent: S.blockExtent && { ...S.blockExtent } }, meshes: S.meshes,
     shell: { ...S.shell, cutoff: shellCut(), cutoffAuto: S.shell.cutoff === null, column: S.valueCol, legend: `Grade shell ≥ ${shellCutText()}`, shown: shellShown(), status: shell.status, progress: shell.progress, message: shell.message || null,
       ...(shell.status === 'ready' || shell.status === 'empty' ? { cells: shell.mesh?.stats.cells ?? 0, triangles: shell.mesh?.stats.triangles ?? 0, holesUsed: shell.mesh?.stats.holesUsed ?? 0, collarGroups: shell.mesh?.stats.groups ?? 0, composites: shell.mesh?.stats.composites ?? 0, searchUsed: shell.mesh?.stats.search ?? null, cellUsed: shell.mesh?.stats.cell ?? null, grid: shell.mesh?.stats.grid ?? null, buildMs: shell.mesh?.stats.ms ?? null } : {}) },
     equivalent: S.eq ? (() => { const i = eqInfo(); return { column: i.name, formula: i.formula, note: i.note, factors: Object.fromEntries(i.factors.map((f) => [f.metal, +f.factor.toPrecision(6)])), ...structuredClone(S.eq) }; })() : null,
