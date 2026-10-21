@@ -59,7 +59,10 @@ const lum = (hex) => {
   return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
 };
 const clampScale = (v) => Math.round(Math.min(1.5, Math.max(0.6, v)) * 100) / 100; // the editor's slider range
-const hasLogoSource = (ref) => !!ref && (ref.startsWith('data:') || ref.startsWith('https://'));
+// Only an inline (data URL) logo goes into a figure. An https logo is drawn without CORS, which taints the
+// export canvas (PNG, PDF and the 3D export would throw), so the figure keeps its own logo; the style's
+// validation notes it (figureStyle.js).
+const inlineLogo = (ref) => !!ref && ref.startsWith('data:');
 // The families the 2D editor loads and offers (FONT_OPTIONS in shared/projectState.js; a test keeps them in
 // step). Listed here so /3d, which shares this module, does not also take the editor's project state.
 export const EDITOR_FONTS = ['Inter', 'Roboto', 'Open Sans', 'Montserrat', 'Lato'];
@@ -82,7 +85,7 @@ export function to2DLayout(style) {
   if (Object.keys(fonts).length) out.fonts = fonts;
   if (s.type.title.size !== null) out.titleFontScale = clampScale(s.type.title.size);
   if (s.type.label.size !== null) out.legendFontScale = clampScale(s.type.label.size);
-  if (hasLogoSource(s.logo.assetRef)) out.logo = s.logo.assetRef;
+  if (inlineLogo(s.logo.assetRef)) out.logo = s.logo.assetRef;
   if (s.logo.placement) out.logoCorner = s.logo.placement;
   return out;
 }
@@ -96,7 +99,7 @@ export function to3DSettings(style) {
   if (s.colours.accent) out.accent = s.colours.accent;
   const sans = s.type.label.family || s.type.title.family;
   if (sans) out.fonts = { sans };
-  if (hasLogoSource(s.logo.assetRef)) out.logo = s.logo.assetRef;
+  if (inlineLogo(s.logo.assetRef)) out.logo = s.logo.assetRef;
   return out;
 }
 
@@ -123,6 +126,7 @@ export function brandStyleRecord(kit, mode, style) {
 export function applyBrandKitStyle(kit, currentLayout) {
   const config = kit?.config || {}, patch = {};
   for (const key of BRAND_KIT_STYLE_KEYS) if (config[key] !== undefined && config[key] !== null) patch[key] = config[key];
+  if (/^https?:/i.test(patch.logo || '')) delete patch.logo; // another site's logo would taint the export: keep the map's own
   const fromStyle = config.style ? to2DLayout(config.style) : {};
   const fonts = { ...(config.fonts || {}), ...(fromStyle.fonts || {}) };
   Object.assign(patch, fromStyle);

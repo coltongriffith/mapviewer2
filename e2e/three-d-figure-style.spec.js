@@ -21,10 +21,31 @@ test('a figure style applies to /3d and stays with its figure only', async ({ pa
   expect(plain.settings.brandStyle).toBeNull();
   expect(await page.evaluate(() => [...document.querySelectorAll('link[id^="em3d-font-"]')].length)).toBe(0); // nothing fetched for it
 
+  // Geology on two faces, so unit names are painted on the block (in Source Sans 3 for now). Every off-screen canvas
+  // font set from here on is recorded.
+  const before = await page.evaluate(async () => {
+    const E = window.EM3D, ids = E.getState().project.holeIds;
+    const lith = ['HoleID,From,To,Lith', ...ids.flatMap((id) => [`${id},0,40,COV`, `${id},40,400,POR`])].join('\n');
+    E.addFiles([...E.getProject().files.map(({ name, text }) => ({ name, text })), { name: 'lithology.csv', text: lith }]);
+    const fonts = []; window.__fonts = fonts;
+    const d = Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype, 'font');
+    Object.defineProperty(CanvasRenderingContext2D.prototype, 'font', { configurable: true, get: d.get, set(v) { if (!this.canvas.isConnected) fonts.push(v); d.set.call(this, v); } });
+    await E.setGeology({ enabled: true, faces: ['N', 'E'], legend: [{ code: 'POR', name: 'Porphyry' }, { code: 'COV', name: 'Cover' }] });
+    await new Promise((r) => { setTimeout(r, 500); });
+    return fonts.splice(0);
+  });
+  // Fonts set on off-screen canvases only (the painted faces, wall labels); wall labels are drawn at 96 px.
+  const unitNames = (list, family) => list.filter((f) => /^600 [\d.]+px /.test(f) && !f.startsWith('600 96px') && f.includes(`"${family}"`));
+  expect(unitNames(before, 'Source Sans 3').length).toBeGreaterThan(0);
+
   const state = await page.evaluate(() => window.EM3D.setFigureStyle(
     { version: 1, colours: { primary: '#0a4268', accent: '#ae4b0a' }, type: { label: { family: 'Poppins' } }, sourceNote: { italic: true } },
     { brandKitId: 'kit-1', brandRevision: '2026-10-20T09:30:00Z' },
   ));
+  // The painted unit names are redrawn in the brand family, not reused from the Source Sans cache.
+  await page.waitForTimeout(300);
+  const after = await page.evaluate(() => window.__fonts.splice(0));
+  expect(unitNames(after, 'Poppins').length).toBeGreaterThan(0);
   expect(state.brand).toMatchObject({ primary: '#0a4268', accent: '#ae4b0a' });
   const styled = await page.evaluate(() => window.EM3D.getProject().settings.brandStyle);
   expect(styled).toMatchObject({ brandKitId: 'kit-1', brandRevision: '2026-10-20T09:30:00Z', mode: 'style', fonts: { sans: 'Poppins' } });

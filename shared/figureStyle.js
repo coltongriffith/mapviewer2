@@ -25,6 +25,7 @@ export function normHex(v) {
   return /^#[0-9a-f]{3}$/.test(t) ? `#${[...t.slice(1)].map((c) => c + c).join('')}` : null;
 }
 // A logo by reference: an image data URL (the kit's own copy) or an https address. Nothing that runs.
+// Only a data URL is put into a figure; an https one is kept in the record and noted (validateFigureStyle).
 export function normAssetRef(v) {
   if (typeof v !== 'string') return null;
   const t = v.trim();
@@ -73,7 +74,9 @@ export function validateFigureStyle(input) {
   if (!Number.isInteger(version) || version < 1) errors.push('version must be a positive whole number.');
   else if (version > FIGURE_STYLE_VERSION) errors.push(`version ${version} is newer than this app reads (${FIGURE_STYLE_VERSION}); its known fields are used.`);
   const style = { version: FIGURE_STYLE_VERSION, ...read(SCHEMA, input, '', errors) };
-  return { ok: errors.length === 0, errors, style };
+  // Valid, but not applied: a logo drawn from another site taints an export canvas (brandKit.js).
+  const notes = style.logo.assetRef?.startsWith('https://') ? ['logo.assetRef is an https address: figures take only an image data URL logo, so each keeps its own logo.'] : [];
+  return { ok: errors.length === 0, errors, notes, style };
 }
 
 // The usable style: invalid fields dropped to null (the figure's own), never an error.

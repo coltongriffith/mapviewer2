@@ -9,6 +9,7 @@ import {
 } from '../shared/brandKit.js';
 import { createInitialProjectState, FONT_OPTIONS } from '../shared/projectState.js';
 import * as type from '../src/three-d/typography.js';
+import { init as initGeology, labelFont } from '../src/three-d/geology.js';
 
 const LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 const FULL_STYLE = {
@@ -173,6 +174,21 @@ describe('to2DLayout', () => {
   });
   it('knows the same editor fonts as the font picker', () => {
     expect(EDITOR_FONTS).toEqual(Object.keys(FONT_OPTIONS));
+  });
+  it('keeps the figure\'s own logo for an https style logo (it would taint the PNG/PDF export canvas), and notes why', () => {
+    const style = { colours: { accent: '#ff6600' }, logo: { assetRef: 'https://cdn.example.com/logo.png', placement: 'tr' } };
+    expect(to2DLayout(style)).toEqual({ accentColor: '#ff6600', logoCorner: 'tr' });
+    expect(to3DSettings(style)).toEqual({ accent: '#ff6600' });
+    const { ok, errors, notes } = validateFigureStyle(style);
+    expect(ok).toBe(true); expect(errors).toEqual([]);
+    expect(notes).toEqual([expect.stringMatching(/logo\.assetRef is an https address.*keeps its own logo/)]);
+    expect(validateFigureStyle({ logo: { assetRef: LOGO } }).notes).toEqual([]);
+  });
+  it('style only never copies an http(s) logo from an older kit either', () => {
+    const before = { ...createInitialProjectState().layout, logo: LOGO };
+    const next = applyBrandKitStyle({ id: 'k', config: { logo: 'https://cdn.example.com/logo.png', accentColor: '#ff6600' } }, before);
+    expect(next.logo).toBe(LOGO);
+    expect(next.accentColor).toBe('#ff6600');
   });
   it('never copies a logo reference that is only a snapshot marker', () => {
     expect(to2DLayout({ logo: { assetRef: 'figure:logo' } })).toEqual({});
@@ -356,6 +372,15 @@ describe('3D typography adapter', () => {
       H.S.brandStyle = null; await type.sync(); // the record removed: back to the default
       expect(H.sans).toBe(type.LEGACY.sans);
     } finally { Object.defineProperty(doc, 'fonts', { configurable: true, value: realFonts }); }
+  });
+  it('paints geology unit names in the figure\'s current sans (part of their cache key)', () => {
+    let sans = type.LEGACY.sans;
+    initGeology({ fonts: () => sans });
+    expect(labelFont()).toBe(type.LEGACY.sans);
+    sans = type.stackOf('Poppins');
+    expect(labelFont()).toBe('"Poppins", "Segoe UI", sans-serif');
+    initGeology({});
+    expect(labelFont()).toBe(type.LEGACY.sans);
   });
   it('keeps the earlier fonts and says so when a brand family cannot load', async () => {
     const H = host({ fonts: { sans: 'Comic Sans MS' } }); type.init(H);
