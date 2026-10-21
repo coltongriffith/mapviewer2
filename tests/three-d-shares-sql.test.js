@@ -145,11 +145,16 @@ describe('create and get', () => {
     await expect(create(null, fig(), KEY, null, 'data:image/svg+xml;base64,PHN2Zz4=')).rejects.toThrow(/SHARE_INVALID/);
   });
 
-  it('caps a figure at 8 MB', async () => {
+  it('caps a figure at 8 MB signed in and 2 MB signed out', async () => {
     await clearShares();
     const big = fig('BIG', { files: [{ name: 'topo.xyz', text: 'x'.repeat(8 * 1024 * 1024 + 10) }] });
     await expect(create(null, big)).rejects.toThrow(/SHARE_TOO_LARGE/);
     await expect(create(A, big)).rejects.toThrow(/SHARE_TOO_LARGE/);
+    const mid = fig('MID', { files: [{ name: 'topo.xyz', text: 'x'.repeat(2 * 1024 * 1024 + 10) }] });
+    await expect(create(null, mid)).rejects.toThrow(/SHARE_TOO_LARGE: signed out/);
+    const anonId = await create(null, fig('SMALL'), KEY);
+    await expect(update(null, anonId, mid, KEY)).rejects.toThrow(/SHARE_TOO_LARGE: signed out/);
+    expect(await create(A, mid)).toMatch(/^[0-9a-f]{32}$/);
     const ok = fig('NEAR LIMIT', { files: [{ name: 'topo.xyz', text: 'x'.repeat(8 * 1024 * 1024 - 2000) }] });
     expect(await create(A, ok)).toMatch(/^[0-9a-f]{32}$/);
   });
@@ -178,12 +183,18 @@ describe('rate limits', () => {
     expect(await create(B, fig('ANOTHER ACCOUNT'))).toMatch(/^[0-9a-f]{32}$/);
   });
 
-  it('caps all anonymous shares per hour, so rotating browser keys does not help', async () => {
+  it('caps all anonymous shares per hour and per day, so rotating browser keys does not help', async () => {
     await clearShares();
     await db.exec(`insert into public.three_d_shares (id, state, creator_key)
-      select replace(gen_random_uuid()::text, '-', ''), '{}'::jsonb, 'rotated-key-' || lpad(g::text, 8, '0') from generate_series(1, 300) g`);
+      select replace(gen_random_uuid()::text, '-', ''), '{}'::jsonb, 'rotated-key-' || lpad(g::text, 8, '0') from generate_series(1, 60) g`);
     await expect(create(null, fig(), 'brand-new-key-0123456789')).rejects.toThrow(/SHARE_RATE_LIMIT/);
     expect(await create(A, fig('SIGNED IN STILL WORKS'))).toMatch(/^[0-9a-f]{32}$/);
+    // Spread over the day instead: the daily ceiling still holds.
+    await clearShares();
+    await db.exec(`insert into public.three_d_shares (id, state, creator_key, created_at)
+      select replace(gen_random_uuid()::text, '-', ''), '{}'::jsonb, 'rotated-key-' || lpad(g::text, 8, '0'), now() - interval '2 hours'
+      from generate_series(1, 300) g`);
+    await expect(create(null, fig(), 'brand-new-key-0123456789')).rejects.toThrow(/SHARE_RATE_LIMIT/);
   });
 
   it('limits updates to 30 an hour per link', async () => {

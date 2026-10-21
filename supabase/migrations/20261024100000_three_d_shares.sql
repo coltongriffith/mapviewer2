@@ -11,11 +11,11 @@
 -- later):
 --   * no direct table access for anon or authenticated: create, read, list,
 --     update and revoke go through SECURITY DEFINER RPCs with search_path '',
---   * a size cap (8 MB of JSON text; SHARE_TOO_LARGE) and a shape check
---     (SHARE_INVALID),
+--   * a size cap (8 MB of JSON text signed in, 2 MB signed out;
+--     SHARE_TOO_LARGE) and a shape check (SHARE_INVALID),
 --   * a rate limit per signed-in user and per anonymous browser key
---     (SHARE_RATE_LIMIT), plus a ceiling on all anonymous shares per hour so
---     a client rotating its browser key cannot fill the table,
+--     (SHARE_RATE_LIMIT), plus a ceiling on all anonymous shares per hour and
+--     per day so a client rotating its browser key cannot fill the disk,
 --   * anonymous shares expire after 30 days; shares owned by an account do
 --     not expire and can be revoked at any time,
 --   * revoking clears the stored figure as well as flagging it,
@@ -149,8 +149,12 @@ declare
   v_user uuid := auth.uid();
   v_id text;
   v_recent int;
+  v_day int;
 begin
   perform public.three_d_share_check(p_state, p_thumbnail);
+  if v_user is null and octet_length(p_state::text) > 2 * 1024 * 1024 then
+    raise exception 'SHARE_TOO_LARGE: signed out, a share is limited to 2048 KB; sign in to share up to 8192 KB' using errcode = 'P0001';
+  end if;
 
   if p_project_id is not null and (v_user is null or not exists (
       select 1 from public.three_d_projects p
@@ -174,10 +178,12 @@ begin
     if v_recent >= 10 then
       raise exception 'SHARE_RATE_LIMIT: too many shares created recently' using errcode = 'P0001';
     end if;
-    -- A browser key is chosen by the client, so also cap anonymous shares as a whole.
-    select count(*) into v_recent from public.three_d_shares s
-      where s.user_id is null and s.created_at > now() - interval '1 hour';
-    if v_recent >= 300 then
+    -- A browser key is chosen by the client, so also cap anonymous shares as a
+    -- whole: at most 60 an hour and 300 a day (about 600 MB a day at worst).
+    select count(*) filter (where s.created_at > now() - interval '1 hour'), count(*) into v_recent, v_day
+      from public.three_d_shares s
+      where s.user_id is null and s.created_at > now() - interval '1 day';
+    if v_recent >= 60 or v_day >= 300 then
       raise exception 'SHARE_RATE_LIMIT: too many anonymous shares created recently; sign in to share' using errcode = 'P0001';
     end if;
   end if;
@@ -283,6 +289,9 @@ begin
   select * into v_row from public.three_d_shares s where s.id = share_id for update;
   if not found or not public.three_d_share_owned(v_user, p_creator_key, v_row.user_id, v_row.creator_key) then
     raise exception 'SHARE_NOT_FOUND: no share of yours with that id' using errcode = 'P0001';
+  end if;
+  if v_row.user_id is null and octet_length(p_state::text) > 2 * 1024 * 1024 then
+    raise exception 'SHARE_TOO_LARGE: signed out, a share is limited to 2048 KB; sign in to share up to 8192 KB' using errcode = 'P0001';
   end if;
   if v_row.revoked_at is not null or (v_row.expires_at is not null and v_row.expires_at <= now()) then
     raise exception 'SHARE_GONE: that link was revoked or has expired' using errcode = 'P0001';

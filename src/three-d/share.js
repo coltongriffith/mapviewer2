@@ -40,6 +40,7 @@ function plain(text, cause) { const e = new Error(text); e.plain = true; if (cau
 function explain(err, doing) {
   if (err?.plain) return err;
   const msg = String(err?.message || err || '');
+  if (/SHARE_TOO_LARGE: signed out/.test(msg)) return plain('Signed out, a shared figure is limited to 2 MB. Sign in (Save) to share figures up to 8 MB, or remove large files such as dense topography.', err);
   if (/SHARE_TOO_LARGE/.test(msg)) return plain('This figure is too large to share: the limit is 8 MB, mostly its data files. Remove large files such as dense topography or model shapes, and try again.', err);
   if (/SHARE_RATE_LIMIT/.test(msg)) return plain(/anonymous/.test(msg) ? 'Too many links are being made without an account right now. Sign in (Save) to share, or try again later.' : /updated/.test(msg) ? 'This link has been updated many times in the last hour. Try again later.' : 'You have made several share links recently. Wait a while and try again.', err);
   if (/SHARE_NOT_FOUND/.test(msg)) return plain('That link is not one of yours, or no longer exists.', err);
