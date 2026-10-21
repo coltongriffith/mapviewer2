@@ -1,13 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { lazyGuarded } from '../utils/preloadGuard';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
-const SummaryTab = React.lazy(() => import('./admin/SummaryTab'));
-const FeedbackTab = React.lazy(() => import('./admin/FeedbackTab'));
-const ClaimRequestsCard = React.lazy(() => import('./admin/ClaimRequestsCard'));
-const TeamEnquiriesCard = React.lazy(() => import('./admin/TeamEnquiriesCard'));
-const UsersTab = React.lazy(() => import('./admin/UsersTab'));
-const RevenueTab = React.lazy(() => import('./admin/RevenueTab'));
-const TenureTab = React.lazy(() => import('./admin/TenureTab'));
+const SummaryTab = lazyGuarded(() => import('./admin/SummaryTab'));
+const FeedbackTab = lazyGuarded(() => import('./admin/FeedbackTab'));
+const ClaimRequestsCard = lazyGuarded(() => import('./admin/ClaimRequestsCard'));
+const TeamEnquiriesCard = lazyGuarded(() => import('./admin/TeamEnquiriesCard'));
+const UsersTab = lazyGuarded(() => import('./admin/UsersTab'));
+const RevenueTab = lazyGuarded(() => import('./admin/RevenueTab'));
+const TenureTab = lazyGuarded(() => import('./admin/TenureTab'));
 import {
   useRpc, useDashboardWindow, useSummary, useUsersOverview, useUserDetail, useFeedback, useClaimRequests, useTeamEnquiries, useRevenue, useTenureOps,
 } from './admin/useDashboardData';

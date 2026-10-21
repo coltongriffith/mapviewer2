@@ -75,7 +75,10 @@ const BUDGETS = {
   // 891.0 → 894.0 (Oct 2026, measured 893.7): the shared figure style (shared/figureStyle.js: versioned spec and
   // its validation) and the brand kit's style-only / full-template apply with the 2D and 3D adapters
   // (shared/brandKit.js), one 2.5 kB chunk shared by the editor and /3d's lazy typography adapter.
-  totalAuthJsGzipKb: 894.0,
+  // 894.0 → 894.1 (Oct 2026, measured 894.06): the stale-chunk guard in the entry (src/utils/preloadGuard.js:
+  // reload once after a deploy, or with unsaved work a notice and lazyGuarded parts that render a note
+  // instead of unmounting the editor), ~0.35 kB in the main chunk; App itself shrank ~10 B.
+  totalAuthJsGzipKb: 894.1,
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.

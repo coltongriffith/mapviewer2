@@ -1,5 +1,7 @@
+import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { installPreloadGuard } from '../src/utils/preloadGuard.js';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { installPreloadGuard, lazyGuarded } from '../src/utils/preloadGuard.js';
 
 function fakeStorage() {
   const m = new Map();
@@ -23,8 +25,61 @@ function preloadError(win) {
 }
 
 afterEach(() => {
+  cleanup();
   vi.useRealTimers();
   document.body.innerHTML = '';
+});
+
+// What main.jsx's root ErrorBoundary does with a thrown render error: the editor is replaced.
+class Boundary extends React.Component {
+  state = { error: null };
+  static getDerivedStateFromError(error) { return { error }; }
+  render() { return this.state.error ? <p>Editor unmounted</p> : this.props.children; }
+}
+
+function renderEditorWith(Part) {
+  return render(<Boundary><p>Editor with unsaved work</p><React.Suspense fallback={<p>Loading</p>}><Part /></React.Suspense></Boundary>);
+}
+
+describe('lazyGuarded', () => {
+  const stale = () => Promise.reject(new TypeError('Failed to fetch dynamically imported module: /assets/LegendEditor-old.js'));
+
+  it('keeps the editor mounted when a stale chunk fails with unsaved work', async () => {
+    const guard = (ev) => { ev.preventDefault(); ev.returnValue = ''; };
+    window.addEventListener('beforeunload', guard);
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      renderEditorWith(lazyGuarded(stale));
+      expect(await screen.findByText('This part was updated — save your work, then reload.')).toBeInTheDocument();
+      expect(screen.getByText('Editor with unsaved work')).toBeInTheDocument();
+      expect(screen.queryByText('Editor unmounted')).toBeNull();
+    } finally {
+      window.removeEventListener('beforeunload', guard);
+      err.mockRestore();
+    }
+  });
+
+  it('throws as before without unsaved work', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      renderEditorWith(lazyGuarded(stale));
+      expect(await screen.findByText('Editor unmounted')).toBeInTheDocument();
+    } finally {
+      err.mockRestore();
+    }
+  });
+
+  it('waits in the Suspense fallback while the guard reloads (the import resolved to undefined)', async () => {
+    renderEditorWith(lazyGuarded(() => Promise.resolve(undefined)));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.getByText('Loading')).toBeInTheDocument();
+    expect(screen.queryByText('Editor unmounted')).toBeNull();
+  });
+
+  it('loads a good chunk normally', async () => {
+    renderEditorWith(lazyGuarded(() => Promise.resolve({ default: () => <p>Legend editor</p> })));
+    expect(await screen.findByText('Legend editor')).toBeInTheDocument();
+  });
 });
 
 describe('preload error guard', () => {
@@ -72,8 +127,12 @@ describe('preload error guard', () => {
     expect(win.sessionStorage.getItem('em.reloadedAt')).toBeNull();
     const notes = document.querySelectorAll('[role="status"]');
     expect(notes).toHaveLength(1);
-    expect(notes[0].textContent).toBe('A new version is available — save your work, then reload.');
-    notes[0].click();
+    expect(notes[0]).toHaveTextContent('A new version is available — save your work, then reload.');
+    // Dismissed with a real, focusable button (keyboard users included).
+    const dismiss = within(notes[0]).getByRole('button', { name: 'Dismiss' });
+    dismiss.focus();
+    expect(dismiss).toHaveFocus();
+    fireEvent.click(dismiss);
     expect(document.querySelector('.update-notice')).toBeNull();
   });
 

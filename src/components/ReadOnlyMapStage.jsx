@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { lazyGuarded } from '../utils/preloadGuard';
 import { LegendPointSwatch, LegendLineSwatch, LegendAreaSwatch } from './LegendSwatches.jsx';
 import AnnotationOverlay from './AnnotationOverlay';
 import CalloutsOverlay from './CalloutsOverlay';
@@ -17,7 +18,7 @@ import CoordinateFrameOverlay from './CoordinateFrameOverlay.jsx';
 import { fitProjectToTemplate } from '../utils/frameMapForTemplate';
 import { projectStageSize, savedViewFor, zoomForSize } from '../utils/savedView';
 
-const MapCanvas = React.lazy(() => import('./MapCanvas'));
+const MapCanvas = lazyGuarded(() => import('./MapCanvas'));
 
 // ── Helpers (mirrored from App.jsx) ──────────────────────────────────────────
 
