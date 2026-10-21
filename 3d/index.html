@@ -95,7 +95,7 @@ ol.how { margin: 0; padding-left: 20px; display: grid; gap: 3px; font-size: 14px
 .file input[type="text"], .file input[type="number"] { box-sizing: border-box; }
 .maps { display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; align-items: center; font-size: 13px; }
 .maps label { color: var(--slate-600); }
-select, input[type="text"], input[type="email"], input[type="number"], textarea { font: inherit; font-size: 14px; color: var(--slate-950); background: #fff; border: 1px solid var(--slate-200); border-radius: 5px; padding: 5px 7px; min-width: 0; width: 100%; }
+select, input[type="text"], input[type="email"], input[type="number"], input[type="date"], textarea { font: inherit; font-size: 14px; color: var(--slate-950); background: #fff; border: 1px solid var(--slate-200); border-radius: 5px; padding: 5px 7px; min-width: 0; width: 100%; }
 textarea { font-family: var(--mono); font-size: 12px; resize: vertical; }
 .warn { color: var(--warn); font-size: 13px; }
 .bad { color: var(--bad); font-size: 13px; }
@@ -275,6 +275,13 @@ html.em3d-embed .share-credit:hover { text-decoration: underline; }
 @media (max-width: 820px) {
   html.em3d-viewer .stage { height: 100vh; height: 100dvh; }
 }
+/* A published version open read-only in the editor (src/three-d/versions.js). Nothing moves, so the figure draws
+   and exports exactly as published: the panel stays in place, inert and faded; the account buttons give way to
+   the version bar. */
+html.em3d-version .panel { opacity: 0.45; }
+html.em3d-version .toolbar .acct, html.em3d-version .frame-label { display: none; }
+html.em3d-version .share-bar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; margin-left: auto; }
+html.em3d-version .share-bar .btn { padding: 6px 11px; }
 </style>
 </head>
 <body>
@@ -985,6 +992,13 @@ Whole projects (to keep or move a figure):
                                   here (force: true overwrites it)
   EM3D.account.openProject(id)    reopens a saved figure
   EM3D.account.deleteProject(id)  removes it from the list
+  EM3D.account.publishVersion({ label, releaseDate })   freezes the open figure AS SAVED (no unsaved changes) as
+                                  a published version: { id, version, label, releaseDate, contentHash, link }.
+                                  It never changes afterwards; later edits are not part of it
+  EM3D.account.listVersions(id?)  the open (or given) figure's versions, newest first
+  EM3D.account.openVersion(n)     shows version n read-only, exactly as published (PNG export works);
+                                  /3d?project=<id>&version=<n> opens it directly
+  EM3D.account.closeVersion()     back to the figure as last saved
 The Save button (or Ctrl/Cmd+S) does the same for a person, and asks them to sign in first.
 </script>
 <!-- API notes for share links (src/three-d/share.js; shown with EM3D.help()). -->

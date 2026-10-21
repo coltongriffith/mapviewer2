@@ -37,6 +37,7 @@ const account = Object.freeze({
   getUser: lazy('getUser'), listProjects: lazy('listProjects'), saveProject: lazy('saveProject'),
   openProject: lazy('openProject'), deleteProject: lazy('deleteProject'), currentProject: lazy('currentProject'),
   sendSignInLink: lazy('sendSignInLink'), signInWithPassword: lazy('signInWithPassword'), signOut: lazy('signOut'),
+  publishVersion: lazy('publishVersion'), listVersions: lazy('listVersions'), openVersion: lazy('openVersion'), closeVersion: lazy('closeVersion'),
 });
 // Help text: <script id="account-help"> in the page, like the share links' below.
 const ACCOUNT_HELP = `\n\n${$('account-help')?.textContent.trim() || ''}`;
