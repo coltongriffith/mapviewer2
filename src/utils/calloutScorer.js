@@ -28,6 +28,9 @@ const COST = { card: 1e6, leaderCard: 1e5, cross: 1e4, distance: 1, movement: 0.
 // Candidate cards sit this far (px) from the anchor, in 16 directions
 // starting up-right, where a new card's default offset (20, -18) puts it.
 const GAPS = [20, 44, 76, 120, 180];
+// Layout 3: a card that has nowhere near goes further out on its leader
+// rather than over an ID label.
+const FAR_GAPS = [...GAPS, 260, 360];
 const DIRS = Array.from({ length: 16 }, (_, k) => {
   const a = (k * 22.5 - 45) * (Math.PI / 180);
   return [Math.round(Math.cos(a) * 1e6) / 1e6, Math.round(Math.sin(a) * 1e6) / 1e6];
@@ -41,6 +44,20 @@ const ID_GAPS = [8, 11, 14, 17, 20, 32, 48, 68, 92];
 // An ID label: a title-only callout on one feature (a collar clicked, or a
 // published result's hole) — not a layer or neighbour-holder label.
 export const isIdLabel = (c) => !!c.featureId && c.type !== 'badge' && !c.subtext && !c.logo?.image && /^[^\n]{1,24}$/.test(c.text || '');
+// An ID label's text width in px, measured in the callout font at the
+// editor's title weight (800; the exporters draw 700, never wider), so its
+// box always holds it: one word never wraps, and the exporters do not split
+// it. Without a canvas (tests, workers), a per-glyph estimate that errs wide.
+let measurer;
+export function idTextWidth(text, fontSize, font) {
+  try { measurer = measurer || document.createElement('canvas').getContext('2d'); } catch { measurer = null; }
+  if (measurer?.measureText) {
+    measurer.font = `800 ${fontSize}px ${font || 'Inter'}, Arial, sans-serif`;
+    const w = measurer.measureText(text).width;
+    if (w > 0) return w;
+  }
+  return [...text].reduce((w, ch) => w + fontSize * (/[WM@%]/.test(ch) ? 1.02 : /[A-Z#&]/.test(ch) ? 0.8 : /[-.,:;' ]/.test(ch) ? 0.45 : 0.66), 0);
+}
 // Px from point p to the nearest edge of box r (0 inside).
 export const boxDistance = (r, p) => Math.hypot(Math.max(r.left - p.x, 0, p.x - r.left - r.width), Math.max(r.top - p.y, 0, p.y - r.top - r.height));
 // Px from p to segment a→b.
@@ -137,7 +154,7 @@ function misread(c, anchors) {
 // position collides with nothing stays exactly there, and one that now
 // collides is re-placed, costed for every pixel it moves away. So a layout the
 // user approved stays put until something lands on it.
-function place(callouts, map, { obstacles = [], fresh = false, algorithm = 2 } = {}) {
+function place(callouts, map, { obstacles = [], fresh = false, algorithm = 2, font } = {}) {
   if (!map) return [];
   const size = map.getSize();
   const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
@@ -157,22 +174,28 @@ function place(callouts, map, { obstacles = [], fresh = false, algorithm = 2 } =
     anchors.push(pt);
     i.id = algorithm >= 3 && isIdLabel(i.callout);
     // An ID label is a tag, not a card: tight padding, and as wide as its
-    // text (bold glyphs at most ~0.66 em) rather than estimateBox's 100 px
-    // floor or the 188 px a callout starts with.
+    // measured text plus padding (and a 1 px border each side, with a px to
+    // spare) rather than estimateBox's 100 px floor or the 188 px a callout
+    // starts with.
     const st = i.callout.style || {}, fs = st.fontSize || 12;
     const c0 = i.id ? { ...i.callout, style: { ...st, paddingX: Math.min(st.paddingX ?? 10, 5), paddingY: Math.min(st.paddingY ?? 8, 3) }, fit: true } : i.callout;
     const box = estimateBox(c0);
-    if (i.id) box.width = Math.min(box.width, Math.ceil(c0.text.length * fs * 0.66 + c0.style.paddingX * 2 + 6));
+    if (i.id) box.width = Math.ceil(idTextWidth(c0.text, fs, font) + c0.style.paddingX * 2 + 4);
     i.base = { ...c0, width: box.width, height: box.height, anchorPx: pt };
     i.card = cardAt(i, pt.x + (i.callout.offset?.x || 0), pt.y + (i.callout.offset?.y || 0));
   }
 
   // The cheapest candidate for item `i` among `others`.
-  const choose = (i, others, approved) => {
+  // Layout 3: placed ID labels are hard obstacles for automatic cards, so an
+  // ID label is placed (and re-placed) seeing only ID labels and pinned cards
+  // — a card never takes its spot; the card moves.
+  const seen = (i, others) => (i.id ? others.filter((c) => c.fit || c.isManualPosition) : others);
+  const choose = (i, all, approved) => {
+    const others = seen(i, all);
     const { anchorPx: pt, width, height } = i.base;
     const hw = width / 2, hh = height / 2;
     const cands = approved ? [approved] : [];
-    for (const gap of i.id ? ID_GAPS : GAPS) {
+    for (const gap of i.id ? ID_GAPS : algorithm >= 3 ? FAR_GAPS : GAPS) {
       for (const [ux, uy] of DIRS) {
         // Centre the card along the direction so its edge is `gap` away.
         const t = gap + Math.min(ux ? hw / Math.abs(ux) : Infinity, uy ? hh / Math.abs(uy) : Infinity);
@@ -196,7 +219,7 @@ function place(callouts, map, { obstacles = [], fresh = false, algorithm = 2 } =
   // unsettle a card).
   // Layout 3: an ID label is not unsettled by another card's leader crossing
   // it — that card is the one to move.
-  const free = (i, placed) => idCost(i, i.card) + clash(i.card, i.card.lead, placed.filter((c) => c !== i.card), anchors, obstacles, Infinity, !i.id) < COST.leaderCard;
+  const free = (i, placed) => idCost(i, i.card) + clash(i.card, i.card.lead, seen(i, placed.filter((c) => c !== i.card)), anchors, obstacles, Infinity, !i.id) < COST.leaderCard;
 
   // Pinned (dragged) cards first: they never move, and every automatic card
   // must see them, whatever its priority.
@@ -259,8 +282,8 @@ export function resolveScoredBoxes(callouts, map, options) {
 // Auto-arrange: a fresh scored layout saved as each automatic card's offset.
 // Pinned cards, anchors and ids are untouched. It arranges for the latest
 // layout (3), which the editor then saves as the project's layoutAlgorithm.
-export function autoArrangeCallouts(callouts, map, { obstacles = [], algorithm = 3 } = {}) {
-  const byIndex = new Map(place(callouts, map, { obstacles, fresh: true, algorithm }).map((p) => [p.index, p.card]));
+export function autoArrangeCallouts(callouts, map, { obstacles = [], algorithm = 3, font } = {}) {
+  const byIndex = new Map(place(callouts, map, { obstacles, fresh: true, algorithm, font }).map((p) => [p.index, p.card]));
   return callouts.map((c, i) => {
     const p = byIndex.get(i);
     return !p || c.isManualPosition ? c : { ...c, offset: { x: p.left - p.anchorPx.x, y: p.top - p.anchorPx.y } };

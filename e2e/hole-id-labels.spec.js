@@ -69,7 +69,11 @@ test('hole IDs sit at their own collars after Auto-arrange, in the editor and th
       .filter((p) => /a/.test(p.getAttribute('d') || ''))
       .map((p) => { const r = p.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
     const gap = (r, p) => Math.hypot(Math.max(r.left - p.x, 0, p.x - r.right), Math.max(r.top - p.y, 0, p.y - r.bottom)) / sc;
-    return { collars: collars.length, labels: [...document.querySelectorAll('.map-callout')].filter((el) => /^RN-25-\d{3}$/.test(el.textContent.trim())).map((el) => {
+    const box = (el) => el.getBoundingClientRect();
+    const cards = [...document.querySelectorAll('.map-callout')].filter((el) => /^RN-25-\d{3}: /.test(el.textContent.trim())).map(box);
+    const tags = [...document.querySelectorAll('.map-callout')].filter((el) => /^RN-25-\d{3}$/.test(el.textContent.trim())).map(box);
+    const under = cards.reduce((n, a) => n + tags.filter((b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom).length, 0);
+    return { under, collars: collars.length, labels: [...document.querySelectorAll('.map-callout')].filter((el) => /^RN-25-\d{3}$/.test(el.textContent.trim())).map((el) => {
       const id = el.textContent.trim(), r = el.getBoundingClientRect(), own = collars[Number(id.slice(-3)) - 1];
       return { id, own: gap(r, own), other: Math.min(...collars.filter((c) => c !== own).map((c) => gap(r, c))), collides: el.classList.contains('collides') ? el.title : false };
     }) };
@@ -84,7 +88,8 @@ test('hole IDs sit at their own collars after Auto-arrange, in the editor and th
   if (process.env.HOLE_IDS_PNG) await file.saveAs(process.env.HOLE_IDS_PNG);
 
   const own = rows.labels.map((r) => r.own).sort((a, b) => a - b);
-  console.log(`hole IDs: ${rows.labels.length}, collars ${rows.collars}; own-collar gap median ${own[19]?.toFixed(1)} px, max ${own.at(-1)?.toFixed(1)} px; nearer another collar: ${rows.labels.filter((r) => r.other <= r.own).length}; flagged: ${rows.labels.filter((r) => r.collides).map((r) => `${r.id} (${r.collides})`).join(', ') || 'none'}`);
+  console.log(`hole IDs: ${rows.labels.length}, collars ${rows.collars}; own-collar gap median ${own[19]?.toFixed(1)} px, max ${own.at(-1)?.toFixed(1)} px; nearer another collar: ${rows.labels.filter((r) => r.other <= r.own).length}; cards over labels: ${rows.under}; flagged: ${rows.labels.filter((r) => r.collides).map((r) => `${r.id} (${r.collides})`).join(', ') || 'none'}`);
+  expect(rows.under, 'intercept cards over hole-ID labels').toBe(0);
   expect(rows.collars).toBe(39);
   expect(rows.labels).toHaveLength(39);
   // Beside the collar (within 24 px), or — where the plan is too tight — out

@@ -74,8 +74,8 @@ export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSe
   // the editor moved off the legend is off the legend in the PNG too.
   const obstacles = useMemo(() => panelObstacles(zones, layout || {}), [zones, layout]);
   const placed = useMemo(
-    () => (scored && scorer ? scorer.resolveScoredBoxes : resolveCalloutBoxes)(callouts, map, { obstacles, algorithm }),
-    [callouts, map, tick, obstacles, scored, algorithm, scorer],
+    () => (scored && scorer ? scorer.resolveScoredBoxes : resolveCalloutBoxes)(callouts, map, { obstacles, algorithm, font: fontFamily }),
+    [callouts, map, tick, obstacles, scored, algorithm, scorer, fontFamily],
   );
   // Cards still in conflict, for the editor's list. Keyed so the parent only
   // hears about a change.

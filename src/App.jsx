@@ -4177,7 +4177,7 @@ export default function App({ initialAction = null }) {
     setProject((prev) => ({
       ...prev,
       layout: { ...prev.layout, layoutAlgorithm: 3 },
-      callouts: arrange(prev.callouts, map, { obstacles: panelObstacles(resolvedZones, prev.layout) }),
+      callouts: arrange(prev.callouts, map, { obstacles: panelObstacles(resolvedZones, prev.layout), font: prev.layout.fonts?.callout }),
     }));
     setUploadStatus({ type: 'info', message: 'Callouts arranged — press Ctrl+Z to undo.' });
   };

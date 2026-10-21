@@ -1234,7 +1234,7 @@ export function placeCallouts(scene, scale) {
   // legacy placement, and one saved with layout 2 keeps layout 2's, until the
   // user runs Auto-arrange, as in the editor.
   const resolve = layout.layoutAlgorithm >= 2 ? resolveScoredBoxes : resolveCalloutBoxes;
-  const placed = resolve(scene.project.callouts || [], scene.map, { obstacles, algorithm: layout.layoutAlgorithm });
+  const placed = resolve(scene.project.callouts || [], scene.map, { obstacles, algorithm: layout.layoutAlgorithm, font: layout.fonts?.callout });
   const colliding = placed.filter((c) => c.collidesWith?.length);
   if (colliding.length) {
     const what = [...new Set(colliding.flatMap((c) => c.collidesWith))].slice(0, 3).join(', ');

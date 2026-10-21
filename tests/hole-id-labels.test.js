@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeAll } from 'vitest';
 import { createHash } from 'node:crypto';
 import { autoArrangeCallouts, resolveScoredBoxes, boxDistance, isIdLabel } from '../src/utils/calloutScorer.js';
-import { panelObstacles } from '../src/utils/calloutLayout.js';
+import { panelObstacles, intersects } from '../src/utils/calloutLayout.js';
 import { renderCalloutsSvg } from '../src/export/renderScene.js';
 import { resolveTemplateZones, technicalResultsTemplate } from '../src/templates/technicalResultsTemplate.js';
 import { createInitialProjectState } from '../shared/projectState.js';
@@ -62,6 +62,10 @@ describe('hole-ID labels in a dense drill plan', () => {
       }
       // On this plan every hole fits beside its collar: no leader needed.
       expect(Math.max(...rows.map((r) => r.own))).toBeLessThanOrEqual(NEAR);
+      // Placed ID labels are hard obstacles: no intercept card lies over one.
+      const ids = placed.filter((c) => c.id.startsWith('id-'));
+      const overlaps = placed.filter((c) => c.id.startsWith('int-')).flatMap((c) => ids.filter((l) => intersects(c, l, -1)).map((l) => `${c.id} over ${l.id}`));
+      expect(overlaps).toEqual([]);
       // Sized to its text, not a 188 px card.
       expect(Math.max(...placed.filter((c) => c.id.startsWith('id-')).map((c) => c.width))).toBeLessThan(100);
     });
