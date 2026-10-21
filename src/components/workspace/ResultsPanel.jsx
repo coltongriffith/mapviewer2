@@ -91,7 +91,7 @@ function RecipeForm({ r, set, stored, edit }) {
   );
 }
 
-export default function ResultsPanel({ property, perms }) {
+export default function ResultsPanel({ property, perms, revision = 0 }) {
   const db = useMemo(() => (supabase ? drillResultsDb(supabase) : null), []);
   const [data, setData] = useState(null); // { rows, capped, stored, saved: [] }
   const [name, setName] = useState('Default');
@@ -100,16 +100,18 @@ export default function ResultsPanel({ property, perms }) {
   const [note, setNote] = useState(null);
   const [busy, setBusy] = useState(false);
 
-  const load = async (keep) => {
+  // keepDraft: an import or roll-back reloads the assays and recipes, keeping the recipe being edited.
+  const load = async (keep, keepDraft) => {
     try {
       if (!db) throw new Error('Drill results are not available on this site right now.');
       const [a, saved] = await Promise.all([db.assays(property.id), db.recipes(property.id)]);
       setData({ ...a, stored: storedElements(a.rows), saved: saved || [] });
       const pick = (saved || []).find((x) => x.name === keep) || saved?.[0];
+      if (keepDraft && draft) return; // the recipe being edited, and its name, stay
       setName(pick?.name || 'Default'); setDraft(null);
     } catch (e) { setError(e.message); setData((d) => d || { rows: [], stored: { elements: [], units: {} }, saved: [] }); }
   };
-  useEffect(() => { load(); }, [property.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(name, true); }, [property.id, revision]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const current = data?.saved.find((x) => x.name === name) || null;
   const recipe = draft || current?.recipe || (data ? defaultRecipe(data.stored.elements, data.stored.units) : null);

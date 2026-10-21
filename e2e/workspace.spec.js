@@ -92,7 +92,7 @@ async function fakeSupabase(page, { role = 'owner', orgs = [org(role)], properti
         return json({ ...diff, dry_run: false, committed: true, batch_id: args.p_batch, rows_written: diff.new });
       }
       if (fn === 'drill_rollback_batch') {
-        fake.drill = { ...fake.drill, assays: 0, holes: 12, elements: [], batches: fake.drill.batches.map((b) => (b.id === args.p_batch ? { ...b, rolled_back_at: '2026-10-21T01:00:00Z' } : b)) };
+        fake.drill = { ...fake.drill, assays: fake.rollbackAssays ?? 0, holes: 12, elements: [], batches: fake.drill.batches.map((b) => (b.id === args.p_batch ? { ...b, rolled_back_at: '2026-10-21T01:00:00Z' } : b)) };
         return json({ batch_id: args.p_batch, rolled_back: true, already: false, withdrawn: 3, restored: 0 });
       }
       // Results recipes: each save is the next version of its name.
@@ -351,6 +351,16 @@ test('drill results: the recipe, the release table, copies and downloads, then s
     'R-2:1,R-2,34,156,122.0,0.61,CuEq,%,,"122.0 m @ 0.61% CuEq (0.45% Cu, 0.21 g/t Au) from 34.0 m",,Property results: Default v1,approved',
     'R-2:1.1,R-2,80,98,18.0,1.32,CuEq,%,R-2:1,18.0 m @ 1.32% CuEq,,Property results: Default v1,approved',
   ]);
+
+  // A roll-back (or an import) changes the assays: Results reads them again.
+  fake.rollbackAssays = 100;
+  fake.assayRows = assayRows('R-2');
+  const reads = fake.assayReads;
+  page.once('dialog', (d) => d.accept());
+  await page.getByRole('table', { name: 'Import history' }).getByRole('button', { name: 'Roll back Rails collars.csv' }).click();
+  await expect(region.getByText('1 intercept in 1 of 1 holes with assays.')).toBeVisible();
+  expect(fake.assayReads).toBe(reads + 1);
+  await expect(region.getByText(/Default, version 1 · saved/)).toBeVisible();
 });
 
 test('drill results: members see the saved recipe and its table, without editing it', async ({ page }) => {

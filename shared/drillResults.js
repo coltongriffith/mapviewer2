@@ -1,7 +1,7 @@
 // A property's drill results (pure): one recipe (elements with prices and recoveries, the metal equivalent,
 // cut-offs, dilution and rounding) turns the drill database's current assays into the intercepts a news
 // release reports, the text it prints, and the published-results table Exploration Maps 3D draws callouts
-// from. The compositing is /3d's own (shared/intercepts.js runs and avgOver, sampled metres only) and the
+// from. The compositing is /3d's own (shared/intercepts.js samples and runs, sampled metres only) and the
 // metal equivalent its formula (shared/metalEq.js), so the table and a figure cannot disagree.
 //
 // Recipe (stored in drill_result_recipes.recipe, supabase/migrations/20261028100000_drill_intercepts.sql):
@@ -15,7 +15,7 @@
 // Element names are the drill database's ("Cu", "Au"); prices are US$/lb, or US$/oz for Au, Ag, Pt and Pd
 // (priceUnit); recoveries in %. A stored grade in another unit (Cu in ppm) is converted to the recipe's.
 
-import { samples, runs, avgOver, gradeText, fmtGrade, TOL } from './intercepts.js';
+import { samples, runs, gradeText, fmtGrade, TOL } from './intercepts.js';
 import { eqFactors, eqFormula, eqValue, priceUnit, defaultUnit, METAL_DEFAULTS } from './metalEq.js';
 
 export const RECIPE_VERSION = 1;
@@ -138,7 +138,8 @@ export function atCutoff(list, cut, minLen) {
   const take = (run) => {
     const L = run.reduce((t, x) => t + (x.to - x.from), 0), metal = run.reduce((t, x) => t + x.v * (x.to - x.from), 0);
     if (!run.length || L < minLen) return;
-    if (metal / L >= cut) { out.push({ run, metal, L }); return; }
+    // A relative tolerance: ten samples at exactly the cut-off average 0.29999999999999993 at 0.3.
+    if (metal / L >= cut - Math.abs(cut) * 1e-9) { out.push({ run, metal, L }); return; }
     let best = null;
     for (let i = 0; i < run.length; i++) {
       if (run[i].v >= cut) continue;
@@ -147,6 +148,7 @@ export function atCutoff(list, cut, minLen) {
       if (!best || w > best.w) best = { i, j, w };
       i = j;
     }
+    if (!best) { out.push({ run, metal, L }); return; } // no sample below cut: it meets the cut-off
     take(run.slice(0, best.i));
     take(run.slice(best.j));
   };
@@ -177,10 +179,19 @@ export function computeResults(rows, r) {
   const g = (c, v) => (Number.isFinite(v) ? gradeText(v, label(c.key, c.unit), gdp(c.key)) : null);
   const cellOf = (c, v) => (Number.isFinite(v) ? fmtGrade(v, gdp(c.key)) : '');
   const L = (v) => v.toFixed(lenDp);
+  // The assay row each sample of a run came from: samples() keeps a row's to (an overlap trims its from) and,
+  // of rows ending at the same depth, the first by from.
+  const srcOf = (ints, x) => ints.find((it) => Number.isFinite(it.vals[col]) && Math.abs(it.to - x.to) <= 1e-9 && it.from <= x.from + 1e-9);
   const build = (ints, run, len, metal, id, holeId, parentId) => {
     const from = run[0].from, to = run[run.length - 1].to;
     const grades = { [col]: metal / run.reduce((s, x) => s + (x.to - x.from), 0) };
-    for (const c of columns.slice(1)) grades[c.key] = avgOver(ints, c.key, from, to);
+    // Each component over exactly the samples and lengths of the run, so it agrees with the equivalent.
+    const src = run.map((x) => srcOf(ints, x));
+    for (const c of columns.slice(1)) {
+      let m = 0, l = 0;
+      run.forEach((x, k) => { const v = src[k]?.vals[c.key]; if (Number.isFinite(v)) { m += v * (x.to - x.from); l += x.to - x.from; } });
+      grades[c.key] = l > 0 ? m / l : null;
+    }
     const bdl = ints.filter((it) => it.bdl && it.from < to - TOL && it.to > from + TOL).length;
     const comps = columns.slice(1).map((c) => g(c, grades[c.key])).filter(Boolean);
     const head = `${L(len)} m @ ${g(main, grades[col])}`;

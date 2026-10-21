@@ -281,3 +281,31 @@ describe('the elements stored in the assays', () => {
     expect(storedElements(rows)).toEqual({ elements: ['Ag', 'Cu'], units: { Ag: 'ppm', Cu: '%' } });
   });
 });
+
+describe('edge cases', () => {
+  it('samples exactly at the cut-off meet it, despite floating-point sums', () => {
+    // Ten 1 m samples at 0.3% average 0.29999999999999993 at a 0.3% cut-off.
+    const flat = simple(Array(10).fill(0.3));
+    expect(flat.reduce((t, x) => t + x.values.Cu, 0) / 10).toBeLessThan(0.3);
+    expect(computeResults(flat, { ...CU, cutoff: 0.3 }).results.map((x) => [x.from, x.to, x.line])).toEqual([[0, 10, '10.0 m @ 0.30% Cu from 0.0 m']]);
+    const r = computeResults(flat, { ...CU, cutoff: 0.1, inclCutoff: 0.3, inclMinLength: 1 }).results;
+    expect(r[0].incl).toEqual([]); // the whole interval again, so no "incl."
+  });
+
+  it('averages each component over the samples and lengths the equivalent used', () => {
+    // 0–1 m has Cu only (no equivalent there); 0–2 m has both. The interval is the 0–2 m sample alone.
+    const rows = [row('H', 0, 1, { Cu: 10 }), row('H', 0, 2, { Cu: 0.5, Au: 0.2 })];
+    const r = computeResults(rows, RECIPE).results;
+    expect(r.map((x) => [x.from, x.to, x.len])).toEqual([[0, 2, 2]]);
+    expect(r[0].grades.Cu).toBe(0.5);
+    expect(r[0].grades.Au).toBe(0.2);
+    expect(r[0].grades.CuEq).toBeCloseTo(0.5 + eqSetup(RECIPE).factors[0].factor * 0.2, 12);
+    expect(r[0].line).toBe('2.0 m @ 0.65% CuEq (0.50% Cu, 0.20 g/t Au) from 0.0 m');
+    // A trimmed overlap counts its trimmed length for every component.
+    const over = [row('H', 0, 2, { Cu: 1, Au: 0.4 }), row('H', 1, 3, { Cu: 0.4, Au: 0.1 })];
+    const o = computeResults(over, RECIPE).results[0];
+    expect([o.from, o.to, o.len]).toEqual([0, 3, 3]);
+    expect(o.grades.Cu).toBeCloseTo((2 * 1 + 1 * 0.4) / 3, 12);
+    expect(o.grades.Au).toBeCloseTo((2 * 0.4 + 1 * 0.1) / 3, 12);
+  });
+});

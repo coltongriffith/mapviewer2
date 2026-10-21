@@ -91,7 +91,9 @@ const BUDGETS = {
   // cut-off, copies, CSV and the published-results export), fetched only when
   // "Show results" is pressed; the drill tab chunk gains the section and its lazy hook (~0.34 kB). App, the homepage
   // and /3d are unchanged (App +7 B and /3d page +0.05 kB of chunk-hash churn and the shared run finder).
-  totalAuthJsGzipKb: 914.3,
+  // 914.3 → 914.5 (measured 914.16): components averaged over the equivalent's own samples, the reload on import
+  // and roll-back, and the cut-off tolerance (review fixes, all in the lazy results chunk).
+  totalAuthJsGzipKb: 914.5,
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
@@ -107,7 +109,8 @@ const BUDGETS = {
   // ~8.8 kB in this build, workspace chunk +0.3 kB); nothing in App or on the homepage.
   // 838.0 → 838.7 (Oct 2026, measured 838.32): the drill CSV reader's structure checks, as totalAuthJsGzipKb above.
   // 838.7 → 847.2 (Oct 2026, measured 846.93): the drill results section, as totalAuthJsGzipKb above.
-  totalJsGzipKb: 847.2,
+  // 847.2 → 847.4 (measured 847.05): the results review fixes, as totalAuthJsGzipKb above.
+  totalJsGzipKb: 847.4,
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the
   // totals above. /3d carries three.js (~109 kB gzip) and its editor.

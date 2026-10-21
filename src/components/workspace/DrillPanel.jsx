@@ -213,6 +213,7 @@ export default function DrillPanel({ property, perms }) {
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(null);
   const [results, setResults] = useState(false);
+  const [revision, setRevision] = useState(0); // bumped by each import and roll-back, so Results reloads its assays
   const load = useCallback(async () => {
     try {
       if (!db) throw new Error('The drill database is not available on this site right now.');
@@ -223,17 +224,17 @@ export default function DrillPanel({ property, perms }) {
   const back = (b) => window.confirm(`Roll back the import of ${b.filename || kindLabel(b.kind)}? Its rows stop being current and what it replaced comes back. The import stays in the history.`)
     && (async () => {
       setBusy(b.id); setError(null);
-      try { await db.rollback(b.id); await load(); } catch (e) { setError(e.message); } finally { setBusy(null); }
+      try { await db.rollback(b.id); setRevision((v) => v + 1); await load(); } catch (e) { setError(e.message); } finally { setBusy(null); }
     })();
   return (
     <section aria-label="Drill data" className="ws-stack">
       <ErrorNote error={error} onDismiss={() => setError(null)} />
       <div className="dash-panel"><Summary s={s} /></div>
-      {perms.edit && db && <div className="dash-panel"><Importer db={db} property={property} orgId={property.org_id} onDone={load} /></div>}
+      {perms.edit && db && <div className="dash-panel"><Importer db={db} property={property} orgId={property.org_id} onDone={() => { setRevision((v) => v + 1); load(); }} /></div>}
       {s?.assays > 0 && (
         <section className="dash-panel" aria-label="Results">
           <h3 style={{ margin: '0 0 8px', fontSize: 15 }}>Results</h3>
-          {results ? <Suspense fallback={<p className="dash-muted">Loading…</p>}><ResultsPanel property={property} perms={perms} /></Suspense> : (
+          {results ? <Suspense fallback={<p className="dash-muted">Loading…</p>}><ResultsPanel property={property} perms={perms} revision={revision} /></Suspense> : (
             <div className="ws-row">
               <button type="button" className="btn" onClick={() => setResults(true)}>Show results</button>
               <span className="dash-muted">Intercepts from the assays with this property's metal equivalent and cut-offs, as a news-release table.</span>
