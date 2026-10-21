@@ -701,7 +701,10 @@ JavaScript API (run in the page console or via your agent's evaluate tool):
                  legend: {merge: "auto" | "one" | "separate", pos: {main | lithology | geophys: "auto" |
                    "tl" | "tr" | "bl" | "br" | {x, y}}} (cards' top-left, 0-1 of the frame; drag them too),
                  coPlacement: "column" | "beside" | "bracket" (where callouts go),
-                 blockMargin (m around the drilling, null = auto), blockExtent: {x0, x1, y0, y1, z0} or null})
+                 blockMargin (m around the drilling, null = auto), blockExtent: {x0, x1, y0, y1, z0} or null,
+                 designOptIn: ["sampledIntercepts", ...] (a figure saved before design version 2 keeps
+                   its earlier look, getState().design; this takes newer rules one by one, e.g. callouts
+                   on sampled metres only, never across an unsampled gap)})
   EM3D.setCRS("EPSG:26909" | "UTM 9N NAD83" | "EPSG:4326" | proj4 string | null)
                                   Promise. The coordinate system of the files; loads real terrain
                                   (AWS Terrain Tiles) and, for satellite/muted, Esri imagery

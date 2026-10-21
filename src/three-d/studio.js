@@ -6,6 +6,8 @@ import { composite, collarGroups, autoCell, autoSearch } from './shell-core.js';
 import { METAL_DEFAULTS, defaultUnit, priceUnit, eqFactors, eqFormula, eqValue } from './metal-eq.js';
 import { isXYZ, parseXYZ, refineRole } from './roles.js';
 import { makeLayout, isClick, legendRows as binRows, wrapNotes, shouldMerge } from './layout.js';
+import { DESIGN_VERSION, FEATURES, uses, withDefaults } from './design-version.js';
+import { intercept, calloutText } from './intercepts.js';
 
 const $ = (id) => document.getElementById(id);
 // ============================================================
@@ -547,7 +549,7 @@ function paintTerrain() {
         if (st === 'satellite') {
           r = TONE[r]; g = TONE[g]; b = TONE[b]; const l = 0.3 * r + 0.59 * g + 0.11 * b;
           r = 128 + (l + (r - l) * sat - 128) * con + 16 * warm; g = 128 + (l + (g - l) * sat - 128) * con + 3 * warm; b = 128 + (l + (b - l) * sat - 128) * con - 16 * warm;
-          f = 1 - 0.6 * rel + 0.85 * rel * sh; // the hillshade multiplied in, so slopes read
+          if (rel || uses(S, 'imageryRelief')) f = 1 - 0.6 * rel + 0.85 * rel * sh; // the hillshade multiplied in, so slopes read
         }
         if (st === 'muted') { const l = 0.3 * r + 0.59 * g + 0.11 * b; r = (l + (r - l) * 0.4) * 0.6 + 98; g = (l + (g - l) * 0.4) * 0.6 + 100; b = (l + (b - l) * 0.4) * 0.6 + 97; f = 0.86 + 0.22 * sh; }
         d[i * 4] = Math.min(255, Math.max(0, r * f)); d[i * 4 + 1] = Math.min(255, Math.max(0, g * f)); d[i * 4 + 2] = Math.min(255, Math.max(0, b * f)); d[i * 4 + 3] = 255;
@@ -591,7 +593,7 @@ function faceWalls() {
   G.walls.forEach((w) => {
     const d = w.userData;
     if (!d.n) { w.material.color.set(solid ? '#cfcac0' : PALE.has(S.terrain) ? '#f3f5f4' : '#e9ecea'); w.material.opacity = solid ? 0.9 : 0.6; w.renderOrder = solid ? 1 : 0; return; }
-    const near = d.n.dot(eye.clone().sub(d.c)) > 0, clear = near && painted.size > 0, tk = `${solid && near}|${clear}`;
+    const near = d.n.dot(eye.clone().sub(d.c)) > 0, clear = near && painted.size > 0 && uses(S, 'clearNearWalls'), tk = `${solid && near}|${clear}`;
     if (d.tk !== tk) { tintWall(w, solid && near, clear); d.tk = tk; }
     // Far solid faces and painted faces go first, before the paint, the model shapes (which do not write
     // depth) and the holes' veils.
@@ -1001,7 +1003,7 @@ function restyle() {
     q.setFromUnitVectors(up, dir.normalize());
     const rw = r * (EXT.tags?.weight(h) ?? 1); sc.set(bi < 0 ? 0.001 : rw, Math.max(0.01, len), bi < 0 ? 0.001 : rw); // EXT hook: key holes bold
     m.compose(va.clone().add(vb).multiplyScalar(0.5), q, sc);
-    T.setMatrixAt(k, m); col.set(BIN_COLORS[Math.max(0, bi)]); if (extFade(h)) col.lerp(new THREE.Color('#b9c1c4'), 0.7); T.setColorAt(k, col); // EXT hook: fade
+    T.setMatrixAt(k, m); col.set(BIN_COLORS[Math.max(0, bi)]); if (extFade(h)) { const gf = uses(S, 'greyFade'); col.lerp(new THREE.Color(gf ? '#b9c1c4' : '#ffffff'), gf ? 0.7 : 0.6); } T.setColorAt(k, col); // EXT hook: fade
   }));
   [G.tubes, G.tubesP].forEach((T, i) => { T.count = n[i]; T.instanceMatrix.needsUpdate = true; if (T.instanceColor) T.instanceColor.needsUpdate = true; });
   styleShell();
@@ -1027,35 +1029,13 @@ function sectionEnds() {
   return p1.x <= p2.x ? [p1, p2] : [p2, p1];
 }
 
-// Intercepts: the run above the broad cut-off holding the most metal (internal dilution up to 6 m),
-// then the longest stretch inside it at or above the "incl." cut-off.
-function intercept(ints, col, cut, inclCut, minLen) {
-  const seq = ints.map((it) => ({ ...it, v: it.vals[col] })).filter((it) => Number.isFinite(it.v));
-  let best = null, start = -1, lastHit = -1;
-  const close = () => {
-    if (start < 0) return; const run = seq.slice(start, lastHit + 1), L = run[run.length - 1].to - run[0].from;
-    const metal = run.reduce((s, x) => s + x.v * (x.to - x.from), 0);
-    if (L >= minLen && (!best || metal > best.metal)) best = { run, metal, L }; start = -1;
-  };
-  seq.forEach((it, i) => {
-    if (it.v >= cut) { if (start < 0) start = i; lastHit = i; }
-    else if (start >= 0 && it.to - seq[lastHit].to > 6) close();
-  });
-  close();
-  if (!best) return null;
-  const run = best.run, len = run[run.length - 1].to - run[0].from;
-  const broad = { len, avg: best.metal / run.reduce((s, x) => s + (x.to - x.from), 0), from: run[0].from, mid: (run[0].from + run[run.length - 1].to) / 2 };
-  let incl = null;
-  for (let i = 0; i < run.length; i++) { let m = 0, l = 0;
-    for (let j = i; j < run.length; j++) { m += run[j].v * (run[j].to - run[j].from); l += run[j].to - run[j].from; const span = run[j].to - run[i].from;
-      if (span >= Math.min(minLen / 2, 10) && span < len * 0.8 && m / l >= inclCut && (!incl || span > incl.len)) incl = { len: span, avg: m / l, from: run[i].from }; } }
-  return { broad, incl };
-}
+// Intercepts (intercepts.js): sampled metres only, or the earlier numbers for a version 1 figure.
 let callouts = [];
 function computeCallouts() {
   callouts = [];
   if (!G || !S.valueCol) return;
-  project.holes.forEach((h) => { const ic = intercept(h.ints, S.valueCol, S.coCut, S.coIncl, S.coMin); if (ic) callouts.push({ h, ic }); });
+  const sampled = uses(S, 'sampledIntercepts');
+  project.holes.forEach((h) => { const ic = intercept(h.ints, S.valueCol, S.coCut, S.coIncl, S.coMin, sampled); if (ic) callouts.push({ h, ic }); });
   callouts.sort((a, b) => b.ic.broad.len * b.ic.broad.avg - a.ic.broad.len * a.ic.broad.avg);
 }
 const fmt = (v) => (v >= 100 ? v.toFixed(0) : v >= 10 ? v.toFixed(1) : v > 0 && v < 0.01 ? v.toFixed(3) : v.toFixed(2));
@@ -1183,7 +1163,7 @@ const lumOf = (rgb) => { const c = rgb.map((v) => { v /= 255; return v <= 0.0392
 const textOn = (hex) => (lumOf(hexRgb(hex)) > 0.45 ? INK : '#ffffff');
 // Brand colours for figure furniture (S.primary and S.accent, set from the logo): legend headers, highlighted
 // (new) holes, the grade shell. Grade, geophysics and lithology colours stay scientific, never from here.
-const brandTone = (kind) => ({ head: S.primary, highlight: S.accent, shell: S.accent }[kind] || S.accent);
+const brandTone = (kind) => ({ head: uses(S, 'brandHeadings') ? S.primary : INK, highlight: S.accent, shell: S.accent }[kind] || S.accent);
 function setSpacing(ctx, px) { if ('letterSpacing' in ctx) ctx.letterSpacing = `${px}px`; }
 
 function drawLogo(ctx, K, Wc, forExport) {
@@ -1220,14 +1200,15 @@ function autoNotes(view) {
 // compact "Notes" block in smaller type.
 function drawFooter(ctx, K, Wc, Hc, credits = [], notes = []) {
   const { u, m, font } = K, y = Hc - 17 * u, wide = Wc - 2 * m, mw = (t) => ctx.measureText(t).width;
-  font(400, 10.5); let lines = wrapNotes(notes, mw, wide), block = !lines, lh = 15 * u;
+  const band = uses(S, 'footerBand'); // version 1: one note per line, no band
+  font(400, 10.5); let lines = band ? wrapNotes(notes, mw, wide) : notes.map((t) => fitText(ctx, t, wide)), block = !lines, lh = 15 * u;
   // Disclosures are never dropped: the block's type shrinks (to 8 pt) to stay within three lines,
   // and grows past three only if it still has to.
   let fs = 9.5;
   if (block) { for (;;) { font(400, fs); lines = wrapNotes(notes, mw, wide - 44 * u, 99); if (lines.length <= 3 || fs <= 8) break; fs -= 0.5; } lh = (fs + 3.5) * u; }
-  const rule = y - 16 * u - lines.length * lh - (lines.length ? 3 * u : 0);
+  const g = band ? 3 * u : 0, rule = y - 16 * u - lines.length * lh - (lines.length ? g : 0);
   // The footer is a white band: the block or its shadow never shows through the notes and credits.
-  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, rule, Wc, Hc - rule);
+  if (band) { ctx.fillStyle = '#ffffff'; ctx.fillRect(0, rule, Wc, Hc - rule); }
   ctx.strokeStyle = RULE; ctx.lineWidth = u; ctx.beginPath(); ctx.moveTo(m, rule); ctx.lineTo(Wc - m, rule); ctx.stroke();
   ctx.textBaseline = 'alphabetic'; let creditW = 0;
   // A white halo keeps the footer legible where the block or its shadow runs under it.
@@ -1238,7 +1219,7 @@ function drawFooter(ctx, K, Wc, Hc, credits = [], notes = []) {
   }
   if (credits.length) { font(400, 10.5); ctx.textAlign = 'right'; ctx.fillStyle = '#7c898c'; const t = credits.join(' · '); halo(t, Wc - m - creditW - (creditW ? 10 * u : 0), y); creditW += ctx.measureText(t).width + 10 * u; }
   if (S.footnote) { font(400, 11.5); ctx.textAlign = 'left'; ctx.fillStyle = MUTED; halo(fitText(ctx, S.footnote, Wc - 2 * m - creditW - 24 * u), m, y); }
-  ctx.textAlign = 'left'; ctx.fillStyle = MUTED; const ny = (i) => y - 3 * u - (lines.length - i) * lh;
+  ctx.textAlign = 'left'; ctx.fillStyle = MUTED; const ny = (i) => y - g - (lines.length - i) * lh;
   if (block && lines.length) { font(700, 9.5); ctx.fillStyle = INK; halo('Notes', m, ny(0)); ctx.fillStyle = MUTED; }
   font(400, block ? fs : 10.5); lines.forEach((t, i) => halo(t, m + (block ? 44 * u : 0), ny(i)));
   return rule;
@@ -1256,10 +1237,11 @@ function shownCallouts() {
   callouts.forEach((c) => { if (ov_(c).show === true && !list.includes(c)) list.push(c); });
   return list;
 }
-function calloutLines(c) {
-  const o = S.coOverrides[c.h.id] || {};
-  return { l1: o.line1 || icText(c.ic.broad, c.h), l1b: o.line1 ? '' : ` from ${Math.round(c.ic.broad.from)} m`, l2: o.incl === false ? null : (o.line2 || (c.ic.incl ? `incl. ${icText(c.ic.incl, c.h)}` : null)) };
-}
+const calloutLines = (c) => calloutText(c.ic, S.coOverrides[c.h.id] || {}, (x) => icText(x, c.h));
+// Version 1 numbers that span an unsampled gap or overlapping samples: kept as published, with a warning in
+// the callout panel and a one-click (undoable) recalculation on sampled metres.
+const gapCallouts = () => shownCallouts().filter((c) => c.ic.gap || c.ic.overlap);
+const gapText = (c) => `${c.h.id} callout spans ${c.ic.gap ? `a ${Math.round(c.ic.gap)} m unsampled gap` : 'overlapping samples'}`;
 function measureCallout(ctx, K, c) {
   const { font, u } = K, L = calloutLines(c);
   font(700, 15); const w1 = ctx.measureText(L.l1).width; font('italic 400', 13); const w1b = ctx.measureText(L.l1b).width; font(600, 13.5); const w2 = L.l2 ? ctx.measureText(L.l2).width : 0;
@@ -1489,7 +1471,7 @@ function drawOverlay(ctx, k, forExport) {
     ctx.beginPath(); ctx.arc(cx, cy, 5 * u, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 2.4 * u; ctx.strokeStyle = EXT.tags?.highlightOf(h) || INK; if (h.prov || h.planned) ctx.setLineDash([2.5 * u, 2 * u]); ctx.stroke(); ctx.setLineDash([]);
     occ.push([cx - 8 * u, cy - 8 * u, cx + 8 * u, cy + 8 * u]);
     // EXT hook: key holes only (the default past 12 holes, when tags.js decides), and no ID where a pill is.
-    if (!S.ids || (EXT.tags ? !EXT.tags.idShown(h) || (S.tags.at === 'collar' && EXT.tags.tagShown(h)) : S.tags.at === 'collar' || project.holes.length > 12)) return;
+    if (!S.ids || (EXT.tags ? !EXT.tags.idShown(h) || (S.tags.at === 'collar' && EXT.tags.tagShown(h)) : S.tags.at === 'collar' || (S.tags.idMode !== 'all' && project.holes.length > 12))) return;
     const ang = Math.atan2(ey - cy, ex - cx), flip = Math.abs(ang) > Math.PI / 2, r = 26 * u, box = [ex - r, ey - r, ex + r, ey + r];
     // The ID is dropped where it would land on another ID or on a label painted on the block.
     const run = [ex + Math.cos(ang) * 6 * u, ey + Math.sin(ang) * 6 * u, ex + Math.cos(ang) * 60 * u, ey + Math.sin(ang) * 60 * u], tbox = [Math.min(run[0], run[2]), Math.min(run[1], run[3]), Math.max(run[0], run[2]), Math.max(run[1], run[3])];
@@ -1883,12 +1865,14 @@ function renderCalloutEditor() {
   const el = $('callout-editor'), shownIds = new Set(shownCallouts().map((c) => c.h.id)), cands = callouts.slice(0, Math.max(6, S.coCount + 3));
   callouts.forEach((c) => { if (shownIds.has(c.h.id) && !cands.includes(c)) cands.push(c); });
   if (!cands.length) { el.innerHTML = '<p class="muted">No hole has an interval above the broad cut-off over the minimum length. Lower either one.</p>'; return; }
-  el.innerHTML = '<p class="muted">Tick to show. Type over a line to reword it; leave it blank for the automatic text.</p>' + cands.map((c) => {
+  const gaps = gapCallouts(), warn = gaps.length ? `<p class="warn" role="status">${esc(gaps.map(gapText).join('; '))}. <button class="btn" type="button" id="co-recalc">Recalculate</button> to count sampled metres only.</p>` : '';
+  el.innerHTML = `${warn}<p class="muted">Tick to show. Type over a line to reword it; leave it blank for the automatic text.</p>` + cands.map((c) => {
     const id = esc(c.h.id), o = S.coOverrides[c.h.id] || {}, a1 = `${icText(c.ic.broad, c.h)} from ${Math.round(c.ic.broad.from)} m`, a2 = c.ic.incl ? `incl. ${icText(c.ic.incl, c.h)}` : '(no "incl." line)';
     return `<div class="callout-ed"><input type="checkbox" data-co="${id}" ${shownIds.has(c.h.id) ? 'checked' : ''} aria-label="Show callout for ${id}"><span class="id">${id}</span>`
       + `<input type="text" data-co1="${id}" value="${esc(o.line1 || '')}" placeholder="${esc(a1)}" aria-label="First line for ${id}">`
       + `<input type="text" data-co2="${id}" value="${esc(o.line2 || '')}" placeholder="${esc(a2)}" aria-label="Second line for ${id}"></div>`;
   }).join('');
+  $('co-recalc')?.addEventListener('click', () => { setStyle({ designOptIn: [...S.designOptIn, 'sampledIntercepts'] }); status('Callouts recalculated on sampled metres only. Undo restores the earlier numbers.'); });
   el.querySelectorAll('[data-co]').forEach((cb) => cb.addEventListener('change', () => setCallout(cb.dataset.co, { show: cb.checked })));
   el.querySelectorAll('[data-co1],[data-co2]').forEach((inp) => inp.addEventListener('input', () => {
     const id = inp.dataset.co1 || inp.dataset.co2, key = inp.dataset.co1 ? 'line1' : 'line2';
@@ -2064,6 +2048,8 @@ function setStyle(o = {}, render = true) {
   if (ve !== undefined) { const v = +ve; if (!Number.isFinite(v)) throw new Error('verticalExaggeration must be a number from 1 to 5.'); const nv = Math.max(1, Math.min(5, v)); rebuild = rebuild || nv !== S.vex; S.vex = nv; }
   if (o.collarFit !== undefined) { if (!['collars', 'terrain'].includes(o.collarFit)) throw new Error('collarFit must be "collars" (move the terrain to the collars) or "terrain" (hang holes from the terrain).'); rebuild = rebuild || S.collarFit !== o.collarFit; S.collarFit = o.collarFit; }
   if (o.blockStyle !== undefined) { if (!['glass', 'solid'].includes(o.blockStyle)) throw new Error('blockStyle must be "glass" or "solid".'); S.blockStyle = o.blockStyle; }
+  // An earlier figure taking newer drawing rules (design-version.js FEATURES), such as "sampledIntercepts".
+  if (o.designOptIn !== undefined) { const v = o.designOptIn || []; if (!Array.isArray(v) || v.some((f) => !FEATURES[f])) throw new Error(`designOptIn is a list of: ${Object.keys(FEATURES).join(', ')}.`); S.designOptIn = [...new Set(v)]; rebuild = true; }
   if (o.meshes) Object.entries(o.meshes).forEach(([name, v]) => { if (!S.meshes[name]) throw new Error(`No model shape named "${name}". Loaded: ${Object.keys(S.meshes).join(', ') || 'none'}.`); Object.assign(S.meshes[name], v); });
   if (rebuild) rebuildScene(true); else { if (o.terrain !== undefined || o.blockStyle !== undefined) paintTerrain(); if (o.terrain !== undefined) syncRealTerrain(); restyle(); }
   if (rebuild && G?.terrainNote) status(G.terrainNote);
@@ -2512,7 +2498,8 @@ function getState() {
       columns: x.cols ? Object.fromEntries(Object.entries(x.cols).map(([k, i]) => [k, x.header[i]])) : undefined, gradeColumns: x.grades && x.grades.length ? x.grades.map((g) => g.name) : undefined })),
     project: ok ? { holes: project.holes.length, holeIds: project.holes.map((h) => h.id), metresDrilled: Math.round(project.holes.reduce((s, h) => s + h.len, 0)), pendingHoles: project.holes.filter(isPending).map((h) => h.id), intervals: project.holes.reduce((s, h) => s + h.ints.length, 0), dipsPositiveDown: project.posDown, warnings: project.warnings } : null,
     grade: { column: S.valueCol, label: S.valueLabel, available: project?.cols || [], bins: S.bins, binColors: BIN_COLORS },
-    callouts: { coCount: S.coCount, coMin: S.coMin, coCut: S.coCut, coIncl: S.coIncl,
+    design: { version: S.designVersion, current: DESIGN_VERSION, optIn: S.designOptIn },
+    callouts: { coCount: S.coCount, coMin: S.coMin, coCut: S.coCut, coIncl: S.coIncl, sampled: uses(S, 'sampledIntercepts'), warnings: gapCallouts().map(gapText),
       shown: shownCallouts().map((c) => { const L = calloutLines(c); return { holeId: c.h.id, line1: L.l1 + L.l1b, line2: L.l2 }; }),
       candidates: callouts.slice(0, 15).map((c) => ({ holeId: c.h.id, broad: icText(c.ic.broad, c.h), fromM: Math.round(c.ic.broad.from), incl: c.ic.incl ? icText(c.ic.incl, c.h) : null })), overrides: S.coOverrides, valueCol2: S.valueCol2 },
     brand: { company: S.company, title: S.title, subtitle: S.subtitle, footnote: S.footnote, primary: S.primary, accent: S.accent, hasLogo: !!S.logo, credit: S.credit },
@@ -2566,6 +2553,8 @@ function toPlain(v, depth = 0) {
   const out = {}; for (const [k, x] of Object.entries(v)) { const p = toPlain(x, depth + 1); if (p !== undefined) out[k] = p; }
   return out;
 }
+// A new figure is of the current design version (design-version.js); an opened one keeps its own.
+Object.assign(S, { designVersion: DESIGN_VERSION, designOptIn: [] });
 const S_DEFAULTS = toPlain(S);
 const isImg = (v) => v && typeof v === 'object' && typeof v.$image === 'string';
 const loadImg = (src) => new Promise((resolve, reject) => { const img = new Image(); img.onload = () => resolve(img); img.onerror = () => reject(new Error('A saved image could not be loaded.')); img.src = src; });
@@ -2593,7 +2582,7 @@ const filesDigest = () => files.map((f) => `${f.name}|${fileDigest(f)}`).join(',
 async function loadProject(p) {
   if (!p || p.v !== 1 || !p.settings || typeof p.settings !== 'object' || !Array.isArray(p.files)) throw new Error('loadProject expects a project from EM3D.getProject() ({ v: 1, settings, files }).');
   if (p.files.some((f) => !f || typeof f.name !== 'string' || typeof f.text !== 'string')) throw new Error('Each project file needs a name and its text.');
-  const saved = { ...S_DEFAULTS, ...p.settings }, { logo, ...rest } = saved, imgs = {};
+  const saved = withDefaults(p.settings, S_DEFAULTS), { logo, ...rest } = saved, imgs = {}; // an earlier figure keeps its look
   await Promise.all(Object.entries(rest).filter(([, v]) => isImg(v)).map(async ([k, v]) => { imgs[k] = await loadImg(v.$image); }));
   if (isImg(logo)) await setLogo(logo.$image, { autoColor: false }); else await setLogo(null);
   Object.entries(rest).forEach(([k, v]) => { S[k] = imgs[k] || (v && typeof v === 'object' ? structuredClone(v) : v); });
@@ -2606,7 +2595,8 @@ async function loadProject(p) {
   });
   histReset(); refresh.secSet = true; refresh(); refresh.secSet = !!p.secSet;
   await settle(p.camera);
-  status(project && !project.empty ? `Figure opened · ${project.holes.length} holes.` : 'Figure opened. Add a collar file to see the holes.');
+  const gaps = document.documentElement.classList.contains('em3d-viewer') ? [] : gapCallouts().map(gapText); // the owner is told, not a viewer
+  status(project && !project.empty ? `Figure opened · ${project.holes.length} holes.${gaps.length ? ` ${gaps.join('; ')}: Recalculate in Layout, Intercept callouts.` : ''}` : 'Figure opened. Add a collar file to see the holes.');
   return getState();
 }
 // After settings are put into S wholesale (a project opened, a history step): the panel, frame and layers.

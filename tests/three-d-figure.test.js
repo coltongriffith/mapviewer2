@@ -28,6 +28,12 @@ describe('hidden lithology codes', () => {
     expect(f.index.get('ENR')).toBe(2);
     expect(f.other).toBe(true);
   });
+  it('leaves hidden codes unpainted in place for figures made before October 2026 ("clear")', () => {
+    const f = foldCodes(legend, codes, 'clear');
+    expect(f.classes).toEqual(codes);
+    expect([...f.index.values()]).toEqual(codes.map((_, i) => i));
+    expect([...f.clear]).toEqual(['LPD', 'ENR']);
+  });
   it('adds no "Other" unit when nothing is hidden, and keeps unknown codes visible', () => {
     expect(foldCodes([], ['A', 'B'], 'other')).toMatchObject({ classes: ['A', 'B'], other: false });
   });

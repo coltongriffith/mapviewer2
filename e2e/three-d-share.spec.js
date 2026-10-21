@@ -147,6 +147,18 @@ test.describe('sharing', () => {
   // Software WebGL and several page loads per test: allow more than the default minute.
   test.setTimeout(180_000);
 
+  test('a link shared before design versions shows the figure as it was, with no prompt to the viewer', async ({ page, context }) => {
+    const legacy = JSON.parse(await readFile('tests/fixtures/three-d/pre-round4-project.json', 'utf8')), id = 'c'.repeat(32), at = '2026-10-19T12:00:00.000Z';
+    await fakeSupabase(context, { shares: new Map([[id, { id, state: legacy, thumbnail: null, user_id: uid, creator_key: null, project_id: null, created_at: at, updated_at: at, expires_at: null, revoked_at: null, view_count: 0 }]]) });
+    await openShared(page, `/3d/share/${id}`);
+    const viewed = await state(page);
+    expect(viewed.design).toEqual({ version: 1, current: 2, optIn: [] });
+    expect(viewed.display).toMatchObject({ imagery: { saturation: 1.15, contrast: 1, warmth: 0, relief: 0 }, legend: { merge: 'separate', pos: { main: 'br' } } });
+    expect(viewed.tags).toMatchObject({ emphasis: 'none', highlightNew: false, idMode: 'all' });
+    expect(viewed.callouts.shown.find((c) => c.holeId === 'S-037').line1).toBe('110 m @ 1.50% Cu from 0 m'); // the numbers as published
+    await expect(page.locator('#status')).not.toContainText('unsampled');
+  });
+
   test('signed out: share, view read-only, download, update the same link, embed and revoke', async ({ page, context }, testInfo) => {
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));

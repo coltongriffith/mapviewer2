@@ -3,6 +3,7 @@
 // inset. Loaded on first use by studio.js (EXT hook).
 import * as THREE from 'three';
 import { placePills } from './layout.js';
+import { uses } from './design-version.js';
 
 export { placePills };
 
@@ -104,6 +105,7 @@ export function idShown(h) {
 export function tagShown(h) {
   const t = T(), v = t.showTag?.[h.id]; if (typeof v === 'boolean') return v;
   if (t.at === 'toe' || t.status[h.id] === 'none') return false;
+  if (!uses(H.S, 'holeTags')) return idShown(h); // version 1 figures: a pill on every hole with an ID
   return mode() === 'key' ? keyHole(h) : statusOf(h) !== null || ![...statuses().status.values()].some(Boolean);
 }
 // Collar pills and small "ASSAYS PENDING" tags, placed before the legends (which keep clear of them): the
@@ -148,11 +150,12 @@ export const pendingGroups = (pts, radius) => clusters(pts, radius);
 function placePending(ctx, K, { placed, occ, W, H: Hh }) {
   const { u, font } = K, hs = H.project.holes.filter(H.isPending).map((h) => ({ h, s: H.proj(H.G.V(h.c.x, h.c.y, h.c.z)) })).filter((p) => p.s[2] < 1);
   if (!hs.length) return null;
-  font(700, 9.5); H.setSpacing(ctx, 1.1 * u); const hh = 16 * u, years = statuses().years;
-  const groups = pendingGroups(hs.map((p) => [p.h.c.x, p.h.c.y]), T().groupRadius || 140).map((g) => g.map((i) => hs[i]));
+  font(700, 9.5); H.setSpacing(ctx, 1.1 * u); const hh = 16 * u, years = statuses().years, v2 = uses(H.S, 'holeTags');
+  // Version 1 figures: groups 70 px apart on screen, the plain text, under the collars.
+  const groups = (v2 ? pendingGroups(hs.map((p) => [p.h.c.x, p.h.c.y]), T().groupRadius || 140) : clusters(hs.map((p) => p.s.slice(0, 2)), 70 * u)).map((g) => g.map((i) => hs[i]));
   const items = groups.map((g) => {
-    const ys = new Set(g.map((p) => years.get(p.h.id))), t = `${ys.size === 1 && [...ys][0] ? `${[...ys][0]} · ` : ''}ASSAYS PENDING`;
-    return { g, t, x: g.reduce((a, p) => a + p.s[0], 0) / g.length, y: Math.min(...g.map((p) => p.s[1])) - 6 * u, w: ctx.measureText(t).width + 14 * u, h: hh };
+    const ys = new Set(g.map((p) => years.get(p.h.id))), t = `${v2 && ys.size === 1 && [...ys][0] ? `${[...ys][0]} · ` : ''}ASSAYS PENDING`;
+    return { g, t, x: g.reduce((a, p) => a + p.s[0], 0) / g.length, y: Math.min(...g.map((p) => p.s[1])) + (v2 ? -6 : 14) * u, w: ctx.measureText(t).width + 14 * u, h: hh };
   });
   const res = placePills(items, [...placed, ...occ.filter((b) => b[3] - b[1] < Hh * 0.5)], { W, H: Hh, unit: u, pad: 3 * u });
   res.forEach((p) => { placed.push(p.box); occ.push(p.box); });
@@ -197,8 +200,8 @@ export function groupItems(ctx, K, items) {
   };
   (t.groups || []).forEach((ids) => { const ms = items.filter((it) => ids.includes(it.c.h.id) && !used.has(it)); if (ms.length >= 2) { ms.forEach((m) => used.add(m)); out.push(make(ms)); } });
   const rest = items.filter((it) => !used.has(it));
-  const at = (it) => { const p = it.c.h.posAt(it.c.ic.broad.mid); return [p.x, p.y, p.z]; }; // groupRadius is in metres
-  if (t.autoGroup) clusters(rest.map(at), t.groupRadius || 140).forEach((cl) => { if (cl.length >= 2) { const ms = cl.map((i) => rest[i]); ms.forEach((m) => used.add(m)); out.push(make(ms)); } });
+  const at = (it) => { const p = it.c.h.posAt(it.c.ic.broad.mid); return [p.x, p.y, p.z]; }, v2 = uses(H.S, 'holeTags'); // groupRadius is in metres (version 1: screen px)
+  if (t.autoGroup) clusters(v2 ? rest.map(at) : rest.map((it) => it.s.slice(0, 2)), (t.groupRadius || 140) * (v2 ? 1 : u)).forEach((cl) => { if (cl.length >= 2) { const ms = cl.map((i) => rest[i]); ms.forEach((m) => used.add(m)); out.push(make(ms)); } });
   return items.filter((it) => !used.has(it)).concat(out).sort((a, b) => a.s[1] - b.s[1]);
 }
 export function drawGroup(ctx, K, x, y, g) {

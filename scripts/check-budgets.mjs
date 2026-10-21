@@ -79,7 +79,10 @@ const BUDGETS = {
   // cards that dock and drag, the imagery tone, the shell seen through the terrain, and the history hooks
   // (Ctrl/Cmd+Z needs them from the first change). The API notes, the design desk and the logo colour
   // picker moved out of the page to pay for most of it; what remains is under 0.1 kB over.
-  threeDJsGzipKb: 169,
+  // 169 → 170 (Oct 2026): figure design versions (design-version.js: earlier figures keep their look) and
+  // gap-aware intercepts (intercepts.js) with the warning on earlier figures, ~0.9 kB. Both run as a figure
+  // opens and on every restyle, so they stay in the page.
+  threeDJsGzipKb: 170,
   // /3d's own modules fetched on first use (the geology, geophysics and tag layers, the account
   // client). They never load with the page or the app, so they sit outside the page and app totals.
   // 32 → 34 (Oct 2026, round 4): per-hole tags, grouped pending tags, callouts beside or bracketed on their
