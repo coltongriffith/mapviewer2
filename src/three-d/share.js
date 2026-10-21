@@ -15,6 +15,7 @@
 // expires after 30 days. Owners can update a link with the current figure
 // (one link a company refreshes after new assays), list and revoke links.
 import { client, getUser, saveProject } from './account-core.js';
+import { track as usage } from './track.js';
 
 const $ = (id) => document.getElementById(id);
 const html = document.documentElement;
@@ -26,7 +27,9 @@ const studio = () => {
 };
 const esc = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmtWhen = (iso) => { try { return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(iso)); } catch { return ''; } };
-const track = (name, params) => { try { window.gtag?.('event', name, params); } catch { /* analytics never breaks sharing */ } };
+// Google tag as before, and our own usage counts (track.js, which keeps only created, viewed and forked). Never the
+// share id: it is the link itself.
+const track = (name, params) => { try { window.gtag?.('event', name, params); } catch { /* analytics never breaks sharing */ } usage(name, params); };
 
 export const shareUrl = (id) => `${location.origin}/3d/share/${id}`;
 export const embedUrl = (id) => `${location.origin}/3d/embed/${id}`;

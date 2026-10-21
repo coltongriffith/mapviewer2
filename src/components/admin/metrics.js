@@ -148,6 +148,45 @@ export function bucketDays(rows, startDateStr, endDateStr, key = 'd', valueKey =
   return out;
 }
 
+// ── 3D & sharing (admin_get_three_d_usage, migration 20261030100000) ─────────
+
+// props.kind of three_d_export_completed / three_d_data_added (src/three-d/studio.js) → what the tab says.
+export const THREE_D_EXPORT_LABEL = { png: '3D figure (PNG)', section: 'Section (PNG)', layers: 'Designer layers (ZIP)' };
+export const THREE_D_DATA_LABEL = {
+  collar: 'Collars', assay: 'Assays', survey: 'Surveys', topo: 'Topography', mesh: 'Model shapes', overlay: 'Map overlays',
+  litho: 'Geology logs', lithlegend: 'Geology legend', geophys: 'Geophysics', published: 'Published results',
+  terrain: 'Real terrain', unknown: 'Not recognised',
+};
+
+/** RPC { kind, n | sessions } rows → HBarsV2 rows, labelled; an unknown kind shows as itself. */
+export function kindRows(rows = [], labels = {}, valueKey = 'n') {
+  return (rows || []).map((r) => ({
+    label: labels[r.kind] || r.kind,
+    value: Number(r[valueKey]) || 0,
+    sub: valueKey === 'n' && r.sessions != null ? `${fmtNum(r.sessions)} ${Number(r.sessions) === 1 ? 'tab' : 'tabs'}` : undefined,
+  }));
+}
+
+/** The shared-maps daily series with 2D and 3D added together, for one ColumnChart (bars made, line viewed). */
+export function sharedMapsDaily(daily = []) {
+  return (daily || []).map((r) => ({
+    ...r,
+    created: (Number(r.created_2d) || 0) + (Number(r.created_3d) || 0),
+    viewed: (Number(r.viewed_2d) || 0) + (Number(r.viewed_3d) || 0),
+  }));
+}
+
+/** "2D n · 3D m" for a tile's detail line. */
+export function splitText(a, b, [la, lb] = ['2D', '3D']) {
+  return `${la} ${fmtNum(Number(a) || 0)} · ${lb} ${fmtNum(Number(b) || 0)}`;
+}
+
+/** What the event-only figures cover: they begin when /3d started reporting (the first three_d_opened). */
+export function threeDTrackingNote(since) {
+  if (!since) return 'No /3d events recorded yet. Projects, shares and versions below come from their tables; opens, exports, data added, views and copies start once /3d reports them.';
+  return `/3d events since ${fmtDate(since)}. Projects, shares and versions come from their tables, so they include earlier history; opens, exports, data added, views and copies start then.`;
+}
+
 // ── tooltip dictionary (one source of truth for metric definitions) ──────────
 
 export const METRIC_DEFS = {
@@ -160,4 +199,15 @@ export const METRIC_DEFS = {
   retention_ladder: 'Every registered user, bucketed by how recently they did a meaningful action. A cohort grid needs hundreds of users to be readable; this ladder is exact at any size.',
   cohorts: 'Of users who signed up N+ days ago, how many came back on a later day within N days. Dashes mean the cohort is too young to judge — never zero.',
   activation_funnel: 'New signups moving from account creation to first value. Each stage counts a user only if they reached it within 7 days of signing up. Click a stage to see who is stuck there.',
+  // 3D & sharing tab. Like the Overview, these leave out your own visits and admin accounts, automated tabs,
+  // tabs from the hosting, database or code dashboards, and data-centre towns.
+  three_d_opens: 'Browser tabs that opened the 3D figure maker (/3d): its open event, sent once per tab, or a page view of /3d. Shared-figure links are counted under shared maps, not here.',
+  three_d_active: 'Signed-in accounts that worked in 3D: anything they did on /3d (not just viewing a shared figure), plus figures created or saved, 3D links made and versions published, from those tables. Anonymous use is in 3D opens.',
+  three_d_projects: 'Figures saved to an account (three_d_projects): created in this period, and saved again after they were made. A deleted figure is counted as deleted, not updated. From the table, so it includes the time before /3d reported events.',
+  three_d_exports: 'Completed downloads from the Export step or EM3D: the 3D figure and section PNGs and the designer layers ZIP. Downloads from a shared figure are not counted.',
+  three_d_data: 'Tabs that added their own data, by kind: collars, assays, surveys, geology, terrain and so on. Counted once per kind per tab; the sample project does not count.',
+  three_d_top_projects: 'Figures ranked by what happened to them in this period: saves (once per tab, or 1 when the table shows it was created or saved), 3D links made from it, and versions published. Share views are all time.',
+  shared_created: 'New share links: 2D maps (shared_maps, including maps made through the AI connectors) and 3D figures (three_d_shares), from the tables. Shares made by admin accounts are left out; links made while signed out cannot be.',
+  shared_viewed: 'Tabs that opened a shared link on a given day: a /map/… or /3d/share/… page view, or the viewer\'s view event. Your own visits and bots are left out.',
+  shared_top: 'Live links created or viewed in this period, by all-time views. The server counts a view at most once a minute per link, and it includes the owner\'s own views.',
 };

@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import { getSessionId } from './session';
+import { postTrack } from './trackCore';
 
 // Lightweight, fire-and-forget product analytics. Never throws, never blocks UI.
 //
@@ -12,33 +12,17 @@ import { getSessionId } from './session';
 //  * rate-limits by IP.
 // Failures are silent in production and logged in development.
 
+// The request itself (body, flags, error handling) is postTrack in
+// ./trackCore, which the /3d page shares.
 async function post(payload) {
-  try {
-    let token = null;
-    if (supabase) {
-      try {
-        const { data } = await supabase.auth.getSession();
-        token = data?.session?.access_token || null;
-      } catch { token = null; }
-    }
-    const res = await fetch('/api/track', {
-      method: 'POST',
-      keepalive: true,
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      // Automated browsers are flagged so /api/track can leave them out.
-      body: JSON.stringify({ session_id: getSessionId(), ...payload, ...(navigator.webdriver ? { automated: true } : {}) }),
-    });
-    if (import.meta.env.DEV && !res.ok && res.status !== 204) {
-      console.warn(`[track] ${payload.kind} rejected: ${res.status}`);
-    }
-    return res.ok;
-  } catch (e) {
-    if (import.meta.env.DEV) console.warn('[track] failed:', e?.message);
-    return false;
+  let token = null;
+  if (supabase) {
+    try {
+      const { data } = await supabase.auth.getSession();
+      token = data?.session?.access_token || null;
+    } catch { token = null; }
   }
+  return postTrack(payload, token);
 }
 
 /**

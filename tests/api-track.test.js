@@ -88,6 +88,17 @@ describe('api/track validation', () => {
     expect(inserts[0]).toMatchObject({ table: 'product_events', row: { event: 'internal_session', user_id: null } });
   });
 
+  it('accepts every event the /3d page sends (src/three-d/track.js)', async () => {
+    const { EVENTS } = await import('../src/three-d/track.js');
+    expect(EVENTS.size).toBe(8);
+    for (const event of EVENTS) {
+      const res = mockRes();
+      await handler(req({ kind: 'event', session_id: SID, event, props: { kind: 'png' } }, { ip: uniqueIp() }), res);
+      expect(res.statusCode, event).toBe(204);
+    }
+    expect(inserts.map((i) => i.row.event)).toEqual([...EVENTS]);
+  });
+
   it('rejects oversized payloads with 413', async () => {
     const res = mockRes();
     const big = 'x'.repeat(10 * 1024);

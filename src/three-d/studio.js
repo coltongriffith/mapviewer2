@@ -705,6 +705,7 @@ function syncRealTerrain() {
     const msgs = [], B = { ...G.B }, fwd = (x, y) => geo.fwd(x, y);
     if (getDem) { try { realT.dem = await (await rtLoad()).loadDem(key, B, fwd); msgs.push(`real terrain (z${realT.dem.z}, ${realT.dem.tiles} tiles)`); } catch (e) { realT.dem = { key, ok: false, error: e.message }; } }
     if (getImg) { try { realT.img = await (await rtLoad()).loadImagery(key, B, fwd); msgs.push(`satellite imagery (z${realT.img.z}, ${realT.img.tiles} tiles)`); } catch (e) { realT.img = { key, ok: false, error: e.message }; } }
+    if (msgs.length && !usingSample) usage('three_d_data_added', { kind: 'terrain' }, 'terrain');
     if (job !== realT.job || !G) return;
     const fails = [realT.dem && !realT.dem.ok && getDem && `real terrain (${realT.dem.error})`, realT.img && !realT.img.ok && getImg && `satellite imagery (${realT.img.error})`].filter(Boolean);
     realT.status = fails.length ? (msgs.length ? 'partial' : 'failed') : 'ready';
@@ -1772,7 +1773,7 @@ function exportPNG(opts = {}) {
   const id = opts.section, view = opts.view === 'section' || id ? 'section' : opts.view === '3d' ? '3d' : S.view, f = FORMATS[S.format], X = xopts(opts), fig = () => figureCanvas(view, 'figure', undefined, X);
   // EXT hook: one of the named sections (sections.js); "A" is a figure's only section.
   const url = (id ? EXT.sections?.using(id, fig) ?? (id === 'A' ? fig() : nope(`No section "${id}": EM3D.addSection first.`)) : fig()).toDataURL('image/png');
-  if (opts.download) downloadURL(url, `${fileSlug()}-${view === 'section' ? `section${id ? `-${id}` : ''}` : '3d'}-${S.format}.png`);
+  if (opts.download) { downloadURL(url, `${fileSlug()}-${view === 'section' ? `section${id ? `-${id}` : ''}` : '3d'}-${S.format}.png`); exported(view === 'section' ? 'section' : 'png'); }
   status(`Exported ${view === 'section' ? 'section A–A′' : 'the 3D figure'} at ${f.w} × ${f.h} px.`);
   return url;
 }
@@ -1786,7 +1787,7 @@ function exportPNG(opts = {}) {
 // instead of leaving it waiting. A turn first: a change event's setter starts in a microtask.
 const extPending = new Set(), settled = () => Promise.race([Promise.resolve().then(() => Promise.allSettled([...extPending])).then(extReady),
   new Promise((ok, no) => setTimeout(() => no(new Error('A layer of this figure is still loading after 20 seconds, so nothing was exported. Check the connection and export again.')), 20000))]);
-const exportLayers = (o) => settled().then(desk).then((m) => m.exportLayers(o));
+const exportLayers = (o) => settled().then(desk).then((m) => m.exportLayers(o)).then((r) => { if (o?.download) exported('layers'); return r; });
 // The Export step's Background and Drop shadow; Transparent turns the shadow off (one click to keep it).
 const xui = (o) => ({ ...o, download: true, background: $('export-bg').value, shadow: S.dropShadow });
 $('export-bg').addEventListener('change', (e) => { if (e.target.value === 'transparent' && S.dropShadow) { setStyle({ dropShadow: false }, false); renderExtUI(); status('Drop shadow off for the transparent background: tick it to keep it.'); } });
@@ -1905,7 +1906,8 @@ function addUserFiles(arr, o = {}) {
   if (o.drillSource !== undefined) S.drillSource = structuredClone(o.drillSource); // property-data.js
   arr.forEach((a) => { if (a.lib) S.libRefs[a.name] = { libFileId: String(a.lib.libFileId), version: +a.lib.version }; else delete S.libRefs[a.name]; });
   refresh.secSet = false; addFiles(arr); extAutoOn(arr); refresh(); // extAutoOn: EXT hook
-  const added = files.filter((f) => arr.some((a) => a.name === f.name)).map((f) => `${f.name} → ${ROLE_LABEL[f.role]}`);
+  const mine = files.filter((f) => arr.some((a) => a.name === f.name)), added = mine.map((f) => `${f.name} → ${ROLE_LABEL[f.role]}`);
+  new Set(mine.map((f) => f.role)).forEach((kind) => usage('three_d_data_added', { kind, source: o.drillSource ? 'drill_db' : 'file' }, kind)); // once per kind a tab
   status(project.empty ? `Added ${added.join(', ')}. Still need a collar file.` : `Added ${added.join(', ')}. ${project.holes.length} holes on the figure.`);
   return getState();
 }
@@ -2600,6 +2602,11 @@ window.EM3D = Object.freeze({ ...window.EM3D, help: () => FULL_HELP, ...EXT_API,
 // ============================================================
 // 12. Start
 // ============================================================
+// Usage counts for the admin dashboard (track.js, loaded on first use: /api/track, as the app). Never throws or waits.
+function usage(...a) { import('./track.js').then((m) => m.track(...a)).catch(() => {}); }
+const viewer = () => document.documentElement.classList.contains('em3d-viewer'); // a shared figure: counted by share.js
+function exported(kind) { if (!viewer()) usage('three_d_export_completed', { kind, format: S.format }); }
+if (!viewer()) setTimeout(() => usage('three_d_opened', { entry: /[?&](project|version)=/.exec(location.search)?.[1] || 'new' }, 'tab'), 1500);
 renderSizes(); syncBrandUI(); renderCRS(); renderLabelList(); renderWallLabelList();
 layoutFrame();
 loadSample();

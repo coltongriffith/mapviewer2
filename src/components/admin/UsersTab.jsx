@@ -129,7 +129,7 @@ export default function UsersTab({ data, loading, detail, onLoadDetail, onOpenSe
                   </tr>
                   {openUser === u.user_id && (
                     <tr className="admx-drawer-row"><td colSpan={9}>
-                      <UserDrawer error={detail?.error} onRetry={() => onLoadDetail(openUser)} d={detail.byId[u.user_id]} loading={detail.loadingId === u.user_id} onOpenSession={onOpenSession} />
+                      <UserDrawer error={detail?.error} onRetry={() => onLoadDetail(openUser)} d={detail.byId[u.user_id]} td={detail.threeDById?.[u.user_id]} loading={detail.loadingId === u.user_id} onOpenSession={onOpenSession} />
                     </td></tr>
                   )}
                 </React.Fragment>
@@ -142,7 +142,22 @@ export default function UsersTab({ data, loading, detail, onLoadDetail, onOpenSe
   );
 }
 
-function UserDrawer({ d, loading, error, onRetry, onOpenSession }) {
+// The account's 3D figure maker use (admin_get_user_three_d); nothing when it has none or the report failed.
+export function ThreeDActivity({ td }) {
+  if (!td || !(Number(td.project_count) || td.projects?.length || Number(td.shares) || Number(td.exports))) return null;
+  return <>
+    <div className="admx-drawer-h" style={{ marginTop: 10 }}>3D figures ({fmtNum(td.project_count)})</div>
+    <ul className="admx-drawer-projects">
+      {(td.projects || []).slice(0, 5).map((p) => <li key={p.id}><span className="adm-truncate">{p.name || 'Untitled'}{p.deleted ? ' · deleted' : ''}</span><span className="adm-muted">{fmtDate(p.updated_at)}</span></li>)}
+    </ul>
+    <div className="admx-drawer-exports">
+      <span>{fmtNum(td.exports)} exports</span><span>{fmtNum(td.shares)} links · {fmtNum(td.share_views)} views</span>
+      <span>{fmtNum(td.versions)} versions</span>{td.last_active && <span>active {relTime(td.last_active)}</span>}
+    </div>
+  </>;
+}
+
+function UserDrawer({ d, td, loading, error, onRetry, onOpenSession }) {
   if (error) return <p role="alert">Could not load this account: {error} <button className="adm-btn adm-btn-ghost" onClick={onRetry}>Retry</button></p>;
   if (loading || !d) return <div className="adm-skeleton adm-skeleton-block" style={{ height: 80 }} />;
   const id = d.identity || {};
@@ -181,6 +196,7 @@ function UserDrawer({ d, loading, error, onRetry, onOpenSession }) {
         {(d.exports_by_format || []).length > 0 && (
           <div className="admx-drawer-exports">{d.exports_by_format.map((x) => <span key={x.format}>{String(x.format).toUpperCase()} {x.n}</span>)}</div>
         )}
+        <ThreeDActivity td={td} />
         {(d.custom_invoices || []).length > 0 && (
           <>
             <div className="admx-drawer-h" style={{ marginTop: 10 }}>Custom invoices</div>
