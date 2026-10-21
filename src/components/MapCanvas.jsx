@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useId, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { resolvePointSymbol, symbolSvg } from '../utils/pointSymbol.js';
@@ -37,6 +37,7 @@ import { featureKey } from '../utils/featureIdentity.js';
 import { REFERENCE_OVERLAY_CONFIG, overlayAttribution } from '../utils/referenceOverlayConfig.js';
 import { basemapConfig } from '../utils/basemapConfig.js';
 import { getTemplateStyle, getFeatureStyle, canDissolve } from '../utils/featureStyle.js';
+import { fillPatternSpec, hasFillPattern, patternIdPart } from '../../shared/fillPattern.js';
 
 // Leaflet path options for one feature: template role defaults, then the
 // layer's style, then that feature's own override — the same resolution the
@@ -88,6 +89,8 @@ function detectGeomType(geojson) {
 
 export default function MapCanvas({ onReady, project, template, onFeatureClick, onMapClick, annotationToolRef, trimLayerId = null, featureStyleLayerId = null, onOverlayError }) {
   const mapRef = useRef(null);
+  // Pattern ids are document-wide; two maps on one page must not share them.
+  const idPrefix = patternIdPart(useId());
   const geometryCache = useRef(null);
   if (!geometryCache.current) geometryCache.current = createLayerGeometryCache();
   const onMapClickRef = useRef(onMapClick);
@@ -367,6 +370,9 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
                nl.style?.markerSize === ol.style?.markerSize &&
                nl.style?.customMarkerDataUri === ol.style?.customMarkerDataUri &&
                (nl.style?.fillPattern || 'none') === (ol.style?.fillPattern || 'none') &&
+               // A pattern's colour and spacing live in its <pattern> tile,
+               // which only a rebuild redraws; setStyle would leave it stale.
+               (!hasFillPattern(nl.style) || nl.style === ol.style) &&
                !!nl.style?.dissolve === !!ol.style?.dissolve;
       });
 
@@ -398,7 +404,7 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
       const isDrillholes = POINT_ROLES.has(layer.role) || layer.type === 'points';
 
       const lo = style.layerOpacity ?? 1;
-      const hasPattern = style.fillPattern && style.fillPattern !== 'none' && geomType !== 'line';
+      const hasPattern = hasFillPattern(style) && geomType !== 'line';
       const svgRenderer = hasPattern ? L.svg({ padding: 0.1 }) : undefined;
       if (svgRenderer) svgRendererRefs.current.push(svgRenderer);
 
@@ -498,32 +504,34 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
       leafletLayerRefsMap.current.set(layer.id, geoLayer);
 
       if (hasPattern && svgRenderer) {
-        const spacing = style.fillPatternSpacing || 6;
         const svgEl = svgRenderer._container;
         if (svgEl) {
+          const NS = 'http://www.w3.org/2000/svg';
           let defs = svgEl.querySelector('defs');
-          if (!defs) { defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs'); svgEl.insertBefore(defs, svgEl.firstChild); }
+          if (!defs) { defs = document.createElementNS(NS, 'defs'); svgEl.insertBefore(defs, svgEl.firstChild); }
           defs.innerHTML = '';
           // One pattern per fill colour and opacity actually used, so a shape
           // given its own fill hatches in that fill — as it does on export.
+          // The tile is shared/fillPattern.js, as the legend swatch draws it.
           const patterns = new Map();
           const patternFor = (fillColor, fillOpacity) => {
             const key = `${fillColor}|${fillOpacity}`;
             if (patterns.has(key)) return patterns.get(key);
-            const patternId = `lf-pat-${layer.id}-${style.fillPattern}-${patterns.size}`;
-            const patEl = document.createElementNS('http://www.w3.org/2000/svg', 'pattern');
+            const spec = fillPatternSpec({ ...style, fill: fillColor, fillOpacity });
+            const patternId = `lf-pat-${idPrefix}-${patternIdPart(layer.id)}-${spec.kind}-${patterns.size}`;
+            const patEl = document.createElementNS(NS, 'pattern');
             patEl.setAttribute('id', patternId);
             patEl.setAttribute('patternUnits', 'userSpaceOnUse');
-            patEl.setAttribute('width', spacing * 2);
-            patEl.setAttribute('height', spacing * 2);
-            const makeL = (x1, y1, x2, y2) => { const l = document.createElementNS('http://www.w3.org/2000/svg', 'line'); l.setAttribute('x1', x1); l.setAttribute('y1', y1); l.setAttribute('x2', x2); l.setAttribute('y2', y2); l.setAttribute('stroke', fillColor); l.setAttribute('stroke-width', 1.5); l.setAttribute('stroke-opacity', fillOpacity); patEl.appendChild(l); };
-            if (style.fillPattern === 'hatch') {
-              makeL(0, spacing * 2, spacing * 2, 0); makeL(-spacing, spacing, spacing, -spacing); makeL(spacing, spacing * 3, spacing * 3, spacing);
-            } else if (style.fillPattern === 'cross') {
-              makeL(0, spacing, spacing * 2, spacing); makeL(spacing, 0, spacing, spacing * 2);
-            } else if (style.fillPattern === 'dots') {
-              const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle'); c.setAttribute('cx', spacing); c.setAttribute('cy', spacing); c.setAttribute('r', 2); c.setAttribute('fill', fillColor); c.setAttribute('fill-opacity', fillOpacity); patEl.appendChild(c);
-            }
+            patEl.setAttribute('width', spec.size);
+            patEl.setAttribute('height', spec.size);
+            spec.shapes.forEach((sh) => {
+              const el = document.createElementNS(NS, sh.type === 'dot' ? 'circle' : 'line');
+              const attrs = sh.type === 'dot'
+                ? { cx: sh.cx, cy: sh.cy, r: sh.r, fill: spec.color, 'fill-opacity': spec.opacity }
+                : { x1: sh.x1, y1: sh.y1, x2: sh.x2, y2: sh.y2, stroke: spec.color, 'stroke-width': spec.strokeWidth, 'stroke-opacity': spec.opacity };
+              Object.entries(attrs).forEach(([k, v]) => el.setAttribute(k, v));
+              patEl.appendChild(el);
+            });
             defs.appendChild(patEl);
             patterns.set(key, patternId);
             return patternId;
@@ -531,7 +539,7 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
           const applyPattern = (l) => {
             if (!l._path) return;
             const fs = getFeatureStyle(template, layer, l.feature, featureKey(l.feature));
-            const patternId = patternFor(fs.fill || '#54a6ff', fs.fillOpacity ?? 0.6);
+            const patternId = patternFor(fs.fill, fs.fillOpacity);
             l._path.style.fill = `url(#${patternId})`;
             l._path.style.fillOpacity = '1';
             const orig = l._updateStyle?.bind(l);
@@ -549,7 +557,7 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
       }
     });
     prevLayersRef.current = newLayers;
-  }, [project?.layers, template, trimLayerId, featureStyleLayerId, annotationToolRef]);
+  }, [project?.layers, template, trimLayerId, featureStyleLayerId, annotationToolRef, idPrefix]);
 
   return <div ref={mapElRef} className="leaflet-map-canvas" />;
 }

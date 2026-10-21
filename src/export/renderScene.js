@@ -22,6 +22,7 @@ import { resolvePointSymbol, symbolPath } from '../utils/pointSymbol.js';
 import { screenScale } from '../utils/stageScale.js';
 import { tileLayerCredits } from '../utils/rasterOverlay.js';
 import { getMapFrame, scaleFrame, computeGridTicks, projectionLabel, FRAME_FONT, FRAME_FONT_PX } from '../utils/coordinateFrame.js';
+import { fillPatternSpec, hasFillPattern } from '../../shared/fillPattern.js';
 
 let _exportWarnings = [];
 export function getExportWarnings() { return _exportWarnings; }
@@ -190,35 +191,28 @@ function setCanvasStroke(ctx, style, scale) {
   ctx.lineWidth = (style.strokeWidth ?? 2) * scale;
   ctx.setLineDash(style.dashArray ? style.dashArray.split(/[ ,]+/).map(Number).filter((n) => Number.isFinite(n) && n > 0).map((n) => n * scale) : []);
 }
+// The tile from shared/fillPattern.js, the one the map and every legend draw.
 function buildPatternCanvas(style, scale) {
-  const spacing = (style.fillPatternSpacing || 6) * scale;
-  const color = rgba(style.fill || '#54a6ff', style.fillOpacity ?? 0.6);
+  const spec = fillPatternSpec(style, scale);
   const pc = document.createElement('canvas');
-  if (style.fillPattern === 'hatch') {
-    pc.width = pc.height = spacing * 2;
-    const px = pc.getContext('2d');
-    px.strokeStyle = color; px.lineWidth = Math.max(1, 1.5 * scale);
-    px.beginPath(); px.moveTo(0, spacing * 2); px.lineTo(spacing * 2, 0); px.stroke();
-    px.beginPath(); px.moveTo(-spacing, spacing); px.lineTo(spacing, -spacing); px.stroke();
-    px.beginPath(); px.moveTo(spacing, spacing * 3); px.lineTo(spacing * 3, spacing); px.stroke();
-  } else if (style.fillPattern === 'cross') {
-    pc.width = pc.height = spacing * 2;
-    const px = pc.getContext('2d');
-    px.strokeStyle = color; px.lineWidth = Math.max(1, 1.5 * scale);
-    px.beginPath(); px.moveTo(0, spacing); px.lineTo(spacing * 2, spacing); px.stroke();
-    px.beginPath(); px.moveTo(spacing, 0); px.lineTo(spacing, spacing * 2); px.stroke();
-  } else if (style.fillPattern === 'dots') {
-    pc.width = pc.height = spacing * 2;
-    const px = pc.getContext('2d');
-    px.fillStyle = color;
-    px.beginPath(); px.arc(spacing, spacing, Math.max(1.5, 2 * scale), 0, Math.PI * 2); px.fill();
-  }
+  pc.width = pc.height = spec.size;
+  const px = pc.getContext('2d');
+  px.strokeStyle = px.fillStyle = rgba(spec.color, spec.opacity);
+  px.lineWidth = spec.strokeWidth;
+  spec.shapes.forEach((sh) => {
+    px.beginPath();
+    if (sh.type === 'dot') { px.arc(sh.cx, sh.cy, sh.r, 0, Math.PI * 2); px.fill(); } else { px.moveTo(sh.x1, sh.y1); px.lineTo(sh.x2, sh.y2); px.stroke(); }
+  });
   return pc;
 }
+// The PNG has always drawn the map's pattern tile at 1x whatever the export
+// scale; the legend swatch uses the same tile so the two agree.
+function canvasFillPattern(ctx, style) {
+  return hasFillPattern(style) ? ctx.createPattern(buildPatternCanvas(style, 1), 'repeat') : null;
+}
 function setCanvasFill(ctx, style) {
-  if (style.fillPattern && style.fillPattern !== 'none') {
-    const patternCanvas = buildPatternCanvas(style, 1);
-    const pattern = ctx.createPattern(patternCanvas, 'repeat');
+  if (hasFillPattern(style)) {
+    const pattern = canvasFillPattern(ctx, style);
     ctx.fillStyle = pattern || rgba(style.fill || '#111111', style.fillOpacity ?? 0.2);
   } else {
     ctx.fillStyle = rgba(style.fill || style.markerFill || style.markerColor || '#111111', style.fillOpacity ?? 0.2);
@@ -290,23 +284,31 @@ function drawCanvasGeometry(ctx, map, feature, style, scale) {
   }
   ctx.restore();
 }
-function buildSvgPatternDef(style, patternId, scale) {
-  const color = safeColor(style.fill, '#54a6ff');
-  const opacity = style.fillOpacity ?? 0.6;
-  const spacing = (style.fillPatternSpacing || 6) * scale;
-  if (style.fillPattern === 'hatch') {
-    return `<pattern id="${patternId}" patternUnits="userSpaceOnUse" width="${spacing * 2}" height="${spacing * 2}"><line x1="0" y1="${spacing * 2}" x2="${spacing * 2}" y2="0" stroke="${color}" stroke-width="${Math.max(1, 1.5 * scale)}" stroke-opacity="${opacity}" /><line x1="${-spacing}" y1="${spacing}" x2="${spacing}" y2="${-spacing}" stroke="${color}" stroke-width="${Math.max(1, 1.5 * scale)}" stroke-opacity="${opacity}" /><line x1="${spacing}" y1="${spacing * 3}" x2="${spacing * 3}" y2="${spacing}" stroke="${color}" stroke-width="${Math.max(1, 1.5 * scale)}" stroke-opacity="${opacity}" /></pattern>`;
-  }
-  if (style.fillPattern === 'cross') {
-    return `<pattern id="${patternId}" patternUnits="userSpaceOnUse" width="${spacing * 2}" height="${spacing * 2}"><line x1="0" y1="${spacing}" x2="${spacing * 2}" y2="${spacing}" stroke="${color}" stroke-width="${Math.max(1, 1.5 * scale)}" stroke-opacity="${opacity}" /><line x1="${spacing}" y1="0" x2="${spacing}" y2="${spacing * 2}" stroke="${color}" stroke-width="${Math.max(1, 1.5 * scale)}" stroke-opacity="${opacity}" /></pattern>`;
-  }
-  if (style.fillPattern === 'dots') {
-    const r = Math.max(1.5, 2 * scale);
-    return `<pattern id="${patternId}" patternUnits="userSpaceOnUse" width="${spacing * 2}" height="${spacing * 2}"><circle cx="${spacing}" cy="${spacing}" r="${r}" fill="${color}" fill-opacity="${opacity}" /></pattern>`;
-  }
-  return '';
+// Markup for one shared/fillPattern.js tile. `origin` starts the tile at a
+// legend swatch's corner, as the editor's swatch does.
+function svgPatternDef(spec, patternId, origin) {
+  const color = safeColor(spec.color, '#54a6ff');
+  const at = origin ? ` x="${origin.x}" y="${origin.y}"` : '';
+  const shapes = spec.shapes.map((sh) => (sh.type === 'dot'
+    ? `<circle cx="${sh.cx}" cy="${sh.cy}" r="${sh.r}" fill="${color}" fill-opacity="${spec.opacity}" />`
+    : `<line x1="${sh.x1}" y1="${sh.y1}" x2="${sh.x2}" y2="${sh.y2}" stroke="${color}" stroke-width="${spec.strokeWidth}" stroke-opacity="${spec.opacity}" />`)).join('');
+  return `<pattern id="${patternId}" patternUnits="userSpaceOnUse"${at} width="${spec.size}" height="${spec.size}">${shapes}</pattern>`;
 }
-function geometryToSvg(map, feature, style, scale) {
+// One <pattern> per distinct tile in a layer, under that layer's prefix. Ids
+// are document-wide, and the old id (kind, spacing, colour) let two layers
+// that differed only in fill opacity claim the same one.
+function svgPatternRegistry(prefix) {
+  const ids = new Map();
+  return (style, scale) => {
+    const spec = fillPatternSpec(style, scale);
+    const key = `${spec.kind}|${spec.size}|${spec.color}|${spec.opacity}`;
+    if (ids.has(key)) return { id: ids.get(key), def: '' };
+    const id = `${prefix}-${ids.size}`;
+    ids.set(key, id);
+    return { id, def: `<defs>${svgPatternDef(spec, id)}</defs>` };
+  };
+}
+function geometryToSvg(map, feature, style, scale, patterns = null) {
   const type = getLayerGeometryType(feature); const coords = feature?.geometry?.coordinates; if (!coords) return '';
   const stroke = safeColor(style.stroke || style.markerColor, '#111111');
   const fill = safeColor(style.fill || style.markerFill || style.markerColor, '#111111');
@@ -318,10 +320,10 @@ function geometryToSvg(map, feature, style, scale) {
 
   let fillAttr = `fill="${fill}" fill-opacity="${fillOpacity}"`;
   let patternDef = '';
-  if (style.fillPattern && style.fillPattern !== 'none' && (type === 'Polygon' || type === 'MultiPolygon')) {
-    const pid = `pat-${style.fillPattern}-${Math.round((style.fillPatternSpacing || 6) * scale)}-${fill.replace('#', '')}`;
-    patternDef = `<defs>${buildSvgPatternDef(style, pid, scale)}</defs>`;
-    fillAttr = `fill="url(#${pid})"`;
+  if (hasFillPattern(style) && (type === 'Polygon' || type === 'MultiPolygon')) {
+    const { id, def } = (patterns || svgPatternRegistry('em-pat'))(style, scale);
+    patternDef = def;
+    fillAttr = `fill="url(#${id})"`;
   }
 
   if (type === 'Polygon') return `${patternDef}<path d="${coords.map((ring) => pathFromPoints(projectRing(map, ring, scale), true)).filter(Boolean).join(' ')}" ${fillAttr} stroke="${stroke}" stroke-width="${strokeWidth}"${dash} fill-rule="evenodd" stroke-opacity="${opacity}" />`;
@@ -580,7 +582,7 @@ function legendDash(style, scale) {
     .map((d) => Number(d) * scale).filter((d) => Number.isFinite(d) && d > 0);
 }
 
-export function legendSwatchSvg(item, x, rowY, scale) {
+export function legendSwatchSvg(item, x, rowY, scale, svgDefs = null) {
   const style = item.style || {};
   if (item.type === 'points') {
     const shape = item.markerShape || style.markerShape || 'circle';
@@ -611,7 +613,20 @@ export function legendSwatchSvg(item, x, rowY, scale) {
   const rectDash = legendDash(style, scale * 0.5);
   const dashAttr = rectDash.length ? ` stroke-dasharray="${rectDash.join(' ')}"` : '';
   const rectEdge = isNearWhite(style.stroke) ? `<rect x="${(x - scale).toFixed(2)}" y="${(rowY + LEGEND_ROW.swatchY * scale - scale).toFixed(2)}" width="${(LEGEND_ROW.swatchW * scale + 2 * scale).toFixed(2)}" height="${(LEGEND_ROW.swatchH * scale + 2 * scale).toFixed(2)}" fill="none" stroke="${LIGHT_SWATCH_EDGE}" stroke-width="${scale.toFixed(2)}" />` : '';
-  return `${rectEdge}<rect x="${x.toFixed(2)}" y="${(rowY + LEGEND_ROW.swatchY * scale).toFixed(2)}" width="${(LEGEND_ROW.swatchW * scale).toFixed(2)}" height="${(LEGEND_ROW.swatchH * scale).toFixed(2)}" fill="${safeColor(style.fill, '#93c5fd')}" fill-opacity="${style.fillOpacity ?? 0.22}" stroke="${safeColor(style.stroke, '#3b82f6')}" stroke-width="${Math.max(1, scale).toFixed(2)}"${dashAttr} />`;
+  const rx = x.toFixed(2), ry = (rowY + LEGEND_ROW.swatchY * scale).toFixed(2);
+  // A hatched layer's swatch is filled with the tile its polygons get on the
+  // SVG map (same scale), not a flat colour. Its id counts the document's
+  // defs, as the clip paths do, so no two legends can share one.
+  let fillAttr = `fill="${safeColor(style.fill, '#93c5fd')}" fill-opacity="${style.fillOpacity ?? 0.22}"`;
+  let inlineDefs = '';
+  const spec = fillPatternSpec(style, scale);
+  if (spec) {
+    const id = `em-legend-pat-${svgDefs ? svgDefs.length : 0}`;
+    const def = svgPatternDef(spec, id, { x: rx, y: ry });
+    if (svgDefs) svgDefs.push(def); else inlineDefs = `<defs>${def}</defs>`;
+    fillAttr = `fill="url(#${id})"`;
+  }
+  return `${inlineDefs}${rectEdge}<rect x="${rx}" y="${ry}" width="${(LEGEND_ROW.swatchW * scale).toFixed(2)}" height="${(LEGEND_ROW.swatchH * scale).toFixed(2)}" ${fillAttr} stroke="${safeColor(style.stroke, '#3b82f6')}" stroke-width="${Math.max(1, scale).toFixed(2)}"${dashAttr} />`;
 }
 // Where each legend row and heading sits, walked identically by the canvas
 // and the SVG so the two cannot disagree about a heading's height.
@@ -717,7 +732,15 @@ async function drawLegendCanvas(ctx, scene, scale) {
       } else {
         const sy = rowY + LEGEND_ROW.swatchY * scale, sw = LEGEND_ROW.swatchW * scale, sh = LEGEND_ROW.swatchH * scale;
         ctx.save();
-        ctx.fillStyle = rgba(item.style.fill || '#93c5fd', item.style.fillOpacity ?? 0.22); ctx.fillRect(x + lp, sy, sw, sh); ctx.strokeStyle = item.style.stroke || '#3b82f6'; ctx.lineWidth = Math.max(1, scale);
+        // The map's own pattern tile for a hatched layer, started at the
+        // swatch's corner as the editor and SVG swatches start theirs.
+        const pattern = canvasFillPattern(ctx, item.style);
+        if (pattern) {
+          ctx.translate(x + lp, sy); ctx.fillStyle = pattern; ctx.fillRect(0, 0, sw, sh); ctx.translate(-(x + lp), -sy);
+        } else {
+          ctx.fillStyle = rgba(item.style.fill || '#93c5fd', item.style.fillOpacity ?? 0.22); ctx.fillRect(x + lp, sy, sw, sh);
+        }
+        ctx.strokeStyle = item.style.stroke || '#3b82f6'; ctx.lineWidth = Math.max(1, scale);
         ctx.setLineDash(legendDash(item.style, scale * 0.5));
         ctx.strokeRect(x + lp, sy, sw, sh);
         if (isNearWhite(item.style.stroke)) { ctx.setLineDash([]); ctx.strokeStyle = LIGHT_SWATCH_EDGE; ctx.lineWidth = scale; ctx.strokeRect(x + lp - scale, sy - scale, sw + 2 * scale, sh + 2 * scale); }
@@ -2267,10 +2290,12 @@ export function getLayerGeojson(layer) {
   return source;
 }
 
-function renderVectorsSvg(scene, scale) {
-  return (scene.project.layers || []).filter((layer) => layer.visible !== false && layer.geojson).map((layer) => {
+// Exported for test: the legend swatch must carry the tile this draws.
+export function renderVectorsSvg(scene, scale) {
+  return (scene.project.layers || []).filter((layer) => layer.visible !== false && layer.geojson).map((layer, i) => {
     const lo = layer.style?.layerOpacity ?? 1;
-    const paths = featureCollectionFeatures(getLayerGeojson(layer)).map((feature) => geometryToSvg(scene.map, feature, getFeatureStyle(scene.template, layer, feature), scale)).join('\n');
+    const patterns = svgPatternRegistry(`em-pat-${i}`);
+    const paths = featureCollectionFeatures(getLayerGeojson(layer)).map((feature) => geometryToSvg(scene.map, feature, getFeatureStyle(scene.template, layer, feature), scale, patterns)).join('\n');
     return lo < 1 ? `<g opacity="${lo}">${paths}</g>` : paths;
   }).join('\n');
 }
@@ -2476,7 +2501,7 @@ export function renderLegendSvg(scene, scale, svgDefs) {
     }
     // Canvas centres the label on the row; matching that with the same y and an
     // explicit middle baseline keeps the two in step at any legendFontScale.
-    return `<g id="em-legend-item-${index}" class="em-legend-item">${legendSwatchSvg(item, x + lp, rowY, scale)}<text x="${x + lp + LEGEND_ROW.labelX * scale}" y="${rowY + LEGEND_ROW.labelCentreY * scale}" dominant-baseline="middle" fill="${theme.bodyText}" font-family="${legendFont}" font-size="${13 * scale * lfs}">${escapeXml(item.label || 'Layer')}</text></g>`;
+    return `<g id="em-legend-item-${index}" class="em-legend-item">${legendSwatchSvg(item, x + lp, rowY, scale, svgDefs)}<text x="${x + lp + LEGEND_ROW.labelX * scale}" y="${rowY + LEGEND_ROW.labelCentreY * scale}" dominant-baseline="middle" fill="${theme.bodyText}" font-family="${legendFont}" font-size="${13 * scale * lfs}">${escapeXml(item.label || 'Layer')}</text></g>`;
   }).join('\n');
   const clipId = pushRoundedClip(svgDefs, x, y, w, h, (theme.panelRadius ?? 10) * scale);
   // The canvas honours legendTransparent; the SVG drew the panel regardless, so

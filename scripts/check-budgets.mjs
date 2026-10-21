@@ -37,7 +37,10 @@ const BUDGETS = {
   // 144 → 146: company workspaces (Oct 2026). The pages are a lazy chunk; the
   // editor keeps the routes, the property chip and view-only save guard for
   // company maps, and the personal / company switcher in the account menu.
-  maxJsChunkGzipKb: 146,
+  // 146 → 147: hatch/cross/dot legend swatches (Oct 2026). The shared pattern
+  // description (shared/fillPattern.js), the patterned area swatch and the
+  // pattern-spacing control land in the editor chunk; ~0.6 KiB.
+  maxJsChunkGzipKb: 147,
   initialJsGzipKb: 75,
   initialAuthJsGzipKb: 135,
   // The former configured check omitted VITE_ADMIN_EMAIL, which pruned the
@@ -56,12 +59,14 @@ const BUDGETS = {
   // map-tile locators (Oct 2026).
   // 876 → 877: the lazy /oauth/consent page for MCP account sign-in.
   // 877 → 878: Download PNG on shared maps (the MCP png_download_url).
-  totalAuthJsGzipKb: 878,
+  // 878 → 879: patterned legend swatches (shared/fillPattern.js) and the property data library client.
+  totalAuthJsGzipKb: 879,
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
   // 810 → 812: Download PNG on shared maps (the MCP png_download_url).
-  totalJsGzipKb: 812,
+  // 812 → 813: patterned legend swatches (shared/fillPattern.js) and the property data library client.
+  totalJsGzipKb: 813,
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the
   // totals above. /3d carries three.js (~109 kB gzip) and its editor.

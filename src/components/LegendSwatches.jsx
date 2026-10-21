@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useId } from 'react';
 import { resolvePointSymbol, symbolPath } from '../utils/pointSymbol.js';
 import { isNearWhite, LIGHT_SWATCH_EDGE } from '../utils/legendCustomization.js';
+import { fillPatternSpec, patternIdPart } from '../../shared/fillPattern.js';
 
 // Legend swatches for the editor stage and the shared (read-only) map — one
 // copy, so the two cannot drift apart again (each used to carry its own).
@@ -57,6 +58,12 @@ export function LegendLineSwatch({ style = {} }) {
 
 export function LegendAreaSwatch({ style = {} }) {
   const stroke = style.stroke || '#3b82f6';
+  // A hatched layer shows the map's own tile (shared/fillPattern.js) rather
+  // than a flat fill. useId keeps the pattern id unique across every legend on
+  // the page: the editor, the shared view, and any number of panels.
+  const patternId = `lg-pat-${patternIdPart(useId())}`;
+  const spec = fillPatternSpec(style);
+  const color = spec && safeColor(spec.color, '#54a6ff');
   return (
     <span
       className="legend-swatch"
@@ -64,9 +71,23 @@ export function LegendAreaSwatch({ style = {} }) {
         borderColor: safeColor(stroke, '#3b82f6'),
         borderStyle: style.dashArray ? 'dashed' : 'solid',
         // Same default opacity as the exporters' swatch (renderScene legendSwatchSvg).
-        background: fillRgba(style.fill || '#93c5fd', style.fillOpacity ?? 0.22),
+        background: spec ? 'none' : fillRgba(style.fill || '#93c5fd', style.fillOpacity ?? 0.22),
+        ...(spec ? { overflow: 'hidden' } : {}),
         ...(isNearWhite(stroke) ? { boxShadow: `0 0 0 1px ${LIGHT_SWATCH_EDGE}` } : {}),
       }}
-    />
+    >
+      {spec ? (
+        <svg width="100%" height="100%" aria-hidden="true" style={{ display: 'block' }}>
+          <defs>
+            <pattern id={patternId} patternUnits="userSpaceOnUse" width={spec.size} height={spec.size}>
+              {spec.shapes.map((sh, i) => (sh.type === 'dot'
+                ? <circle key={i} cx={sh.cx} cy={sh.cy} r={sh.r} fill={color} fillOpacity={spec.opacity} />
+                : <line key={i} x1={sh.x1} y1={sh.y1} x2={sh.x2} y2={sh.y2} stroke={color} strokeWidth={spec.strokeWidth} strokeOpacity={spec.opacity} />))}
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" fill={`url(#${patternId})`} />
+        </svg>
+      ) : null}
+    </span>
   );
 }
