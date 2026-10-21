@@ -67,16 +67,21 @@ const BUDGETS = {
   // 877 → 878: Download PNG on shared maps (the MCP png_download_url).
   // 878 → 879: patterned legend swatches (shared/fillPattern.js) and the property data library client.
   // 879 → 884 (measured 883.2): 2D callout leader routing (#291, lazy scored layout + shared leader geometry) and Add Published Results (lazy reader + button).
-  // 884 → 883.4 (Oct 2026, the /3d trim; measured 883.1): lowered to what ships, plus 0.3.
-  totalAuthJsGzipKb: 883.4,
+  // 884 → 891 (measured 890.4): the opt-in publication check (F3 part 1). All of it is lazy and loads only when
+  // the check is ticked: export/preflight.js (~4.2 kB), the findings dialog (0.8 kB) and shared/figureDiagnostics.js
+  // (0.8 kB); the export renderer gains the per-export context and structured findings (~1 kB). The editor chunk
+  // keeps only the toggle and the hand-off (~0.4 kB).
+  // 891 → 891.0 (Oct 2026, after the /3d trim; measured 890.7): lowered to what ships, plus 0.3.
+  totalAuthJsGzipKb: 891.0,
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
   // 810 → 812: Download PNG on shared maps (the MCP png_download_url).
   // 812 → 813: patterned legend swatches (shared/fillPattern.js) and the property data library client.
   // 813 → 819 (measured 817.8): callout leader routing and "Add Published Results", as totalAuthJsGzipKb above.
-  // 819 → 817.9 (Oct 2026, the /3d trim below; measured 817.6): lowered to what ships, plus 0.3.
-  totalJsGzipKb: 817.9,
+  // 819 → 826 (measured 824.8): the publication check, as totalAuthJsGzipKb above.
+  // 826 → 825.5 (Oct 2026, after the /3d trim below; measured 825.2): lowered to what ships, plus 0.3.
+  totalJsGzipKb: 825.5,
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the
   // totals above. /3d carries three.js (~109 kB gzip) and its editor.
