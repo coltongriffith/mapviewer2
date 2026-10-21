@@ -200,7 +200,10 @@ const BUDGETS = {
   // setting and its export override, the Export step's Background select, exports that wait for the layers they
   // need (pending setMapUse and module loads), and the hooks for Map use (the footer's notes and credits moved out,
   // the details atop the legend card, EM3D.setMapUse, the saved settings). The standalone block is lazy (mapuse.js).
-  threeDJsGzipKb: 171.6,
+  // 171.6 → 171.7 (Oct 2026, claim map inset merged over export options, measured 171.40, configured 171.42, + ~0.3):
+  // the hooks for Find claims (the lazy import, EM3D.findClaims and the panel button), insetStyle "claims" and the
+  // claims' registry credit in the footer (+0.12 kB); the rest is lazy (claims.js, tags.js).
+  threeDJsGzipKb: 171.7,
   // /3d's own modules fetched on first use (the geology, geophysics and tag layers, the account
   // client). They never load with the page or the app, so they sit outside the page and app totals.
   // 32 → 34 (Oct 2026, round 4): per-hole tags, grouped pending tags, callouts beside or bracketed on their
@@ -274,7 +277,15 @@ const BUDGETS = {
   // 114.6 → 115.7 (Oct 2026, export options, measured 115.19, configured 115.42, merged over figure versions 5A): mapuse.js (~1 kB: a standalone map's details, sources
   // and notes as the top section of the legend card), fetched only for a standalone figure; desk.js passes the
   // background to every layer.
-  threeDLazyJsGzipKb: 115.7,
+  // 115.7 → 121.7 (Oct 2026, claim map inset merged over export options, measured 121.13, configured 121.36, + 0.3;
+  // +5.9 kB over export options' 115.42, as on its own branch where it took 104.5 → 110.5): claims.js (~4.45 kB with
+  // shared/claimSearch.js: "Find claims" by holder, numbers or name and "Claims around the model" through the 2D
+  // app's /api/claims and /api/bc-claims, added as area overlays with role "claims" and the registry's credit;
+  // fetched only on the first click on Find claims or EM3D.findClaims), tags.js +1.4 (insetStyle "claims": the claim
+  // map fitted to the block and the project's claims, tenure labels where they fit, the north arrow and scale bar
+  // shared with the location inset) and overlays.js +0.15 (role, group and credit; the footer credit). The page
+  // gains only the hooks (+0.12 kB, inside its budget).
+  threeDLazyJsGzipKb: 121.7,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.
