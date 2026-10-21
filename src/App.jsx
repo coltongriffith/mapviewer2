@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazyGuarded } from './utils/preloadGuard';
 import { LegendPointSwatch, LegendLineSwatch, LegendAreaSwatch } from './components/LegendSwatches.jsx';
 import { hasFillPattern, DEFAULT_PATTERN_SPACING } from '../shared/fillPattern.js';
 import RatioSwitcher from './components/RatioSwitcher';
@@ -19,29 +20,29 @@ import NorthArrow, { NORTH_ARROW_STYLES } from './components/NorthArrow';
 import Menu, { MenuItem, MenuSeparator, MenuLabel } from './components/Menu';
 import BrandMarkInline from './components/BrandMark';
 
-const MapCanvas = React.lazy(() => import('./components/MapCanvas'));
-const SigninLinkStatus = React.lazy(() => import('./components/SigninLinkStatus'));
-const MobileEditorBanner = React.lazy(() => import('./components/MobileEditorBanner'));
-const MobileClaimsViewer = React.lazy(() => import('./components/MobileClaimsViewer'));
+const MapCanvas = lazyGuarded(() => import('./components/MapCanvas'));
+const SigninLinkStatus = lazyGuarded(() => import('./components/SigninLinkStatus'));
+const MobileEditorBanner = lazyGuarded(() => import('./components/MobileEditorBanner'));
+const MobileClaimsViewer = lazyGuarded(() => import('./components/MobileClaimsViewer'));
 // The legend editor loads when the Legend group opens.
-const LegendEditor = React.lazy(() => import('./components/LegendEditor'));
+const LegendEditor = lazyGuarded(() => import('./components/LegendEditor'));
 // The Style step's pickers load with the step, not with the editor.
-const MapStyleGallery = React.lazy(() => import('./components/MapStyleGallery'));
-const ThemePicker = React.lazy(() => import('./components/MapStyleGallery').then((m) => ({ default: m.ThemePicker })));
-const DashboardPage = React.lazy(() => import('./components/DashboardPage'));
-const AdminPage = React.lazy(() => import('./components/AdminPage'));
-const AccountPage = React.lazy(() => import('./components/AccountPage'));
-const TenureMonitorPage = React.lazy(() => import('./components/tenure/TenureMonitorPage'));
-const WorkspaceScreens = React.lazy(() => import('./components/workspace/WorkspaceScreens'));
-const ExportHDModal = React.lazy(() => import('./components/ExportHDModal'));
-const HowToUseModal = React.lazy(() => import('./components/HowToUseModal'));
-const ColumnMapperModal = React.lazy(() => import('./components/ColumnMapperModal'));
-const RasterPlacementModal = React.lazy(() => import('./components/RasterPlacementModal'));
-const ClassificationPanel = React.lazy(() => import('./components/ClassificationPanel'));
-const AddClaimsModal = React.lazy(() => import('./components/AddClaimsModal'));
-const UpgradeModal = React.lazy(() => import('./components/UpgradeModal'));
-const FullResOfferModal = React.lazy(() => import('./components/FullResOfferModal'));
-const PublicationCheck = React.lazy(() => import('./components/PublicationCheck'));
+const MapStyleGallery = lazyGuarded(() => import('./components/MapStyleGallery'));
+const ThemePicker = lazyGuarded(() => import('./components/MapStyleGallery').then((m) => ({ default: m.ThemePicker })));
+const DashboardPage = lazyGuarded(() => import('./components/DashboardPage'));
+const AdminPage = lazyGuarded(() => import('./components/AdminPage'));
+const AccountPage = lazyGuarded(() => import('./components/AccountPage'));
+const TenureMonitorPage = lazyGuarded(() => import('./components/tenure/TenureMonitorPage'));
+const WorkspaceScreens = lazyGuarded(() => import('./components/workspace/WorkspaceScreens'));
+const ExportHDModal = lazyGuarded(() => import('./components/ExportHDModal'));
+const HowToUseModal = lazyGuarded(() => import('./components/HowToUseModal'));
+const ColumnMapperModal = lazyGuarded(() => import('./components/ColumnMapperModal'));
+const RasterPlacementModal = lazyGuarded(() => import('./components/RasterPlacementModal'));
+const ClassificationPanel = lazyGuarded(() => import('./components/ClassificationPanel'));
+const AddClaimsModal = lazyGuarded(() => import('./components/AddClaimsModal'));
+const UpgradeModal = lazyGuarded(() => import('./components/UpgradeModal'));
+const FullResOfferModal = lazyGuarded(() => import('./components/FullResOfferModal'));
+const PublicationCheck = lazyGuarded(() => import('./components/PublicationCheck'));
 import { loadGeoJSON, loadCSV, loadShapefileSet, MAX_FEATURES } from './utils/importers';
 import {
   CALLOUT_TYPES,

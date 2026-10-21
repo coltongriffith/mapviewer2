@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazyGuarded } from '../utils/preloadGuard';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import '../styles/mobile-viewer.css';
@@ -11,7 +12,7 @@ import { trackEvent } from '../utils/track';
 import { detectRegion } from '../utils/detectRegion';
 import { US_GEOMETRY_DISCLAIMER, isUsJurisdiction } from '../utils/jurisdictions';
 
-const ReadOnlyMapStage = React.lazy(() => import('./ReadOnlyMapStage'));
+const ReadOnlyMapStage = lazyGuarded(() => import('./ReadOnlyMapStage'));
 
 // Amber for anything due within a year, blue for later: the one question a
 // phone lookup is usually asking is "when do these lapse".
