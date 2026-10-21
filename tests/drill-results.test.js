@@ -33,6 +33,9 @@ function textbookHole(hole = 'RC-24-001') {
 }
 const simple = (vals, extra = {}) => vals.map((cu, i) => row('H-1', i, i + 1, { Cu: cu }, extra));
 const CU = { ...RECIPE, equivalent: false, elements: [RECIPE.elements[0]], inclCutoff: null, minLength: 1 };
+// A run by the dilution rule that averages below the cut-off, with an "incl." that would average below its own.
+const SPLIT = simple([0.3, 0, 0, 0, 0, 0, 0, 0.3, 1.1, 0.3, 0.3, 0.3, 1.1]);
+const SPLIT_RECIPE = { ...CU, cutoff: 0.3, maxDilution: 6, inclCutoff: 1, inclMinLength: 1, inclMaxDilution: 3 };
 
 describe('the textbook composite', () => {
   const { results, columns, eq, problems } = computeResults(textbookHole(), RECIPE);
@@ -64,7 +67,7 @@ describe('the textbook composite', () => {
     expect(eq.formula).toBe('CuEq = Cu + 0.756 × Au');
     expect(notes(RECIPE)).toEqual([
       'CuEq = Cu + 0.756 × Au, with CuEq and Cu in %, Au in g/t. Prices Cu US$4.50/lb, Au US$3,000/oz; recoveries Cu 90%, Au 70%.',
-      'Composited at 0.2% CuEq over at least 2 m, with up to 6 m of consecutive internal dilution; lengths are sampled core lengths and grades are length-weighted. "incl." intervals at 1% CuEq over at least 2 m, with up to 0 m of internal dilution.',
+      'Composited at 0.2% CuEq over at least 2 m, with up to 6 m of consecutive internal dilution (split where that would bring the average below the cut-off); lengths are sampled core lengths and grades are length-weighted. "incl." intervals at 1% CuEq over at least 2 m, with up to 0 m of internal dilution.',
       'Below-detection assays: as stored at import.',
       'True widths are estimated at 70–90% of the core lengths.',
     ]);
@@ -95,15 +98,36 @@ describe('compositing rules', () => {
   });
 
   it('internal dilution up to the limit joins; one sample more ends the run (as /3d)', () => {
-    const at = (waste) => [0.5, ...Array(waste).fill(0), 0.5];
-    expect(computeResults(simple(at(6)), CU).results.map((x) => [x.from, x.to])).toEqual([[0, 8]]);
+    const at = (waste, v = 0.9) => [v, ...Array(waste).fill(0), v];
+    expect(computeResults(simple(at(6)), CU).results.map((x) => [x.from, x.to, +x.grades.Cu.toFixed(6)])).toEqual([[0, 8, 0.225]]);
     expect(computeResults(simple(at(7)), CU).results.map((x) => [x.from, x.to])).toEqual([[0, 1], [8, 9]]);
     // The run ends on its last sample above the cut-off: trailing waste is never reported.
     expect(computeResults(simple([0.5, 0.5, 0.1, 0.1]), CU).results.map((x) => [x.from, x.to])).toEqual([[0, 2]]);
     // /3d's intercept() is the run of these holding the most metal.
-    const ints = simple(at(7)).map((x) => ({ from: x.from_m, to: x.to_m, vals: x.values }));
+    const ints = simple(at(7, 0.5)).map((x) => ({ from: x.from_m, to: x.to_m, vals: x.values }));
     expect(intercept(ints, 'Cu', 0.2, 1, 1).broad).toMatchObject({ from: 0, len: 1 });
     expect(runs(samples(ints, 'Cu'), 0.2, 1).map((x) => x.metal)).toEqual([0.5, 0.5]);
+  });
+
+  it('never reports a composite averaging below the cut-off: it is split at its dilution', () => {
+    // 0.5, 6 m of waste, 0.5: one run by the dilution rule, but it averages 0.125% at a 0.2% cut-off.
+    const long = simple([0.5, 0, 0, 0, 0, 0, 0, 0.5]);
+    expect(computeResults(long, CU).results.map((x) => [x.from, x.to, x.line])).toEqual([[0, 1, '1.0 m @ 0.50% Cu from 0.0 m'], [7, 8, '1.0 m @ 0.50% Cu from 7.0 m']]);
+    // /3d's own intercept() is unchanged: its figures join them, as before.
+    const ints = long.map((x) => ({ from: x.from_m, to: x.to_m, vals: x.values }));
+    expect(intercept(ints, 'Cu', 0.2, 1, 1).broad).toMatchObject({ from: 0, len: 8, avg: 0.125 });
+    // Split at the longest dilution first, keeping the parts that still meet the cut-off.
+    const two = simple([0.5, 0, 0, 0.5, 0, 0, 0, 0, 0, 0.5]);
+    expect(computeResults(two, CU).results.map((x) => [x.from, x.to, +x.grades.Cu.toFixed(6)])).toEqual([[0, 4, 0.25], [9, 10, 0.5]]);
+    // Recursing where a part still falls short; the minimum length drops short parts.
+    const deep = simple([0.3, 0, 0, 0, 0.3, 0, 0, 0, 0, 0.3]);
+    expect(computeResults(deep, CU).results.map((x) => [x.from, x.to])).toEqual([[0, 1], [4, 5], [9, 10]]);
+    expect(computeResults(deep, { ...CU, minLength: 2 }).results).toEqual([]);
+    // Every reported interval and "incl." meets its cut-off.
+    const r = computeResults(SPLIT, SPLIT_RECIPE).results;
+    expect(r.map((x) => [x.from, x.to])).toEqual([[0, 1], [7, 13]]); // all 13 m would average 0.285% at a 0.3% cut-off
+    expect(r[1].incl.map((x) => [x.from, x.to])).toEqual([[8, 9], [12, 13]]); // 1.1, 3 m at 0.3, 1.1 averages 0.62%: split
+    r.forEach((x) => { expect(x.grades.Cu).toBeGreaterThanOrEqual(0.3); x.incl.forEach((y) => expect(y.grades.Cu).toBeGreaterThanOrEqual(1)); });
   });
 
   it('an unsampled gap ends an interval; overlapping samples count once', () => {
@@ -215,6 +239,16 @@ describe('the published results for /3d', () => {
       expect(c.ic.incl).toMatchObject({ from: results[i].incl[0].from, len: 18 });
     });
     expect(headline(recs[0])).toEqual({ l1: results[0].line, l1b: '' });
+  });
+  it('round-trips intervals split at the cut-off with the same wording', () => {
+    const split = computeResults(SPLIT, SPLIT_RECIPE);
+    const f = toPublishedFile(split.results, split.columns, SOURCE);
+    const data = Papa.parse(f.text.trim(), { skipEmptyLines: true }).data, header = data[0];
+    const { results: recs, problems } = readResults(header, data.slice(1), pubCols(header, matchCols(header)), f.name);
+    expect(problems).toEqual([]);
+    const cards = pubCallouts(recs, [{ id: 'H-1', len: 13 }]);
+    expect(cards.map((c) => { const l = pubLines(c); return l.l2 ? `${l.l1}${l.l1b}, ${l.l2}` : l.l1 + l.l1b; })).toEqual(split.results.map((x) => x.text));
+    expect(split.results.map((x) => x.text)).toEqual(['1.0 m @ 0.30% Cu from 0.0 m', '6.0 m @ 0.57% Cu from 7.0 m, incl. 1.0 m @ 1.10% Cu; incl. 1.0 m @ 1.10% Cu']);
   });
 });
 

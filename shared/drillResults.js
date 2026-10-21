@@ -126,9 +126,38 @@ export function holeIntervals(rows, r, eq = eqSetup(r)) {
 const label = (name, unit) => `${name} ${unit}`;
 
 /**
+ * Composites a release can report: runs() (/3d's run finder) can take in enough internal dilution to bring a
+ * composite's average below the cut-off, which a release table must never show. Such a composite is split at
+ * its longest stretch of internal dilution (samples below cut; the first of equal ones) and each side tried
+ * again; parts shorter than minLen are dropped. Every split removes at least one sample and both sides start
+ * and end on a sample at or above cut, so it ends (a single such sample always meets the cut-off).
+ * runs: [{ run, metal, L }] (sampled) → the same, each averaging at least cut, in depth order.
+ */
+export function atCutoff(list, cut, minLen) {
+  const out = [];
+  const take = (run) => {
+    const L = run.reduce((t, x) => t + (x.to - x.from), 0), metal = run.reduce((t, x) => t + x.v * (x.to - x.from), 0);
+    if (!run.length || L < minLen) return;
+    if (metal / L >= cut) { out.push({ run, metal, L }); return; }
+    let best = null;
+    for (let i = 0; i < run.length; i++) {
+      if (run[i].v >= cut) continue;
+      let j = i, w = 0;
+      for (; j < run.length && run[j].v < cut; j++) w += run[j].to - run[j].from;
+      if (!best || w > best.w) best = { i, j, w };
+      i = j;
+    }
+    take(run.slice(0, best.i));
+    take(run.slice(best.j));
+  };
+  list.forEach((x) => take(x.run));
+  return out;
+}
+
+/**
  * The intercepts: per hole (natural order) and depth, every composite at the cut-off at least the minimum
- * length (internal dilution up to maxDilution m; a gap ends one), each with its "incl." composites at the
- * "incl." cut-off inside it (not the whole interval again). Grades are length-weighted over sampled metres.
+ * length (internal dilution up to maxDilution m; a gap ends one; never averaging below the cut-off, atCutoff),
+ * each with its "incl." composites at the "incl." cut-off inside it (the same rules; not the whole interval again). Grades are length-weighted over sampled metres.
  * Every number is rounded once here, and the text, the table, the CSV and the published results all use
  * those strings.
  * line: the interval in words ("122.0 m @ 0.61% CuEq (0.45% Cu, 0.21 g/t Au) from 34.0 m"; an "incl." one without its
@@ -163,9 +192,10 @@ export function computeResults(rows, r) {
   const inclOn = r.inclCutoff !== null && r.inclCutoff !== undefined && r.inclCutoff !== '';
   [...holes.keys()].sort(byHole).forEach((holeId) => {
     const ints = holes.get(holeId);
-    runs(samples(ints, col), num(r.cutoff, 0), num(r.minLength, 0), true, num(r.maxDilution, 0)).forEach((x, i) => {
+    const cut = num(r.cutoff, 0), minLen = num(r.minLength, 0), inclCut = num(r.inclCutoff, 0), inclMin = num(r.inclMinLength, 0);
+    atCutoff(runs(samples(ints, col), cut, minLen, true, num(r.maxDilution, 0)), cut, minLen).forEach((x, i) => {
       const id = `${holeId}:${i + 1}`, res = build(ints, x.run, x.L, x.metal, id, holeId);
-      res.incl = !inclOn ? [] : runs(x.run, num(r.inclCutoff, 0), num(r.inclMinLength, 0), true, num(r.inclMaxDilution, 0))
+      res.incl = !inclOn ? [] : atCutoff(runs(x.run, inclCut, inclMin, true, num(r.inclMaxDilution, 0)), inclCut, inclMin)
         .filter((y) => !(Math.abs(y.run[0].from - res.from) <= TOL && Math.abs(y.run[y.run.length - 1].to - res.to) <= TOL))
         .map((y, j) => build(ints, y.run, y.L, y.metal, `${id}.${j + 1}`, holeId, id));
       res.text = [res.line, ...(res.incl.length ? [res.incl.map((y) => `incl. ${y.line}`).join('; ')] : [])].join(', ');
@@ -181,7 +211,7 @@ export function notes(r, eq = eqSetup(r)) {
   const c = eq ? eq.name : r.primary, u = eq ? eq.unit : primaryEl(r).unit, n = (v) => +num(v, 0).toFixed(4), at = (v) => `${n(v)}${u === '%' ? '%' : ` ${u}`} ${c}`;
   const out = [];
   if (eq) out.push(eq.note);
-  out.push(`Composited at ${at(r.cutoff)} over at least ${n(r.minLength)} m, with up to ${n(r.maxDilution)} m of consecutive internal dilution; lengths are sampled core lengths and grades are length-weighted.`
+  out.push(`Composited at ${at(r.cutoff)} over at least ${n(r.minLength)} m, with up to ${n(r.maxDilution)} m of consecutive internal dilution (split where that would bring the average below the cut-off); lengths are sampled core lengths and grades are length-weighted.`
     + (r.inclCutoff !== null && r.inclCutoff !== undefined && r.inclCutoff !== '' ? ` "incl." intervals at ${at(r.inclCutoff)} over at least ${n(r.inclMinLength)} m, with up to ${n(r.inclMaxDilution)} m of internal dilution.` : ''));
   out.push(`Below-detection assays: ${BDL_RULES.find((b) => b.value === (r.bdl || 'stored'))?.label.toLowerCase()}.`);
   if (String(r.trueWidth || '').trim()) out.push(String(r.trueWidth).trim());
