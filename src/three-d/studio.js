@@ -7,7 +7,7 @@ import { METAL_DEFAULTS, defaultUnit, priceUnit, eqFactors, eqFormula, eqValue }
 import { isXYZ, parseXYZ, refineRole, matchCols, roleOf } from './roles.js';
 import { makeLayout, isClick, legendRows as binRows, wrapNotes, shouldMerge, hits as boxHits } from './layout.js';
 import { DESIGN_VERSION, FEATURES, uses, withDefaults } from './design-version.js';
-import { intercept, calloutText, avgOver, ribbonPieces } from './intercepts.js';
+import { intercept, calloutText, avgOver, ribbonPieces, gradeText } from './intercepts.js';
 import { fitLine, lineThrough, secFrame, toSection, lerp, clipSlab, clipPath, cleanSection } from './section-geometry.js';
 import { watchVersion } from './version-check.js';
 
@@ -996,8 +996,6 @@ function computeCallouts() {
   callouts = S.calloutMode === 'manual' ? PR.manualCallouts(calcCallouts, project.holes, S.coOverrides, (h, a, b) => avgOver(h.ints, S.valueCol, a, b, sampled)) : calcCallouts;
 }
 const inclsOf = (ic) => ic.incls || (ic.incl ? [ic.incl] : []);
-const fmt = (v) => (v >= 100 ? v.toFixed(0) : v >= 10 ? v.toFixed(1) : v > 0 && v < 0.01 ? v.toFixed(3) : v.toFixed(2));
-const gradeText = (v, label) => { const unit = (label.match(/(%|g\/t|ppm|ppb)$/) || [''])[0], el = label.replace(/\s*(%|g\/t|ppm|ppb)$/, ''); return `${fmt(v)}${unit === '%' ? '%' : ' ' + unit} ${el}`; };
 const icText = (x, h) => {
   let t = `${x.len.toFixed(x.len < 10 ? 1 : 0)} m @ ${gradeText(x.avg, S.valueLabel)}`;
   const v2 = h && S.valueCol2 ? avgOver(h.ints, S.valueCol2, x.from, x.from + x.len, uses(S, 'sampledIntercepts')) : null;
