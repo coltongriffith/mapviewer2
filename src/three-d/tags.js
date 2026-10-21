@@ -390,6 +390,7 @@ export function drawInset(ctx, K, { W, top, occ }) {
   occ.push([ix - 8 * u, 0, W, iy + iw + 26 * u]);
   ctx.drawImage(inset.canvas, ix, iy, iw, iw);
   const P = (x, y) => { const [a, b] = inset.frame.toInset(x, y); return [ix + a * iw, iy + b * iw]; }, G = H.G;
+  H.ext('overlays')?.inset(ctx, P, u, [ix, iy, iw, iw]); // claims outlined (overlays.js)
   ctx.beginPath(); [[G.B.x0, G.B.y0], [G.B.x1, G.B.y0], [G.B.x1, G.B.y1], [G.B.x0, G.B.y1]].forEach(([x, y], i) => { const p = P(x, y); i ? ctx.lineTo(...p) : ctx.moveTo(...p); }); ctx.closePath();
   ctx.lineWidth = 3.2 * u; ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.stroke(); ctx.lineWidth = 1.6 * u; ctx.strokeStyle = S.accent; ctx.stroke();
   // North arrow (the inset is north-up) and a scale bar, in dark ink on the map whatever the theme.

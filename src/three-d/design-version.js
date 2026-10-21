@@ -3,7 +3,7 @@
 // (made before the October 2026 design rounds). A later round that changes a default or a drawing rule bumps
 // DESIGN_VERSION, puts the earlier values in a LEGACY_V<n> table and lists its new behaviours in FEATURES.
 
-export const DESIGN_VERSION = 4; // 4: only a drawing rule (cleanSection), so no LEGACY_V3 table
+export const DESIGN_VERSION = 5; // 4: only a drawing rule (cleanSection), so no LEGACY_V3 table; 5: plan views and LEGACY_V4
 
 // Version 1 settings: what a figure saved before version 2 had when a setting did not exist yet. Applied
 // only to settings the saved figure lacks (nested objects key by key), before today's defaults fill the rest.
@@ -25,6 +25,10 @@ export const LEGACY_V2 = {
   autoLabels: false,
 };
 
+// Version 4 settings (and earlier, after the tables above): what a figure saved before version 5 had. No
+// easting/northing grid in plan view.
+export const LEGACY_V4 = { grid: false };
+
 // Drawing rules that arrived with a version: on for figures of that version or later, or taken early by a
 // figure (S.designOptIn, an undoable setting, such as the callouts' "Recalculate").
 export const FEATURES = {
@@ -37,6 +41,10 @@ export const FEATURES = {
   sampledIntercepts: 2, // callout intervals never span an unsampled gap or count an overlap twice
   clearLeaders: 3, // arrows routed around cards; pills, brackets and boxes beside a hole keep off leaders and markers
   cleanSection: 4, // section traces and intervals cut at the slab edges, hole IDs spread clear of each other, callouts level with their holes
+  planView: 5, // looking down (plunge 80° or more): intervals as flat bars along the plan trace, "Plan view" under the north arrow, smaller IDs on short leaders (plan.js)
+  padIds: 5, // section IDs of collars a few metres apart merged ("S-001/002"), crowded ones in two rows; the IDs kept by grade near the line
+  legendWrap: 5, // a long legend name wraps to a second line rather than being cut short
+  insetOutline: 5, // area (fill) overlays outlined in the inset unless set inset: false
 };
 export const uses = (S, f) => (S.designVersion || 1) >= FEATURES[f] || !!S.designOptIn?.includes(f);
 
@@ -45,7 +53,7 @@ const isObj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 // Each legacy table older than the figure's version applies, oldest first; settings the figure saved win.
 export function withDefaults(saved, defaults) {
   const v = Number.isInteger(saved.designVersion) && saved.designVersion > 0 ? saved.designVersion : 1, out = { ...defaults, ...saved, designVersion: v }, was = {};
-  [[2, LEGACY_V1], [3, LEGACY_V2]].forEach(([n, T]) => { if (v < n) Object.entries(T).forEach(([k, L]) => { was[k] = isObj(L) ? { ...was[k], ...structuredClone(L) } : L; }); });
+  [[2, LEGACY_V1], [3, LEGACY_V2], [5, LEGACY_V4]].forEach(([n, T]) => { if (v < n) Object.entries(T).forEach(([k, L]) => { was[k] = isObj(L) ? { ...was[k], ...structuredClone(L) } : L; }); });
   Object.entries(was).forEach(([k, L]) => { const s = saved[k]; if (!isObj(L)) { if (s === undefined) out[k] = L; } else if (s === undefined || isObj(s)) out[k] = { ...defaults[k], ...L, ...s }; });
   return out;
 }

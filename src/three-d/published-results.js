@@ -13,7 +13,7 @@
 // and is flagged; neither is picked silently.
 // A result whose parentResultId names another result on the same hole, and lies inside it, is an "incl."
 // interval: its own record, ribbon and wording, drawn as the second line of its parent's callout.
-// Edited wording (S.pubOverrides[resultId].line1) belongs to that result and to the depths it was written
+// Edited wording (S.pubOverrides[resultId].line1, and line2 for the callout's second line) belongs to that result and to the depths it was written
 // for (at: [fromM, toM]); if the result's depths change, the approved text shows and the panel says why.
 
 export const RECORD_VERSION = 1;
@@ -154,9 +154,10 @@ export function tie(cur, o, mode, at) {
 export const atOf = (results, id) => { const r = results.find((x) => x.resultId === id); return r ? [r.fromM, r.toM] : null; };
 export const stale = (o, r) => !o.at || Math.abs(o.at[0] - r.fromM) > TOL || Math.abs(o.at[1] - r.toM) > TOL;
 export function textOf(r, ov = {}) { const o = ov[r.resultId] || {}; return o.line1 && !stale(o, r) ? { l1: o.line1, l1b: '' } : headline(r); }
+// The second line is the "incl." results, or the wording typed for it (ov[resultId].line2, kept like line1).
 export function pubLines(c, ov = {}) {
-  const top = textOf(c.pub, ov), kids = c.kids.map((r) => { const t = textOf(r, ov), s = t.l1 + t.l1b; return /^incl/i.test(s) ? s : `incl. ${s}`; });
-  return { l1: top.l1, l1b: top.l1b, l2: kids.length ? kids.join('; ') : null };
+  const top = textOf(c.pub, ov), o = ov[c.pub.resultId] || {}, kids = c.kids.map((r) => { const t = textOf(r, ov), s = t.l1 + t.l1b; return /^incl/i.test(s) ? s : `incl. ${s}`; });
+  return { l1: top.l1, l1b: top.l1b, l2: o.line2 && !stale(o, c.pub) ? o.line2 : kids.length ? kids.join('; ') : null };
 }
 // Wording kept but not drawn: written for other depths, or for a result no longer in the tables.
 export function staleNotes(results, ov = {}) {

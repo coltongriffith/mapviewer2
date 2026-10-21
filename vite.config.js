@@ -11,6 +11,18 @@ export default defineConfig({
   // Release identifier stamped into error reports (audit P1-12).
   define: { __APP_VERSION__: JSON.stringify(commit ? `${pkg.version}+${commit.slice(0, 12)}` : pkg.version) },
   plugins: [
+    // The /3d page's build stamp, which an open page compares with the deployed one (src/three-d/version-check.js):
+    // its entry chunk's content hash, which changes whenever any of its code does (lazy chunks included).
+    {
+      name: 'em3d-build-stamp',
+      transformIndexHtml: {
+        order: 'post',
+        handler(html, ctx) {
+          if (!ctx.chunk || !/[\\/]3d[\\/]index\.html$/.test(ctx.filename)) return html;
+          return html.replace('<head>', `<head>\n<meta name="em-build" content="${ctx.chunk.fileName.replace(/^assets\/|\.js$/g, '')}">`);
+        },
+      },
+    },
     react(),
     nodePolyfills({
       globals: {

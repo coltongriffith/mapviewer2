@@ -4,7 +4,8 @@
 // size, and on the section where they lie within its width.
 // S.shapes: [{ id, type: "ellipse", at: [e, n, z?], rx, ry, rotation, vertical, text, color, width, dash }
 //            | { id, type: "dimension" | "arrow", from: [e, n, z?], to: [e, n, z?], text, color, width, size, style }].
-// A point without z sits on the terrain; color null takes the brand colours.
+// A point without z sits on the terrain; color null takes the brand colours. views: where it is drawn, "both" (the
+// default, also when unset), "3d" (the 3D figure only) or "section" (the section only).
 import { sightTest } from './drape.js';
 import { secFrame, toSection } from './section-geometry.js';
 import { hits } from './layout.js';
@@ -12,7 +13,7 @@ import { hits } from './layout.js';
 let H, S;
 export function init(host) { H = host; S = host.S; }
 
-const TYPES = ['ellipse', 'dimension', 'arrow'], RAD = Math.PI / 180, r1 = (v) => Math.round(v * 10) / 10;
+const TYPES = ['ellipse', 'dimension', 'arrow'], VIEWS = ['both', '3d', 'section'], RAD = Math.PI / 180, r1 = (v) => Math.round(v * 10) / 10;
 // The ellipse's outline: rx along the rotation azimuth (degrees from north), ry across it, flat on the ground
 // (z of the centre, or the terrain when it has none) or upright (vertical) with ry up and down.
 export function ellipsePts(s, n = 96) {
@@ -71,6 +72,7 @@ function patch(s, x) {
   if (x.width !== undefined) s.width = num(x.width, 'width', 0.5, 12);
   if (x.size !== undefined) s.size = num(x.size, 'size', 0.4, 3);
   if (x.dash !== undefined) s.dash = !!x.dash;
+  if (x.views !== undefined) { if (!VIEWS.includes(x.views)) throw new Error('views must be "both", "3d" or "section".'); s.views = x.views; }
   if (x.style !== undefined) { if (!['outline', 'solid'].includes(x.style)) throw new Error('style must be "outline" (hollow) or "solid".'); s.style = x.style; }
   if (s.type === 'ellipse' && s.vertical && s.at.length < 3) throw new Error('An upright ellipse needs a centre with an elevation: [easting, northing, elevation].');
 }
@@ -151,6 +153,7 @@ export function draw(ctx, K, occ) {
   const toScreen = (x, y, z) => H.proj(G.V(x, y, z)), end = (q) => toScreen(q[0], q[1], q[2] ?? G.surf(q[0], q[1]));
   const k = { ...K, W }; ctx.save();
   S.shapes.forEach((s) => {
+    if (s.views === 'section') return;
     // On the terrain: drawn only where it shows. At depth: faint where the terrain is in front of it.
     if (s.type === 'ellipse') {
       const runs = [[], []]; let cur = null, was;
@@ -173,6 +176,7 @@ export function drawSection(ctx, { A, Bp, X, Y, w, K, Wc }) {
   const at = (q) => [X(on(q).t), Y(q[2] ?? G.surf(q[0], q[1]))], k = { ...K, W: Wc };
   ctx.save();
   S.shapes.forEach((s) => {
+    if (s.views === '3d') return;
     if (s.type === 'ellipse') {
       if (!s.vertical || !inW(s.at)) return;
       const a = (s.rotation || 0) * RAD, along = Math.abs(Math.sin(a) * F.d.x + Math.cos(a) * F.d.y) * s.rx; if (along < 0.25 * s.rx) return;
@@ -192,7 +196,8 @@ export function renderUI(el) {
   el.innerHTML = S.shapes.map((s) => {
     const i = esc(s.id), nb = (k, label, v, a = '') => `<label class="field"><span>${label}</span><input type="number" step="any" data-sh="${i}" data-k="${k}" value="${v ?? ''}" ${a}></label>`;
     return `<div class="file"><div class="file-head"><span class="name">${NAME[s.type]}</span><span class="row"><input type="color" data-sh="${i}" data-k="color" value="${esc(colourOf(s))}" aria-label="Colour of ${NAME[s.type]} ${i}"><button class="btn" type="button" data-shx="${i}" aria-label="Remove ${NAME[s.type]} ${i}">Remove</button></span></div>
-      <label class="field"><span>${s.type === 'dimension' ? 'Text (empty: the length)' : 'Text'}</span><input type="text" data-sh="${i}" data-k="text" value="${esc(s.text ?? '')}" maxlength="80" placeholder="${s.type === 'dimension' ? esc(lengthText(dimLength(s.from, s.to))) : ''}"></label>
+      <div class="grid2"><label class="field"><span>${s.type === 'dimension' ? 'Text (empty: the length)' : 'Text'}</span><input type="text" data-sh="${i}" data-k="text" value="${esc(s.text ?? '')}" maxlength="80" placeholder="${s.type === 'dimension' ? esc(lengthText(dimLength(s.from, s.to))) : ''}"></label>
+      <label class="field"><span>Show on</span><select data-sh="${i}" data-k="views" aria-label="Where ${NAME[s.type]} ${i} shows">${[['both', '3D and section'], ['3d', '3D figure only'], ['section', 'Section only']].map(([v, t]) => `<option value="${v}" ${(s.views || 'both') === v ? 'selected' : ''}>${t}</option>`).join('')}</select></label></div>
       <details data-id="${i}" ${open.has(s.id) ? 'open' : ''}><summary>Position and size</summary><div class="grid2">
         ${s.type === 'ellipse' ? `${xyz(s, 'at', 'Centre')}${nb('rx', 'Radius along (m)', s.rx, 'min="1"')}${nb('ry', s.vertical ? 'Radius up and down (m)' : 'Radius across (m)', s.ry, 'min="1"')}${nb('rotation', 'Azimuth (°)', s.rotation)}
           <label class="check"><input type="checkbox" data-sh="${i}" data-k="vertical" ${s.vertical ? 'checked' : ''}>Upright</label><label class="check"><input type="checkbox" data-sh="${i}" data-k="dash" ${s.dash !== false ? 'checked' : ''}>Dashed</label>`

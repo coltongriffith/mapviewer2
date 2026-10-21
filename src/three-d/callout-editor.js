@@ -1,6 +1,6 @@
 // The intercept callout editor in the Layout step (Exploration Maps 3D), loaded when that step first shows.
 // Calculated and manual mode: a row per hole (tick to show, two lines of wording). Published mode: a row per
-// published result, "incl." ones indented under their parent, with one line of wording each and its flags.
+// published result, "incl." ones indented under their parent, with its wording (a second line for a top one) and flags.
 // H (studio.js): { S, esc, PR, read, callouts, calc, shown, icText, gaps, setCallout, setStyle, status, redraw }.
 
 import { icAt } from './published-results.js';
@@ -42,6 +42,8 @@ export function render(el, H) {
 function published(el, H) {
   const { S, esc, PR } = H, { results, problems } = H.read(), ov = S.pubOverrides, byId = new Map(results.map((r) => [r.resultId, r]));
   if (!results.length) { el.innerHTML = `<p class="muted">No published results yet. Add the release table in step 1 and set its type to Published results.</p>${problems.map((p) => `<p class="warn">${esc(p.message)}</p>`).join('')}`; return; }
+  // The automatic second line: the "incl." results under this one, as pubLines words them.
+  const kids = (r) => PR.pubLines({ pub: r, kids: results.filter((x) => PR.parentOf(x, byId) === r) }, ov).l2;
   const notes = PR.staleNotes(results, ov).concat(problems.filter((p) => !p.resultId).map((p) => p.message));
   el.innerHTML = `${notes.map((t) => `<p class="warn" role="status">${esc(t)}</p>`).join('')}<p class="muted">Each callout is a published result at its own depths, whatever the cut-offs. Type over a line to reword it; the wording stays with that result.</p>`
     + results.map((r) => {
@@ -49,13 +51,15 @@ function published(el, H) {
       return `<div class="callout-ed"${kid ? ' style="margin-left:18px"' : ''}><input type="checkbox" data-pc="${id}" ${ok && o.show !== false ? 'checked' : ''} ${ok ? '' : 'disabled'} aria-label="Show ${id}">`
         + `<span class="id">${id} · ${esc(r.holeId)} ${m(r.fromM)}–${m(r.toM)} m${kid ? ' · incl.' : ''}</span>`
         + `<input type="text" data-pt="${id}" value="${esc(o.line1 && !PR.stale(o, r) ? o.line1 : '')}" placeholder="${esc(t.l1 + t.l1b)}" aria-label="Wording for ${id}">`
+        // The second line of a callout (its "incl." results, or none): reworded per result, like the first.
+        + (kid ? '' : `<input type="text" data-pt2="${id}" value="${esc(o.line2 && !PR.stale(o, r) ? o.line2 : '')}" placeholder="${esc(kids(r) || '(no second line)')}" aria-label="Second line for ${id}">`)
         + flags.map((p) => `<span class="warn" style="grid-column:2">${esc(p.message)}</span>`).join('') + '</div>';
     }).join('');
   el.querySelectorAll('[data-pc]').forEach((cb) => cb.addEventListener('change', () => H.setCallout(cb.dataset.pc, { show: cb.checked })));
   // Typing rewords that result only, for the depths it has now; the box redraws without rebuilding the panel.
-  el.querySelectorAll('[data-pt]').forEach((inp) => inp.addEventListener('input', () => {
-    const id = inp.dataset.pt, o = ov[id] || (ov[id] = {});
-    if (inp.value) { o.line1 = inp.value; o.at = PR.atOf(results, id); } else delete o.line1;
+  el.querySelectorAll('[data-pt],[data-pt2]').forEach((inp) => inp.addEventListener('input', () => {
+    const id = inp.dataset.pt || inp.dataset.pt2, k = inp.dataset.pt ? 'line1' : 'line2', o = ov[id] || (ov[id] = {});
+    if (inp.value) { o[k] = inp.value; o.at = PR.atOf(results, id); } else delete o[k];
     H.redraw();
   }));
 }

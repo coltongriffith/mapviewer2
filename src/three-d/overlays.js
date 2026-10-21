@@ -3,11 +3,13 @@
 // first time a figure has an overlay or an overlay file. Areas are painted into the terrain image (so the relief
 // hides them where it should); outlines, lines, points and their labels are drawn on the figure, sampled along
 // the surface and broken where a ridge hides them, so they stay crisp at any export size.
-// S.overlays: [{ id, name, file | data, crs, kind, color, dash, width, opacity, label, labelField, show }]. An
+// S.overlays: [{ id, name, file | data, crs, kind, color, dash, width, opacity, label, labelField, show, inset }].
+// inset: outlined in the inset too; unset, an area (fill) overlay is on a figure of design version 5. An
 // overlay from a file (role "overlay") keeps the file's name, the file being saved with the figure; one added
 // as data keeps its features. crs: null (the figure's own metres), "EPSG:4326" or another system's name.
 import { clipLine, clipRing, densify, sightTest, drapeRuns } from './drape.js';
 import { hits } from './layout.js';
+import { uses } from './design-version.js';
 
 let H, S;
 export function init(host) { H = host; S = host.S; }
@@ -159,6 +161,7 @@ function patch(o, x, feats) {
     o.labelField = v;
   }
   if (x.show !== undefined) o.show = !!x.show;
+  if (x.inset !== undefined) o.inset = !!x.inset;
 }
 const fieldsOf = (feats) => [...new Set(feats.slice(0, 200).flatMap((f) => Object.keys(f.p || {})))];
 const mix = (h, t) => `#${[1, 3, 5].map((i) => Math.round(parseInt(h.slice(i, i + 2), 16) * (1 - t) + 255 * t).toString(16).padStart(2, '0')).join('')}`;
@@ -296,6 +299,20 @@ export function draw(ctx, K, occ) {
   }));
   ctx.restore();
 }
+// In the inset (studio.js's plan of drilling, tags.js's location map): the outlines of the overlays set to show
+// there, clipped to its picture (rect [x, y, w, h]); P maps the figure's metres to the inset.
+export const inInset = (o) => o.show !== false && (o.inset ?? (o.kind === 'fill' && uses(S, 'insetOutline')));
+export function inset(ctx, P, u, [x, y, w, h]) {
+  const list = S.overlays.filter(inInset); if (!list.length) return;
+  ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip(); ctx.lineJoin = 'round';
+  list.forEach((o) => {
+    const F = placed(o); if (!F?.length || o.kind === 'points') return;
+    ctx.beginPath(); F.forEach((f) => (f.g === 'A' ? f.c : [f.c]).forEach((r) => { r.forEach((p, i) => { const q = P(p[0], p[1]); if (i) ctx.lineTo(q[0], q[1]); else ctx.moveTo(q[0], q[1]); }); if (f.g === 'A') ctx.closePath(); }));
+    if (o.kind === 'fill') { ctx.globalAlpha = Math.min(0.2, o.opacity); ctx.fillStyle = o.color; ctx.fill('evenodd'); ctx.globalAlpha = 1; }
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 2.6 * u; ctx.stroke(); ctx.strokeStyle = o.color; ctx.lineWidth = 1.2 * u; ctx.stroke();
+  });
+  ctx.restore();
+}
 // Legend rows, each with a swatch the shape of its mark (a filled box, a line, a dot).
 const swatch = (o) => (ctx, x, cy, u) => {
   const w = Math.min(o.width, o.kind === 'points' ? 10 : 4) * u; ctx.save(); ctx.lineJoin = 'round'; if (o.kind !== 'fill') ctx.globalAlpha = Math.max(0.3, o.opacity);
@@ -330,6 +347,7 @@ export function renderUI(el) {
         <label class="field" style="grid-column:1/-1"><span>Legend text (empty: not in the legend)</span><input type="text" data-ov="${i}" data-k="label" value="${esc(o.label ?? o.name)}" maxlength="80"></label>
         <label class="field"><span>${o.kind === 'points' ? 'Dot size' : 'Width'}</span><input type="number" data-ov="${i}" data-k="width" min="0.5" max="16" step="0.5" value="${o.width}"></label>
         <label class="field"><span>${o.kind === 'fill' ? 'Fill opacity' : 'Opacity'} %</span><input type="number" data-ov="${i}" data-k="opacity" min="0" max="100" step="5" value="${Math.round(o.opacity * 100)}"></label>
+        ${o.kind === 'points' ? '' : `<label class="check" style="grid-column:1/-1"><input type="checkbox" data-ov="${i}" data-k="inset" ${inInset({ ...o, show: true }) ? 'checked' : ''}>Outline in the inset</label>`}
         <label class="field" style="grid-column:1/-1"><span>Label each with</span><select data-ov="${i}" data-k="labelField"><option value="">No labels</option>${fields.map((f) => `<option ${f === o.labelField ? 'selected' : ''}>${esc(f)}</option>`).join('')}</select></label>
       </div></details>
       <span class="${n.problem ? 'warn' : 'muted'}">${n.features.toLocaleString()} ${n.features === 1 ? 'feature' : 'features'}${o.file ? ` from ${esc(o.file)}` : ''}${n.problem ? `. ${esc(n.problem)}` : ''}</span></div>`;

@@ -561,22 +561,23 @@ html.em3d-embed .share-credit:hover { text-decoration: underline; }
       <section>
         <h3>Display</h3>
         <div class="row" style="gap:14px">
-          <label class="check"><input type="checkbox" id="opt-walls" checked>Glass block sides</label>
-          <label class="check"><input type="checkbox" id="opt-ids" checked>Hole IDs</label>
-          <label class="check"><input type="checkbox" id="opt-inset" checked>Plan inset</label>
-          <label class="check"><input type="checkbox" id="opt-ribbons" checked>Intercept bars beside holes</label>
-          <label class="check"><input type="checkbox" id="opt-elev" checked>Elevation ticks</label>
-          <label class="check"><input type="checkbox" id="opt-pending" checked>"Assays pending" from collar status</label>
-          <label class="check"><input type="checkbox" id="opt-pending-none">Label holes without assays</label>
+          <label class="check"><input type="checkbox" id="opt-walls" data-ext="style.walls" checked>Glass block sides</label>
+          <label class="check"><input type="checkbox" id="opt-ids" data-ext="style.ids" checked>Hole IDs</label>
+          <label class="check"><input type="checkbox" id="opt-inset" data-ext="style.inset" checked>Plan inset</label>
+          <label class="check"><input type="checkbox" id="opt-ribbons" data-ext="style.ribbons" checked>Intercept bars beside holes</label>
+          <label class="check"><input type="checkbox" id="opt-elev" data-ext="style.elevTicks" checked>Elevation ticks</label>
+          <label class="check" title="Eastings and northings when looking straight down"><input type="checkbox" data-ext="style.grid">Grid in plan view</label>
+          <label class="check"><input type="checkbox" id="opt-pending" data-ext="style.pendingLabels" checked>"Assays pending" from collar status</label>
+          <label class="check"><input type="checkbox" id="opt-pending-none" data-ext="style.pendingNoAssays">Label holes without assays</label>
         </div>
         <div class="grid2" style="margin-top:8px">
-          <label class="field"><span>Terrain</span><select id="terrain">
+          <label class="field"><span>Terrain</span><select id="terrain" data-ext="style.terrain">
             <option value="natural">Natural</option><option value="light">Light relief</option><option value="relief">Shaded relief</option><option value="dark">Dark slate</option>
             <option value="satellite">Satellite</option><option value="muted">Satellite, muted</option></select></label>
-          <label class="field"><span>Surface from</span><select id="terrain-src">
+          <label class="field"><span>Surface from</span><select id="terrain-src" data-ext="style.terrainSource">
             <option value="auto">Best available</option><option value="topo">Your topography</option><option value="dem">Real elevation (DEM)</option><option value="collars">Collar elevations</option></select></label>
-          <label class="field"><span>Block sides</span><select id="block-style"><option value="glass">Glass</option><option value="solid">Solid block</option></select></label>
-          <label class="field"><span>Real elevation vs collars</span><select id="collar-fit"><option value="collars">Move terrain to collars</option><option value="terrain">Hang holes from terrain</option></select></label>
+          <label class="field"><span>Block sides</span><select id="block-style" data-ext="style.blockStyle"><option value="glass">Glass</option><option value="solid">Solid block</option></select></label>
+          <label class="field"><span>Real elevation vs collars</span><select id="collar-fit" data-ext="style.collarFit"><option value="collars">Move terrain to collars</option><option value="terrain">Hang holes from terrain</option></select></label>
           <label class="field"><span>Presentation</span><select data-ext="scene.theme"><option value="light">Light</option><option value="dark">Dark</option></select></label>
         </div>
         <details style="margin-top:8px">
@@ -684,6 +685,11 @@ html.em3d-embed .share-credit:hover { text-decoration: underline; }
       <span id="lib-notice-text"></span>
       <button class="btn" type="button" id="lib-update">Update</button>
       <button class="lib-x" type="button" id="lib-dismiss" aria-label="Keep the current data">×</button>
+    </div>
+    <div class="lib-notice" id="ver" role="status" hidden>
+      <span>A new version is available<span id="ver-save" hidden> — save your work, then reload</span>.</span>
+      <button class="btn" type="button" id="ver-reload">Reload</button>
+      <button class="lib-x" type="button" id="ver-x" aria-label="Dismiss">×</button>
     </div>
     <div class="status" id="status" role="status" aria-live="polite">Sample project loaded · illustrative data</div>
   </main>
