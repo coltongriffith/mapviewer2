@@ -79,6 +79,9 @@ Object.assign(ROLE_FIELDS, { litho: ['hole', 'from', 'to', 'code', 'desc'], geop
 // Published results: a release table, only ever by the user's choice; its columns (published-results.js PUB_FIELDS)
 // are mapped once that module loads.
 ROLE_LABEL.published = 'Published results';
+// Map overlays (overlays.js): GeoJSON and KML files, or a CSV of points given that type by hand.
+ROLE_LABEL.overlay = 'Map overlay'; ROLE_FIELDS.overlay = ['east', 'north', 'lat', 'lon'];
+const isOverlay = (n, t) => /\.(geo)?json$|\.kml$/i.test(n) || /^\s*(<\?xml[^>]*>\s*)?<kml|^\s*\{[\s\S]{0,300}"Feature/.test(t.slice(0, 400));
 
 function parseOBJ(text) {
   const v = [], f = [];
@@ -189,6 +192,7 @@ function addFiles(list) {
   for (const f of list) {
     const entry = { name: f.name, text: f.text };
     if (/\.obj$/i.test(f.name)) { entry.role = 'mesh'; entry.mesh = parseOBJ(f.text); }
+    else if (isOverlay(f.name, f.text)) Object.assign(entry, { role: 'overlay', header: [], rows: [], cols: {}, grades: [] }); // EXT hook
     else {
       const { header, rows } = isXYZ(f.name, f.text) ? parseXYZ(f.text) : parseCSV(f.text); // EXT hook: Geosoft XYZ
       Object.assign(entry, { header, rows, cols: matchCols(header) });
@@ -982,7 +986,7 @@ function restyle() {
   // Section line on the top surface
   const ctx = G.topCanvas.getContext('2d'); ctx.drawImage(G.topBase, 0, 0);
   const [A, Bp] = sectionEnds(), P = (p) => [(p.x - G.B.x0) / G.bw * G.topCanvas.width, (G.B.y1 - p.y) / G.bh * G.topCanvas.height];
-  const lk = G.topCanvas.width / 768;
+  const lk = G.topCanvas.width / 768; EXT.overlays?.paint(ctx, P); // EXT hook: overlay areas on the terrain
   ctx.setLineDash([14 * lk, 9 * lk]); const dk = S.terrain === 'dark'; // a dark line would vanish on dark slate
   ctx.lineWidth = 5 * lk; ctx.strokeStyle = dk ? '#fff' : S.primary; ctx.beginPath(); ctx.moveTo(...P(A)); ctx.lineTo(...P(Bp)); ctx.stroke();
   ctx.lineWidth = 2 * lk; ctx.strokeStyle = dk ? S.accent : '#fff'; ctx.stroke(); ctx.setLineDash([]); G.topTex.needsUpdate = true;
@@ -1285,7 +1289,7 @@ function legendSecs() {
   if (S.ribbons && callouts.length) [[ribLabel(), RIB_COLORS[0]], ...(callouts.some((c) => c.ic.incl) ? [['incl.', RIB_COLORS[1]]] : [])].forEach(([label, c], i) => assays.push({ label, sep: !i, draw: (ctx, x, cy, u) => { ctx.fillStyle = c; ctx.fillRect(x, cy - 3 * u, 22 * u, 6 * u); } }));
   const model = G.meshes.filter(({ name }) => S.meshes[name].show).map(({ name }) => [meshName(name), S.meshes[name].color]);
   if (shellShown()) model.unshift(...shellList().map((x) => [x.label || `Grade shell ≥ ${shellCutText([x.cutoff])}`, x.color]));
-  return [{ key: 'holes', rows: holes }, { key: 'assays', title: `Assay · ${S.valueLabel}`, rows: assays },
+  return [{ key: 'holes', rows: holes }, ...(EXT.overlays?.legendSecs() || []), { key: 'assays', title: `Assay · ${S.valueLabel}`, rows: assays },
     { key: 'model', title: 'Model', rows: model.map(([label, c]) => ({ label, draw: (ctx, x, cy, u) => { ctx.globalAlpha = 0.6; ctx.fillStyle = c; ctx.fillRect(x, cy - 6 * u, 22 * u, 12 * u); ctx.globalAlpha = 1; } })) }].filter((s) => s.rows.length);
 }
 function cardSize(ctx, K, secs) {
@@ -1480,6 +1484,7 @@ function drawOverlay(ctx, k, forExport) {
   if (!G) { font(600, 18); ctx.fillStyle = MUTED; ctx.textAlign = 'center'; ctx.fillText('Add a collar file and an assay file to build the figure.', W / 2, H / 2); ctx.restore(); return; }
   // Collars and hole IDs. occ collects what is drawn, so the scale bar and new labels can keep clear of it.
   const placed = wallLabelBoxes(), idBoxes = [], occ = [], hits = [];
+  EXT.overlays?.draw(ctx, K, occ); EXT.shapes?.draw(ctx, K, occ); // EXT hook: map overlays and shapes, under the collars
   project.holes.forEach((h) => {
     const [cx, cy] = proj(G.V(h.c.x, h.c.y, h.c.z)), e = h.path[h.path.length - 1], [ex, ey] = proj(G.V(e.x, e.y, e.z));
     ctx.beginPath(); ctx.arc(cx, cy, 5 * u, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 2.4 * u; ctx.strokeStyle = EXT.tags?.highlightOf(h) || '#142126'; if (h.prov || h.planned) ctx.setLineDash([2.5 * u, 2 * u]); ctx.stroke(); ctx.setLineDash([]);
@@ -1651,6 +1656,7 @@ function drawSection(ctx, Wc, Hc, forExport) {
     }));
     if (!clean && inW(h.c)) { ctx.save(); ctx.translate(X(pr(h.c).t), Y(h.c.z) - 8 * u); ctx.rotate(-Math.PI / 4); ctx.fillStyle = INK; font(500, 12, true); ctx.fillText(h.id, 0, 0); ctx.restore(); }
   });
+  EXT.shapes?.drawSection(ctx, { A, Bp, X, Y, w, K, Wc }); // EXT hook
   // Pending labels last, placed clear of the other holes on the section.
   if (S.pendingLabels) {
     const scr = new Map(shown.map(({ h, runs }) => [h, runs.flat().map(XY)]));
@@ -1871,7 +1877,7 @@ function principalAz(holes) { const f = holes.length > 2 && fitLine(holes.map((h
 function turnSection() { const s = S.section; if (s?.a) [s.a, s.b] = lineThrough({ x: (s.a.x + s.b.x) / 2, y: (s.a.y + s.b.y) / 2 }, S.secAz, Math.hypot(s.b.x - s.a.x, s.b.y - s.a.y) / 2); }
 function addUserFiles(arr) {
   if (!Array.isArray(arr) || !arr.length || arr.some((f) => !f || typeof f.name !== 'string' || typeof f.text !== 'string')) throw new Error('addFiles expects [{ name: "collars.csv", text: "HoleID,Easting,..." }].');
-  if (usingSample) { files = []; usingSample = false; S.meshes = {}; S.valueCol = null; S.coOverrides = {}; S.valueCol2 = null; resetDerived(); }
+  if (usingSample && !arr.every((a) => isOverlay(a.name, a.text))) { files = []; usingSample = false; S.meshes = {}; S.valueCol = null; S.coOverrides = {}; S.valueCol2 = null; resetDerived(); }
   arr.forEach((a) => { if (a.lib) S.libRefs[a.name] = { libFileId: String(a.lib.libFileId), version: +a.lib.version }; else delete S.libRefs[a.name]; });
   refresh.secSet = false; addFiles(arr); extAutoOn(arr); refresh(); // extAutoOn: EXT hook
   const added = files.filter((f) => arr.some((a) => a.name === f.name)).map((f) => `${f.name} → ${ROLE_LABEL[f.role]}`);
@@ -2279,13 +2285,13 @@ Object.assign(S, {
   geology: { enabled: false, title: 'Lithology', faces: 'far', opacity: 0.85, strength: 1.3, hidden: 'nearest', anisotropy: 4, search: null, smooth: 2, texture: true, section: false, legend: [], images: {}, note: 'Geology on block faces interpolated from drill logs; schematic.', contacts: true, labels: true, clean: true },
   geophys: { mode: 'off', lines: 'auto', ramp: 'geophys', log: null, min: null, max: null, opacity: 0.85, faces: 'far', search: null, width: null, property: null, label: null, unit: null, note: 'Geophysics: illustrative inversion model' },
   tags: { at: 'toe', style: 'dark', status: {}, fadePrevious: false, newLabel: '', prevLabel: 'Previously released', plannedLabel: 'Planned', groups: [], autoGroup: false, groupRadius: 140, emphasis: 'auto', highlight: {}, highlightNew: true, idMode: 'auto', showId: {}, showTag: {}, hideRows: [], pending: 'collar' },
-  histograms: false, insetStyle: 'plan',
+  histograms: false, insetStyle: 'plan', overlays: [], shapes: [], // overlays.js, shapes.js
 });
-const EXT = {}, extLoading = {}, EXT_IMPORT = { geology: () => import('./geology.js'), geophys: () => import('./geophys.js'), tags: () => import('./tags.js'), look: () => import('./look.js'), section: () => import('./section.js') };
+const EXT = {}, extLoading = {}, EXT_IMPORT = { geology: () => import('./geology.js'), geophys: () => import('./geophys.js'), tags: () => import('./tags.js'), look: () => import('./look.js'), section: () => import('./section.js'), overlays: () => import('./overlays.js'), shapes: () => import('./shapes.js') };
 const hasRole = (r) => files.some((f) => f.role === r);
 function extWanted() {
   const gp = S.geophys.mode !== 'off' && hasRole('geophys'), t = S.tags;
-  return { look: S.shell.enabled || ortho() || S.scene.haze > 0 || (uses(S, 'clearLeaders') && S.labels.some((l) => l.arrow)), geology: (S.geology.enabled && hasRole('litho')) || Object.keys(S.geology.images || {}).length > 0 || gp, geophys: gp, section: !!S.section,
+  return { look: S.shell.enabled || ortho() || S.scene.haze > 0 || (uses(S, 'clearLeaders') && S.labels.some((l) => l.arrow)), geology: (S.geology.enabled && hasRole('litho')) || Object.keys(S.geology.images || {}).length > 0 || gp, geophys: gp, section: !!S.section, overlays: S.overlays.length > 0 || hasRole('overlay'), shapes: S.shapes.length > 0,
     tags: t.at !== 'toe' || t.fadePrevious || t.idMode === 'key' || (t.idMode !== 'all' && (project?.holes?.length || 0) > 12) || Object.keys(t.showId).length > 0 || Object.keys(t.showTag || {}).length > 0 || t.emphasis === 'key' || Object.keys(t.highlight || {}).length > 0
       || S.coPlacement !== 'column' || Object.values(coMap()).some((o) => o.placement || o.x !== undefined) || (S.pendingLabels && t.pending === 'collar' && !!project?.holes?.some(isPending)) || t.autoGroup || t.groups.length > 0 || Object.keys(t.status).length > 0 || S.histograms || S.insetStyle !== 'plan' || S.labels.some((l) => l.kind === 'stat') };
 }
@@ -2301,7 +2307,7 @@ const host = () => (extHost ||= {
   ROLE_LABEL, ROLE_FIELDS, FIELD_LABEL, gradeCols, refresh, get PR() { return PR; }, setStyle, pad3, labelFor, dcutChoices, meshName, restyle, schedulePublish,
   renderShellUI, renderEq, renderExtUI, renderLegendUI, FORMATS, setFigureSize, updateLabel, removeLabel, updateWallLabel, removeWallLabel,
   metalCols, unitOf, setEquivalent, getChecks, setProvisional,
-  step: () => currentStep, sectionChanged: () => { refresh.secSet = true; restyle(); renderStyle(); schedulePublish(); },
+  step: () => currentStep, renderFiles, sectionChanged: () => { refresh.secSet = true; restyle(); renderStyle(); schedulePublish(); },
 });
 const extLoad = (k) => (extLoading[k] ||= EXT_IMPORT[k]().then((m) => { m.init(host()); EXT[k] = m; return m; }));
 async function extReady() {
@@ -2310,13 +2316,13 @@ async function extReady() {
   // Hole fade and weights are read while the scene is built: rebuild once tags.js arrives.
   if (!hadTags && EXT.tags && G) rebuildScene(true);
   extScene();
-  await Promise.all([EXT.geology?.imagesReady(), EXT.tags?.syncInset()]);
+  await Promise.all([EXT.geology?.imagesReady(), EXT.tags?.syncInset(), EXT.overlays?.ready()]);
   extScene(); renderExtUI(); schedulePublish();
 }
 function extScene() {
   if (Object.entries(extWanted()).some(([k, v]) => v && !EXT[k])) { extReady().catch((e) => status(e.message)); return; }
   if (!G) return;
-  EXT.geophys?.syncCurtains(); faceWalls(); EXT.tags?.placeHistograms(); EXT.tags?.syncInset(); EXT.tags?.syncHoles();
+  EXT.geophys?.syncCurtains(); faceWalls(); EXT.tags?.placeHistograms(); EXT.tags?.syncInset(); EXT.tags?.syncHoles(); EXT.overlays?.sync();
 }
 const extView = () => { if (G) EXT.geology?.syncFaces(); };
 const extRestyle = () => { if (G) { EXT.geophys?.syncCurtains(); faceWalls(); EXT.tags?.syncHoles(); } };
@@ -2359,7 +2365,7 @@ function extState() {
 }
 function renderExtUI() {
   document.querySelectorAll('[data-ext]').forEach((el) => { const [g, k] = el.dataset.ext.split('.'), v = g === 'style' || g === 'view' ? S[k] : S[g][k]; if (el.type === 'checkbox') el.checked = !!v; else el.value = v; });
-  [['geology', 'geo-ui'], ['geophys', 'gp-ui'], ['tags', 'tag-ui'], ['section', 'sec-holes']].forEach(([k, id]) => { if (EXT[k]) EXT[k].renderUI($(id)); });
+  [['geology', 'geo-ui'], ['geophys', 'gp-ui'], ['tags', 'tag-ui'], ['section', 'sec-holes'], ['overlays', 'ov-ui'], ['shapes', 'shape-ui']].forEach(([k, id]) => { if (EXT[k]) EXT[k].renderUI($(id)); });
   document.querySelectorAll('[data-secmode]').forEach((b) => b.setAttribute('aria-pressed', String((b.dataset.secmode === 'chosen') === !!S.section?.holes)));
 }
 document.querySelectorAll('[data-ext]').forEach((el) => el.addEventListener('change', () => {
@@ -2392,6 +2398,10 @@ const EXT_API = {
   },
   layersReady: async () => { await extReady(); return getState(); },
 };
+// Map overlays and shapes (overlays.js, shapes.js): addOverlay, updateOverlay, removeOverlay, and the same for shapes.
+[['overlays', 'Overlay'], ['shapes', 'Shape']].forEach(([k, n]) => ['add', 'update', 'remove'].forEach((a) => { EXT_API[a + n] = async (...x) => { const r = await (await extLoad(k))[a](...x); await extReady(); return r ?? getState(); }; }));
+$('ov-file').addEventListener('change', (e) => { if (e.target.files.length) readFileList(e.target.files); e.target.value = ''; });
+document.querySelectorAll('[data-shape]').forEach((b) => b.addEventListener('click', () => { showView('3d'); EXT_API.addShape({ type: b.dataset.shape }).catch((e) => status(e.message)); }));
 // The API notes for these layers are kept in the page (#ext-help), out of the script bundle.
 const EXT_HELP = `\n${$('ext-help').textContent.trim()}`;
 
@@ -2425,6 +2435,7 @@ function getState() {
     equivalent: S.eq ? (() => { const i = eqInfo(); return { column: i.name, formula: i.formula, note: i.note, factors: Object.fromEntries(i.factors.map((f) => [f.metal, +f.factor.toPrecision(6)])), ...structuredClone(S.eq) }; })() : null,
     footnoteAuto: G ? autoNotes(S.view) : [], checks: getChecks(),
     ...extState(), // EXT hook: geology, geophys, tags
+    overlays: S.overlays.map((o) => ({ ...o, data: undefined, ...EXT.overlays?.info(o) })), shapes: structuredClone(S.shapes),
     figureSize: { key: S.format, width: f.w, height: f.h, label: f.label }, figureSizes: Object.fromEntries(Object.entries(FORMATS).map(([k, v]) => [k, `${v.label}, ${v.w}×${v.h}`])),
   };
 }

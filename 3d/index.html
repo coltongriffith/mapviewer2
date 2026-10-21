@@ -90,6 +90,8 @@ ol.how { margin: 0; padding-left: 20px; display: grid; gap: 3px; font-size: 14px
 .file { border: 1px solid var(--slate-200); border-radius: 8px; padding: 9px 10px; display: grid; gap: 6px; font-size: 13.5px; }
 .file-head { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
 .file-head .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.file-head .check, .file-head .row { min-width: 0; flex-wrap: nowrap; }
+.file-head .row .btn { padding: 4px 9px; font-size: 13px; }
 .maps { display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; align-items: center; font-size: 13px; }
 .maps label { color: var(--slate-600); }
 select, input[type="text"], input[type="email"], input[type="number"], textarea { font: inherit; font-size: 14px; color: var(--slate-950); background: #fff; border: 1px solid var(--slate-200); border-radius: 5px; padding: 5px 7px; min-width: 0; width: 100%; }
@@ -294,10 +296,10 @@ html.em3d-embed .share-credit:hover { text-decoration: underline; }
         <p>Export collars and assays from your drill database as CSV and drop them in. The sample project is showing until you do.</p></div>
       <div class="drop" id="drop">
         <strong>Drop CSV or ZIP files here</strong>
-        <span class="muted">Collars, assays, surveys, topography, or OBJ model shapes, loose or in a ZIP. Columns are matched for you.</span>
+        <span class="muted">Collars, assays, surveys, topography, OBJ model shapes or map overlays (GeoJSON, KML, shapefile), loose or in a ZIP. Columns are matched for you.</span>
         <div class="row" style="justify-content:center">
           <label class="btn primary" for="file-input">Choose files</label>
-          <input type="file" id="file-input" multiple accept=".csv,.txt,.obj,.xyz,.dat,.zip" hidden>
+          <input type="file" id="file-input" multiple accept=".csv,.txt,.obj,.xyz,.dat,.zip,.geojson,.json,.kml" hidden>
           <button class="btn" type="button" id="load-sample">Use sample project</button>
           <button class="btn" type="button" id="clear-files">Clear</button>
           <button class="btn" type="button" id="lib-add" aria-expanded="false" aria-controls="lib-pick" hidden>From property library</button>
@@ -509,6 +511,20 @@ html.em3d-embed .share-credit:hover { text-decoration: underline; }
         <button class="btn" type="button" id="wall-add" style="margin-top:8px">Add label on the block</button>
         <p class="muted" style="margin-top:6px">Painted on the face in perspective. Drag it on the preview to move it along the face.</p>
         <div class="files" id="wall-list" style="margin-top:8px"></div>
+      </section>
+      <!-- Map overlays and annotation shapes: their lists load with the first one (overlays.js, shapes.js). -->
+      <section id="ext-overlays">
+        <h3>Map overlays</h3>
+        <p class="muted">Claims, targets, faults or soil points draped on the terrain, from GeoJSON, KML or a zipped shapefile (or a CSV of points given the Map overlay type in step 1). Each gets a legend row.</p>
+        <label class="btn" for="ov-file" style="margin-top:8px">Add GeoJSON, KML or shapefile</label>
+        <input type="file" id="ov-file" multiple accept=".geojson,.json,.kml,.zip" hidden>
+        <div class="files" id="ov-ui" style="margin-top:8px"></div>
+      </section>
+      <section id="ext-shapes">
+        <h3>Shapes</h3>
+        <p class="muted">Placed in the files' coordinates, so they stay put as the camera turns, and drawn on the section where they lie within its width.</p>
+        <div class="row" style="margin-top:8px"><button class="btn" type="button" data-shape="ellipse">Add ellipse</button><button class="btn" type="button" data-shape="dimension">Add dimension</button><button class="btn" type="button" data-shape="arrow">Add arrow</button></div>
+        <div class="files" id="shape-ui" style="margin-top:8px"></div>
       </section>
       <!-- Geology, geophysics and hole tags: the controls below load their layer (geology.js, geophys.js, tags.js) on first use. -->
       <section id="ext-geology">
@@ -887,6 +903,26 @@ Whole projects (to keep or move a figure):
   EM3D.setStyle({histograms: true})   grade bars along each hole, length by grade
   EM3D.setStyle({insetStyle: "plan" | "satellite" | "topo"})   a map inset around the property (needs the
                                   coordinate system)
+  EM3D.addOverlay({name, data | file, kind: "fill" | "line" | "points", color, dash: "solid" | "dashed" |
+                   "dotted" (or true / false), width, opacity (0-1), label, labelField, crs})   a map overlay
+                                  draped on the terrain: claims, targets, faults, soil points. data: GeoJSON
+                                  (an object or its text), KML text, or a zipped shapefile (base64, a data URL
+                                  or an ArrayBuffer); file: the name of a file added in step 1. Without kind, a
+                                  file with areas, lines and points gives one overlay of each. Coordinates in
+                                  the files' metres, or latitude/longitude (GeoJSON in WGS 84, KML), placed
+                                  with the coordinate system set in step 1. color defaults to the brand
+                                  colours; label: the legend text (null: the name, "": no legend row);
+                                  labelField: a property written beside each feature. Returns the id (or ids)
+  EM3D.updateOverlay(id, {..., show}) / removeOverlay(id)   getState().overlays
+  EM3D.addShape({type: "ellipse", centre: [e, n, z?], radii: [rx, ry], rotation (azimuth of rx), vertical,
+                 dash, text, color, width})   a dashed ellipse; without z it lies on the terrain; vertical:
+                                  upright, ry up and down, in the plane at the rotation azimuth
+  EM3D.addShape({type: "dimension", from: [e, n, z?], to: [e, n, z?], text})   a dimension line, its length
+                                  in metres unless text is given
+  EM3D.addShape({type: "arrow", from, to, text: "OPEN", style: "outline" | "solid", size, color})   a big arrow
+                                  with its text along it. Any shape given only a type is placed for you (round
+                                  the top intercept, along the section). Returns the id
+  EM3D.updateShape(id, {...}) / removeShape(id)   getState().shapes
   EM3D.layersReady()              Promise; resolves once the layers, face images and inset have loaded
   getState().geology / .geophys / .tags
 </script>
