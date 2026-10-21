@@ -413,7 +413,7 @@ html.em3d-embed .share-credit:hover { text-decoration: underline; }
         <div class="row" style="margin-top:6px"><button class="btn" type="button" id="auto-bins">Suggest from data</button><span class="muted">Lower limit of each colour</span></div>
         <div class="field" style="margin-top:10px"><span>Show intervals ≥ (lower ones draw as the plain trace; callouts are unaffected)</span>
           <div class="row"><span class="chips" id="dcut-btns" role="group" aria-label="Show intervals at or above"></span><input type="number" id="dcut" step="any" min="0" placeholder="other" aria-label="Show intervals at or above this grade" style="width:84px"></div></div>
-        <details style="margin-top:10px">
+        <details style="margin-top:10px" id="eq-box">
           <summary>Metal equivalent (CuEq, AuEq…)</summary>
           <p class="muted" style="margin:6px 0">Adds a calculated column from your prices and recoveries: % → lb/t × 22.0462, g/t → oz/t ÷ 31.1035. An interval missing any metal gets no value. The formula and assumptions are added to the footnote while it is in use.</p>
           <div id="eq-body"></div>
@@ -426,6 +426,7 @@ html.em3d-embed .share-credit:hover { text-decoration: underline; }
         <div class="grid2" style="margin-top:8px">
           <label class="field"><span>Cut-off <output id="shell-unit" class="mono"></output></span><input type="number" id="shell-cut" step="any" min="0"></label>
           <label class="field"><span>Colour</span><input type="color" id="shell-color" value="#1f9e96"></label>
+          <label class="field" style="grid-column:1/-1"><span>Shading</span><select id="shell-shade"><option value="solid+edges">Solid with outlines</option><option value="solid">Solid</option><option value="glass">Glass</option></select></label>
         </div>
         <label class="field" style="margin-top:8px"><span>Opacity <output id="shell-op-out" class="mono"></output></span><input type="range" id="shell-op" min="5" max="90"></label>
         <label class="check" style="margin-top:6px"><input type="checkbox" id="shell-ghost">Show it faintly through the terrain</label>
@@ -435,6 +436,8 @@ html.em3d-embed .share-credit:hover { text-decoration: underline; }
           <div class="grid2" style="margin-top:8px">
             <label class="field"><span>Search radius (m)</span><input type="number" id="shell-search" min="5" step="5" placeholder="auto"></label>
             <label class="field"><span>Cell size (m)</span><input type="number" id="shell-cell" min="2" placeholder="auto"></label>
+            <label class="field" style="grid-column:1/-1"><span>Nested shells: up to three cut-offs (e.g. 0.2, 0.5, 1); empty for one</span><input type="text" id="shell-cuts" inputmode="decimal" placeholder="one shell at the cut-off above"></label>
+            <label class="field" style="grid-column:1/-1"><span>Nested shell colours</span><select id="shell-ramp"><option value="brand">Tones of the brand accent</option><option value="green">Mint, green, dark green</option></select></label>
           </div>
         </details>
         <details style="margin-top:8px">
@@ -464,6 +467,7 @@ html.em3d-embed .share-credit:hover { text-decoration: underline; }
           <button class="btn" type="button" data-view="low">Low angle</button>
           <button class="btn" type="button" data-view="plan">Plan view</button>
         </div>
+        <label class="field" style="margin-top:8px"><span>Projection</span><select data-ext="view.projection"><option value="perspective">Perspective</option><option value="orthographic">Orthographic (parallel, framed to the drilling)</option></select></label>
         <label class="field" style="margin-top:8px"><span>Looking toward (azimuth) <output id="cam-az-out" class="mono"></output></span><input type="range" id="cam-az" min="0" max="359"></label>
         <label class="field"><span>Plunge (angle down) <output id="cam-pl-out" class="mono"></output></span><input type="range" id="cam-pl" min="3" max="89"></label>
         <label class="field"><span>Zoom <output id="cam-zoom-out" class="mono"></output></span><input type="range" id="cam-zoom" min="40" max="250"></label>
@@ -550,7 +554,18 @@ html.em3d-embed .share-credit:hover { text-decoration: underline; }
             <option value="auto">Best available</option><option value="topo">Your topography</option><option value="dem">Real elevation (DEM)</option><option value="collars">Collar elevations</option></select></label>
           <label class="field"><span>Block sides</span><select id="block-style"><option value="glass">Glass</option><option value="solid">Solid block</option></select></label>
           <label class="field"><span>Real elevation vs collars</span><select id="collar-fit"><option value="collars">Move terrain to collars</option><option value="terrain">Hang holes from terrain</option></select></label>
+          <label class="field"><span>Presentation</span><select data-ext="scene.theme"><option value="light">Light</option><option value="dark">Dark</option></select></label>
         </div>
+        <details style="margin-top:8px">
+          <summary>Sun, shadows and haze</summary>
+          <div class="grid2" style="margin-top:8px">
+            <label class="field"><span>Sun from (azimuth)</span><input type="range" data-ext="scene.sunAz" min="0" max="359" step="5"></label>
+            <label class="field"><span>Sun height</span><input type="range" data-ext="scene.sunAlt" min="5" max="85" step="5"></label>
+            <label class="field"><span>Terrain shadows</span><input type="range" data-ext="scene.shadow" min="0" max="1" step="0.05"></label>
+            <label class="field"><span>Darker hollows</span><input type="range" data-ext="scene.ao" min="0" max="1" step="0.05"></label>
+            <label class="field"><span>Haze</span><input type="range" data-ext="scene.haze" min="0" max="1" step="0.05"></label>
+          </div>
+        </details>
         <details style="margin-top:8px">
           <summary>Satellite imagery tone</summary>
           <div class="grid2" style="margin-top:8px">
@@ -750,14 +765,25 @@ JavaScript API (run in the page console or via your agent's evaluate tool):
                                   has no equivalent value (never read as zero). null removes it. The formula and
                                   assumptions go in the footnote while the column is in use
   EM3D.setShell({enabled, cutoff, opacity, color (null = brand accent), throughTerrain (a faint ghost where
-                 the terrain hides it), search, cell})   Promise; resolves with the state once
-                                  the grade shell is built. cutoff/search/cell null = automatic. See below
+                 the terrain hides it), search, cell, shading: "solid+edges" (default) | "solid" | "glass",
+                 shells: [{cutoff, color, label}] (up to three nested shells from one estimate, each with its
+                 legend row; colours default to tones of the brand accent; [] for the one shell at cutoff),
+                 ramp: "brand" | "green" (nested shells' default colours: brand tones, or mint, green and a
+                 dark-green core)})
+                                  Promise; resolves with the state once the grade shell is built.
+                                  cutoff/search/cell null = automatic. See below
   EM3D.cancelShell()              stops a build in progress
   EM3D.setProvisional(holeId, true | false | null)   dashed, fainter "Provisional position" (null: from the
                                   collar status/flags column)
   getState().checks               data checks: counts and problems (no collar, From ≥ To, overlaps, beyond depth,
                                   conflicting survey depths, dips out of range, outlying collars)
-  EM3D.setCamera({view: "a" | "b" | "low" | "plan"}) or ({azimuth, plunge, zoom})
+  EM3D.setCamera({view: "a" | "b" | "low" | "plan"}) or ({azimuth, plunge, zoom, pan: [x, y, z] | null})
+  EM3D.setView({projection: "perspective" | "orthographic"})   orthographic: parallel lines, framed to the
+                                  drilling and shell with even margins (the offset is the camera's pan)
+  EM3D.setScene({sunAz (0-360), sunAlt (5-85), shadow (0-1, terrain shadows), ao (0-1, darker hollows),
+                 haze (0-1), theme: "light" | "dark", edge: "#hex" (the block outline)})   the light and the
+                                  presentation theme (dark: dark background, light text and legends; brand
+                                  colours kept). Figures saved before these settings keep their old look
   EM3D.setFigureSize("slide" | "release" | "square" | "portrait" | "a4")
   EM3D.showStep("data" | "brand" | "layout" | "export")
   EM3D.showView("3d" | "section")

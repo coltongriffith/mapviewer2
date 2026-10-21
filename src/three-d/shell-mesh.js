@@ -65,15 +65,21 @@ export function smoothMesh(positions, indices, passes = 2) {
   return positions;
 }
 
-// The whole shell from a worker message: { holes, grid, top, search, iso, field? }. A field from an
-// earlier build of the same inputs skips the estimate (a new cut-off only re-runs the surface).
+// The whole shell from a worker message: { holes, grid, top, search, iso or isos, field? }. A field from an
+// earlier build of the same inputs skips the estimate (a new cut-off only re-runs the surface). One part
+// per cut-off (nested shells share the estimate); the first part's surface is also returned on its own.
 export function buildShell(m, onProgress) {
   const t0 = Date.now();
   const field = m.field || estimate(m.holes, m.grid, { search: m.search, top: m.top, onRow: onProgress && ((p) => onProgress(p * 0.9)) });
-  let cells = 0, estimated = 0;
-  for (const v of field) if (Number.isFinite(v)) { estimated++; if (v >= m.iso) cells++; }
-  const { positions, indices } = marchingCubes(field, m.grid, m.iso);
-  smoothMesh(positions, indices);
+  let estimated = 0;
+  for (const v of field) if (Number.isFinite(v)) estimated++;
+  const parts = (m.isos || [m.iso]).map((iso) => {
+    let cells = 0; for (const v of field) if (v >= iso) cells++;
+    const { positions, indices } = marchingCubes(field, m.grid, iso);
+    smoothMesh(positions, indices);
+    return { iso, positions, indices, cells };
+  });
   if (onProgress) onProgress(1);
-  return { field, positions, indices, stats: { cells, estimated, triangles: indices.length / 3, vertices: positions.length / 3, ms: Date.now() - t0 } };
+  const tri = parts.reduce((t, p) => t + p.indices.length / 3, 0), { positions, indices, cells } = parts[0];
+  return { field, parts, positions, indices, stats: { cells, estimated, triangles: tri, vertices: parts.reduce((t, p) => t + p.positions.length / 3, 0), ms: Date.now() - t0 } };
 }

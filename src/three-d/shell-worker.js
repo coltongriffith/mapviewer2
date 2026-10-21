@@ -6,7 +6,7 @@ self.onmessage = (e) => {
   const m = e.data; let last = -1;
   try {
     const r = buildShell(m, (p) => { if (p - last >= 0.02 || p === 1) { last = p; self.postMessage({ id: m.id, type: 'progress', p }); } });
-    self.postMessage({ id: m.id, type: 'done', ...r }, [r.field.buffer, r.positions.buffer, r.indices.buffer]);
+    self.postMessage({ id: m.id, type: 'done', ...r }, [r.field.buffer, ...r.parts.flatMap((p) => [p.positions.buffer, p.indices.buffer])]);
   } catch (err) {
     self.postMessage({ id: m.id, type: 'error', message: String((err && err.message) || err) });
   }

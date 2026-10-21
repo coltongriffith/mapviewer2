@@ -140,18 +140,91 @@ export function smoothClasses(G, radius = 2) {
   return out;
 }
 
+// A majority filter of radius r: each covered cell takes the class most common around it (ties keep its own),
+// which clears the one- and two-cell blotches the argmax leaves. Uncovered cells (-1) stay so and do not vote.
+export function modeFilter(cls, nx, ny, nc, r = 1) {
+  const out = Int16Array.from(cls), n = new Int32Array(nc);
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+    const k = j * nx + i, own = cls[k]; if (own < 0) continue; n.fill(0);
+    for (let b = Math.max(0, j - r); b <= Math.min(ny - 1, j + r); b++) for (let a = Math.max(0, i - r); a <= Math.min(nx - 1, i + r); a++) { const c = cls[b * nx + a]; if (c >= 0) n[c]++; }
+    let best = own; for (let c = 0; c < nc; c++) if (n[c] > n[best]) best = c; out[k] = best;
+  }
+  return out;
+}
+// Patches: 4-connected runs of one class. id per cell (-1 uncovered) and [{ c, n }] per patch.
+export function patches(cls, nx, ny) {
+  const id = new Int32Array(nx * ny).fill(-1), list = [], stack = [];
+  for (let s = 0; s < cls.length; s++) {
+    if (cls[s] < 0 || id[s] >= 0) continue;
+    const p = list.length, c = cls[s]; let n = 0; id[s] = p; stack.push(s);
+    while (stack.length) {
+      const k = stack.pop(), i = k % nx; n++;
+      for (const q of [i > 0 ? k - 1 : -1, i < nx - 1 ? k + 1 : -1, k - nx, k + nx]) if (q >= 0 && q < cls.length && id[q] < 0 && cls[q] === c) { id[q] = p; stack.push(q); }
+    }
+    list.push({ c, n });
+  }
+  return { id, list };
+}
+// Patches smaller than minCells take the class that borders them most.
+export function dropSpecks(cls, nx, ny, minCells) {
+  const { id, list } = patches(cls, nx, ny), out = Int16Array.from(cls), votes = list.map(() => new Map());
+  for (let k = 0; k < cls.length; k++) {
+    const p = id[k]; if (p < 0 || list[p].n >= minCells) continue;
+    const i = k % nx; for (const q of [i > 0 ? k - 1 : -1, i < nx - 1 ? k + 1 : -1, k - nx, k + nx]) if (q >= 0 && q < cls.length && cls[q] >= 0 && id[q] !== p) votes[p].set(cls[q], (votes[p].get(cls[q]) || 0) + 1);
+  }
+  const to = votes.map((v) => [...v].sort((a, b) => b[1] - a[1])[0]?.[0]);
+  for (let k = 0; k < cls.length; k++) { const p = id[k]; if (p >= 0 && list[p].n < minCells && to[p] !== undefined) out[k] = to[p]; }
+  return out;
+}
+// The class grid at f times the resolution with smooth contacts: each class (and "uncovered") as a softened
+// indicator, interpolated bilinearly, the highest winning. Cells whose neighbours agree are copied as they are.
+export function refine(cls, nx, ny, nc, f) {
+  const ch = nc + 1, oh = new Float32Array(nx * ny * ch);
+  cls.forEach((c, k) => { oh[k * ch + (c < 0 ? nc : c)] = 1; });
+  const w = blur(oh, nx, ny, ch, 1), NX = nx * f, NY = ny * f, out = new Int16Array(NX * NY);
+  for (let J = 0; J < NY; J++) for (let I = 0; I < NX; I++) {
+    const x = Math.max(0, Math.min(nx - 1.0001, (I + 0.5) / f - 0.5)), y = Math.max(0, Math.min(ny - 1.0001, (J + 0.5) / f - 0.5)), i = Math.floor(x), j = Math.floor(y), a = x - i, b = y - j;
+    const k = j * nx + i, c0 = cls[k];
+    if (cls[k + 1] === c0 && cls[k + nx] === c0 && cls[k + nx + 1] === c0) { out[J * NX + I] = c0; continue; }
+    let best = 0, bw = -1;
+    for (let c = 0; c < ch; c++) { const v = w[k * ch + c] * (1 - a) * (1 - b) + w[(k + 1) * ch + c] * a * (1 - b) + w[(k + nx) * ch + c] * (1 - a) * b + w[(k + nx + 1) * ch + c] * a * b; if (v > bw) { bw = v; best = c; } }
+    out[J * NX + I] = best === nc ? -1 : best;
+  }
+  return out;
+}
+// Where to name each unit on a face: in its largest patch (if that holds minShare of the covered cells), the
+// cells deepest inside it, deepest first (chamfer distance to the patch edge in metres; cells are sx × sy m).
+export function labelSpots(cls, nx, ny, sx, sy, minShare = 0.03) {
+  const { id, list } = patches(cls, nx, ny), covered = list.reduce((t, p) => t + p.n, 0), big = new Map();
+  list.forEach((p, k) => { if (p.n >= minShare * covered && p.n > (list[big.get(p.c)]?.n || 0)) big.set(p.c, k); });
+  const d = new Float32Array(nx * ny), dg = Math.hypot(sx, sy);
+  for (let k = 0; k < d.length; k++) d[k] = id[k] >= 0 ? Infinity : 0;
+  const pass = (i, j, steps) => {
+    const k = j * nx + i; if (!d[k]) return;
+    for (const [di, dj, w] of steps) { const p = i + di, q = j + dj, o = q * nx + p; d[k] = Math.min(d[k], (p < 0 || q < 0 || p >= nx || q >= ny || id[o] !== id[k] ? 0 : d[o]) + w); }
+  };
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) pass(i, j, [[-1, 0, sx], [0, -1, sy], [-1, -1, dg], [1, -1, dg]]);
+  for (let j = ny - 1; j >= 0; j--) for (let i = nx - 1; i >= 0; i--) pass(i, j, [[1, 0, sx], [0, 1, sy], [1, 1, dg], [-1, 1, dg]]);
+  return [...big].map(([c, p]) => {
+    const cells = []; for (let k = 0; k < d.length; k++) if (id[k] === p) cells.push(k);
+    cells.sort((a, b) => d[b] - d[a]);
+    return { c, n: list[p].n, spots: cells.map((k) => ({ i: k % nx, j: Math.floor(k / nx), depth: d[k] })) };
+  });
+}
+
 // ---------- canvases ----------
 function rgbOf(h) { return [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)); }
-// Classes to an RGBA canvas. colors[c] = '#rrggbb' or null (hidden). Contacts are drawn a shade darker,
-// and texture adds a faint bedding striation and grain, as on hand-coloured sections.
-export function classCanvas(cls, nx, ny, colors, texture = true) {
+// Classes to an RGBA canvas. colors[c] = '#rrggbb' or null (hidden). Contacts are drawn a shade darker (with
+// contacts: a thin dark line), and texture adds a faint bedding striation and grain, as on hand-coloured sections.
+export function classCanvas(cls, nx, ny, colors, texture = true, contacts = false) {
   const c = document.createElement('canvas'); c.width = nx; c.height = ny;
   const g = c.getContext('2d'), img = g.createImageData(nx, ny), d = img.data, rgb = colors.map((h) => (h ? rgbOf(h) : null));
   let seed = 12345; const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
   for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
     const k = j * nx + i, cl = cls[k], o = k * 4, col = cl >= 0 ? rgb[cl] : null; if (!col) continue;
-    const edge = (i + 1 < nx && cls[k + 1] !== cl && cls[k + 1] >= 0) || (j + 1 < ny && cls[k + nx] !== cl && cls[k + nx] >= 0) || (i > 0 && cls[k - 1] !== cl && cls[k - 1] >= 0) || (j > 0 && cls[k - nx] !== cl && cls[k - nx] >= 0);
-    let f = edge ? 0.72 : 1;
+    const line = contacts && ((i + 1 < nx && cls[k + 1] !== cl && cls[k + 1] >= 0) || (j + 1 < ny && cls[k + nx] !== cl && cls[k + nx] >= 0));
+    const edge = line || (i + 1 < nx && cls[k + 1] !== cl && cls[k + 1] >= 0) || (j + 1 < ny && cls[k + nx] !== cl && cls[k + nx] >= 0) || (i > 0 && cls[k - 1] !== cl && cls[k - 1] >= 0) || (j > 0 && cls[k - nx] !== cl && cls[k - nx] >= 0);
+    let f = line ? 0.4 : edge ? (contacts ? 0.86 : 0.72) : 1;
     if (texture && !edge) f *= 1 + 0.018 * Math.sin(j * 0.9 + Math.sin(i * 0.05) * 3) + 0.03 * (rnd() - 0.5);
     d[o] = Math.min(255, col[0] * f); d[o + 1] = Math.min(255, col[1] * f); d[o + 2] = Math.min(255, col[2] * f); d[o + 3] = 255;
   }
@@ -245,20 +318,45 @@ function samplesNow() {
 }
 // The code index of every cell on a plane, cached by plane and method settings.
 export function planeClasses(key, a, b, sizeOverride) {
-  const P = samplesNow(), g = cfg(), [nx, ny] = sizeOverride || gridSize(a, b), k = `${key}|${a}|${b}|${nx}x${ny}|${g.anisotropy}|${searchNow()}|${g.smooth}`;
+  const P = samplesNow(), g = cfg(), [nx, ny] = sizeOverride || gridSize(a, b), k = `${key}|${a}|${b}|${nx}x${ny}|${g.anisotropy}|${searchNow()}|${g.smooth}|${g.clean}`;
   let hit = cache.grids[key]; if (hit && hit.k === k) return hit;
   const grid = classifyGrid(P, cache.fold.classes.length, nx, ny, planeSampler(a, b)(nx, ny), { aniso: Math.max(1, g.anisotropy || 1), search: searchNow() });
-  hit = { k, nx, ny, cls: smoothClasses(grid, g.smooth ?? 2), canvas: null, ck: null, covered: grid.cover.reduce((s, v) => s + v, 0) / (nx * ny) };
+  // clean: blotches cleared (a majority filter, then patches under 0.3% of the face merged into their
+  // surroundings), and the grid refined to about 1000 px across with smooth contacts for the face texture.
+  const nc = cache.fold.classes.length, sm = smoothClasses(grid, g.smooth ?? 2), clean = g.clean !== false;
+  const cls = clean ? dropSpecks(modeFilter(sm, nx, ny, nc, 1), nx, ny, Math.max(4, nx * ny * 0.003)) : sm, f = clean ? Math.max(1, Math.round(1000 / nx)) : 1;
+  hit = { k, nx, ny, cls, f, fine: f > 1 ? refine(cls, nx, ny, nc, f) : cls, canvas: null, ck: null, covered: grid.cover.reduce((s, v) => s + v, 0) / (nx * ny) };
   cache.grids[key] = hit; return hit;
 }
 // Face colours: the legend colour at the wall colour strength, the same as the legend swatches.
 const strength = () => cfg().strength ?? 1.3;
 const colorOf = (code) => deepen(code === OTHER ? OTHER_COLOR : cfg().legend.find((e) => e.code === code)?.color || OTHER_COLOR, strength());
 function colorsNow() { return cache.fold.classes.map((c) => (cache.fold.clear?.has(c) ? null : colorOf(c))); }
+const fill = (hit, cols) => classCanvas(hit.fine, hit.nx * hit.f, hit.ny * hit.f, cols, cfg().texture !== false, cfg().contacts !== false);
 function geologyCanvas(key, a, b) {
-  const hit = planeClasses(key, a, b), cols = colorsNow(), ck = `${cols.join()}|${cfg().texture}`;
-  if (!hit.canvas || hit.ck !== ck) { hit.canvas = classCanvas(hit.cls, hit.nx, hit.ny, cols, cfg().texture !== false); hit.ck = ck; }
+  const hit = planeClasses(key, a, b), cols = colorsNow(), ck = `${cols.join()}|${cfg().texture}|${cfg().contacts}`;
+  if (!hit.base || hit.ck !== ck) { hit.base = fill(hit, cols); hit.ck = ck; hit.lk = null; }
+  if (key === 'section' || cfg().labels === false) return hit.base;
+  // Unit names in about 22 px type in the export, mirrored on a face seen from inside the block.
+  const G = H.G, len = Math.hypot(b[0] - a[0], b[1] - a[1]), ht = G.zmax - G.B.z0, c = G.V((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, G.B.z0 + ht / 2), p0 = H.proj(c), p1 = H.proj(c.clone().setY(c.y + 10 * H.S.vex));
+  const pxm = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) / 10 * H.exportScale(), size = Math.min(ht * 0.06, Math.max(ht * 0.015, 22 / (pxm || 1))), bucket = Math.round(Math.log(size) / Math.log(1.2));
+  const mirror = faceWanted('far', key), lk = `${ck}|${bucket}|${mirror}|${cfg().legend.map((e) => e.name).join()}`;
+  if (hit.lk !== lk) { hit.canvas = labelCanvas(hit, cols, 1.2 ** bucket, len, ht, mirror); hit.lk = lk; }
   return hit.canvas;
+}
+function labelCanvas(hit, cols, size, len, ht, mirror) {
+  const c = document.createElement('canvas'), { nx, ny, f } = hit; c.width = hit.base.width; c.height = hit.base.height;
+  const g = c.getContext('2d'), kx = c.width / len, ky = c.height / ht, names = cache.fold.classes.map((code) => (code === OTHER ? null : cfg().legend.find((e) => e.code === code)?.name || code));
+  g.drawImage(hit.base, 0, 0); g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = `600 ${size * kx}px "Source Sans 3", "Segoe UI", sans-serif`;
+  labelSpots(hit.cls, nx, ny, len / nx, ht / ny).forEach(({ c: cl, spots }) => {
+    if (!names[cl] || !cols[cl]) return;
+    const hw = g.measureText(names[cl]).width / kx / 2 + size * 0.3, ri = Math.ceil(hw / (len / nx)), rj = Math.ceil(size * 0.75 / (ht / ny));
+    const fits = ({ i, j }) => { for (let q = j - rj; q <= j + rj; q++) for (let p = i - ri; p <= i + ri; p++) if (p < 0 || q < 0 || p >= nx || q >= ny || hit.cls[q * nx + p] !== cl) return false; return true; };
+    const deep = spots.filter((p) => p.depth >= size * 0.6), step = Math.max(1, Math.floor(deep.length / 300)), at = deep.find((p, k) => k % step === 0 && fits(p)); if (!at) return;
+    g.save(); g.translate((at.i + 0.5) * f, (at.j + 0.5) * f); g.scale(mirror ? -1 : 1, ky / kx);
+    g.fillStyle = `#${rgbOf(cols[cl]).map((v) => Math.round(v * 0.45).toString(16).padStart(2, '0')).join('')}`; g.fillText(names[cl], 0, 0); g.restore();
+  });
+  return c;
 }
 export const hasLogs = () => H.files().some((f) => f.role === 'litho') && logsNow().codes.length > 0;
 // Face images: a geologist's drawn section stretched over a face from its base to its highest point.
@@ -300,8 +398,8 @@ export function legendBlock() {
 // Paints the section view: the plane A→A′ classified at the section's own resolution, clipped by the profile.
 export function drawSection2D(ctx, { A, Bp, X, Y, L, clip }) {
   const g = cfg(); if (!g.enabled || !hasLogs()) return;
-  const G = H.G, hit = planeClasses('section2d', [A.x, A.y], [Bp.x, Bp.y], [320, 200]), cols = colorsNow(), ck = `${cols.join()}|${g.texture}`;
-  if (!hit.canvas || hit.ck !== ck) { hit.canvas = classCanvas(hit.cls, hit.nx, hit.ny, cols, g.texture !== false); hit.ck = ck; }
+  const G = H.G, hit = planeClasses('section2d', [A.x, A.y], [Bp.x, Bp.y], [320, 200]), cols = colorsNow(), ck = `${cols.join()}|${g.texture}|${g.contacts}`;
+  if (!hit.canvas || hit.ck !== ck) { hit.canvas = fill(hit, cols); hit.ck = ck; }
   ctx.save(); clip(); ctx.globalAlpha = Math.min(1, g.opacity + 0.1); ctx.imageSmoothingEnabled = true;
   ctx.drawImage(hit.canvas, X(0), Y(G.zmax), X(L) - X(0), Y(G.B.z0) - Y(G.zmax)); ctx.restore();
 }
@@ -328,7 +426,7 @@ export function set(o = {}) {
   if (o.smooth !== undefined) g.smooth = Math.max(0, Math.min(8, Math.round(+o.smooth) || 0));
   if (o.strength !== undefined) { const v = +o.strength; if (!Number.isFinite(v)) throw new Error('strength must be 0.5-2 (1: the legend colour; higher: deeper).'); g.strength = Math.max(0.5, Math.min(2, v)); }
   if (o.hidden !== undefined) { if (!['nearest', 'other', 'clear'].includes(o.hidden)) throw new Error('hidden must be "nearest" (hidden codes give way to the nearest visible unit), "other" (one muted "Other" unit) or "clear" (left unpainted).'); g.hidden = o.hidden; }
-  ['texture', 'section'].forEach((k) => { if (o[k] !== undefined) g[k] = !!o[k]; });
+  ['texture', 'section', 'contacts', 'labels', 'clean'].forEach((k) => { if (o[k] !== undefined) g[k] = !!o[k]; });
   if (o.title !== undefined) g.title = String(o.title).slice(0, 40) || 'Lithology';
   if (o.note !== undefined) g.note = o.note === null ? '' : String(o.note).slice(0, 200);
   if (o.legend !== undefined) {
@@ -374,7 +472,8 @@ export function renderUI(el) {
       <label class="field"><span>Anisotropy (sideways ÷ vertical reach)</span><input type="number" min="1" max="20" step="0.5" data-g="anisotropy" value="${esc(g.anisotropy)}"></label>
       <label class="field"><span>Search radius (m)</span><input type="number" min="5" data-g="search" value="${esc(g.search ?? '')}" placeholder="auto${H.G ? ` (${searchNow()} m)` : ''}"></label>
     </div>
-    <div class="row" style="gap:14px;margin-top:6px"><label class="check"><input type="checkbox" data-g="texture" ${g.texture !== false ? 'checked' : ''}>Subtle texture</label><label class="check"><input type="checkbox" data-g="section" ${g.section ? 'checked' : ''}>Also on the A–A′ plane</label></div>
+    <div class="row" style="gap:14px;margin-top:6px"><label class="check"><input type="checkbox" data-g="texture" ${g.texture !== false ? 'checked' : ''}>Subtle texture</label><label class="check"><input type="checkbox" data-g="section" ${g.section ? 'checked' : ''}>Also on the A–A′ plane</label>
+      <label class="check"><input type="checkbox" data-g="contacts" ${g.contacts !== false ? 'checked' : ''}>Contact lines</label><label class="check"><input type="checkbox" data-g="labels" ${g.labels !== false ? 'checked' : ''}>Unit names on the faces</label><label class="check"><input type="checkbox" data-g="clean" ${g.clean !== false ? 'checked' : ''}>Clear small blotches</label></div>
     </details>
     ${legend.length ? `<div class="files geo-legend" style="margin-top:8px">${legend.map((e, i) => `<div class="label-row" style="${present.size && !present.has(e.code) ? 'opacity:.55' : ''}">
       <input type="checkbox" data-gs="${i}" ${e.show !== false ? 'checked' : ''} aria-label="Show ${esc(e.code)}"><input type="color" data-gc="${i}" value="${esc(e.color)}" aria-label="Colour of ${esc(e.code)}">

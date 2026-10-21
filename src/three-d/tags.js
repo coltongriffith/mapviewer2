@@ -2,7 +2,7 @@
 // intercept boxes, free-form stat boxes, grade histogram bars along holes, and a real-map location
 // inset. Loaded on first use by studio.js (EXT hook).
 import * as THREE from 'three';
-import { placePills } from './layout.js';
+import { placePills, overlapArea } from './layout.js';
 import { uses } from './design-version.js';
 
 export { placePills };
@@ -131,7 +131,7 @@ function drawIdPills(ctx, K, { placed, occ, W, H: Hh }) {
     const c = pillColors(p.st), x = p.cx - p.w / 2, y = p.cy - p.h / 2;
     if (p.leader) {
       const ex = Math.max(x, Math.min(x + p.w, p.x)), ey = p.y + 4 * u < y ? y : p.y + 4 * u > y + p.h ? y + p.h : p.cy;
-      ctx.lineCap = 'round'; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 3.4 * u; ctx.beginPath(); ctx.moveTo(p.x, p.y + 4 * u); ctx.lineTo(ex, ey); ctx.stroke();
+      ctx.lineCap = 'round'; ctx.strokeStyle = H.paper(0.9); ctx.lineWidth = 3.4 * u; ctx.beginPath(); ctx.moveTo(p.x, p.y + 4 * u); ctx.lineTo(ex, ey); ctx.stroke();
       ctx.strokeStyle = c.line; ctx.lineWidth = 1.3 * u; ctx.stroke(); ctx.lineCap = 'butt';
     }
   });
@@ -157,7 +157,7 @@ function placePending(ctx, K, { placed, occ, W, H: Hh }) {
     const ys = new Set(g.map((p) => years.get(p.h.id))), t = `${v2 && ys.size === 1 && [...ys][0] ? `${[...ys][0]} · ` : ''}ASSAYS PENDING`;
     return { g, t, x: g.reduce((a, p) => a + p.s[0], 0) / g.length, y: Math.min(...g.map((p) => p.s[1])) + (v2 ? -6 : 14) * u, w: ctx.measureText(t).width + 14 * u, h: hh };
   });
-  const res = placePills(items, [...placed, ...occ.filter((b) => b[3] - b[1] < Hh * 0.5)], { W, H: Hh, unit: u, pad: 3 * u });
+  const res = placePills(items, [...placed, ...occ.filter((b) => b[3] - b[1] < Hh * 0.5)], { W, H: Hh, unit: u, pad: 3 * u, leaders: true });
   res.forEach((p) => { placed.push(p.box); occ.push(p.box); });
   return () => res.forEach((p) => {
     font(700, 9.5); H.setSpacing(ctx, 1.1 * u);
@@ -165,7 +165,7 @@ function placePending(ctx, K, { placed, occ, W, H: Hh }) {
     ctx.strokeStyle = H.S.accent; ctx.lineWidth = 0.9 * u; ctx.setLineDash([2 * u, 2 * u]);
     p.g.forEach(({ s }) => { const ex = Math.max(x0, Math.min(x1, s[0])), ey = Math.max(y0, Math.min(y1, s[1])); if (Math.hypot(s[0] - ex, s[1] - ey) > 4 * u) { ctx.beginPath(); ctx.moveTo(s[0], s[1]); ctx.lineTo(ex, ey); ctx.stroke(); } });
     ctx.setLineDash([]);
-    H.roundRect(ctx, x0, y0, w, hh, hh / 2); ctx.fillStyle = 'rgba(255,255,255,0.96)'; ctx.fill(); ctx.lineWidth = u; ctx.stroke();
+    H.roundRect(ctx, x0, y0, w, hh, hh / 2); ctx.fillStyle = H.paper(0.96); ctx.fill(); ctx.lineWidth = u; ctx.stroke();
     ctx.fillStyle = H.S.accent; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(p.t, p.cx + 0.5 * u, p.cy + 0.6 * u);
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; H.setSpacing(ctx, 0);
   });
@@ -212,15 +212,15 @@ export function drawGroup(ctx, K, x, y, g) {
   const x0 = x + bw;
   targets.forEach(({ y: ty, s, k }) => {
     const xm = Math.max(x0 + 14 * u + k * 7 * u, Math.min(s[0] - 26 * u, x0 + 56 * u + k * 7 * u));
-    ctx.strokeStyle = S.primary; ctx.lineWidth = 1.2 * u; ctx.beginPath(); ctx.moveTo(x0, ty); ctx.lineTo(xm, ty); ctx.lineTo(s[0], s[1]); ctx.stroke();
+    ctx.strokeStyle = H.pri(); ctx.lineWidth = 1.2 * u; ctx.beginPath(); ctx.moveTo(x0, ty); ctx.lineTo(xm, ty); ctx.lineTo(s[0], s[1]); ctx.stroke();
     g.M.leader.push([x0, ty, xm, ty], [xm, ty, s[0], s[1]]);
-    ctx.beginPath(); ctx.arc(s[0], s[1], 3.4 * u, 0, Math.PI * 2); ctx.fillStyle = S.primary; ctx.fill(); ctx.lineWidth = 1.1 * u; ctx.strokeStyle = '#fff'; ctx.stroke();
+    ctx.beginPath(); ctx.arc(s[0], s[1], 3.4 * u, 0, Math.PI * 2); ctx.fillStyle = H.pri(); ctx.fill(); ctx.lineWidth = 1.1 * u; ctx.strokeStyle = '#fff'; ctx.stroke();
   });
-  ctx.fillStyle = 'rgba(255,255,255,0.97)'; ctx.strokeStyle = H.RULE; ctx.lineWidth = u; H.roundRect(ctx, x, y, bw, bh, 4 * u); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = H.paper(0.97); ctx.strokeStyle = H.RULE; ctx.lineWidth = u; H.roundRect(ctx, x, y, bw, bh, 4 * u); ctx.fill(); ctx.stroke();
   ctx.fillStyle = S.accent; ctx.fillRect(x + 7 * u, y + 7 * u, 4 * u, bh - 14 * u);
   g.rows.forEach((r, k) => {
     const tx = x + 18 * u; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
-    font(600, 11, true); ctx.fillStyle = S.primary; ctx.fillRect(tx, r.y + 2.5 * u, r.chip, 17 * u); ctx.fillStyle = H.textOn(S.primary); ctx.fillText(r.it.c.h.id, tx + 6 * u, r.y + 11.5 * u);
+    font(600, 11, true); ctx.fillStyle = H.pri(); ctx.fillRect(tx, r.y + 2.5 * u, r.chip, 17 * u); ctx.fillStyle = H.textOn(H.pri()); ctx.fillText(r.it.c.h.id, tx + 6 * u, r.y + 11.5 * u);
     const lx = tx + r.chip + 8 * u; font(700, 14); ctx.fillStyle = H.INK; ctx.fillText(r.L.l1, lx, r.y + 11.5 * u);
     if (r.L.l1b) { font('italic 400', 12.5); ctx.fillStyle = H.MUTED; ctx.fillText(r.L.l1b, lx + r.w1, r.y + 11.5 * u); }
     if (r.L.l2) { font(600, 13); ctx.fillStyle = H.INK; ctx.fillText(r.L.l2, lx, r.y + 30 * u); }
@@ -237,20 +237,25 @@ const placementOf = (it) => { const o = H.S.coOverrides[it.c?.h.id] || {}; retur
 export const splitCallouts = (items) => ({ col: items.filter((it) => placementOf(it) === 'column'), free: items.filter((it) => placementOf(it) !== 'column') });
 export function drawFree(ctx, K, items, { lay, W, H: Hh, hits }) {
   const S = H.S, { u } = K;
-  items.forEach((it) => {
+  // The brackets' lines first, so a box set beside its hole keeps off them.
+  items.filter((it) => placementOf(it) === 'bracket').forEach(({ c }) => { for (let k = 0; k <= 8; k++) { const p = c.h.posAt(c.ic.broad.from + c.ic.broad.len * k / 8), q = H.proj(H.G.V(p.x, p.y, p.z)); lay.add([q[0] - 12 * u, q[1] - 4 * u, q[0] + 12 * u, q[1] + 4 * u]); } });
+  // Brackets go first (they sit on their hole); the boxes beside a hole then keep clear of their text.
+  items.slice().sort((a, b) => (placementOf(b) === 'bracket') - (placementOf(a) === 'bracket')).forEach((it) => {
     const o = S.coOverrides[it.c.h.id] || {}, free = placementOf(it) === 'free';
     if (placementOf(it) === 'bracket') { hits.push({ kind: 'callout', id: it.c.h.id, box: drawBracket(ctx, K, it, lay) }); return; }
     const { M, s } = it, tag = 18 * u, at = (x, y) => [x, y, x + M.bw, y + M.bh + tag];
     const cands = free ? [at(Math.min(o.x * W, W - M.bw), Math.min(o.y * Hh, Hh - M.bh - tag))]
-      : [[1, -0.5], [-1, -0.5], [1, -1.4], [-1, -1.4], [1, 0.4], [-1, 0.4], [1.8, -0.5], [-1.8, -0.5]].map(([sx, sy]) => at(sx > 0 ? s[0] + 40 * u * sx : s[0] + 40 * u * sx - M.bw, s[1] + sy * M.bh));
-    const box = free ? lay.add(cands[0]) : lay.place(cands, Infinity) || lay.add(cands[0]);
+      : [[1, -0.5], [-1, -0.5], [1, -1.4], [-1, -1.4], [1, 0.4], [-1, 0.4], [1.8, -0.5], [-1.8, -0.5], [1, 1.4], [-1, 1.4], [1, -2.4], [-1, -2.4], [3, -0.5], [-3, -0.5], [3, 0.8], [-3, 0.8], [3, -1.8], [-3, -1.8]].map(([sx, sy]) => at(sx > 0 ? s[0] + 40 * u * sx : s[0] + 40 * u * sx - M.bw, s[1] + sy * M.bh));
+    // With no clear spot, the one overlapping least (leaders, brackets and arrows included).
+    const fit = cands.filter((b) => b[0] >= 0 && b[1] >= 0 && b[2] <= W && b[3] <= Hh), least = () => (fit.length ? fit : cands).reduce((a, b) => { const on = (x) => lay.boxes.reduce((t, o) => t + overlapArea(x, o), 0); return on(b) < on(a) ? b : a; });
+    const box = free ? lay.add(cands[0]) : lay.place(cands, Infinity) || lay.add(least());
     H.drawCallout(ctx, K, box[0], box[1], it.c, M, s); hits.push({ kind: 'callout', id: it.c.h.id, box });
   });
 }
 // A bracket along the reported interval, a hair to the side of the hole, with the hole ID and the grade
 // text beside it (the side with room).
 function drawBracket(ctx, K, it, lay) {
-  const { u, font } = K, S = H.S, c = it.c, b = c.ic.broad, L = H.calloutLines(c);
+  const { u, font } = K, c = it.c, b = c.ic.broad, L = H.calloutLines(c);
   const P = (d) => { const p = c.h.posAt(d); return H.proj(H.G.V(p.x, p.y, p.z)); }, a = P(b.from), e = P(b.from + b.len);
   let dx = e[0] - a[0], dy = e[1] - a[1]; const len = Math.hypot(dx, dy) || 1; dx /= len; dy /= len;
   font(700, 14); const w1 = ctx.measureText(L.l1).width; font(600, 13); const w2 = L.l2 ? ctx.measureText(L.l2).width : 0;
@@ -261,12 +266,12 @@ function drawBracket(ctx, K, it, lay) {
   // The bracket: the brand colour over a white halo, so it reads on any face; end ticks point at the hole.
   ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.beginPath();
   ctx.moveTo(a[0] + nx * (off - 8 * u), a[1] + ny * (off - 8 * u)); ctx.lineTo(a[0] + nx * off, a[1] + ny * off); ctx.lineTo(e[0] + nx * off, e[1] + ny * off); ctx.lineTo(e[0] + nx * (off - 8 * u), e[1] + ny * (off - 8 * u));
-  ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.lineWidth = 5.5 * u; ctx.stroke(); ctx.strokeStyle = S.primary; ctx.lineWidth = 2.4 * u; ctx.stroke(); ctx.lineCap = 'butt';
+  ctx.strokeStyle = H.paper(0.95); ctx.lineWidth = 5.5 * u; ctx.stroke(); ctx.strokeStyle = H.pri(); ctx.lineWidth = 2.4 * u; ctx.stroke(); ctx.lineCap = 'butt';
   // A white card behind the text, so it reads over a busy block face.
-  ctx.fillStyle = 'rgba(255,255,255,0.94)'; ctx.strokeStyle = H.RULE; ctx.lineWidth = u; H.roundRect(ctx, box[0], box[1], box[2] - box[0], box[3] - box[1], 4 * u); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = H.paper(0.94); ctx.strokeStyle = H.RULE; ctx.lineWidth = u; H.roundRect(ctx, box[0], box[1], box[2] - box[0], box[3] - box[1], 4 * u); ctx.fill(); ctx.stroke();
   const halo = (t, x, y) => ctx.fillText(t, x, y);
   ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; let y = box[1] + 13 * u;
-  font(600, 11, true); ctx.fillStyle = S.primary; ctx.fillRect(x0, y - 8.5 * u, chip, 17 * u); ctx.fillStyle = H.textOn(S.primary); ctx.fillText(c.h.id, x0 + 6 * u, y);
+  font(600, 11, true); ctx.fillStyle = H.pri(); ctx.fillRect(x0, y - 8.5 * u, chip, 17 * u); ctx.fillStyle = H.textOn(H.pri()); ctx.fillText(c.h.id, x0 + 6 * u, y);
   y += 20 * u; font(700, 14); ctx.fillStyle = H.INK; halo(L.l1, x0, y);
   if (L.l2) { y += 18 * u; font(600, 13); ctx.fillStyle = H.INK; halo(L.l2, x0, y); }
   ctx.textBaseline = 'alphabetic';
@@ -281,10 +286,10 @@ export function statSize(ctx, K, L) {
 }
 export function drawStat(ctx, K, L, Wf, Hf) {
   const { u, font } = K, S = H.S, { bw, bh } = statSize(ctx, K, L), x = L.x * Wf - bw / 2, y = L.y * Hf - bh / 2;
-  ctx.fillStyle = 'rgba(255,255,255,0.97)'; ctx.strokeStyle = H.RULE; ctx.lineWidth = u; H.roundRect(ctx, x, y, bw, bh, 5 * u); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = H.paper(0.97); ctx.strokeStyle = H.RULE; ctx.lineWidth = u; H.roundRect(ctx, x, y, bw, bh, 5 * u); ctx.fill(); ctx.stroke();
   ctx.fillStyle = S.accent; ctx.fillRect(x, y + 6 * u, 4 * u, bh - 12 * u);
   ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; font(700, 13.5); if ('letterSpacing' in ctx) ctx.letterSpacing = `${1.2 * u}px`;
-  ctx.fillStyle = S.primary; ctx.fillText(String(L.text).toUpperCase(), x + 16 * u, y + 14 * u + 7 * u); if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+  ctx.fillStyle = H.pri(); ctx.fillText(String(L.text).toUpperCase(), x + 16 * u, y + 14 * u + 7 * u); if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
   let yy = y + 14 * u + 18 * u + 10.5 * u;
   (L.rows || []).forEach((r) => {
     const m = String(r).match(/^([^:]{1,40}):\s*(.*)$/);
@@ -358,19 +363,20 @@ export const insetCredits = () => (H.S.inset && inset.status === 'ready' && inse
 export function drawInset(ctx, K, { W, top, occ }) {
   const S = H.S; if (!S.inset || S.insetStyle === 'plan' || inset.status !== 'ready' || !inset.canvas) return false;
   const { u, m, font, narrow } = K, iw = (narrow ? 130 : 168) * u, ix = W - m - iw, iy = top;
-  ctx.fillStyle = '#fff'; ctx.strokeStyle = H.RULE; ctx.lineWidth = u; H.roundRect(ctx, ix - 6 * u, iy - 6 * u, iw + 12 * u, iw + 30 * u, 5 * u); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = H.paper(); ctx.strokeStyle = H.RULE; ctx.lineWidth = u; H.roundRect(ctx, ix - 6 * u, iy - 6 * u, iw + 12 * u, iw + 30 * u, 5 * u); ctx.fill(); ctx.stroke();
   occ.push([ix - 8 * u, 0, W, iy + iw + 26 * u]);
   ctx.drawImage(inset.canvas, ix, iy, iw, iw);
   const P = (x, y) => { const [a, b] = inset.frame.toInset(x, y); return [ix + a * iw, iy + b * iw]; }, G = H.G;
   ctx.beginPath(); [[G.B.x0, G.B.y0], [G.B.x1, G.B.y0], [G.B.x1, G.B.y1], [G.B.x0, G.B.y1]].forEach(([x, y], i) => { const p = P(x, y); i ? ctx.lineTo(...p) : ctx.moveTo(...p); }); ctx.closePath();
   ctx.lineWidth = 3.2 * u; ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.stroke(); ctx.lineWidth = 1.6 * u; ctx.strokeStyle = S.accent; ctx.stroke();
-  // North arrow (the inset is north-up) and a scale bar.
+  // North arrow (the inset is north-up) and a scale bar, in dark ink on the map whatever the theme.
+  const INK = '#142126';
   const nx = ix + iw - 16 * u, ny = iy + 22 * u;
-  ctx.beginPath(); ctx.moveTo(nx, ny - 13 * u); ctx.lineTo(nx + 6 * u, ny + 5 * u); ctx.lineTo(nx, ny + 2 * u); ctx.lineTo(nx - 6 * u, ny + 5 * u); ctx.closePath(); ctx.fillStyle = '#fff'; ctx.fill(); ctx.strokeStyle = H.INK; ctx.lineWidth = u; ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(nx, ny - 13 * u); ctx.lineTo(nx + 6 * u, ny + 5 * u); ctx.lineTo(nx, ny + 2 * u); ctx.closePath(); ctx.fillStyle = H.INK; ctx.fill();
-  font(700, 10); ctx.textAlign = 'center'; ctx.lineWidth = 3 * u; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.strokeText('N', nx, ny + 15 * u); ctx.fillStyle = H.INK; ctx.fillText('N', nx, ny + 15 * u);
+  ctx.beginPath(); ctx.moveTo(nx, ny - 13 * u); ctx.lineTo(nx + 6 * u, ny + 5 * u); ctx.lineTo(nx, ny + 2 * u); ctx.lineTo(nx - 6 * u, ny + 5 * u); ctx.closePath(); ctx.fillStyle = '#fff'; ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = u; ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(nx, ny - 13 * u); ctx.lineTo(nx + 6 * u, ny + 5 * u); ctx.lineTo(nx, ny + 2 * u); ctx.closePath(); ctx.fillStyle = INK; ctx.fill();
+  font(700, 10); ctx.textAlign = 'center'; ctx.lineWidth = 3 * u; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.strokeText('N', nx, ny + 15 * u); ctx.fillStyle = INK; ctx.fillText('N', nx, ny + 15 * u);
   const metres = [500, 1000, 2000, 5000, 10000].find((d) => d / (2 * inset.frame.half) * iw >= 34 * u) || 10000, bl = metres / (2 * inset.frame.half) * iw, bx = ix + 8 * u, by = iy + iw - 10 * u;
-  ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.fillRect(bx - 4 * u, by - 14 * u, bl + 8 * u, 20 * u); ctx.fillStyle = H.INK; ctx.fillRect(bx, by, bl, 3 * u);
+  ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.fillRect(bx - 4 * u, by - 14 * u, bl + 8 * u, 20 * u); ctx.fillStyle = INK; ctx.fillRect(bx, by, bl, 3 * u);
   font(500, 9.5, true); ctx.fillText(metres >= 1000 ? `${metres / 1000} km` : `${metres} m`, bx + bl / 2, by - 4 * u);
   font(400, 11); ctx.fillStyle = H.MUTED; ctx.fillText('Location of the model', ix + iw / 2, iy + iw + 16 * u); ctx.textAlign = 'left';
   return true;
