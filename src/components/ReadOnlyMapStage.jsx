@@ -368,7 +368,7 @@ export default function ReadOnlyMapStage({ project, onExportReady }) {
                 </div>
               )}
             </div>
-            {noteInLegend(layout) && <div className="legend-note">{layout.footerText}</div>}
+            {noteInLegend(layout, legendItems) && <div className="legend-note">{layout.footerText}</div>}
           </div>
         </div>
       )}
@@ -409,7 +409,7 @@ export default function ReadOnlyMapStage({ project, onExportReady }) {
       )}
 
       {/* Footer */}
-      {layout.templateId !== 'ni_43101_technical' && layout.footerText && layout.footerEnabled !== false && !noteInLegend(layout) && (
+      {layout.templateId !== 'ni_43101_technical' && layout.footerText && layout.footerEnabled !== false && !noteInLegend(layout, legendItems) && (
         <div className="template-zone" style={{ ...zoneStyle(resolvedZones.footer), zIndex: 408, height: layout.footerHeightPx || resolvedZones.footer?.height }}>
           <div className="template-card footer-card">{layout.footerText}</div>
         </div>

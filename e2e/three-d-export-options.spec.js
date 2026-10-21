@@ -96,6 +96,7 @@ test('standalone map: its details and notes in the legend, not the footer; prese
   expect(st.mapInfo).toEqual({ use: 'presentation', what: '', project: '', date: '', sources: '' });
   const foot = st.brand.footnote;
   const plainTexts = await textsOf(page, () => window.EM3D.exportPNG({ view: '3d' }));
+  const callouts = (texts) => texts.filter((t) => / m @ /.test(t) && !t.startsWith('incl.')); // each callout's first line
   expect(plainTexts.filter((t) => t.includes(foot.slice(0, 30))).length).toBe(1); // in the footer
   await page.evaluate(() => window.EM3D.setMapUse({ use: 'standalone', what: 'Drill plan · Main zone, 2026 program', date: 'October 2026', sources: 'Drilling and assays: company database' }));
   const texts = await textsOf(page, () => window.EM3D.exportPNG({ view: '3d' }));
@@ -107,6 +108,11 @@ test('standalone map: its details and notes in the legend, not the footer; prese
   expect(texts.some((t) => t === foot)).toBe(false);
   expect(texts.filter((t) => t.startsWith('Intervals are core')).length).toBe(1);
   expect(texts).toContain('Made with Exploration Maps'); // the credit line stays in the footer
+  // The details sit atop the legend card, which grows in its place: every callout of the presentation figure stays.
+  expect(callouts(plainTexts).length).toBeGreaterThan(3);
+  expect(callouts(texts)).toEqual(callouts(plainTexts));
+  const at = (t) => texts.indexOf(t);
+  expect(at('PROJECT')).toBeLessThan(at('Drill hole collar')); // one card: the details, then the legend's entries
   const standalone = await page.evaluate(() => window.EM3D.exportPNG({ view: '3d' }));
   keep('3d-standalone.png', standalone);
   keep('3d-standalone-transparent.png', await page.evaluate(() => window.EM3D.exportPNG({ view: '3d', background: 'transparent' })));

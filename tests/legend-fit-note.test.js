@@ -39,10 +39,11 @@ describe('legend size', () => {
 describe('the footer note', () => {
   const note = 'Source: Tower Resources drilling database, 2026; claims from BC Mineral Titles Online.';
   it('finds room along the bottom edge in the standard layout, clear of the legend, scale bar and north arrow', () => {
-    const z = zones(saved({ footerText: note }));
-    expect(z.footer.width).toBeGreaterThanOrEqual(160);
-    for (const k of ['legend', 'scaleBar', 'northArrow']) expect(hits(z.footer, z[k]), k).toBe(false);
-    expect(exportFooterBox(scene(saved({ footerText: note })))).toMatchObject({ text: note });
+    const z = zones(saved({ footerText: note })), box = exportFooterBox(scene(saved({ footerText: note })));
+    expect(z.footer.width).toBe(0); // the template's strip collides (editor unchanged); the export finds another
+    expect(box.width).toBeGreaterThanOrEqual(160);
+    for (const k of ['legend', 'scaleBar', 'northArrow']) expect(hits(box, z[k]), k).toBe(false);
+    expect(exportFooterBox(scene(saved({ footerText: note })))).toMatchObject({ text: note, lines: [note] }); // one line where it fits
     expect(creditLinesFor(scene(saved({ footerText: note })))).not.toContain(note); // drawn once, in the footer
   });
   it('is printed with the source credit where no footer strip fits', () => {
@@ -58,7 +59,7 @@ describe('the footer note', () => {
     expect(noteInLegend({ ...L, templateId: 'side_panel' })).toBe(false);
     expect(exportFooterBox(scene(L))).toBeNull();
     expect(creditLinesFor(scene(L))).not.toContain(note);
-    const lines = legendNoteLines(L, 300);
+    const lines = legendNoteLines(L);
     expect(lines.length).toBeGreaterThan(1);
     expect(lines.join(' ')).toBe(note);
     expect(legendContentHeight(items, L)).toBe(legendContentHeight(items, saved()) + 8 + lines.length * 14);
@@ -66,5 +67,26 @@ describe('the footer note', () => {
     const svg = renderLegendSvg(scene({ ...L, legendItems: items }), 1, []);
     expect(svg.match(/class="em-legend-note"/g)).toHaveLength(lines.length);
     expect(svg).toContain('Tower Resources');
+  });
+  it('stays in the footer when a standalone map draws no legend (hidden, or no entries)', () => {
+    for (const L of [saved({ footerText: note, mapUse: 'standalone', showLegend: false }), saved({ footerText: note, mapUse: 'standalone', legendItems: [] })]) {
+      expect(noteInLegend(L)).toBe(false);
+      expect(legendNoteLines(L)).toEqual([]);
+      const s = scene(L), box = exportFooterBox(s);
+      expect(box?.text === note || creditLinesFor(s).includes(note)).toBe(true); // exported, in the footer or with the credit
+    }
+    expect(exportFooterBox(scene(saved({ footerText: note, mapUse: 'standalone', showLegend: false })))).toMatchObject({ text: note });
+  });
+  it('wraps the note to a narrower strip (800 px standard map), else falls back to the source credit', () => {
+    const s800 = { ...scene(saved({ footerText: note })), width: 800 };
+    const box = exportFooterBox(s800);
+    expect(box.lines.length).toBe(2);
+    expect(box.lines.join(' ')).toBe(note);
+    for (const t of box.lines) expect(t.length * 6).toBeLessThanOrEqual(box.width - 24); // fits the strip (estimated in jsdom)
+    expect(box.left + box.width).toBeLessThanOrEqual(800 - 22);
+    expect(creditLinesFor(s800)).not.toContain(note);
+    const long = `${note} ${note} ${note}`, sl = { ...scene(saved({ footerText: long })), width: 800 };
+    expect(exportFooterBox(sl)).toBeNull(); // three or more lines: not squeezed into the strip
+    expect(creditLinesFor(sl)).toContain(long);
   });
 });

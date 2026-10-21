@@ -7,7 +7,7 @@ import { METAL_DEFAULTS, defaultUnit, priceUnit, eqFactors, eqFormula, eqValue }
 import { isXYZ, parseXYZ, refineRole, matchCols, roleOf } from './roles.js';
 import { makeLayout, isClick, legendRows as binRows, wrapNotes, shouldMerge, hits as boxHits } from './layout.js';
 import { DESIGN_VERSION, FEATURES, uses, withDefaults } from './design-version.js';
-import { intercept, calloutText, avgOver, ribbonPieces } from './intercepts.js';
+import { intercept, calloutText, avgOver, ribbonPieces, gradeText } from './intercepts.js';
 import { fitLine, lineThrough, secFrame, toSection, lerp, clipSlab, clipPath, cleanSection } from './section-geometry.js';
 import { watchVersion } from './version-check.js';
 
@@ -999,8 +999,6 @@ function computeCallouts() {
   callouts = S.calloutMode === 'manual' ? PR.manualCallouts(calcCallouts, project.holes, S.coOverrides, (h, a, b) => avgOver(h.ints, S.valueCol, a, b, sampled)) : calcCallouts;
 }
 const inclsOf = (ic) => ic.incls || (ic.incl ? [ic.incl] : []);
-const fmt = (v) => (v >= 100 ? v.toFixed(0) : v >= 10 ? v.toFixed(1) : v > 0 && v < 0.01 ? v.toFixed(3) : v.toFixed(2));
-const gradeText = (v, label) => { const unit = (label.match(/(%|g\/t|ppm|ppb)$/) || [''])[0], el = label.replace(/\s*(%|g\/t|ppm|ppb)$/, ''); return `${fmt(v)}${unit === '%' ? '%' : ' ' + unit} ${el}`; };
 const icText = (x, h) => {
   let t = `${x.len.toFixed(x.len < 10 ? 1 : 0)} m @ ${gradeText(x.avg, S.valueLabel)}`;
   const v2 = h && S.valueCol2 ? avgOver(h.ints, S.valueCol2, x.from, x.from + x.len, uses(S, 'sampledIntercepts')) : null;
@@ -1531,7 +1529,7 @@ function drawOverlay(ctx, k, forExport) {
   let merge = shouldMerge([...main, ...ext], LG.merge);
   if (merge && LG.merge === 'auto' && !LG.pos.main) { const [w, h] = cardSize(ctx, K, one); merge = lay.clear([W - m - w, footTop - 12 * u - h, W - m, footTop - 12 * u], soft) || lay.clear([W - m - w, trTop, W - m, trTop + h], soft); } // only where one card fits at the right
   const cards = merge ? [['main', one]] : [['main', main], ...ext.map((s) => [s.key, [s]])], cardBoxes = [];
-  if (SA) cards.push(['info', EXT.mapuse.secs(ctx, K)]); // EXT hook: a standalone map's details, a card of their own
+  if (SA) cards[0][1] = [...EXT.mapuse.secs(ctx, K), ...cards[0][1]]; // EXT hook: a standalone map's details, atop the legend card
   let prev = null;
   const fixed = (k) => +(!!LG.pos[k] && LG.pos[k] !== 'auto'); // cards placed by hand go first
   cards.sort((a, b) => fixed(b[0]) - fixed(a[0])).forEach(([key, secs]) => {
@@ -1992,7 +1990,7 @@ function setStyle(o = {}, render = true) {
     const l = o.legend || {}, LG = S.legend;
     if (l.merge !== undefined) { if (!['auto', 'one', 'separate'].includes(l.merge)) throw new Error('legend.merge must be "auto" (one card once three or more blocks show), "one" or "separate".'); LG.merge = l.merge; }
     Object.entries(l.pos || {}).forEach(([k, v]) => {
-      if (!['main', 'lithology', 'geophys', 'info'].includes(k)) throw new Error('Legend cards are "main", "lithology", "geophys" and "info" (a standalone map\'s details).');
+      if (!['main', 'lithology', 'geophys'].includes(k)) throw new Error('Legend cards are "main", "lithology" and "geophys".');
       if (v === null || v === 'auto') delete LG.pos[k]; else if (['tl', 'tr', 'bl', 'br'].includes(v)) LG.pos[k] = v;
       else if (v && Number.isFinite(+v.x) && Number.isFinite(+v.y)) LG.pos[k] = { x: clamp01(v.x, 0), y: clamp01(v.y, 0) };
       else throw new Error('A legend position is "auto", a corner ("tl", "tr", "bl", "br") or {x, y}: its top-left corner, 0-1 across and down the frame.');

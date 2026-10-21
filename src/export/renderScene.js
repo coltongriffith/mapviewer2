@@ -17,7 +17,8 @@ import { exportCreditLines } from '../utils/claimProvenance';
 import { referenceOverlayCredits } from '../utils/referenceOverlayCredits.js';
 import { featureKey, visibleGeojson } from '../utils/featureIdentity.js';
 import { getFeatureStyle as resolveFeatureStyle, canDissolve } from '../utils/featureStyle.js';
-import { groupLegendItems, isNearWhite, LIGHT_SWATCH_EDGE, legendNoteLines, legendWidthFor, noteInLegend, LEGEND_NOTE } from '../utils/legendCustomization.js';
+import { groupLegendItems, isNearWhite, LIGHT_SWATCH_EDGE, legendNoteLines, noteInLegend } from '../utils/legendCustomization.js';
+const LEGEND_NOTE = { font: 11, line: 14 }; // the standalone note's type and pitch (legendCustomization.js legendNoteLines)
 import { isBracket, distanceLineLabel, bracketTicks, bracketLabelAnchor } from '../utils/distanceLine.js';
 import { pickScaleBar } from '../utils/scaleBar.js';
 import { resolvePointSymbol, symbolPath } from '../utils/pointSymbol.js';
@@ -807,7 +808,7 @@ async function drawLegendCanvas(ctx, scene, scale) {
 // A standalone map's footer note in the legend (utils/legendCustomization.js legendNoteLines), lines and their
 // tops, set at the bottom of the panel: the panel's height counts them (legendContentHeight).
 function legendNote(scene, bottom, scale) {
-  const layout = scene.project.layout || {}, lines = legendNoteLines(layout, legendWidthFor(layout, layout.legendItems || []));
+  const lines = legendNoteLines(scene.project.layout || {});
   return lines.map((t, i) => [t, bottom - (12 + (lines.length - i) * LEGEND_NOTE.line) * scale]);
 }
 
@@ -1218,15 +1219,50 @@ export function exportFooterBox(scene) {
   const layout = scene.project.layout || {};
   const templateId = scene.template?.id || layout.templateId;
   if (!layout.footerText || layout.footerEnabled === false || templateId === 'ni_43101_technical' || noteInLegend(layout)) return null; // a standalone map's note is in the legend
-  const zone = getOverlayMetrics(scene).footer;
-  if (!zone || !zone.width || !zone.height) return null;
-  return { left: zone.left, top: zone.top, width: zone.width, height: layout.footerHeightPx || zone.height, text: layout.footerText };
+  const zones = getOverlayMetrics(scene), zone = zones.footer?.width && zones.footer.height ? zones.footer : templateId !== 'side_panel' && freeFooter(scene, zones);
+  if (!zone) return null;
+  const height = layout.footerHeightPx || zone.height, lines = footerLines(layout, zone.width, height);
+  // A note longer than the strip holds goes with the source credit (creditLinesFor) instead of overflowing it.
+  return lines && { left: zone.left, top: zone.top, width: zone.width, height, text: layout.footerText, lines };
 }
+// The standard layout collapses its footer strip where it would meet the legend, scale bar or north arrow (with the
+// legend at the bottom left it always did, so the note never reached the export). The export then takes the free
+// stretch of the bottom edge between the bottom corners' cards, as wide as the note needs (6 px a character), at
+// least 160 px; with none, the note goes with the source credit. Export only: the editor's strip is unchanged.
+function freeFooter(scene, zones) {
+  const layout = scene.project.layout || {}, W = scene.width, top = zones.footer?.top, m = layout.safeMargins || {};
+  if (!Number.isFinite(top) || !top) return null;
+  const low = ['legend', 'scaleBar', 'northArrow', 'inset', 'logo', 'title'].map((k) => zones[k]).filter((b) => b?.width && b.height && b.top + b.height > top);
+  const lo = Math.max(m.left ?? 22, ...low.filter((b) => b.left + b.width / 2 < W / 2).map((b) => b.left + b.width + 10));
+  const hi = Math.min(W - (m.right ?? 22), ...low.filter((b) => b.left + b.width / 2 >= W / 2).map((b) => b.left - 10));
+  return hi - lo >= 160 && { top, left: lo, width: Math.min(Math.max(440, String(layout.footerText).length * 6 + 28), hi - lo), height: 42 };
+}
+// The footer note wrapped to its strip (12 px text, 12 px padding each side), measured in the footer font where a
+// canvas can measure, else estimated; null when it needs more lines than the strip's height holds (at least two).
+const FOOTER_LINE = 14;
+let measureCtx;
+function footerLines(layout, width, height) {
+  measureCtx ??= typeof OffscreenCanvas === 'undefined' ? null : new OffscreenCanvas(1, 1).getContext('2d');
+  const font = `12px ${layout.fonts?.footer || 'Inter'}, Arial, sans-serif`, room = width - 24;
+  const fits = measureCtx ? (t) => { measureCtx.font = font; return measureCtx.measureText(t).width <= room; } : (t) => t.length * 6 <= room;
+  const lines = fits(layout.footerText) ? [layout.footerText] : wrapWords(layout.footerText, fits);
+  return lines.length <= Math.max(2, Math.floor((height - 10) / FOOTER_LINE)) ? lines : null;
+}
+// Words into lines, each as long as fits(line) allows (a word too long for any line keeps a line of its own).
+function wrapWords(text, fits) {
+  const out = []; let line = '';
+  String(text || '').split(/\s+/).filter(Boolean).forEach((w) => { const next = line ? `${line} ${w}` : w; if (line && !fits(next)) { out.push(line); line = w; } else line = next; });
+  if (line) out.push(line);
+  return out;
+}
+// Line i of n, centred on the strip's middle.
+const footerLineY = (box, i, scale) => box.top * scale + box.height * scale / 2 + (i - (box.lines.length - 1) / 2) * FOOTER_LINE * scale;
 function drawFooterCanvas(ctx, scene, scale) {
   const theme = getTheme(scene);
-  const box = exportFooterBox(scene); if (!box) return; const text = box.text; const x = box.left * scale, y = box.top * scale, w = box.width * scale, h = box.height * scale;
+  const box = exportFooterBox(scene); if (!box) return; const x = box.left * scale, y = box.top * scale, w = box.width * scale, h = box.height * scale;
   drawPanelRect(ctx, x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.footerFill, theme.panelBorder, scale);
-  ctx.fillStyle = theme.footerText; ctx.font = `${12 * scale}px ${scene.project.layout?.fonts?.footer || 'Inter'}, Arial, sans-serif`; ctx.textBaseline = 'middle'; ctx.fillText(text, x + 12 * scale, y + h / 2);
+  ctx.fillStyle = theme.footerText; ctx.font = `${12 * scale}px ${scene.project.layout?.fonts?.footer || 'Inter'}, Arial, sans-serif`; ctx.textBaseline = 'middle';
+  box.lines.forEach((t, i) => ctx.fillText(t, x + 12 * scale, footerLineY(box, i, scale)));
 }
 
 // The same placement the editor draws (utils/calloutLayout.js
@@ -2683,12 +2719,12 @@ function renderScaleBarSvg(scene, scale) {
 }
 function renderFooterSvg(scene, scale) {
   const theme = getTheme(scene);
-  const box = exportFooterBox(scene); if (!box) return ''; const text = box.text;
+  const box = exportFooterBox(scene); if (!box) return '';
   const x = box.left * scale, y = box.top * scale, w = box.width * scale, h = box.height * scale;
   // Centred in the panel and in the footer font, as the canvas does. A fixed
   // y + 25 only agreed with it at one panel height, and Arial disagreed always.
   const footerFont = `${scene.project.layout?.fonts?.footer || 'Inter'}, Arial, sans-serif`;
-  return `<g id="em-footer" class="em-panel">${svgRect(x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.footerFill, theme.panelBorder, scale)}<text x="${x + 12 * scale}" y="${y + h / 2}" dominant-baseline="middle" fill="${theme.footerText}" font-family="${footerFont}" font-size="${12 * scale}">${escapeXml(text)}</text></g>`;
+  return `<g id="em-footer" class="em-panel">${svgRect(x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.footerFill, theme.panelBorder, scale)}${box.lines.map((t, i) => `<text x="${x + 12 * scale}" y="${footerLineY(box, i, scale)}" dominant-baseline="middle" fill="${theme.footerText}" font-family="${footerFont}" font-size="${12 * scale}">${escapeXml(t)}</text>`).join('')}</g>`;
 }
 function insetBackdropSvg(innerX, innerY, innerW, innerH, scale, svgDefs) {
   const px = (n) => n / 100;

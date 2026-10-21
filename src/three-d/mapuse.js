@@ -32,21 +32,24 @@ const wrap = (ctx, t, max) => {
   if (line) out.push(line);
   return out.map((l) => H.fitText(ctx, l, max));
 };
-// The block as a legend card of its own (studio.js drawCard, key "info"), placed with the legend's cards (above the
-// main card where it fits): the full card width (280u, so the wrapping is known before the card is sized), what the
-// map shows in the brand colour, then the rows. The title itself stays in the figure's header.
+// The block as the top section of the figure's legend card (studio.js drawCard): what the map shows in the legend
+// headings' type and colour, the label and value rows, and a thin rule above the legend's own entries. The card
+// keeps its place in the layout pass and grows to fit; 230u wide (the wrapping is known before the card is
+// sized), narrow enough to stay clear of the block beside it. The title itself stays in the figure's header.
+export const CARD_W = 230;
 export function secs(ctx, K) {
-  const { u, font } = K, D = details('3d'), LW = 72, TW = 256, rows = [];
+  const { u, font } = K, D = details('3d'), LW = 64, TW = CARD_W - 24, LH = 12.5, rows = [];
   if (D.what) {
     font(700, 13); const L = wrap(ctx, D.what, TW * u);
-    rows.push({ h: L.length * 16 + 4, full: (c, k, x, y) => { k.font(700, 13); c.fillStyle = H.brandTone('head'); L.forEach((t, i) => c.fillText(t, x, y + (8 + 16 * i) * u)); } });
+    rows.push({ h: L.length * 16 + 3, full: (c, k, x, y) => { k.font(700, 13); c.fillStyle = H.brandTone('head'); L.forEach((t, i) => c.fillText(t, x, y + (8 + 16 * i) * u)); } });
   }
   D.rows.forEach(([label, v]) => {
-    font(400, 11); const L = wrap(ctx, v, (TW - LW) * u);
-    rows.push({ h: L.length * 13 + 4, full: (c, k, x, y) => {
-      k.font(700, 9); c.fillStyle = H.MUTED; c.fillText(label.toUpperCase(), x, y + 7 * u);
-      k.font(400, 11); c.fillStyle = H.INK; L.forEach((t, i) => c.fillText(t, x + LW * u, y + (7 + 13 * i) * u));
+    font(400, 10.5); const L = wrap(ctx, v, (TW - LW) * u);
+    rows.push({ h: L.length * LH + 3, full: (c, k, x, y) => {
+      k.font(700, 8.5); c.fillStyle = H.MUTED; c.fillText(label.toUpperCase(), x, y + 6.5 * u);
+      k.font(400, 10.5); c.fillStyle = H.INK; L.forEach((t, i) => c.fillText(t, x + LW * u, y + (6.5 + LH * i) * u));
     } });
   });
-  return [{ key: 'info', minW: 280, rows }];
+  rows.push({ h: 7, full: (c, k, x, y, w) => { c.strokeStyle = H.RULE; c.lineWidth = u; c.beginPath(); c.moveTo(x, y + 4 * u); c.lineTo(x + w, y + 4 * u); c.stroke(); } });
+  return [{ key: 'info', minW: CARD_W, rows }];
 }

@@ -226,19 +226,11 @@ export function resolveTemplateZones(template, layout, mapSize, legendItems) {
 
   const { title: titleZone, logo: logoZone, inset: insetZone, northArrow: northArrowZone, scaleBar: scaleBarZone, legend: legendZone } = zones;
 
-  // Footer: bottom-center strip. Where it would collide with the legend, scale bar or north arrow (the
-  // standard layout's legend at the bottom left always did, so the note never showed), it takes the free
-  // stretch of the bottom edge between the bottom corners' cards instead; hidden only when that is under
-  // 160 px (the export then prints the note with the source credit: renderScene creditLinesFor).
-  let footerZone = clampZone({ bottom: safe.bottom, left: BASE_ZONES.footer.left, width: BASE_ZONES.footer.width, height: BASE_ZONES.footer.height }, safe, width, height);
-  const below = [legendZone, scaleBarZone, northArrowZone];
-  if (below.some((z) => intersects(z, footerZone))) {
-    const top = footerZone.top, low = [...below, insetZone, logoZone, titleZone].filter((z) => z.width && z.height && z.top + z.height > top);
-    const lo = Math.max(safe.left, ...low.filter((z) => z.left + z.width / 2 < width / 2).map((z) => z.left + z.width + 10));
-    const hi = Math.min(width - safe.right, ...low.filter((z) => z.left + z.width / 2 >= width / 2).map((z) => z.left - 10));
-    // As wide as the note needs (12 px text, estimated), up to the free stretch.
-    const want = Math.max(BASE_ZONES.footer.width, Math.round(String(layout?.footerText || '').length * 5.6 + 28));
-    footerZone = hi - lo >= 160 ? { top, left: lo, width: Math.min(want, hi - lo), height: footerZone.height } : { ...footerZone, width: 0, height: 0 };
+  // Footer: bottom-center strip, hidden if it collides with anything below
+  const footerZone = clampZone({ bottom: safe.bottom, left: BASE_ZONES.footer.left, width: BASE_ZONES.footer.width, height: BASE_ZONES.footer.height }, safe, width, height);
+  if (intersects(legendZone, footerZone) || intersects(scaleBarZone, footerZone) || intersects(northArrowZone, footerZone)) {
+    footerZone.width = 0;
+    footerZone.height = 0;
   }
 
   return {

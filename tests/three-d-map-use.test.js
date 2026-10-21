@@ -57,13 +57,14 @@ describe('map use (mapuse.js)', () => {
       Sources: 'Assays: ALS · Imagery: Esri', Notes: 'Illustrative data. Grade shell: exploratory envelope.',
     });
   });
-  it('lays the block out as a legend card of fixed width, rows sized to their wrapped lines', () => {
+  it('lays the block out as the top section of the legend card, of fixed width, rows sized to their wrapped lines', () => {
     mapuse.set({ use: 'standalone', what: 'Drill plan', date: 'Oct 2026' });
     const ctx = { measureText: (t) => ({ width: t.length * 6 }), fillText: () => {} }, K = { u: 1, font: () => {} };
     const [sec] = mapuse.secs(ctx, K);
-    expect(sec).toMatchObject({ key: 'info', minW: 280 });
-    expect(sec.rows).toHaveLength(6); // what, then five label rows
-    expect(sec.rows[0].h).toBe(20);
+    expect(sec).toMatchObject({ key: 'info', minW: mapuse.CARD_W });
+    expect(mapuse.CARD_W).toBeLessThanOrEqual(240); // narrow enough to keep the legend card beside the block
+    expect(sec.rows).toHaveLength(7); // what, five label rows, the rule above the legend's entries
+    expect(sec.rows[0].h).toBe(19);
     expect(sec.rows.every((r) => typeof r.full === 'function' && r.h > 0)).toBe(true);
   });
 });

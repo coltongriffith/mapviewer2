@@ -46,12 +46,7 @@ const BUDGETS = {
   // editor keeps the shared leader geometry the overlay must draw (elbow,
   // curve, anchor mark), the Auto-arrange action, the overlap list and the
   // leader/anchor-mark controls; ~1.0 KiB.
-  // 148 → 148.9 (Oct 2026, measured 148.61 configured): 2D export options. The footer note always reaches the
-  // export (the footer strip moves along the bottom edge when the legend or scale bar is in its way, else the note
-  // prints with the source credit), "Map use: Standalone" puts the note in the legend, new maps fit the legend to its
-  // entries ("Fit to entries" for saved maps), and the blank-basemap transparent PNG toggle: ~0.7 kB, mostly the
-  // shared template and legend helpers the editor and the exporters both read.
-  maxJsChunkGzipKb: 148.9,
+  maxJsChunkGzipKb: 148,
   initialJsGzipKb: 75,
   initialAuthJsGzipKb: 135,
   // The former configured check omitted VITE_ADMIN_EMAIL, which pruned the
@@ -90,9 +85,20 @@ const BUDGETS = {
   // 904.5 → 905.2 (Oct 2026, measured 904.87): the drill CSV reader refuses broken files (an unclosed quote, a
   // row that does not match the header) naming the line, keeps each row's file line, and lists every column as
   // an element to tick (~0.7 kB, all in the lazy drill chunk).
-  // 905.2 → 906.1 (Oct 2026, measured 905.78): the 2D export options above (+0.7 kB in the editor chunk) and /3d's
-  // transparent background, drop shadow toggle and Map use (+0.55 kB on the page, mapuse.js lazy; see threeDJsGzipKb).
-  totalAuthJsGzipKb: 906.1,
+  // 905.2 → 914.3 (Oct 2026, drill database 2C, measured 914.00): the Drill data tab's Results section, one lazy chunk
+  // (ResultsPanel.jsx with shared/drillResults.js and its own copy of the intercept and metal-equivalent maths,
+  // ~8.9 kB: the recipe form, the release table with composites split where dilution would take them below the
+  // cut-off, copies, CSV and the published-results export), fetched only when
+  // "Show results" is pressed; the drill tab chunk gains the section and its lazy hook (~0.34 kB). App, the homepage
+  // and /3d are unchanged (App +7 B and /3d page +0.05 kB of chunk-hash churn and the shared run finder).
+  // 914.3 → 914.5 (measured 914.16): components averaged over the equivalent's own samples, the reload on import
+  // and roll-back, and the cut-off tolerance (review fixes, all in the lazy results chunk).
+  // 914.5 → 916.0 (Oct 2026, export options merged over drill database 2C, measured 915.67): /3d's transparent
+  // background, drop shadow toggle and Map use (+0.55 kB on the page, mapuse.js lazy; see threeDJsGzipKb) and the 2D
+  // export options: the footer note always exported (its wrapping and the free-strip fallback in the lazy renderScene
+  // chunk), Standalone's note in the legend, the fitted legend for new maps, the blank-basemap transparent toggle (a
+  // lazy ExportBackground chunk) and the Map use and Fit controls (the lazy LegendEditor chunk).
+  totalAuthJsGzipKb: 916.0,
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
@@ -107,8 +113,10 @@ const BUDGETS = {
   // 828.8 → 838.0 (Oct 2026, measured 837.65 after merging round 5C, plus 0.3): the drill database tab, as totalAuthJsGzipKb above (lazy chunk
   // ~8.8 kB in this build, workspace chunk +0.3 kB); nothing in App or on the homepage.
   // 838.0 → 838.7 (Oct 2026, measured 838.32): the drill CSV reader's structure checks, as totalAuthJsGzipKb above.
-  // 838.7 → 839.6 (Oct 2026, measured 839.25): the export options, as totalAuthJsGzipKb above.
-  totalJsGzipKb: 839.6,
+  // 838.7 → 847.2 (Oct 2026, measured 846.93): the drill results section, as totalAuthJsGzipKb above.
+  // 847.2 → 847.4 (measured 847.05): the results review fixes, as totalAuthJsGzipKb above.
+  // 847.4 → 848.8 (Oct 2026, measured 848.52): the export options, as totalAuthJsGzipKb above.
+  totalJsGzipKb: 848.8,
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the
   // totals above. /3d carries three.js (~109 kB gzip) and its editor.
@@ -171,10 +179,10 @@ const BUDGETS = {
   // instead of reloading). The Display checkboxes and terrain selects now use the generic data-ext binding (-0.16 kB).
   // 170.1 → 170.6 (Oct 2026, round 5D merged over drill database 2A, measured 170.33, configured 170.36): the two
   // entries above add up; neither adds the other's code.
-  // 170.6 → 171.2 (Oct 2026, export options, measured 170.89, configured 170.91; +0.56 kB): a transparent background
+  // 170.6 → 171.2 (Oct 2026, export options, measured 170.91, configured 170.93; +0.56 kB): a transparent background
   // for exportPNG and the layers ZIP (no scene colour, section paper or footer band; drawn synchronously, so in the
   // page), the drop shadow setting and its export override, the Export step's Background select, and the hooks for
-  // Map use (the footer's notes and credits moved out, the info card placed with the legend, EM3D.setMapUse, the
+  // Map use (the footer's notes and credits moved out, the details atop the legend card, EM3D.setMapUse, the
   // saved settings). The standalone block itself is lazy (mapuse.js, below).
   threeDJsGzipKb: 171.2,
   // /3d's own modules fetched on first use (the geology, geophysics and tag layers, the account
@@ -229,10 +237,10 @@ const BUDGETS = {
   // design version 5 or with the grid on), section.js +0.55 (pad-merged and staggered section IDs, grade-ranked holes),
   // overlays.js +0.3 (claims outlined in the inset), shapes.js +0.2 (views: both, 3D or section), the callout editor's
   // second published line with its own depths and stale-wording note (+0.2) and the location inset's outline hook in tags.js.
-  // 104.5 → 105.6 (Oct 2026, export options, measured 105.10, configured 105.33): mapuse.js (~1 kB: a standalone
-  // map's details, sources and notes as a legend card), fetched only for a standalone figure; desk.js passes the
+  // 104.5 → 105.7 (Oct 2026, export options, measured 105.19, configured 105.42): mapuse.js (~1 kB: a standalone
+  // map's details, sources and notes as the top section of the legend card), fetched only for a standalone figure; desk.js passes the
   // background to every layer.
-  threeDLazyJsGzipKb: 105.6,
+  threeDLazyJsGzipKb: 105.7,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.
@@ -240,8 +248,7 @@ const BUDGETS = {
   teamsJsGzipKb: 10,
   adminAuthJsGzipKb: 150,
   adminJsGzipKb: 85,
-  // 335 → 335.9 (Oct 2026, measured 335.59): the 2D export options, as maxJsChunkGzipKb above.
-  editorAuthJsGzipKb: 335.9,
+  editorAuthJsGzipKb: 335,
   editorJsGzipKb: 270,
   claimsAuthJsGzipKb: 355,
   claimsJsGzipKb: 290,

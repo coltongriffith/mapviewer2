@@ -51,6 +51,8 @@ test('the footer note is exported in the standard layout; standalone puts it in 
   expect(texts.filter((t) => t.includes('Tower Resources drilling database'))).toHaveLength(1); // in the footer strip, whole
 
   await page.getByRole('tab', { name: /^customize$/i }).first().click();
+  const legendGroup = page.locator('.ins-acc-heading button', { hasText: /^Legend/ }).first();
+  if ((await legendGroup.getAttribute('aria-expanded')) !== 'true') await legendGroup.click();
   await page.getByLabel('Map use').selectOption('standalone');
   await expect(page.locator('.legend-card .legend-note')).toContainText('Tower Resources');
   await expect(page.locator('.footer-card')).toHaveCount(0);

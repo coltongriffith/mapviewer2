@@ -249,6 +249,18 @@ export default function LegendEditor({ derivedItems, layout, updateLayout }) {
           <span>Group entries under headings</span>
         </label>
       )}
+      {/* Kept in this lazy panel, out of the editor's first load. */}
+      <label className="toggle-row" style={{ marginBottom: 6 }}>
+        <input type="checkbox" checked={!!layout?.legendFit} onChange={(e) => updateLayout({ legendFit: e.target.checked, legendHeightPx: null })} />
+        <span>Fit to entries</span>
+      </label>
+      <div className="control-row">
+        <label htmlFor="f-map-use">Map use</label>
+        <select id="f-map-use" value={layout?.mapUse || 'presentation'} onChange={(e) => updateLayout({ mapUse: e.target.value })}>
+          <option value="presentation">Presentation figure</option>
+          <option value="standalone">Standalone map (footer note in the legend)</option>
+        </select>
+      </div>
 
       {grouped && headings.length > 0 && (
         <div className="legend-editor-headings">
