@@ -67,14 +67,16 @@ const BUDGETS = {
   // 877 → 878: Download PNG on shared maps (the MCP png_download_url).
   // 878 → 879: patterned legend swatches (shared/fillPattern.js) and the property data library client.
   // 879 → 884 (measured 883.2): 2D callout leader routing (#291, lazy scored layout + shared leader geometry) and Add Published Results (lazy reader + button).
-  totalAuthJsGzipKb: 884,
+  // 884 → 883.4 (Oct 2026, the /3d trim; measured 883.1): lowered to what ships, plus 0.3.
+  totalAuthJsGzipKb: 883.4,
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
   // 810 → 812: Download PNG on shared maps (the MCP png_download_url).
   // 812 → 813: patterned legend swatches (shared/fillPattern.js) and the property data library client.
   // 813 → 819 (measured 817.8): callout leader routing and "Add Published Results", as totalAuthJsGzipKb above.
-  totalJsGzipKb: 819,
+  // 819 → 817.9 (Oct 2026, the /3d trim below; measured 817.6): lowered to what ships, plus 0.3.
+  totalJsGzipKb: 817.9,
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the
   // totals above. /3d carries three.js (~109 kB gzip) and its editor.
@@ -108,7 +110,13 @@ const BUDGETS = {
   // 174 → 174.1 (Oct 2026, with published results, measured 174.0): the callout-source hooks that must run as
   // a figure draws (computeCallouts by mode, callouts keyed per result, ribbons sized to the callouts); their
   // logic, the callout editor and groupCallouts are already lazy.
-  threeDJsGzipKb: 174.1,
+  // 174.1 → 168.5 (Oct 2026, trim; measured 168.2 in both builds): code that never runs as a figure is first
+  // drawn left the page, with no change to the figure, its exports or the API. Real terrain (the coordinate
+  // systems, proj4 and the DEM and imagery mosaics) is in terrain.js; the designer layers ZIP in desk.js; ZIP
+  // reading in unzip.js; the file list, the Layout step's controls, the figure sizes and the label lists in
+  // panels.js (fetched with the first data, like the checks); the account API notes in the page's HTML.
+  // Collars in latitude/longitude, the credits and everything drawn or exported synchronously stay here.
+  threeDJsGzipKb: 168.5,
   // /3d's own modules fetched on first use (the geology, geophysics and tag layers, the account
   // client). They never load with the page or the app, so they sit outside the page and app totals.
   // 32 → 34 (Oct 2026, round 4): per-hole tags, grouped pending tags, callouts beside or bracketed on their
@@ -136,7 +144,9 @@ const BUDGETS = {
   // callout editor moved out of the page (callout-editor.js, ~2 kB, fetched when the Layout step first shows).
   // 64 → 67 (Oct 2026, measured 65.8, configured 66.0): section.js, the "Chosen holes" list, collar clicks
   // and EM3D.setSection (~2.5 kB), fetched when a figure first chooses holes for its section.
-  threeDLazyJsGzipKb: 67,
+  // 67 → 73.3 (Oct 2026, measured 72.7, configured 73.0): the page trim above moved ~5.8 kB here (terrain.js
+  // 3.2, panels.js +2.6, desk.js +0.6, unzip.js 0.5; split chunks compress a little less well together).
+  threeDLazyJsGzipKb: 73.3,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.

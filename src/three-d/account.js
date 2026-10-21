@@ -38,17 +38,8 @@ const account = Object.freeze({
   openProject: lazy('openProject'), deleteProject: lazy('deleteProject'), currentProject: lazy('currentProject'),
   sendSignInLink: lazy('sendSignInLink'), signInWithPassword: lazy('signInWithPassword'), signOut: lazy('signOut'),
 });
-const ACCOUNT_HELP = `
-
-Exploration Maps account (all Promises; saving needs a signed-in visitor):
-  EM3D.account.getUser()          { id, email } or null
-  EM3D.account.listProjects()     [{ id, name, thumbnail, createdAt, updatedAt }]
-  EM3D.account.saveProject(name, existingId?, dest?, { force })   saves the figure; returns { id, name, savedAt }.
-                                  Throws code "CONFLICT" when the saved copy is newer than the one opened
-                                  here (force: true overwrites it)
-  EM3D.account.openProject(id)    reopens a saved figure
-  EM3D.account.deleteProject(id)  removes it from the list
-The Save button (or Ctrl/Cmd+S) does the same for a person, and asks them to sign in first.`;
+// Help text: <script id="account-help"> in the page, like the share links' below.
+const ACCOUNT_HELP = `\n\n${$('account-help')?.textContent.trim() || ''}`;
 
 // Share links: the Share button, EM3D.share and the read-only viewer at
 // /3d/share/<id> and /3d/embed/<id>, all in share.js (loaded on first use, or
