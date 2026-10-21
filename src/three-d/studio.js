@@ -158,6 +158,8 @@ const S = {              // style
   // legend: one card or several ("auto" merges three or more blocks), each card "auto", a corner or {x, y}.
   // coPlacement: where callouts go unless set per hole. Block: margin (m) around the drilling, extent limits.
   legend: { merge: 'auto', pos: {} }, coPlacement: 'column', blockMargin: null, blockExtent: null,
+  // Files taken from the property's data library: { [file name]: { libFileId, version } } (library.js).
+  libRefs: {},
   // shell.color null: the brand accent (brandTone). throughTerrain: a faint ghost where the terrain hides it.
   shell: { enabled: false, cutoff: null, opacity: 0.3, color: null, search: null, cell: null, throughTerrain: false },
   // Satellite imagery tone: saturation, contrast, warmth (-1 cool to 1 warm) and shaded-relief blend (0-1).
@@ -1919,6 +1921,7 @@ function principalAz(holes) {
 function addUserFiles(arr) {
   if (!Array.isArray(arr) || !arr.length || arr.some((f) => !f || typeof f.name !== 'string' || typeof f.text !== 'string')) throw new Error('addFiles expects [{ name: "collars.csv", text: "HoleID,Easting,..." }].');
   if (usingSample) { files = []; usingSample = false; S.meshes = {}; S.valueCol = null; S.coOverrides = {}; S.valueCol2 = null; resetDerived(); }
+  arr.forEach((a) => { if (a.lib) S.libRefs[a.name] = { libFileId: String(a.lib.libFileId), version: +a.lib.version }; else delete S.libRefs[a.name]; });
   refresh.secSet = false; addFiles(arr); extAutoOn(arr); refresh(); // extAutoOn: EXT hook
   const added = files.filter((f) => arr.some((a) => a.name === f.name)).map((f) => `${f.name} → ${ROLE_LABEL[f.role]}`);
   status(project.empty ? `Added ${added.join(', ')}. Still need a collar file.` : `Added ${added.join(', ')}. ${project.holes.length} holes on the figure.`);
@@ -1983,7 +1986,7 @@ function loadSample() {
 // A new data set starts without the old one's equivalent recipe, display cut-off or provisional flags.
 function resetDerived() {
   histReset(); // the history belongs to the old data
-  S.eq = null; eqApplied = false; S.displayCutoff = null; S.provisional = {}; S.shell.cutoff = null;
+  S.eq = null; eqApplied = false; S.displayCutoff = null; S.provisional = {}; S.shell.cutoff = null; S.libRefs = {};
   S.tags.status = {}; S.tags.groups = []; S.geology.legend = []; // EXT hook: per-hole tags and codes belong to the old data
   // The shell belongs to the old data: switch it off and stop any build still running.
   S.shell.enabled = false; shell.pending = null; shell.mesh = null; shell.field = null; syncShell();
@@ -2510,6 +2513,7 @@ function getState() {
     app: 'Exploration Maps 3D', version: 3, ready: !!G, usingSample, step: currentStep, view: S.view,
     files: files.map((x) => ({ name: x.name, role: x.role, rows: x.rows ? x.rows.length : undefined,
       columns: x.cols ? Object.fromEntries(Object.entries(x.cols).map(([k, i]) => [k, x.header[i]])) : undefined, gradeColumns: x.grades && x.grades.length ? x.grades.map((g) => g.name) : undefined })),
+    libRefs: structuredClone(S.libRefs),
     project: ok ? { holes: project.holes.length, holeIds: project.holes.map((h) => h.id), metresDrilled: Math.round(project.holes.reduce((s, h) => s + h.len, 0)), pendingHoles: project.holes.filter(isPending).map((h) => h.id), intervals: project.holes.reduce((s, h) => s + h.ints.length, 0), dipsPositiveDown: project.posDown, warnings: project.warnings } : null,
     grade: { column: S.valueCol, label: S.valueLabel, available: project?.cols || [], bins: S.bins, binColors: BIN_COLORS },
     callouts: { coCount: S.coCount, coMin: S.coMin, coCut: S.coCut, coIncl: S.coIncl,

@@ -192,7 +192,7 @@ function Properties({ org, properties, onChanged, onOpenProperty }) {
                 <div className="ws-actions" style={{ marginTop: 8 }}>
                   <button type="button" className="dash-link" style={{ color: 'var(--ui-danger)' }}
                     onClick={async () => {
-                      if (!window.confirm(`Delete ${p.name}? Move its maps, figures and claims out first.`)) return;
+                      if (!window.confirm(`Delete ${p.name}? Move its maps, figures and claims out, and delete its data files, first.`)) return;
                       try { await deleteProperty(p.id); setEditing(null); onChanged(); } catch (e) { setError(e.message); }
                     }}>Delete property</button>
                 </div>

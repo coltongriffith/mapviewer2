@@ -93,7 +93,10 @@ const BUDGETS = {
   // 40 → 47 (Oct 2026): share links (share.js: the Share dialog, EM3D.share and the read-only viewer for
   // /3d/share/<id> and /3d/embed/<id>, ~6.5 kB). Loaded on the first click on Share, or at once on a shared
   // figure; the page itself only gains the hook in account.js.
-  threeDLazyJsGzipKb: 47,
+  // 47 → 48 (Oct 2026): the property data library picker and newer-data notice (library.js, ~1.4 kB),
+  // fetched by account-core.js only for a figure in a company property. Counted here now that the
+  // walk follows lazy imports of lazy modules; before, it would have landed in the app's totals.
+  threeDLazyJsGzipKb: 48,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.
@@ -174,9 +177,18 @@ for (const [name, entry, limit] of STANDALONE) {
   }
   // Lazy chunks: the page's own modules (src/three-d/) it imports on first use. Shared vendors it
   // imports lazily (proj4, fflate, Supabase) stay in the app totals, as before.
+  // Followed through those modules' own lazy imports (account-core.js fetches library.js).
   if (name === '3d') {
-    const lazy = new Set();
-    for (const key of manifest[entry].dynamicImports || []) if (key.startsWith('src/three-d/') && !appReach.has(manifest[key].file) && !files.has(manifest[key].file)) lazy.add(manifest[key].file);
+    const lazy = new Set(), seen = new Set();
+    const walkLazy = (from) => {
+      for (const key of manifest[from].dynamicImports || []) {
+        if (!key.startsWith('src/three-d/') || seen.has(key)) continue;
+        seen.add(key);
+        if (!appReach.has(manifest[key].file) && !files.has(manifest[key].file)) lazy.add(manifest[key].file);
+        walkLazy(key);
+      }
+    };
+    walkLazy(entry);
     let lz = 0; for (const file of lazy) { lz += await gzipKb(join(DIST, file)); standaloneOnly.add(join(DIST, file)); }
     report.push(`${name} lazy JS: ${lz.toFixed(1)} kB gzip across ${lazy.size} chunks (loaded on first use)`);
     if (lz > BUDGETS.threeDLazyJsGzipKb) failures.push(`${name} lazy JS ${lz.toFixed(1)} kB exceeds ${BUDGETS.threeDLazyJsGzipKb} kB`);

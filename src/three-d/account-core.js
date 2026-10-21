@@ -163,6 +163,14 @@ async function homeOf(row) {
   return { orgId: row.org_id, propertyId: row.property_id || null, propertyName: prop?.name || null, orgName: org?.name || 'Company workspace', role: org?.role || 'viewer' };
 }
 
+// ── Property data library ───────────────────────────────────────────────────
+// A figure in a company property can take files from the property's data
+// library and is told when one has a newer version (library.js, on first use).
+let libP = null;
+const lib = () => (libP ||= import('./library.js').then((m) => { m.init({ client, current: () => current, say }); return m; })
+  .catch((err) => { libP = null; throw err; }));
+const checkLibrary = () => { if (current?.home?.propertyId) lib().then((m) => m.check()).catch(() => { /* the figure is fine as it is */ }); };
+
 export async function listProjects() {
   await requireUser('see your saved 3D maps');
   const sb = await client();
@@ -290,6 +298,7 @@ export async function openProject(id) {
     throw Object.assign(plain(`That 3D map could not be opened (${err.message}). The figure you had is back.`, err), { plain: true });
   }
   current = { id: row.id, name: row.name, savedAt: row.updated_at, home: await homeOf(row) };
+  checkLibrary();
   return { ...current, state: em.getState() };
 }
 
@@ -380,6 +389,9 @@ function say(msg) {
 }
 function settle() { dirty = false; try { savedSig = sig(studio().getState()); } catch { savedSig = null; } renderNote(); }
 function renderNote() {
+  // "From property library" only for a figure in a company property.
+  const lb = $('lib-add');
+  if (lb) { lb.hidden = !current?.home?.propertyId; if (lb.hidden) { $('lib-pick').hidden = true; $('lib-notice').hidden = true; } }
   const note = $('acct-note'); if (!note) return;
   if (busy) { note.textContent = 'Saving…'; note.hidden = false; return; }
   if (!current) { note.hidden = true; return; }
@@ -606,6 +618,8 @@ function wire() {
     // While a sign-in link is out, keep the stashed copy up to date.
     if (pending) { clearTimeout(pendingT); pendingT = setTimeout(() => stashWork(pending), 1500); }
   });
+
+  $('lib-add')?.addEventListener('click', () => lib().then((m) => m.toggle()).catch(() => say('Could not load the property library. Check your connection and try again.')));
 
   $('acct-use-password').addEventListener('click', () => {
     $('acct-password-row').hidden = false; $('acct-use-password').hidden = true; $('acct-link-btn').hidden = true; $('acct-password-btn').hidden = false; $('acct-new').hidden = true; $('acct-password').focus();

@@ -20,7 +20,10 @@ const token = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: uid, role: 'aut
 const session = { user, access_token: token, refresh_token: 'synthetic-refresh', expires_in: 86400, expires_at: Math.floor(Date.now() / 1000) + 86400, token_type: 'bearer' };
 const AUTH_KEY = 'sb-example-auth-token';
 
-async function fakeSupabase(page, { failUpload = false } = {}) {
+const ORG = '00000000-0000-4000-8000-0000000003a1', PROP = '00000000-0000-4000-8000-0000000003b1';
+
+// library: { files } for a user in one company with one property (Rails) whose data library lists `files`.
+async function fakeSupabase(page, { failUpload = false, library = null } = {}) {
   const fake = { requests: [], otp: [], rows: new Map(), objects: new Map(), upserts: [], patches: [] };
   await page.route('https://example.supabase.co/**', async (route) => {
     const req = route.request(), url = new URL(req.url()), path = url.pathname, method = req.method();
@@ -34,6 +37,13 @@ async function fakeSupabase(page, { failUpload = false } = {}) {
       if (fn === 'logout') return route.fulfill({ status: 204 });
       return json({});
     }
+    if (path.startsWith('/rest/v1/rpc/')) {
+      const fn = path.split('/').pop();
+      if (fn === 'get_my_workspaces') return json(library ? [{ id: ORG, name: 'Star Copper Corp.', slug: 'star-copper-corp', role: 'editor' }] : []);
+      if (fn === 'list_property_files') return json(library?.files || []);
+      return json(null);
+    }
+    if (path === '/rest/v1/properties') return json(library ? [{ id: PROP, name: 'Rails', slug: 'rails', org_id: ORG }] : []);
     if (path === '/rest/v1/three_d_projects') {
       const single = (req.headers().accept || '').includes('vnd.pgrst.object');
       if (method === 'GET') {
@@ -217,6 +227,9 @@ test.describe('account', () => {
     await expect.poll(() => fake.upserts.length).toBe(1);
     await expect(page.locator('#acct-note')).toHaveText(/^Saved /);
     const id = fake.upserts[0].id;
+    // A personal figure has no property library.
+    await expect(page.getByRole('button', { name: 'From property library' })).toBeHidden();
+    expect(fake.upserts[0].settings.settings.libRefs).toEqual({});
 
     await page.evaluate(() => window.EM3D.setBrand({ subtitle: 'Version two' }));
     await expect(page.locator('#acct-note')).toHaveText('Unsaved changes');
@@ -317,6 +330,67 @@ test.describe('account', () => {
     await conflict.getByRole('button', { name: 'Reload saved version' }).click();
     await expect.poll(async () => (await state(page)).brand.subtitle).toBe('From the other tab');
     expect(fake.upserts).toHaveLength(4);
+  });
+
+  test('a figure in a property takes files from its data library and offers newer versions', async ({ page }) => {
+    const library = { files: [] };
+    const fake = await fakeSupabase(page, { library });
+    await page.addInitScript(([k, s]) => localStorage.setItem(k, JSON.stringify(s)), [AUTH_KEY, session]);
+    await open3d(page);
+    // The sample's own collars and assays stand in for the property's drill data.
+    const sample = await page.evaluate(() => window.EM3D.getProject().files.map(({ name, text }) => ({ name, text })));
+    const publish = (n, f, version) => {
+      const id = `00000000-0000-4000-8000-00000000f${n}00`, path = `${ORG}/${PROP}/${id}/v${version}/${f.name}`;
+      fake.objects.set(`property-files/${path}`, f.text);
+      library.files = [...library.files.filter((x) => x.id !== id), { id, name: f.name, kind: 'drill', version, path, bytes: f.text.length, sha256: String(version).repeat(64) }];
+      return id;
+    };
+    const collars = sample.find((f) => /collar/i.test(f.name)), assays = sample.find((f) => /assay/i.test(f.name));
+    publish(1, collars, 1);
+    const assaysId = publish(2, assays, 1);
+    publish(3, { name: 'NI 43-101.pdf', text: '%PDF' }, 1);
+
+    // Saved into the property, the figure offers its library.
+    const libButton = page.getByRole('button', { name: 'From property library' });
+    await expect(libButton).toBeHidden();
+    await page.getByRole('button', { name: 'My 3D maps' }).click();
+    await page.getByRole('region', { name: 'My 3D maps' }).getByRole('button', { name: 'Save to property…' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Save to your account' });
+    await expect(dialog.getByLabel('Save to')).toHaveValue(PROP);
+    await dialog.getByLabel('Name').fill('Rails 3D');
+    await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect.poll(() => fake.upserts.length).toBe(1);
+    expect(fake.upserts[0]).toMatchObject({ org_id: ORG, property_id: PROP });
+    await expect(libButton).toBeVisible();
+
+    await libButton.click();
+    const picker = page.getByRole('region', { name: 'Property library' });
+    await expect(picker.getByText('NI 43-101.pdf')).toHaveCount(0); // only what the editor reads
+    await picker.getByRole('button', { name: `Add ${collars.name} to the figure` }).click();
+    await expect(picker.getByRole('button', { name: `Add ${collars.name} to the figure` })).toHaveText('Added');
+    await picker.getByRole('button', { name: `Add ${assays.name} to the figure` }).click();
+    await expect(picker.getByRole('button', { name: `Add ${assays.name} to the figure` })).toHaveText('Added');
+    const st = await state(page);
+    expect(st.files.map((f) => f.name).sort()).toEqual([collars.name, assays.name].sort());
+    expect(st.project.holes).toBeGreaterThan(0);
+    expect(st.libRefs[assays.name]).toEqual({ libFileId: assaysId, version: 1 });
+    await page.locator('body').press('Control+s');
+    await expect.poll(() => fake.upserts.length).toBe(2);
+    expect(fake.upserts[1].settings.settings.libRefs[assays.name]).toEqual({ libFileId: assaysId, version: 1 });
+    const id = fake.upserts[1].id;
+
+    // A new version of the assays in the library: reopening the figure offers it.
+    const v2 = assays.text.replace(/\d(?=[^\d]*$)/, (d) => String((Number(d) + 1) % 10));
+    publish(2, { name: assays.name, text: v2 }, 2);
+    await open3d(page, `/3d?project=${id}`);
+    const notice = page.locator('#lib-notice');
+    await expect(notice).toBeVisible();
+    await expect(notice).toContainText(`Newer data: ${assays.name} v2 (was v1)`);
+    await notice.getByRole('button', { name: 'Update' }).click();
+    await expect(notice).toBeHidden();
+    expect((await state(page)).libRefs[assays.name]).toEqual({ libFileId: assaysId, version: 2 });
+    expect(await page.evaluate((n) => window.EM3D.getProject().files.find((f) => f.name === n).text, assays.name)).toBe(v2);
+    await expect(page.locator('#acct-note')).toHaveText(/^Unsaved changes/);
   });
 
   test('a failed save says so plainly and keeps the figure', async ({ page }) => {
