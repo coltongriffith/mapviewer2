@@ -44,7 +44,7 @@ test('the layers ZIP is unchanged unless the SVG is asked for', async ({ page })
   for (const name of ['figure.png', 'scene.png', 'annotations.png', 'section.png']) expect(Buffer.compare(Buffer.from(withSvg[name]), Buffer.from(plain[name])), name).toBe(0);
 });
 
-test('annotations.svg has live text and lies on annotations.png', async ({ page }) => {
+test('annotations.svg has live text and lies on annotations.png', async ({ page }, testInfo) => {
   await page.evaluate(() => window.EM3D.showStep('export'));
   await page.locator('#export-svg').check();
   const [download] = await Promise.all([page.waitForEvent('download'), page.locator('#export-layers').click()]);
@@ -74,29 +74,68 @@ test('annotations.svg has live text and lies on annotations.png', async ({ page 
   const b = state.grade.bins;
   expect(texts).toEqual(expect.arrayContaining([`Assay · ${state.grade.label}`, `≥ ${b.at(-1)}`, `${b[0]} – ${b[1]}`, `< ${b[0]}`]));
 
-  // Rasterized in the browser at the same size, the SVG matches the PNG up to antialiasing and hinting.
-  const m = await page.evaluate(async ({ text, data }) => {
+  // Rasterized in the browser at the same size, the SVG lies on the PNG. One thing is renderer-dependent: where a
+  // browser lays text out on whole-pixel glyph advances (Chrome 151's headless shell does, for web fonts), Canvas
+  // rounds them at the size the overlay is drawn at, in the on-screen frame before its scale to the export size, while
+  // SVG text rounds them at the size it is shown. A long run then starts in the same place and ends a few pixels
+  // apart (the title by ~5 px at 1920 wide). So the comparison is made twice. As exported, it is logged and its
+  // overall ink bounds asserted. With each glyph placed where Canvas places it, from Canvas measurements of the SVG's
+  // own text, family, weight, size, letter spacing and anchor at the frame's scale, it is asserted pixel by pixel:
+  // that takes out only the rounding, so a wrong position, anchor, baseline, size, weight, spacing, colour or shape
+  // still fails. Every metric is logged, and the rasters and diffs attached, before anything is asserted.
+  const k = W / await page.evaluate(() => parseFloat(document.getElementById('frame').style.width)); // export px per frame px
+  const m = await page.evaluate(async ({ text, data, k }) => {
     const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(new Error('image did not load')); i.src = src; });
-    const a = await load(`data:image/png;base64,${data}`), W = a.naturalWidth, H = a.naturalHeight, b = await load(URL.createObjectURL(new Blob([text], { type: 'image/svg+xml' })));
-    const pix = (img) => { const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d'); g.drawImage(img, 0, 0, W, H); return g.getImageData(0, 0, W, H).data; };
-    const A = pix(a), B = pix(b), S = 8, box = () => [W, H, 0, 0], ba = box(), bb = box();
-    let sum = 0, over64 = 0, block = 0;
-    const grow = (r, x, y) => { r[0] = Math.min(r[0], x); r[1] = Math.min(r[1], y); r[2] = Math.max(r[2], x); r[3] = Math.max(r[3], y); };
-    for (let i = 0; i < W * H; i++) {
-      const j = i * 4; let d = Math.abs(A[j + 3] - B[j + 3]);
-      for (let k = 0; k < 3; k++) d = Math.max(d, Math.abs(A[j + k] * A[j + 3] - B[j + k] * B[j + 3]) / 255);
-      sum += d; if (d > 64) over64++;
-      if (A[j + 3] > 128) grow(ba, i % W, Math.floor(i / W)); if (B[j + 3] > 128) grow(bb, i % W, Math.floor(i / W));
-    }
-    for (let y = 0; y + S <= H; y += S) for (let x = 0; x + S <= W; x += S) {
-      let da = 0, db = 0; for (let yy = y; yy < y + S; yy++) for (let xx = x; xx < x + S; xx++) { const j = (yy * W + xx) * 4; da += A[j + 3]; db += B[j + 3]; }
-      block = Math.max(block, Math.abs(da - db) / (S * S));
-    }
-    return { mean: sum / (W * H), over64: over64 / (W * H), block, ba, bb };
-  }, { text: svg, data: png.toString('base64') });
-  console.log(`annotations.svg vs annotations.png: mean ${m.mean.toFixed(3)}/255, ${(m.over64 * 100).toFixed(3)} % of pixels off by more than 64, 8 px block max ${m.block.toFixed(1)}`);
-  expect(m.mean).toBeLessThan(1.5);
-  expect(m.over64).toBeLessThan(0.005);
-  expect(m.block).toBeLessThan(48);
-  m.ba.forEach((v, i) => expect(Math.abs(v - m.bb[i]), 'ink bounds').toBeLessThanOrEqual(2)); // same place, same extent
+    const a = await load(`data:image/png;base64,${data}`), W = a.naturalWidth, H = a.naturalHeight;
+    const pix = (img) => { const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d'); g.drawImage(img, 0, 0, W, H); return [c, g.getImageData(0, 0, W, H).data]; };
+    const [, A] = pix(a);
+    const compare = async (svgText) => {
+      const [canvas, B] = pix(await load(URL.createObjectURL(new Blob([svgText], { type: 'image/svg+xml' }))));
+      const S = 8, box = () => [W, H, 0, 0], inkPng = box(), inkSvg = box(), grow = (r, x, y) => { r[0] = Math.min(r[0], x); r[1] = Math.min(r[1], y); r[2] = Math.max(r[2], x); r[3] = Math.max(r[3], y); };
+      const dc = document.createElement('canvas'); dc.width = W; dc.height = H; const dg = dc.getContext('2d'), out = dg.createImageData(W, H);
+      let sum = 0, over64 = 0, block = 0;
+      for (let i = 0; i < W * H; i++) {
+        const j = i * 4; let d = Math.abs(A[j + 3] - B[j + 3]);
+        for (let k = 0; k < 3; k++) d = Math.max(d, Math.abs(A[j + k] * A[j + 3] - B[j + k] * B[j + 3]) / 255);
+        sum += d; if (d > 64) over64++;
+        if (A[j + 3] > 128) grow(inkPng, i % W, Math.floor(i / W)); if (B[j + 3] > 128) grow(inkSvg, i % W, Math.floor(i / W));
+        const bg = 255 - A[j + 3] * 0.25, red = Math.min(255, d * 3); out.data[j] = Math.max(bg, red); out.data[j + 1] = out.data[j + 2] = bg * (1 - red / 255); out.data[j + 3] = 255; // the PNG faded, differences in red
+      }
+      for (let y = 0; y + S <= H; y += S) for (let x = 0; x + S <= W; x += S) {
+        let da = 0, db = 0; for (let yy = y; yy < y + S; yy++) for (let xx = x; xx < x + S; xx++) { const j = (yy * W + xx) * 4; da += A[j + 3]; db += B[j + 3]; }
+        block = Math.max(block, Math.abs(da - db) / (S * S));
+      }
+      dg.putImageData(out, 0, 0);
+      return { mean: sum / (W * H), over64: over64 / (W * H), block, inkPng, inkSvg, raster: canvas.toDataURL('image/png'), diff: dc.toDataURL('image/png') };
+    };
+    const d = new DOMParser().parseFromString(text, 'image/svg+xml'), g = document.createElement('canvas').getContext('2d');
+    let runs = 0;
+    d.querySelectorAll('text:not([textLength])').forEach((t) => {
+      if (/matrix/.test(t.getAttribute('transform') || '')) return;
+      g.setTransform(k, 0, 0, k, 0, 0);
+      g.font = `${t.getAttribute('font-style') || 'normal'} ${t.getAttribute('font-weight') || 400} ${t.getAttribute('font-size') / k}px ${t.getAttribute('font-family')}`;
+      g.letterSpacing = `${(t.getAttribute('letter-spacing') || 0) / k}px`;
+      const w = (s) => g.measureText(s).width * k, chars = [...t.textContent], all = w(t.textContent), anchor = t.getAttribute('text-anchor'), x = +t.getAttribute('x');
+      const start = anchor === 'middle' ? x - all / 2 : anchor === 'end' ? x - all : x;
+      // Glyph i starts where the run up to and including it ends, less its own advance (so kerning before it counts).
+      t.setAttribute('x', chars.map((c, i) => (start + w(chars.slice(0, i + 1).join('')) - w(c)).toFixed(2)).join(' ')); t.removeAttribute('text-anchor'); runs++;
+    });
+    return { fonts: d.querySelector('desc')?.textContent, k, runs, exported: await compare(text), matched: await compare(new XMLSerializer().serializeToString(d)) };
+  }, { text: svg, data: png.toString('base64'), k });
+  const fmt = (r) => `mean ${r.mean.toFixed(3)}/255, ${(r.over64 * 100).toFixed(3)} % of pixels off by more than 64, 8 px block max ${r.block.toFixed(1)}, ink bounds PNG [${r.inkPng}] SVG [${r.inkSvg}]`;
+  console.log(`annotations.svg vs annotations.png (${m.fonts} Frame scale ${m.k.toFixed(3)}.)\n  as exported:   ${fmt(m.exported)}\n  glyphs at Canvas positions (${m.runs} runs): ${fmt(m.matched)}`);
+  for (const [name, r] of [['as-exported', m.exported], ['canvas-positions', m.matched]]) {
+    await testInfo.attach(`svg-raster-${name}.png`, { body: Buffer.from(r.raster.split(',')[1], 'base64'), contentType: 'image/png' });
+    await testInfo.attach(`svg-diff-${name}.png`, { body: Buffer.from(r.diff.split(',')[1], 'base64'), contentType: 'image/png' });
+    delete r.raster; delete r.diff;
+  }
+  await testInfo.attach('annotations.svg', { body: svg, contentType: 'image/svg+xml' });
+  await testInfo.attach('svg-metrics.json', { body: JSON.stringify(m, null, 2), contentType: 'application/json' });
+  // Both families embedded, none left to a system fallback on either side.
+  expect(m.fonts).toMatch(/Fonts embedded: [^;]*Source Sans 3/); expect(m.fonts).toMatch(/Fonts embedded: [^;]*IBM Plex Mono/); expect(m.fonts).toContain('named only: none');
+  m.exported.inkPng.forEach((v, i) => expect(Math.abs(v - m.exported.inkSvg[i]), 'ink bounds as exported').toBeLessThanOrEqual(2));
+  expect(m.matched.mean).toBeLessThan(0.5);
+  expect(m.matched.over64).toBeLessThan(0.002);
+  expect(m.matched.block).toBeLessThan(24);
+  m.matched.inkPng.forEach((v, i) => expect(Math.abs(v - m.matched.inkSvg[i]), 'ink bounds').toBeLessThanOrEqual(2)); // same place, same extent
 });
