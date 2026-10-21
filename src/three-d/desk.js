@@ -1,8 +1,32 @@
-// Exploration Maps 3D: send the figure and its layers to the design desk (the Teams enquiry). Loaded on
-// first use by studio.js, from the Export step's form or EM3D.sendToDesignDesk.
+// Exploration Maps 3D: the designer layers ZIP, and sending the figure and its layers to the design desk
+// (the Teams enquiry). Loaded on first use by studio.js: Download layers, the Export step's form,
+// EM3D.exportLayers or EM3D.sendToDesignDesk.
+import { zipSync } from 'fflate';
+
 const $ = (id) => document.getElementById(id);
 let H = null; // host (studio.js)
 export function init(host) { H = host; }
+const canvasBlob = (c) => new Promise((resolve, reject) => c.toBlob((b) => (b ? resolve(b) : reject(new Error('The PNG could not be encoded.'))), 'image/png'));
+const blobDataURL = (b) => new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(r.result); r.onerror = () => reject(r.error); r.readAsDataURL(b); });
+// Designer handoff: the figure, its 3D render and annotations as separate transparent layers, the section,
+// and the settings, in one ZIP at the chosen size. PNGs are stored, not deflated: they are compressed already.
+const LAYER_FILES = { figure: 'figure.png', scene: 'scene.png', annotations: 'annotations.png', section: 'section.png', settings: 'figure-settings.json' };
+export async function exportLayers(opts = {}) {
+  if (!H.G) throw new Error('Nothing to export yet: add a collar file and an assay file.');
+  const f = H.format(), fig = H.figureCanvas;
+  H.status(`Preparing layers at ${f.w} × ${f.h} px…`);
+  const bytes = async (c) => new Uint8Array(await (await canvasBlob(c)).arrayBuffer());
+  const png = { figure: await bytes(fig('3d')), scene: await bytes(fig('3d', 'scene')), annotations: await bytes(fig('3d', 'annotations')), section: await bytes(fig('section')) };
+  const settings = { ...H.getState(), layers: { ...LAYER_FILES, note: 'scene.png and annotations.png are transparent and stack (scene below) to make figure.png.' }, exportedAt: new Date().toISOString() };
+  const zip = zipSync({
+    ...Object.fromEntries(Object.entries(png).map(([k, v]) => [LAYER_FILES[k], [v, { level: 0 }]])),
+    [LAYER_FILES.settings]: new TextEncoder().encode(JSON.stringify(settings, null, 2)),
+  });
+  const blob = new Blob([zip], { type: 'application/zip' });
+  if (opts.download) { const url = URL.createObjectURL(blob); H.downloadURL(url, `${H.fileSlug()}-layers-${H.S.format}.zip`); setTimeout(() => URL.revokeObjectURL(url), 30000); }
+  H.status(`Layers ready: ${Object.keys(LAYER_FILES).length} files, ${(blob.size / 1048576).toFixed(1)} MB.`);
+  return opts.as === 'blob' ? blob : blobDataURL(blob);
+}
 // Same flow as /teams: POST the enquiry to /api/track, which answers with one signed upload URL per declared
 // file; each file is then PUT straight to storage. 204 means accepted without uploads (automated browsers).
 const DESK_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/, DESK_MAX_BYTES = 50 * 1024 * 1024;
@@ -21,7 +45,7 @@ export async function sendToDesignDesk(o = {}) {
   const step = (t) => { H.status(t); deskMsg(t, 'busy'); const b = $('desk-send'); b.disabled = true; b.textContent = t.replace(/…$/, '…'); };
   try {
     step('Preparing the figure and layers…');
-    const made = [['figure.png', await H.canvasBlob(H.figureCanvas('3d'))], ['layers.zip', await H.exportLayers({ as: 'blob' })]];
+    const made = [['figure.png', await canvasBlob(H.figureCanvas('3d'))], ['layers.zip', await exportLayers({ as: 'blob' })]];
     // Over the 50 MB upload limit: not sent, and said so below rather than dropped quietly.
     const blobs = made.filter(([, b]) => b.size <= DESK_MAX_BYTES), tooBig = made.filter(([, b]) => b.size > DESK_MAX_BYTES).map(([n]) => n);
     step('Sending to the design desk…');

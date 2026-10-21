@@ -897,6 +897,17 @@ Whole projects (to keep or move a figure):
                                   Grade, geology and geophysics colours never change
   getState().geology / .geophys / .tags
 </script>
+<!-- API notes for the account (src/three-d/account.js; shown with EM3D.help()). -->
+<script type="text/plain" id="account-help">Exploration Maps account (all Promises; saving needs a signed-in visitor):
+  EM3D.account.getUser()          { id, email } or null
+  EM3D.account.listProjects()     [{ id, name, thumbnail, createdAt, updatedAt }]
+  EM3D.account.saveProject(name, existingId?, dest?, { force })   saves the figure; returns { id, name, savedAt }.
+                                  Throws code "CONFLICT" when the saved copy is newer than the one opened
+                                  here (force: true overwrites it)
+  EM3D.account.openProject(id)    reopens a saved figure
+  EM3D.account.deleteProject(id)  removes it from the list
+The Save button (or Ctrl/Cmd+S) does the same for a person, and asks them to sign in first.
+</script>
 <!-- API notes for share links (src/three-d/share.js; shown with EM3D.help()). -->
 <script type="text/plain" id="share-help">Share links (all Promises; anyone with a link can view the figure, read-only, and its data files):
   EM3D.share.create()             a new link: { id, url, embedUrl, embedCode }. Signed out, it expires in 30 days
