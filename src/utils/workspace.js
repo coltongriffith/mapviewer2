@@ -38,6 +38,7 @@ export function permissions(role) {
     invite: hasRole(role, 'admin'),
     manageMembers: hasRole(role, 'admin'),
     deleteProperty: hasRole(role, 'admin'),
+    deleteFile: hasRole(role, 'admin'),
     moveOut: hasRole(role, 'admin'),
     manageOwners: role === 'owner',
   };
@@ -97,7 +98,7 @@ const MESSAGES = [
   [/ORG_RATE_LIMIT/, 'You have created several workspaces today. Try again tomorrow.'],
   [/ORG_PROJECT_LIMIT/, 'This workspace has reached its map limit on the current plan.'],
   [/PROJECT_LIMIT/, 'Your personal plan is full. Upgrade to Pro, or keep the map in the workspace.'],
-  [/PROPERTY_NOT_EMPTY/, 'Move this property’s maps, 3D figures and claim portfolios out before deleting it.'],
+  [/PROPERTY_NOT_EMPTY/, 'Move this property’s maps, 3D figures and claim portfolios out, and delete its data files, before deleting it.'],
   [/PROPERTY_NOT_FOUND/, 'That property was not found. It may have been deleted.'],
   [/FILES_NOT_COPIED|FILE_PATH_UNEXPECTED/, 'The 3D figure’s files could not be moved. Try again.'],
   [/duplicate key.*properties_org_slug/, 'Another property already uses that address.'],

@@ -22,14 +22,33 @@ const ORG2 = '00000000-0000-4000-8000-0000000000a2';
 const jvOrg = { id: ORG2, name: 'North Rock JV', slug: 'north-rock-jv', plan: 'free', role: 'viewer', member_count: 3, property_count: 1 };
 const jvProperty = { ...property, id: '00000000-0000-4000-8000-0000000000b2', org_id: ORG2, name: 'Rails JV', description: 'Joint venture ground' };
 
+const FILE = '00000000-0000-4000-8000-0000000000f1';
+const assays = { id: FILE, name: 'assays.csv', kind: 'drill', role: 'assays', version: 2, path: `${ORG}/${PROP}/${FILE}/v2/assays.csv`, bytes: 2048, sha256: 'a'.repeat(64), note: null, uploaded_at: '2026-10-19T00:00:00Z', uploaded_by_email: 'cfo@star.test' };
+
 async function fakeSupabase(page, { role = 'owner', orgs = [org(role)], properties = null } = {}) {
-  const fake = { rpc: [], orgs, properties: properties || (orgs.length ? [property] : []), invites: [] };
+  const fake = { rpc: [], orgs, properties: properties || (orgs.length ? [property] : []), invites: [], files: [{ ...assays }], uploads: [], signed: [], patches: [] };
   await page.route('**/api/track', (route) => route.fulfill({ status: 204 }));
   await page.route('https://example.supabase.co/**', async (route) => {
     const req = route.request(), url = new URL(req.url()), path = url.pathname, method = req.method();
     const json = (body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
     const single = (req.headers().accept || '').includes('vnd.pgrst.object');
     const rows = (list) => (single ? (list[0] ? json(list[0]) : json({ code: 'PGRST116', message: 'no rows' }, 406)) : json(list));
+    // Property data library: storage uploads, signed downloads, soft deletes.
+    if (path.startsWith('/storage/v1/object/sign/')) {
+      const p = decodeURIComponent(path.slice('/storage/v1/object/sign/property-files/'.length));
+      fake.signed.push(p);
+      return json({ signedURL: `/object/sign/property-files/${p}?token=t` });
+    }
+    if (path.startsWith('/storage/v1/object/property-files/') && method === 'POST') {
+      fake.uploads.push(decodeURIComponent(path.slice('/storage/v1/object/property-files/'.length)));
+      return json({ Key: path, Id: 'x' });
+    }
+    if (path === '/rest/v1/property_files' && method === 'PATCH') {
+      const id = (url.searchParams.get('id') || '').slice(3);
+      fake.patches.push({ id, body: req.postDataJSON() });
+      fake.files = fake.files.filter((f) => f.id !== id);
+      return json([{ id }]);
+    }
     if (path.startsWith('/auth/v1/')) {
       const fn = path.split('/').pop();
       if (fn === 'token') return json(session);
@@ -57,6 +76,14 @@ async function fakeSupabase(page, { role = 'owner', orgs = [org(role)], properti
       }
       if (fn === 'get_org_activity') return json([{ id: 'a1', created_at: '2026-10-20T10:00:00Z', action: 'created', entity_type: 'map', property_id: PROP, property_name: property.name, actor_email: 'cfo@star.test', summary: 'Created map "Rails claims"' }]);
       if (fn === 'get_property_claims') return json([]);
+      if (fn === 'list_property_files') return json(fake.files);
+      if (fn === 'add_property_file_version') {
+        const f = fake.files.find((x) => x.id === args.p_file);
+        const version = f ? f.version + 1 : 1;
+        const entry = { ...(f || { id: args.p_file, name: args.p_name, kind: args.p_kind, role: args.p_role }), version, path: args.p_path, bytes: args.p_bytes, sha256: args.p_sha256, uploaded_at: '2026-10-21T00:00:00Z', uploaded_by_email: user.email };
+        fake.files = [...fake.files.filter((x) => x.id !== args.p_file), entry].sort((a, b) => a.name.localeCompare(b.name));
+        return json({ file_id: args.p_file, version, unchanged: false });
+      }
       return json(null);
     }
     if (path === '/rest/v1/properties') {
@@ -129,6 +156,47 @@ test('the property page lists its map and its 3D figure', async ({ page }) => {
   await expect(page.getByText('Created map "Rails claims"')).toBeVisible();
 });
 
+test('the data library lists, adds, versions, downloads and deletes files', async ({ page }) => {
+  const fake = await fakeSupabase(page, { role: 'admin' });
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold');
+  await page.getByRole('tab', { name: 'Data library' }).click();
+  const region = page.getByRole('region', { name: 'Data library' });
+  const table = region.getByRole('table', { name: 'Data files' });
+  await expect(table.getByRole('row', { name: /assays\.csv.*Drill data · assays.*v2.*cfo@star\.test/ })).toBeVisible();
+
+  // A new file: kind guessed from the name, uploaded to v1 of its own folder, then recorded.
+  let chooser = page.waitForEvent('filechooser');
+  await region.getByRole('button', { name: '+ Add a file' }).click();
+  await (await chooser).setFiles({ name: 'Rails collars.csv', mimeType: 'text/csv', buffer: Buffer.from('HoleID,Easting,Northing\nR-1,1,2\n') });
+  await expect(region.getByLabel('Kind of data')).toHaveValue('drill');
+  await region.getByRole('button', { name: 'Upload', exact: true }).click();
+  await expect(region.getByText('Added Rails collars.csv.')).toBeVisible();
+  expect(fake.uploads[0]).toMatch(new RegExp(`^${ORG}/${PROP}/[0-9a-f-]{36}/v1/Rails_collars\\.csv$`));
+  const added = fake.rpc.find((c) => c.fn === 'add_property_file_version').args;
+  expect(added).toMatchObject({ p_property: PROP, p_name: 'Rails collars.csv', p_kind: 'drill', p_role: 'collars', p_path: fake.uploads[0], p_bytes: 32 });
+  expect(added.p_sha256).toMatch(/^[0-9a-f]{64}$/);
+  await expect(table.getByRole('row', { name: /Rails collars\.csv.*v1.*geo@star\.test/ })).toBeVisible();
+
+  // A new version of an existing file goes into its next folder.
+  chooser = page.waitForEvent('filechooser');
+  await region.getByRole('button', { name: 'Upload a new version of assays.csv' }).click();
+  await (await chooser).setFiles({ name: 'assays-batch7.csv', mimeType: 'text/csv', buffer: Buffer.from('HoleID,From,To,Cu\nR-1,0,2,0.4\n') });
+  await expect(region.getByText('Uploaded version 3 of assays.csv.')).toBeVisible();
+  expect(fake.uploads[1]).toBe(`${ORG}/${PROP}/${FILE}/v3/assays-batch7.csv`);
+  await expect(table.getByRole('row', { name: /assays\.csv.*v3/ })).toBeVisible();
+  const download = page.waitForEvent('download');
+  await page.route('https://example.supabase.co/storage/v1/object/sign/property-files/**', (route) => (route.request().method() === 'GET'
+    ? route.fulfill({ status: 200, headers: { 'content-disposition': 'attachment; filename="assays.csv"' }, body: 'HoleID' }) : route.fallback()));
+  await region.getByRole('button', { name: 'Download assays.csv' }).click();
+  expect((await download).suggestedFilename()).toBe('assays.csv');
+  expect(fake.signed).toEqual([`${ORG}/${PROP}/${FILE}/v3/assays-batch7.csv`]);
+
+  page.once('dialog', (d) => d.accept());
+  await region.getByRole('button', { name: 'Delete assays.csv' }).click();
+  await expect(table.getByText('assays.csv')).toHaveCount(0);
+  expect(fake.patches).toEqual([{ id: FILE, body: { deleted_at: expect.any(String) } }]);
+});
+
 test('a viewer gets the same pages without editing controls', async ({ page }) => {
   await fakeSupabase(page, { role: 'viewer' });
   await page.goto('/workspace');
@@ -148,6 +216,11 @@ test('a viewer gets the same pages without editing controls', async ({ page }) =
   await page.getByRole('tab', { name: '3D figures' }).click();
   await expect(page.getByRole('button', { name: 'Open Rails 3D section' })).toBeVisible();
   await expect(page.getByRole('link', { name: '+ New 3D figure' })).toHaveCount(0);
+  await page.getByRole('tab', { name: 'Data library' }).click();
+  await expect(page.getByRole('button', { name: 'Download assays.csv' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '+ Add a file' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Upload a new version/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^Delete / })).toHaveCount(0);
 });
 
 test('an older property link opens directly when only one company has that address', async ({ page }) => {
