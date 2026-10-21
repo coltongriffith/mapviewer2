@@ -137,7 +137,12 @@ const BUDGETS = {
   // (~0.64 kB): GeoJSON and KML files taken as overlays when added (and kept beside the sample), the overlay areas
   // painted with the terrain, the draw and section hooks, the legend rows, the saved settings, getState and the six
   // EM3D methods. Their parsing, placing, drawing and panels are lazy (overlays.js, shapes.js, below).
-  threeDJsGzipKb: 169.3,
+  // 169.3 → 169.7 (Oct 2026, round 5C, measured 169.33, configured 169.36): the hooks for named sections and fences
+  // (~0.36 kB): the saved settings (sections, secActive), the section ends lettered B, B′ on the figure and the
+  // section, a named section's heading, exportPNG({ section }) (drawn synchronously, so the section is swapped in
+  // here), the fence lines painted with the terrain, getState and the four EM3D methods. The tabs, the API, the
+  // fences and their letters are lazy (sections.js, below).
+  threeDJsGzipKb: 169.7,
   // /3d's own modules fetched on first use (the geology, geophysics and tag layers, the account
   // client). They never load with the page or the app, so they sit outside the page and app totals.
   // 32 → 34 (Oct 2026, round 4): per-hole tags, grouped pending tags, callouts beside or bracketed on their
@@ -175,7 +180,11 @@ const BUDGETS = {
   // dimension lines and arrows on the figure and section, and their list), the draping maths both share
   // (drape.js, 0.9 kB) and zipped shapefiles read in unzip.js (shp.js, +1.1 kB). Fetched only for a figure with
   // an overlay or a shape, or a ZIP.
-  threeDLazyJsGzipKb: 89.7,
+  // 89.7 → 94.4 (Oct 2026, round 5C, measured 93.9, configured 94.1): named sections and fences (sections.js with
+  // shared/sectionGeometry.js, ~4.6 kB: addSection / updateSection / removeSection / setActiveSection, the section
+  // tabs, the old single section kept as A–A′, each section swapped in for its export, and the fences built as
+  // painted slabs with their letters). Fetched only for a figure with named sections.
+  threeDLazyJsGzipKb: 94.4,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.
