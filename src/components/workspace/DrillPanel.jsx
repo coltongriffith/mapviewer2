@@ -127,7 +127,7 @@ function Importer({ db, property, orgId, onDone }) {
           </select>
         </label>
         <label className="ws-field">Saved columns
-          <select value="" onChange={(e) => { const t = templates.find((x) => x.id === e.target.value); if (t) change(applyTemplate(t, file.header)); }}>
+          <select value="" onChange={(e) => { const t = templates.find((x) => x.id === e.target.value); if (t) change(applyTemplate(t, file.header, kind === 'assays' ? autoMapping(kind, file.header, file.rows).elements : null)); }}>
             <option value="">{templates.length ? 'Apply a template…' : 'No templates yet'}</option>
             {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
@@ -164,14 +164,14 @@ function Importer({ db, property, orgId, onDone }) {
               {(mapping.elements || []).map((e, i) => (
                 <tr key={e.column}>
                   <td><input type="checkbox" aria-label={`Import ${e.column}`} checked={e.skip !== true} onChange={(ev) => setEl(i, { skip: !ev.target.checked })} /></td>
-                  <td>{e.column}{e.unitColumn ? <small className="dash-muted"> · units in {e.unitColumn}</small> : null}</td>
+                  <td className={e.skip ? 'dash-muted' : undefined}>{e.column}{e.unitColumn ? <small className="dash-muted"> · units in {e.unitColumn}</small> : null}</td>
                   <td><span className="ws-field"><input aria-label={`Element for ${e.column}`} value={e.name} size={8} onChange={(ev) => setEl(i, { name: ev.target.value })} /></span></td>
                   <td><span className="ws-field"><input aria-label={`Unit for ${e.column}`} value={e.unit || ''} size={6} placeholder="%, ppm, g/t" onChange={(ev) => setEl(i, { unit: ev.target.value || null })} /></span></td>
                 </tr>
               ))}
             </tbody>
           </table>
-          {!mapping.elements?.length && <p className="dash-muted">No numeric columns were found for elements.</p>}
+          {!mapping.elements?.some((e) => !e.skip) && <p className="dash-muted">Tick the columns that hold assay values.</p>}
         </div>
       )}
       {problems && <Problems {...problems} />}

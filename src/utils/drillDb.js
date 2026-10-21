@@ -69,13 +69,55 @@ export const BDL_MODES = [
 
 const norm = (h) => String(h).toLowerCase().replace(/[\s\-.()/#]+/g, '_').replace(/^_+|_+$/g, '');
 
-/** Reads CSV / delimited text into { header, rows } (rows of strings). */
+/**
+ * Reads CSV / delimited text into { header, rows, lines } (rows of strings;
+ * lines[i] is the file line row i starts on, past blank lines and quoted
+ * values that span lines).
+ *
+ * A file whose structure is broken is refused, naming the line, rather than
+ * read in part: an unclosed quote would swallow every row after it into one
+ * value, and a row with more or fewer values than the header has its values
+ * under the wrong columns. Extra empty cells at the end of a row (as
+ * spreadsheets leave them) are the only tolerance.
+ */
 export async function parseCsv(text) {
   const { default: Papa } = await import('papaparse');
-  const out = Papa.parse(String(text).replace(/^\uFEFF/, ''), { skipEmptyLines: 'greedy' });
-  const data = out.data || [];
-  const header = (data.shift() || []).map((h) => String(h).trim());
-  return { header, rows: data.map((r) => r.map((v) => (v == null ? '' : String(v)))) };
+  const src = String(text).replace(/^\uFEFF/, '');
+  // File line of a character position, counted forward as rows arrive.
+  let at = 0, line = 1;
+  const lineOf = (pos) => { for (; at < pos; at++) if (src[at] === '\n') line++; return line; };
+  const data = [], lines = [], problems = [];
+  let start = 0;
+  Papa.parse(src, {
+    skipEmptyLines: 'greedy',
+    step: (r) => {
+      while (src[start] === '\n' || src[start] === '\r') start++;
+      const first = lineOf(start);
+      for (const e of r.errors || []) {
+        const where = Number.isInteger(e.index) ? lineOf(e.index) : first;
+        if (e.code === 'MissingQuotes') problems.push(`Line ${where}: a quoted value starts here and is never closed, so every row after it would be read as part of it. Close the quote (") or remove it.`);
+        else if (e.code === 'InvalidQuotes') problems.push(`Line ${where}: a quoted value is not closed properly (text after the closing quote). Fix the quotes on that line.`);
+        else if (e.code === 'UndetectableDelimiter') problems.push('Could not tell how the columns are separated. Save the file as CSV with commas, tabs or semicolons between columns.');
+        else problems.push(`Line ${where}: ${e.message}.`);
+      }
+      data.push((r.data || []).map((v) => (v == null ? '' : String(v))));
+      lines.push(first);
+      start = r.meta.cursor;
+    },
+  });
+  if (problems.length) throw new Error(problems[0] + (problems.length > 1 ? ` (${problems.length - 1} more problem${problems.length > 2 ? 's' : ''} in the file.)` : ''));
+  const header = (data.shift() || []).map((h) => h.trim());
+  lines.shift();
+  const bad = [];
+  const rows = data.map((r, i) => {
+    if (r.length > header.length && r.slice(header.length).every((v) => !v.trim())) return r.slice(0, header.length);
+    if (r.length !== header.length) bad.push(`line ${lines[i]} has ${r.length} value${r.length === 1 ? '' : 's'}`);
+    return r;
+  });
+  if (bad.length) {
+    throw new Error(`The header has ${header.length} columns but ${bad[0]}${bad.length > 1 ? ` (and ${bad.length - 1} more row${bad.length > 2 ? 's' : ''} do not match)` : ''}. Check that line for a stray comma or quote; nothing was imported.`);
+  }
+  return { header, rows, lines };
 }
 
 // ── Detection ──────────────────────────────────────────────────────────────
@@ -110,9 +152,11 @@ export function parseElementHeader(h) {
 
 const cell = (v) => String(v ?? '').trim();
 const looksNumeric = (v) => /^[<>]?\s*-?\d*\.?\d+(e[-+]?\d+)?$/i.test(cell(v)) || BDL_WORDS.test(cell(v));
+// Every row is read, not a sample: a column blank for its first few hundred
+// rows (an element assayed only in the last batch) is still found.
 const share = (rows, i, test) => {
   let n = 0, tot = 0;
-  for (const r of rows.slice(0, 300)) { const v = cell(r[i]); if (!v || MISSING.test(v)) continue; tot++; if (test(v)) n++; }
+  for (const r of rows) { const v = cell(r[i]); if (!v || MISSING.test(v)) continue; tot++; if (test(v)) n++; }
   return tot ? n / tot : 0;
 };
 
@@ -137,24 +181,38 @@ export function autoMapping(kind, header, rows, { name = '', crs = null } = {}) 
   if (kind === 'assays') {
     const used = new Set(Object.values(cols));
     const unitCols = new Map(header.map((h, i) => [norm(h), i]).filter(([h]) => /_?units?$/.test(h)));
+    // Every other column is listed, so nothing is dropped out of sight: the ones
+    // that read as assay values are ticked, the rest (weights, lab codes, an
+    // empty column) are there to tick by hand.
     mapping.elements = header.flatMap((h, i) => {
-      if (used.has(h) || NOT_ELEMENT.test(n[i]) || /units?$/.test(n[i]) || /(^|_)id$/.test(n[i]) || share(rows, i, looksNumeric) < 0.8) return [];
+      if (used.has(h) || /units?$/.test(n[i])) return [];
       const el = parseElementHeader(h);
       const uc = [`${n[i]}_unit`, `${n[i]}_units`, `${norm(el.name)}_unit`, `${norm(el.name)}_units`].find((k) => unitCols.has(k));
-      return [{ column: h, name: el.name, unit: el.unit, unitColumn: uc ? header[unitCols.get(uc)] : null }];
+      const isValue = !NOT_ELEMENT.test(n[i]) && !/(^|_)id$/.test(n[i]) && share(rows, i, looksNumeric) >= 0.8;
+      return [{ column: h, name: el.name, unit: el.unit, unitColumn: uc ? header[unitCols.get(uc)] : null, ...(isValue ? {} : { skip: true }) }];
     });
   }
   return mapping;
 }
 
-/** Applies a saved template's mapping to this file's header; columns not in the file are dropped. */
-export function applyTemplate(template, header) {
+/**
+ * Applies a saved template's mapping to this file's header; columns not in the
+ * file are dropped. `candidates` (autoMapping's elements for this file) adds the
+ * file's other columns, unticked, so a column the template does not know is
+ * still there to tick.
+ */
+export function applyTemplate(template, header, candidates = null) {
   const byNorm = new Map(header.map((h) => [norm(h), h]));
   const pick = (c) => (c ? byNorm.get(norm(c)) || null : null);
   const m = template?.mapping || template || {};
   const columns = Object.fromEntries(Object.entries(m.columns || {}).map(([k, c]) => [k, pick(c)]).filter(([, c]) => c));
   const elements = (m.elements || []).flatMap((e) => (pick(e.column) ? [{ ...e, column: pick(e.column), unitColumn: pick(e.unitColumn) }] : []));
-  return { ...m, columns, ...(m.elements ? { elements } : {}) };
+  if (candidates) {
+    const have = new Set(elements.map((e) => e.column));
+    const taken = new Set(Object.values(columns));
+    for (const c of candidates) if (!have.has(c.column) && !taken.has(c.column)) elements.push({ ...c, skip: true });
+  }
+  return { ...m, columns, ...(m.elements || candidates ? { elements } : {}) };
 }
 
 // ── Values ─────────────────────────────────────────────────────────────────
@@ -203,7 +261,7 @@ const list = (ids) => `${ids.slice(0, 6).join(', ')}${ids.length > 6 ? '…' : '
  * by hole, in the 3D data checks' terms).
  * → { rows, lines, errors: [{ line, message }], errorCount, warnings: [{ kind, message, holes }], stats }
  */
-export function buildImport(kind, { header, rows }, mapping, { firstLine = 2 } = {}) {
+export function buildImport(kind, { header, rows, lines: fileLines = null }, mapping, { firstLine = 2 } = {}) {
   const fields = FIELDS[kind];
   const col = (k) => (mapping.columns?.[k] ? header.indexOf(mapping.columns[k]) : -1);
   const idx = Object.fromEntries(fields.map((f) => [f.key, col(f.key)]));
@@ -248,7 +306,7 @@ export function buildImport(kind, { header, rows }, mapping, { firstLine = 2 } =
   const dips = [];
   const seen = new Map();
   rows.forEach((r, i) => {
-    const line = i + firstLine;
+    const line = fileLines?.[i] ?? i + firstLine;
     if (r.every((v) => !cell(v))) { stats.skipped++; return; }
     const o = {};
     let bad = false;

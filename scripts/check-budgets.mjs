@@ -82,7 +82,10 @@ const BUDGETS = {
   // chunk (DrillPanel.jsx + utils/drillDb.js, ~9.8 kB: CSV mapping with saved templates, the import checks, the
   // dry-run diff, commit and the import history with Roll back), fetched only when the tab opens; the
   // workspace chunk gains the tab and its lazy hook (~0.3 kB). App and the homepage are unchanged.
-  totalAuthJsGzipKb: 904.5,
+  // 904.5 → 905.2 (Oct 2026, measured 904.87): the drill CSV reader refuses broken files (an unclosed quote, a
+  // row that does not match the header) naming the line, keeps each row's file line, and lists every column as
+  // an element to tick (~0.7 kB, all in the lazy drill chunk).
+  totalAuthJsGzipKb: 905.2,
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
@@ -96,7 +99,8 @@ const BUDGETS = {
   // (~0.3 kB); chunk-hash churn alone moves this total by about ±20 B, so 828.5 left no room.
   // 828.8 → 838.0 (Oct 2026, measured 837.65 after merging round 5C, plus 0.3): the drill database tab, as totalAuthJsGzipKb above (lazy chunk
   // ~8.8 kB in this build, workspace chunk +0.3 kB); nothing in App or on the homepage.
-  totalJsGzipKb: 838.0,
+  // 838.0 → 838.7 (Oct 2026, measured 838.32): the drill CSV reader's structure checks, as totalAuthJsGzipKb above.
+  totalJsGzipKb: 838.7,
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the
   // totals above. /3d carries three.js (~109 kB gzip) and its editor.

@@ -232,6 +232,13 @@ test('drill data: import a CSV, map its columns, see the diff, commit and roll b
   const history = region.getByRole('table', { name: 'Import history' });
   await expect(history.getByRole('row', { name: /Collars.*Rails collars\.csv.*12 new holes.*cfo@star\.test/ })).toBeVisible();
 
+  // A file with an unclosed quote is refused whole, naming the line.
+  const broken = page.waitForEvent('filechooser');
+  await region.getByRole('button', { name: '+ Import a CSV' }).click();
+  await (await broken).setFiles({ name: 'lith.csv', mimeType: 'text/csv', buffer: Buffer.from('HoleID,From,To,Code,Description\nR-1,0,2,QMD,"Quartz monzodiorite\nR-1,2,4,AND,Andesite\n') });
+  await expect(region.getByRole('alert')).toContainText('Line 2: a quoted value starts here and is never closed');
+  await expect(region.getByRole('form', { name: 'Import drill data' })).toHaveCount(0);
+
   // The kind and columns are detected; the BDL value is flagged before anything is sent.
   const chooser = page.waitForEvent('filechooser');
   await region.getByRole('button', { name: '+ Import a CSV' }).click();

@@ -12,9 +12,30 @@ const table = async (csv) => parseCsv(csv);
 
 describe('reading and detecting', () => {
   it('parses CSV, tab and semicolon files with a BOM, quotes and blank lines', async () => {
-    expect(await table('\uFEFFHoleID,Easting,Northing\n"R-1",1,2\n\nR-2,3,4\n')).toEqual({ header: ['HoleID', 'Easting', 'Northing'], rows: [['R-1', '1', '2'], ['R-2', '3', '4']] });
+    expect(await table('\uFEFFHoleID,Easting,Northing\n"R-1",1,2\n\nR-2,3,4\n')).toEqual({ header: ['HoleID', 'Easting', 'Northing'], rows: [['R-1', '1', '2'], ['R-2', '3', '4']], lines: [2, 4] });
     expect((await table('Hole\tFrom\tTo\nR-1\t0\t2\n')).header).toEqual(['Hole', 'From', 'To']);
     expect((await table('Hole;From;To\nR-1;0;2\n')).rows).toEqual([['R-1', '0', '2']]);
+  });
+
+  it('keeps each row\'s own file line past blank lines and values that span lines; trailing empty cells are fine', async () => {
+    const t = await table('HoleID,From,To,Description\r\n\r\nR-1,0,2,"Quartz\r\nmonzodiorite"\r\nR-1,2,4,Andesite,,\r\n\r\nR-1,4,6,Andesite\r\n');
+    expect(t.rows).toEqual([['R-1', '0', '2', 'Quartz\r\nmonzodiorite'], ['R-1', '2', '4', 'Andesite'], ['R-1', '4', '6', 'Andesite']]);
+    expect(t.lines).toEqual([3, 5, 7]);
+    // Problems found later point at those lines too.
+    const r = buildImport('lithology', t, { columns: { hole_id: 'HoleID', from_m: 'From', to_m: 'To', description: 'Description' } });
+    expect(r.lines).toEqual([3, 5, 7]);
+  });
+
+  it('refuses a file with an unclosed quote instead of swallowing the rows after it', async () => {
+    const csv = 'HoleID,From,To,Code,Description\nR-1,0,2,QMD,Quartz monzodiorite\nR-1,2,4,AND,"Andesite, chloritic\nR-1,4,6,AND,Andesite\nR-1,6,8,QMD,Quartz monzodiorite\n';
+    await expect(table(csv)).rejects.toThrow('Line 3: a quoted value starts here and is never closed, so every row after it would be read as part of it. Close the quote (") or remove it.');
+    await expect(table('HoleID,From,To,Description\nR-1,0,2,"Andesite" chloritic\n')).rejects.toThrow(/^Line 2: a quoted value is not closed properly/);
+  });
+
+  it('refuses rows with more or fewer values than the header, naming the first', async () => {
+    await expect(table('HoleID,From,To,Cu\nR-1,0,2,0.4\nR-1,2,4,0,5\nR-1,4,6\n'))
+      .rejects.toThrow('The header has 4 columns but line 3 has 5 values (and 1 more row do not match). Check that line for a stray comma or quote; nothing was imported.');
+    await expect(table('HoleID\nR-1\n')).rejects.toThrow(/Could not tell how the columns are separated/);
   });
 
   it('tells collars, surveys, assays and lithology apart as the 3D maker does', async () => {
@@ -39,7 +60,7 @@ describe('mapping columns', () => {
     expect(parseElementHeader('Mo')).toEqual({ name: 'Mo', unit: null });
   });
 
-  it('maps assay columns, elements and per-element unit columns, leaving out the rest', async () => {
+  it('maps assay columns, elements and per-element unit columns; other columns are listed unticked', async () => {
     const t = await table('HOLEID,SAMPLE,FROM,TO,Cu_pct,Au (g/t),Mo,Mo_units,Weight_kg,Lab\nR-1,A1,0,2,0.4,<0.005,12,ppm,3.2,ALS\n');
     expect(autoMapping('assays', t.header, t.rows)).toEqual({
       columns: { hole_id: 'HOLEID', from_m: 'FROM', to_m: 'TO', sample_id: 'SAMPLE' },
@@ -48,8 +69,31 @@ describe('mapping columns', () => {
         { column: 'Cu_pct', name: 'Cu', unit: '%', unitColumn: null },
         { column: 'Au (g/t)', name: 'Au', unit: 'g/t', unitColumn: null },
         { column: 'Mo', name: 'Mo', unit: null, unitColumn: 'Mo_units' },
+        { column: 'Weight_kg', name: 'Weight_kg', unit: null, unitColumn: null, skip: true },
+        { column: 'Lab', name: 'Lab', unit: null, unitColumn: null, skip: true },
       ],
     });
+  });
+
+  it('finds an element whose only value is in the last of 301 rows, and imports it', async () => {
+    const body = Array.from({ length: 301 }, (_, i) => `R-1,${i},${i + 1},0.${i % 9 + 1},${i === 300 ? '1.25' : ''}`).join('\n');
+    const t = await table(`HoleID,From,To,Cu_pct,Au_ppb\n${body}\n`);
+    const m = autoMapping('assays', t.header, t.rows);
+    expect(m.elements).toEqual([{ column: 'Cu_pct', name: 'Cu', unit: '%', unitColumn: null }, { column: 'Au_ppb', name: 'Au', unit: 'ppb', unitColumn: null }]);
+    const r = buildImport('assays', t, m);
+    expect(r.errorCount).toBe(0);
+    expect(r.rows[300]).toMatchObject({ from_m: 300, values: { Cu: 0.4, Au: 1.25 }, units: { Cu: '%', Au: 'ppb' } });
+    expect(r.lines[300]).toBe(302);
+    expect(r.rows[299].values).toEqual({ Cu: 0.3 });
+  });
+
+  it('an empty or unrecognised column can be ticked by hand', async () => {
+    const t = await table('HoleID,From,To,Cu_pct,Pt_ppb\nR-1,0,2,0.4,\nR-1,2,4,0.5,\n');
+    const m = autoMapping('assays', t.header, t.rows);
+    expect(m.elements[1]).toEqual({ column: 'Pt_ppb', name: 'Pt', unit: 'ppb', unitColumn: null, skip: true });
+    expect(buildImport('assays', t, m).rows[0].values).toEqual({ Cu: 0.4 });
+    const ticked = { ...m, elements: m.elements.map((e) => ({ ...e, skip: false })) };
+    expect(buildImport('assays', t, ticked).rows[0]).toMatchObject({ values: { Cu: 0.4 }, units: { Cu: '%' } });
   });
 
   it('maps collars, in latitude / longitude as WGS 84, and the property CRS otherwise', async () => {
@@ -67,6 +111,12 @@ describe('mapping columns', () => {
       elements: [{ column: 'Cu_PCT', name: 'Cu', unit: '%' }, { column: 'Zn_pct', name: 'Zn', unit: '%' }] } };
     expect(applyTemplate(template, ['holeid', 'FROM', 'TO', 'cu_pct'])).toEqual({
       columns: { hole_id: 'holeid', from_m: 'FROM', to_m: 'TO' }, bdl: 'dl', elements: [{ column: 'cu_pct', name: 'Cu', unit: '%', unitColumn: null }] });
+    // With this file's own candidates, a column the template does not know stays available, unticked.
+    const candidates = [{ column: 'cu_pct', name: 'Cu', unit: '%', unitColumn: null }, { column: 'Au_ppb', name: 'Au', unit: 'ppb', unitColumn: null }];
+    expect(applyTemplate(template, ['holeid', 'FROM', 'TO', 'cu_pct', 'Au_ppb'], candidates).elements).toEqual([
+      { column: 'cu_pct', name: 'Cu', unit: '%', unitColumn: null },
+      { column: 'Au_ppb', name: 'Au', unit: 'ppb', unitColumn: null, skip: true },
+    ]);
   });
 });
 
