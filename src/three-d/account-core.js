@@ -171,6 +171,15 @@ const lib = () => (libP ||= import('./library.js').then((m) => { m.init({ client
   .catch((err) => { libP = null; throw err; }));
 const checkLibrary = () => { if (current?.home?.propertyId) lib().then((m) => m.check()).catch(() => { /* the figure is fine as it is */ }); };
 
+// ── Property drill database ─────────────────────────────────────────────────
+// Any member can take a figure's holes from a property's drill database; a
+// figure that did is told of newer imports when it opens (property-data.js).
+let drillP = null;
+const drill = () => (drillP ||= import('./property-data.js').then((m) => { m.init({ client, current: () => current, say, listHomes }); return m; })
+  .catch((err) => { drillP = null; throw err; }));
+const resetDrill = () => drillP?.then((m) => m.reset(), () => {}); // a notice belongs to the figure it was shown for
+const checkDrill = () => { if (studio().getState().drillSource?.kind === 'property') drill().then((m) => m.check()).catch(() => { /* the figure is fine as it is */ }); };
+
 export async function listProjects() {
   await requireUser('see your saved 3D maps');
   const sb = await client();
@@ -272,6 +281,7 @@ export async function saveProject(name, existingId, dest = null, { force = false
 
 export async function openProject(id) {
   await requireUser('open your saved 3D maps');
+  resetDrill();
   const sb = await client();
   let project, row;
   try {
@@ -298,7 +308,7 @@ export async function openProject(id) {
     throw Object.assign(plain(`That 3D map could not be opened (${err.message}). The figure you had is back.`, err), { plain: true });
   }
   current = { id: row.id, name: row.name, savedAt: row.updated_at, home: await homeOf(row) };
-  checkLibrary();
+  checkLibrary(); checkDrill();
   return { ...current, state: em.getState() };
 }
 
@@ -499,6 +509,9 @@ async function doSave(name, id, dest = null, opts) {
 }
 
 function renderButtons() {
+  // "From property drill database" for a member of a company property.
+  const d = $('drill-add');
+  if (d) { if (!user) { d.hidden = true; $('drill-pick').hidden = true; } else listHomes().then(({ properties }) => { d.hidden = !user || !properties.length; }); }
   const s = $('acct-save'); if (!s) return;
   s.disabled = busy;
   s.title = user ? `Save to your account (${navigator.platform?.startsWith('Mac') ? '⌘' : 'Ctrl'}+S)` : 'Sign in and save this figure to your account';
@@ -585,7 +598,7 @@ async function onMenuClick(e) {
   else if (act === 'save-prop') { toggleMenu(false); openDialog('name', { asNew: Boolean(current), toProperty: true }); }
   else if (act === 'signout') {
     try { await signOut(); } catch { /* local sign-out still clears */ }
-    user = null; current = null; setUrlProject(null); renderNote(); renderButtons(); renderMenu();
+    user = null; current = null; resetDrill(); setUrlProject(null); renderNote(); renderButtons(); renderMenu();
     say('Signed out. The figure on screen is unchanged.');
   }
 }
@@ -619,6 +632,7 @@ function wire() {
     if (pending) { clearTimeout(pendingT); pendingT = setTimeout(() => stashWork(pending), 1500); }
   });
 
+  $('drill-add')?.addEventListener('click', () => drill().then((m) => m.toggle()).catch(() => say('Could not load the property drill database. Check your connection and try again.')));
   $('lib-add')?.addEventListener('click', () => lib().then((m) => m.toggle()).catch(() => say('Could not load the property library. Check your connection and try again.')));
 
   $('acct-use-password').addEventListener('click', () => {

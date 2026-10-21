@@ -173,7 +173,9 @@ const BUDGETS = {
   // instead of reloading). The Display checkboxes and terrain selects now use the generic data-ext binding (-0.16 kB).
   // 170.1 → 170.6 (Oct 2026, round 5D merged over drill database 2A, measured 170.33, configured 170.36): the two
   // entries above add up; neither adds the other's code.
-  threeDJsGzipKb: 170.6,
+  // 170.6 → 170.9 (Oct 2026, drill database 2B, measured 170.56, configured 170.57): the drillSource hooks and the
+  // hole-path switch (+0.18 kB); 170.6 left ~30 B, inside chunk-hash churn.
+  threeDJsGzipKb: 170.9,
   // /3d's own modules fetched on first use (the geology, geophysics and tag layers, the account
   // client). They never load with the page or the app, so they sit outside the page and app totals.
   // 32 → 34 (Oct 2026, round 4): per-hole tags, grouped pending tags, callouts beside or bracketed on their
@@ -226,7 +228,17 @@ const BUDGETS = {
   // design version 5 or with the grid on), section.js +0.55 (pad-merged and staggered section IDs, grade-ranked holes),
   // overlays.js +0.3 (claims outlined in the inset), shapes.js +0.2 (views: both, 3D or section), the callout editor's
   // second published line with its own depths and stale-wording note (+0.2) and the location inset's outline hook in tags.js.
-  threeDLazyJsGzipKb: 104.5,
+  // 104.5 → 109.0 (Oct 2026, drill database 2B on top of round 5D, measured 108.5, configured 108.7): figures that take their holes
+  // from a property's drill database (property-data.js, ~3.7 kB: the property picker, the current rows read 1,000 at a
+  // time and written as the files an upload would be, the snapshot the figure records, the newer-imports notice and
+  // Update) and minimum-curvature paths for their surveyed holes (min-curvature.js with shared/desurvey.js, 0.64 kB);
+  // account-core.js gains the button, the hook and the check on open (+0.15 kB). Fetched only on "From property drill
+  // database" or for a figure that used it. The page gains the hooks (drillSource, the path switch; +0.18 kB, inside
+  // its budget); App and the totals are unchanged.
+  // 109.0 → 109.3 (review fixes, measured 108.79, configured 109.02): the newer-data notice is cleared when another figure
+  // opens and Update checks it still belongs to the figure on screen; collars in more than one coordinate system are
+  // refused with their counts (~0.2 kB in property-data.js, account-core.js +0.02).
+  threeDLazyJsGzipKb: 109.3,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.

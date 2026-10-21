@@ -304,11 +304,16 @@ html.em3d-embed .share-credit:hover { text-decoration: underline; }
           <button class="btn" type="button" id="load-sample">Use sample project</button>
           <button class="btn" type="button" id="clear-files">Clear</button>
           <button class="btn" type="button" id="lib-add" aria-expanded="false" aria-controls="lib-pick" hidden>From property library</button>
+          <button class="btn" type="button" id="drill-add" aria-expanded="false" aria-controls="drill-pick" hidden>From property drill database</button>
         </div>
       </div>
       <section id="lib-pick" aria-label="Property library" hidden>
         <h3>Property library</h3>
         <div class="files" id="lib-list"></div>
+      </section>
+      <section id="drill-pick" aria-label="Property drill database" hidden>
+        <h3>Property drill database</h3>
+        <div id="drill-body"></div>
       </section>
       <details id="paste-box">
         <summary>Or paste data as text</summary>
@@ -688,6 +693,11 @@ html.em3d-embed .share-credit:hover { text-decoration: underline; }
       <button class="btn" type="button" id="lib-update">Update</button>
       <button class="lib-x" type="button" id="lib-dismiss" aria-label="Keep the current data">×</button>
     </div>
+    <div class="lib-notice" id="drill-notice" role="status" hidden>
+      <span id="drill-notice-text"></span>
+      <button class="btn" type="button" id="drill-update">Update</button>
+      <button class="lib-x" type="button" id="drill-dismiss" aria-label="Keep the drill data this figure has">×</button>
+    </div>
     <div class="lib-notice" id="ver" role="status" hidden>
       <span>A new version is available<span id="ver-save" hidden> — save your work, then reload</span>.</span>
       <button class="btn" type="button" id="ver-reload">Reload</button>
@@ -746,6 +756,9 @@ JavaScript API (run in the page console or via your agent's evaluate tool):
                                   collars, surveys, assays, topography, or a .obj model shape.
                                   lib: {libFileId, version} marks a file from the property's data library
                                   role: "published" adds a table of published results (never detected)
+  EM3D.addFiles(files, {drillSource})   files from a property's drill database (step 1, "From property drill
+                                  database"): drillSource records the property and its newest import, in
+                                  getState().drillSource; opening the figure offers newer imports, never applies them
   EM3D.setBrand({company, title, subtitle, footnote, primary, accent, credit})
                                   colours as hex, e.g. primary: "#0b3954"
   EM3D.setLogo(dataUrl)           Promise. Also picks primary and accent from the logo

@@ -142,6 +142,9 @@ const S = {              // style
   calloutMode: 'calculated', pubOverrides: {},
   // Files taken from the property's data library: { [file name]: { libFileId, version } } (library.js).
   libRefs: {},
+  // Drill data taken from a property's drill database (property-data.js): { kind: 'property', propertyId, latestAt, ... }
+  // as loaded. The files keep the data as it was then; null for a figure made from uploaded files.
+  drillSource: null,
   // shell.color null: the brand accent (brandTone). throughTerrain: a faint ghost where the terrain hides it.
   // shading: "solid+edges" (lit, outlined), "solid" or "glass" (the old haze). shells: up to three named
   // cut-offs [{ cutoff, color, label }] drawn together; empty: the one shell at cutoff.
@@ -241,6 +244,7 @@ function build() {
   for (const c of collars.values()) {
     const ints = (assays.get(c.id) || []).sort((p, q) => p.from - q.from);
     let st = (surveys.get(c.id) || []).filter((s) => Number.isFinite(s.az) || Number.isFinite(s.dip)).sort((p, q) => p.d - q.d).map((s) => ({ d: s.d, az: Number.isFinite(s.az) ? s.az : (c.az || 0), dip: Number.isFinite(fixDip(s.dip)) ? fixDip(s.dip) : (fixDip(c.dip) || -90) }));
+    const surveyed = st.length > 0;
     if (!st.length) st = [{ d: 0, az: Number.isFinite(c.az) ? c.az : 0, dip: Number.isFinite(fixDip(c.dip)) ? fixDip(c.dip) : -90 }];
     const len = Math.max(Number.isFinite(c.depth) ? c.depth : 0, ints.length ? ints[ints.length - 1].to : 0, st[st.length - 1].d) || 200;
     const dirAt = (d) => {
@@ -249,7 +253,7 @@ function build() {
       const v = (s) => { const az = s.az * Math.PI / 180, dp = s.dip * Math.PI / 180; return [Math.sin(az) * Math.cos(dp), Math.cos(az) * Math.cos(dp), Math.sin(dp)]; };
       const va = v(a), vb = v(b), m = va.map((x, k) => x + (vb[k] - x) * t), l = Math.hypot(...m) || 1; return m.map((x) => x / l);
     };
-    holes.push({ id: c.id, c, ints, len, dirAt, path: null, note: c.note });
+    holes.push({ id: c.id, c, ints, len, dirAt, st, surveyed, path: null, note: c.note });
   }
   return { warnings, holes, topoPts, meshF, cols, posDown, latlon: latlon || null, checks };
 }
@@ -372,7 +376,8 @@ function rebuildScene(keepCam) {
   // Paths every 2 m (from 0 when the collar has no elevation; shifted onto the surface below)
   holes.forEach((h) => {
     const z0 = Number.isFinite(h.c.z) ? h.c.z : 0, pts = [{ d: 0, x: h.c.x, y: h.c.y, z: z0 }]; let p = { x: h.c.x, y: h.c.y, z: z0 };
-    for (let d = 0; d < h.len; d += 2) { const s = Math.min(2, h.len - d), v = h.dirAt(d + s / 2); p = { x: p.x + v[0] * s, y: p.y + v[1] * s, z: p.z + v[2] * s }; pts.push({ d: d + s, ...p }); }
+    if (mcPath(h)) EXT.desurvey.desurveyPath(h.st, h.len).forEach((o, i) => { if (i) pts.push({ d: o.d, x: h.c.x + o.x, y: h.c.y + o.y, z: z0 + o.z }); }); // EXT hook: minimum curvature
+    else for (let d = 0; d < h.len; d += 2) { const s = Math.min(2, h.len - d), v = h.dirAt(d + s / 2); p = { x: p.x + v[0] * s, y: p.y + v[1] * s, z: p.z + v[2] * s }; pts.push({ d: d + s, ...p }); }
     h.path = pts;
     h.posAt = (d) => { const i = Math.max(0, Math.min(pts.length - 2, Math.floor(d / 2))), a = pts[i], b = pts[i + 1], t = Math.max(0, Math.min(1, (d - a.d) / ((b.d - a.d) || 1))); return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, z: a.z + (b.z - a.z) * t }; };
   });
@@ -1869,9 +1874,10 @@ function refresh() {
 function principalAz(holes) { const f = holes.length > 2 && fitLine(holes.map((h) => h.c)); return f ? Math.round(f.az) % 180 : null; }
 // A line set by hand or fitted turns about its middle when the azimuth changes.
 function turnSection() { const s = S.section; if (s?.a) [s.a, s.b] = lineThrough({ x: (s.a.x + s.b.x) / 2, y: (s.a.y + s.b.y) / 2 }, S.secAz, Math.hypot(s.b.x - s.a.x, s.b.y - s.a.y) / 2); }
-function addUserFiles(arr) {
+function addUserFiles(arr, o = {}) {
   if (!Array.isArray(arr) || !arr.length || arr.some((f) => !f || typeof f.name !== 'string' || typeof f.text !== 'string')) throw new Error('addFiles expects [{ name: "collars.csv", text: "HoleID,Easting,..." }].');
   if (usingSample && !arr.every((a) => isOverlay(a.name, a.text))) { files = []; usingSample = false; S.meshes = {}; S.valueCol = null; S.coOverrides = {}; S.valueCol2 = null; resetDerived(); }
+  if (o.drillSource !== undefined) S.drillSource = structuredClone(o.drillSource); // property-data.js
   arr.forEach((a) => { if (a.lib) S.libRefs[a.name] = { libFileId: String(a.lib.libFileId), version: +a.lib.version }; else delete S.libRefs[a.name]; });
   refresh.secSet = false; addFiles(arr); extAutoOn(arr); refresh(); // extAutoOn: EXT hook
   const added = files.filter((f) => arr.some((a) => a.name === f.name)).map((f) => `${f.name} → ${ROLE_LABEL[f.role]}`);
@@ -1916,7 +1922,7 @@ function loadSample() {
 // A new data set starts without the old one's equivalent recipe, display cut-off or provisional flags.
 function resetDerived() {
   histReset(); // the history belongs to the old data
-  S.eq = null; eqApplied = false; S.displayCutoff = null; S.provisional = {}; S.shell.cutoff = null; S.libRefs = {}; S.section = S.sections = null; S.pubOverrides = {}; S.calloutMode = 'calculated'; callouts = calcCallouts = [];
+  S.eq = null; eqApplied = false; S.displayCutoff = null; S.provisional = {}; S.shell.cutoff = null; S.libRefs = {}; S.drillSource = null; S.section = S.sections = null; S.pubOverrides = {}; S.calloutMode = 'calculated'; callouts = calcCallouts = [];
   S.tags.status = {}; S.tags.groups = []; S.geology.legend = []; // EXT hook: per-hole tags and codes belong to the old data
   // The shell belongs to the old data: switch it off and stop any build still running.
   S.shell.enabled = false; shell.pending = null; shell.mesh = null; shell.field = null; syncShell();
@@ -2271,11 +2277,13 @@ Object.assign(S, {
   tags: { at: 'toe', style: 'dark', status: {}, fadePrevious: false, newLabel: '', prevLabel: 'Previously released', plannedLabel: 'Planned', groups: [], autoGroup: false, groupRadius: 140, emphasis: 'auto', highlight: {}, highlightNew: true, idMode: 'auto', showId: {}, showTag: {}, hideRows: [], pending: 'collar' },
   histograms: false, insetStyle: 'plan', overlays: [], shapes: [], // overlays.js, shapes.js
 });
-const EXT = {}, extLoading = {}, EXT_IMPORT = { geology: () => import('./geology.js'), geophys: () => import('./geophys.js'), tags: () => import('./tags.js'), look: () => import('./look.js'), section: () => import('./section.js'), type: () => import('./typography.js'), overlays: () => import('./overlays.js'), shapes: () => import('./shapes.js'), sections: () => import('./sections.js'), plan: () => import('./plan.js') };
+const EXT = {}, extLoading = {}, EXT_IMPORT = { geology: () => import('./geology.js'), geophys: () => import('./geophys.js'), tags: () => import('./tags.js'), look: () => import('./look.js'), section: () => import('./section.js'), type: () => import('./typography.js'), overlays: () => import('./overlays.js'), shapes: () => import('./shapes.js'), sections: () => import('./sections.js'), plan: () => import('./plan.js'), desurvey: () => import('./min-curvature.js') };
 const hasRole = (r) => files.some((f) => f.role === r);
+// Holes from a property's drill database follow their surveys by minimum curvature (shared/desurvey.js).
+const mcWanted = () => !!S.drillSource && hasRole('survey'), mcPath = (h) => h.surveyed && mcWanted() && !!EXT.desurvey;
 function extWanted() {
   const gp = S.geophys.mode !== 'off' && hasRole('geophys'), t = S.tags;
-  return { look: S.shell.enabled || ortho() || S.scene.haze > 0 || (uses(S, 'clearLeaders') && S.labels.some((l) => l.arrow)), geology: (S.geology.enabled && hasRole('litho')) || Object.keys(S.geology.images || {}).length > 0 || gp, geophys: gp, section: !!(S.section || S.sections) || uses(S, 'padIds'), sections: !!S.sections, plan: uses(S, 'planView') || S.grid, overlays: S.overlays.length > 0 || hasRole('overlay'), shapes: S.shapes.length > 0,
+  return { look: S.shell.enabled || ortho() || S.scene.haze > 0 || (uses(S, 'clearLeaders') && S.labels.some((l) => l.arrow)), geology: (S.geology.enabled && hasRole('litho')) || Object.keys(S.geology.images || {}).length > 0 || gp, geophys: gp, section: !!(S.section || S.sections) || uses(S, 'padIds'), sections: !!S.sections, plan: uses(S, 'planView') || S.grid, overlays: S.overlays.length > 0 || hasRole('overlay'), shapes: S.shapes.length > 0, desurvey: mcWanted(),
     tags: t.at !== 'toe' || t.fadePrevious || t.idMode === 'key' || (t.idMode !== 'all' && (project?.holes?.length || 0) > 12) || Object.keys(t.showId).length > 0 || Object.keys(t.showTag || {}).length > 0 || t.emphasis === 'key' || Object.keys(t.highlight || {}).length > 0
       || S.coPlacement !== 'column' || Object.values(coMap()).some((o) => o.placement || o.x !== undefined) || (S.pendingLabels && t.pending === 'collar' && !!project?.holes?.some(isPending)) || t.autoGroup || t.groups.length > 0 || Object.keys(t.status).length > 0 || S.histograms || S.insetStyle !== 'plan' || S.labels.some((l) => l.kind === 'stat') };
 }
@@ -2296,10 +2304,10 @@ const host = () => (extHost ||= {
 });
 const extLoad = (k) => (extLoading[k] ||= EXT_IMPORT[k]().then((m) => { m.init(host()); EXT[k] = m; return m; }));
 async function extReady() {
-  const want = extWanted(), hadTags = !!EXT.tags;
+  const want = extWanted(), had = !!EXT.tags + 2 * !!EXT.desurvey;
   await Promise.all(Object.keys(EXT_IMPORT).filter((k) => want[k]).map(extLoad).concat(prWanted() && prLoad()));
-  // Hole fade and weights are read while the scene is built: rebuild once tags.js arrives.
-  if (!hadTags && EXT.tags && G) rebuildScene(true);
+  // Hole fade and weights, and the surveyed paths, are read while the scene is built: rebuild once tags.js or the desurvey arrives.
+  if (G && had !== !!EXT.tags + 2 * !!EXT.desurvey) rebuildScene(true);
   extScene();
   await Promise.all([EXT.geology?.imagesReady(), EXT.tags?.syncInset(), EXT.overlays?.ready()]);
   extScene(); renderExtUI(); schedulePublish();
@@ -2402,7 +2410,7 @@ function getState() {
     app: 'Exploration Maps 3D', version: 3, ready: !!G, usingSample, step: currentStep, view: S.view,
     files: files.map((x) => ({ name: x.name, role: x.role, rows: x.rows ? x.rows.length : undefined,
       columns: x.cols ? Object.fromEntries(Object.entries(x.cols).map(([k, i]) => [k, x.header[i]])) : undefined, gradeColumns: x.grades && x.grades.length ? x.grades.map((g) => g.name) : undefined })),
-    libRefs: structuredClone(S.libRefs),
+    libRefs: structuredClone(S.libRefs), drillSource: structuredClone(S.drillSource),
     project: ok ? { holes: project.holes.length, holeIds: project.holes.map((h) => h.id), metresDrilled: Math.round(project.holes.reduce((s, h) => s + h.len, 0)), pendingHoles: project.holes.filter(isPending).map((h) => h.id), intervals: project.holes.reduce((s, h) => s + h.ints.length, 0), dipsPositiveDown: project.posDown, warnings: project.warnings } : null,
     grade: { column: S.valueCol, label: S.valueLabel, available: project?.cols || [], bins: S.bins, binColors: BIN_COLORS },
     design: { version: S.designVersion, current: DESIGN_VERSION, optIn: S.designOptIn },
