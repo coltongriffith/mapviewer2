@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { DESIGN_VERSION } from '../src/three-d/design-version.js';
 import { readFileSync } from 'node:fs';
 
 // Exploration Maps 3D (/3d): whole-figure snapshots, and Save / My 3D maps
@@ -141,6 +142,28 @@ test('a figure survives getProject, clearFiles and loadProject unchanged', async
   expect(after.figureSize.key).toBe('square');
 });
 
+test('holes chosen for the section and its fitted line survive getProject and loadProject; an earlier figure keeps the centre line', async ({ page }) => {
+  await open3d(page);
+  const r = await page.evaluate(async () => {
+    const E = window.EM3D, ids = E.getState().project.holeIds.slice(0, 5);
+    const { walls, ids: holeIds, inset } = E.getProject().settings, defaults = { walls, ids: holeIds, inset };
+    const chosen = (await E.setSection({ holes: ids })).section;
+    const project = JSON.parse(JSON.stringify(E.getProject())), before = E.getState();
+    E.clearFiles(); const after = await E.loadProject(project);
+    const png = E.exportPNG({ view: 'section' }).length;
+    const old = JSON.parse(JSON.stringify(project)); delete old.settings.section; old.settings.designVersion = 2;
+    const earlier = (await E.loadProject(old)).section;
+    return { ids, chosen, saved: project.settings.section, before, after, png, earlier, defaults };
+  });
+  expect(r.defaults).toEqual({ walls: true, ids: true, inset: true }); // a new figure keeps its block sides, hole IDs and inset
+  expect(r.chosen.holes).toEqual(r.ids);
+  expect(r.chosen.ends).toHaveLength(2);
+  expect(r.saved).toEqual({ holes: r.ids, a: r.chosen.ends[0], b: r.chosen.ends[1] });
+  expect(r.after).toEqual(r.before);
+  expect(r.png).toBeGreaterThan(10000);
+  expect(r.earlier).toMatchObject({ holes: null, ends: null });
+});
+
 test('geology, geophysics, tags and a face image survive getProject and loadProject', async ({ page }) => {
   await open3d(page);
   const { before, after, roles } = await page.evaluate(async () => {
@@ -233,13 +256,13 @@ test('a figure saved before design versions keeps its look; its gap callout is f
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await open3d(page);
-  expect((await state(page)).design).toEqual({ version: 3, current: 3, optIn: [] }); // a new figure: today's design
+  expect((await state(page)).design).toEqual({ version: DESIGN_VERSION, current: DESIGN_VERSION, optIn: [] }); // a new figure: today's design
   const { opened, settings } = await page.evaluate(async (p) => {
     const opened = await window.EM3D.loadProject(p);
     await window.EM3D.history(); // the history starts at the opened figure
     return { opened, settings: window.EM3D.getProject().settings };
   }, LEGACY);
-  expect(opened.design).toEqual({ version: 1, current: 3, optIn: [] });
+  expect(opened.design).toEqual({ version: 1, current: DESIGN_VERSION, optIn: [] });
   // What it saved is as saved; what it lacks takes the earlier look, not today's defaults.
   for (const [k, v] of Object.entries(LEGACY.settings)) expect(settings[k], k).toEqual(v && typeof v === 'object' && !Array.isArray(v) ? expect.objectContaining(v) : v);
   expect(settings).toMatchObject({ ...LEGACY_LOOK, designVersion: 1, designOptIn: [] });
@@ -255,7 +278,7 @@ test('a figure saved before design versions keeps its look; its gap callout is f
   await warn.getByRole('button', { name: 'Recalculate' }).click();
   await expect(warn).toBeHidden();
   let now = await state(page);
-  expect(now.design).toEqual({ version: 1, current: 3, optIn: ['sampledIntercepts'] });
+  expect(now.design).toEqual({ version: 1, current: DESIGN_VERSION, optIn: ['sampledIntercepts'] });
   expect(now.callouts).toMatchObject({ sampled: true, warnings: [] });
   expect(now.callouts.shown.map((c) => c.holeId)).toEqual(['S-035', 'S-038']); // S-037's two 10 m zones are each under the 20 m minimum
   expect(now.callouts.shown.find((c) => c.holeId === 'S-038').line1).toBe('24 m @ 0.48% Cu from 20 m');
@@ -271,7 +294,7 @@ test('a figure saved before design versions keeps its look; its gap callout is f
   expect(now.callouts.shown.find((c) => c.holeId === 'S-037').line1).toBe('110 m @ 1.50% Cu from 0 m');
   // Saved and reopened, it is still a version 1 figure.
   const again = await page.evaluate(async () => (await window.EM3D.loadProject(JSON.parse(JSON.stringify(window.EM3D.getProject())))).design);
-  expect(again).toEqual({ version: 1, current: 3, optIn: [] });
+  expect(again).toEqual({ version: 1, current: DESIGN_VERSION, optIn: [] });
   expect(errors).toEqual([]);
 });
 
@@ -486,7 +509,7 @@ test.describe('account', () => {
     await page.addInitScript(([k, s]) => localStorage.setItem(k, JSON.stringify(s)), [AUTH_KEY, session]);
     await open3d(page);
     const opened = await page.evaluate((i) => window.EM3D.account.openProject(i), id);
-    expect(opened.state.design).toEqual({ version: 1, current: 3, optIn: [] });
+    expect(opened.state.design).toEqual({ version: 1, current: DESIGN_VERSION, optIn: [] });
     expect(opened.state.display).toMatchObject({ imagery: LEGACY_LOOK.imagery, legend: LEGACY_LOOK.legend });
     expect(opened.state.callouts.warnings).toHaveLength(2);
     await page.evaluate((i) => window.EM3D.account.saveProject('OLD FIGURE', i), id);

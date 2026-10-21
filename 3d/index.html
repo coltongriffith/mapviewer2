@@ -485,6 +485,8 @@ html.em3d-embed .share-credit:hover { text-decoration: underline; }
         <h3>Section line A–A′</h3>
         <label class="field"><span>Azimuth <output id="sec-az-out" class="mono"></output></span><input type="range" id="sec-az" min="0" max="179"></label>
         <label class="field"><span>Projection either side (m)</span><input type="number" id="sec-w" min="5"></label>
+        <div class="field"><span>Holes in section</span><div class="chips" role="group" aria-label="Holes in section"><button type="button" class="chip" data-secmode="width" aria-pressed="true">Within width</button><button type="button" class="chip" data-secmode="chosen" aria-pressed="false">Chosen holes</button></div></div>
+        <div id="sec-holes"></div>
       </section>
       <section>
         <h3>Text labels</h3>
@@ -870,6 +872,15 @@ Whole projects (to keep or move a figure):
                 pending: "collar" (one small ASSAYS PENDING tag per group of pending holes) | "trace"})   collar ID pills; new vs previously released from a
                                   status, year or campaign column. Planned holes (status "planned", no assays)
                                   draw dashed with a "Planned" legend row
+  EM3D.setSection({holes: [holeIds] | "auto" | null, fit, az, width, origin: {x, y} | null})   the section
+                                  A–A′. holes: only these are drawn, projected whole onto the plane, each
+                                  label saying how far off it lies ("S-037 12 m NE"); "auto" starts with the
+                                  key holes near the line; null: every hole within the width (the default).
+                                  fit: true fits the line through the chosen holes (the middle of each hole),
+                                  running a little past their traces; the default when holes are given
+                                  without az or origin. az (0-179) turns the line about its middle; origin
+                                  puts it through an easting/northing; origin: null back to the block centre.
+                                  width: metres either side (secW). getState().section has holes and ends
   EM3D.groupCallouts([holeIds] | "auto" | null)   one box listing several holes' intercepts
   EM3D.addStatBox({title, rows: ["Indicated: 133 koz @ 1.07 g/t Au"], x, y})   returns its id; a label of
                                   kind "stat" (EM3D.updateLabel / removeLabel; drag it on the preview)

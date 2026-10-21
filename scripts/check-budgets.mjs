@@ -101,10 +101,14 @@ const BUDGETS = {
   // classes they use (0.6 kB, in the shared vendor chunk). The shells' drawing and checks, the orthographic
   // framing, the haze and the scene checks went to look.js, the leaders and pills to leaders.js, and the
   // metal-equivalent form and the data checks list to panels.js (1.1 kB), to keep the rest out of the page.
-  // 172 → 172.1 (Oct 2026, with published results): the callout-source hooks that must run as a figure draws
-  // (computeCallouts by mode, callouts keyed per result, ribbons sized to the callouts) measure 172.02 kB
-  // once merged with round 5A; their logic, the callout editor and groupCallouts are already lazy.
-  threeDJsGzipKb: 172.1,
+  // 172 → 174 (Oct 2026): holes chosen for the section (section-geometry.js: the fitted line, projection
+  // and cutting traces at the slab edges) and the cleaner section drawing (IDs in a row on leaders, callouts
+  // level with their holes), ~2.1 kB. The section is drawn and exported synchronously, so it stays in the
+  // page; the panel list, collar clicks and EM3D.setSection are lazy (section.js, below).
+  // 174 → 174.1 (Oct 2026, with published results, measured 174.0): the callout-source hooks that must run as
+  // a figure draws (computeCallouts by mode, callouts keyed per result, ribbons sized to the callouts); their
+  // logic, the callout editor and groupCallouts are already lazy.
+  threeDJsGzipKb: 174.1,
   // /3d's own modules fetched on first use (the geology, geophysics and tag layers, the account
   // client). They never load with the page or the app, so they sit outside the page and app totals.
   // 32 → 34 (Oct 2026, round 4): per-hole tags, grouped pending tags, callouts beside or bracketed on their
@@ -130,7 +134,9 @@ const BUDGETS = {
   // 57 → 64 (measured 62.9, configured 63.1): round 5A's chunks above with published results
   // (published-results.js, ~3.9 kB: release-table records, checks and the callouts drawn from them) and the
   // callout editor moved out of the page (callout-editor.js, ~2 kB, fetched when the Layout step first shows).
-  threeDLazyJsGzipKb: 64,
+  // 64 → 67 (Oct 2026, measured 65.8, configured 66.0): section.js, the "Chosen holes" list, collar clicks
+  // and EM3D.setSection (~2.5 kB), fetched when a figure first chooses holes for its section.
+  threeDLazyJsGzipKb: 67,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.

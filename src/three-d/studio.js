@@ -8,6 +8,7 @@ import { isXYZ, parseXYZ, refineRole } from './roles.js';
 import { makeLayout, isClick, legendRows as binRows, wrapNotes, shouldMerge, hits as boxHits } from './layout.js';
 import { DESIGN_VERSION, FEATURES, uses, withDefaults } from './design-version.js';
 import { intercept, calloutText, avgOver, ribbonPieces } from './intercepts.js';
+import { fitLine, lineThrough, secFrame, toSection, lerp, clipSlab, clipPath, cleanSection } from './section-geometry.js';
 
 const $ = (id) => document.getElementById(id);
 // ============================================================
@@ -152,7 +153,7 @@ let usingSample = true;
 const S = {              // style
   title: 'EXAMPLE RIDGE · MAIN ZONE', subtitle: '3D drilling model, looking northeast',
   valueCol: null, valueLabel: '', bins: [0.1, 0.2, 0.3, 0.5], coCount: 5, coMin: 20, coCut: 0.2, coIncl: 0.5,
-  secAz: 135, secW: 75, surf: 1, walls: true, ids: true, inset: true, logo: null, meshes: {},
+  secAz: 135, secW: 75, section: null, surf: 1, walls: true, ids: true, inset: true, logo: null, meshes: {}, // section: { holes: chosen IDs, a, b: the line's ends } (section.js)
   ribbons: true, traceWidth: 1.4, pendingLabels: true, pendingNoAssays: false, valueCol2: null, elevTicks: true,
   terrain: 'natural', terrainSource: 'auto', vex: 1, crs: null, labels: [],
   collarFit: 'collars', blockStyle: 'glass', wallLabels: [], lockView: false,
@@ -1086,6 +1087,7 @@ function restyle() {
   drawSectionView();
 }
 function sectionEnds() {
+  if (S.section?.a) return [S.section.a, S.section.b]; // a line set by hand or fitted to chosen holes
   const a = S.secAz * Math.PI / 180, d = { x: Math.sin(a), y: Math.cos(a) };
   const half = Math.min(Math.abs(G.bw / 2 / (d.x || 1e-9)), Math.abs(G.bh / 2 / (d.y || 1e-9))) * 0.92;
   // A is the west-ish end so the section reads left to right.
@@ -1330,12 +1332,13 @@ function tagLabel(ctx, K, t, x, y) {
   ctx.fillStyle = textOn(pri()); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(t, x, y + u); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
 }
 
-// Callouts: the top intercepts, minus any hidden, plus any forced on, with optional reworded lines.
-function shownCallouts() {
+// Callouts: the top intercepts (of `from`, e.g. a section's chosen holes), minus any hidden, plus any forced on,
+// with optional reworded lines.
+function shownCallouts(from = callouts) {
   const ov_ = coOv;
-  if (S.calloutMode !== 'calculated') return callouts.slice(); // published: the ticked results; manual: the ticked holes
-  const list = callouts.filter((c) => ov_(c).show !== false).slice(0, S.coCount);
-  callouts.forEach((c) => { if (ov_(c).show === true && !list.includes(c)) list.push(c); });
+  if (S.calloutMode !== 'calculated') return from.slice(); // published: the ticked results; manual: the ticked holes
+  const list = from.filter((c) => ov_(c).show !== false).slice(0, S.coCount);
+  from.forEach((c) => { if (ov_(c).show === true && !list.includes(c)) list.push(c); });
   return list;
 }
 const calloutLines = (c) => (c.pub ? PR.pubLines(c, S.pubOverrides) : calloutText(c.ic, S.coOverrides[c.key] || {}, (x) => icText(x, c.h)));
@@ -1620,7 +1623,7 @@ function drawOverlay(ctx, k, forExport) {
     ctx.fillStyle = paper(); ctx.strokeStyle = RULE; ctx.lineWidth = u; roundRect(ctx, ix - 8 * u, iy - 8 * u, iw + 16 * u, bh + 34 * u, 5 * u); ctx.fill(); ctx.stroke(); occ.push([ix - 8 * u, 0, W, iy + bh + 26 * u]);
     ctx.strokeStyle = pri(); ctx.lineWidth = 1.4 * u; ctx.strokeRect(ix + (iw - bw) / 2, iy, bw, bh);
     project.holes.forEach((h) => { ctx.strokeStyle = '#7c898c'; ctx.lineWidth = u; ctx.beginPath(); h.path.forEach((p, i) => { const [X, Y] = P(p.x, p.y); i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); }); ctx.stroke();
-      const [X, Y] = P(h.c.x, h.c.y); ctx.fillStyle = INK; ctx.fillRect(X - 1.5 * u, Y - 1.5 * u, 3 * u, 3 * u); });
+      const [X, Y] = P(h.c.x, h.c.y), on = S.section?.holes?.includes(h.id), r = (on ? 2.6 : 1.5) * u; ctx.fillStyle = on ? S.accent : INK; ctx.fillRect(X - r, Y - r, 2 * r, 2 * r); }); // chosen section holes in the accent
     ctx.setLineDash([5 * u, 3 * u]); ctx.strokeStyle = S.accent; ctx.lineWidth = 1.6 * u; ctx.beginPath(); ctx.moveTo(...P(A.x, A.y)); ctx.lineTo(...P(Bp.x, Bp.y)); ctx.stroke(); ctx.setLineDash([]);
     font(700, 11); ctx.fillStyle = pri(); ctx.fillText('N ↑', ix + (iw - bw) / 2 + 3 * u, iy + 12 * u);
     font(400, 11); ctx.fillStyle = MUTED; ctx.textAlign = 'center'; ctx.fillText('Plan of drilling', ix + iw / 2, iy + bh + 18 * u); ctx.textAlign = 'left';
@@ -1700,16 +1703,19 @@ function drawSection(ctx, Wc, Hc, forExport) {
   ctx.fillStyle = paper(); ctx.fillRect(0, 0, Wc, Hc);
   const K = kit(ctx, Wc, Hc), { u, m, font, narrow } = K;
   if (!G) { font(600, 18); ctx.fillStyle = MUTED; ctx.textAlign = 'center'; ctx.fillText('Add a collar file and an assay file to build the section.', Wc / 2, Hc / 2); ctx.textAlign = 'left'; return; }
-  const [A, Bp] = sectionEnds(), L = Math.hypot(Bp.x - A.x, Bp.y - A.y), d = { x: (Bp.x - A.x) / L, y: (Bp.y - A.y) / L }, perp = { x: -d.y, y: d.x };
-  const pr = (p) => ({ t: (p.x - A.x) * d.x + (p.y - A.y) * d.y, off: (p.x - A.x) * perp.x + (p.y - A.y) * perp.y });
+  const [A, Bp] = sectionEnds(), F = secFrame(A, Bp), L = F.L, pr = (p) => toSection(F, p), w = S.secW;
+  // Chosen holes (S.section.holes) project whole onto the plane. Otherwise the holes within the width, cut at
+  // the slab's edges (design version 3; an earlier figure keeps the 2 m points inside it).
+  const pick = S.section?.holes, chosen = pick && project.holes.filter((h) => pick.includes(h.id)), clean = !!chosen || uses(S, 'cleanSection'), inW = (p) => Math.abs(pr(p).off) <= w;
+  const cut = (pts) => (chosen ? [pts] : clean ? clipPath(F, pts, w) : pts.reduce((r, p, i) => { if (inW(p)) { if (i && inW(pts[i - 1])) r[r.length - 1].push(p); else r.push([p]); } return r; }, []));
   const lookAz = ((S.secAz - 90) % 360 + 360) % 360;
   const logo = drawLogo(ctx, K, Wc, forExport), head = S.title.split('·')[0].trim() || S.title;
-  const headBottom = drawHeader(ctx, K, Wc, `${head} · SECTION A–A′`, `Looking ${pad3(lookAz)}° · ±${S.secW} m projection · ${S.valueLabel}`, logo.w);
+  const headBottom = drawHeader(ctx, K, Wc, `${head} · SECTION A–A′`, `Looking ${pad3(lookAz)}° · ${chosen ? `${chosen.length} chosen hole${chosen.length === 1 ? '' : 's'} projected` : `±${w} m projection`} · ${S.valueLabel}`, logo.w);
   const footTop = drawFooter(ctx, K, Wc, Hc, terrainCredits(false), autoNotes('section'));
   const profile = []; let zMax = -Infinity;
-  for (let i = 0; i <= 200; i++) { const t = i / 200 * L, z = G.surf(A.x + d.x * t, A.y + d.y * t); profile.push([t, z]); zMax = Math.max(zMax, z); }
-  const shown = project.holes.map((h) => ({ h, pts: h.path.map((p) => ({ ...p, ...pr(p) })) })).filter(({ pts }) => pts.some((p) => Math.abs(p.off) <= S.secW));
-  let zMin = Infinity; shown.forEach(({ pts }) => pts.forEach((p) => { if (Math.abs(p.off) <= S.secW) zMin = Math.min(zMin, p.z); }));
+  for (let i = 0; i <= 200; i++) { const t = i / 200 * L, z = G.surf(A.x + F.d.x * t, A.y + F.d.y * t); profile.push([t, z]); zMax = Math.max(zMax, z); }
+  const shown = (chosen || project.holes).map((h) => ({ h, runs: cut(h.path) })).filter(({ runs }) => runs.length);
+  let zMin = Infinity; shown.forEach(({ runs }) => runs.forEach((r) => r.forEach((p) => { zMin = Math.min(zMin, p.z); })));
   if (!Number.isFinite(zMin)) zMin = G.B.z0;
   const zTop = zMax + (zMax - zMin) * 0.12, zBot = zMin - (zMax - zMin) * 0.05;
   const ml = narrow ? m + 8 * u : Math.min(330 * u, Wc * 0.27), mr = m + 70 * u, mt = Math.max(headBottom, logo.bottom) + 40 * u, mb = Hc - footTop + 56 * u;
@@ -1722,41 +1728,79 @@ function drawSection(ctx, Wc, Hc, forExport) {
   font(400, 11, true); ctx.fillStyle = MUTED; ctx.strokeStyle = RULE; ctx.lineWidth = u;
   const stepZ = niceRound((zTop - zBot) / 5);
   for (let z = Math.ceil(zBot / stepZ) * stepZ; z < zTop; z += stepZ) { ctx.beginPath(); ctx.moveTo(X(L) + 4 * u, Y(z)); ctx.lineTo(X(L) + 10 * u, Y(z)); ctx.stroke(); ctx.fillText(`${Math.round(z)} m`, X(L) + 14 * u, Y(z) + 4 * u); }
-  const barW = Math.max(6 * u, Math.min(12 * u, s * 7));
-  shown.forEach(({ h, pts }) => {
-    ctx.strokeStyle = dark() ? '#c9d2d4' : '#2c3d42'; ctx.lineWidth = u; ctx.beginPath(); let on = false; if (h.prov || h.planned) ctx.setLineDash([5 * u, 3 * u]);
-    pts.forEach((p) => { if (Math.abs(p.off) > S.secW) { on = false; return; } on ? ctx.lineTo(X(p.t), Y(p.z)) : ctx.moveTo(X(p.t), Y(p.z)); on = true; }); ctx.stroke(); ctx.setLineDash([]);
+  const barW = Math.max(6 * u, Math.min(12 * u, s * 7)), XY = (p) => [X(pr(p).t), Y(p.z)], line = (r, dx = 0, dy = 0) => r.forEach((p, i) => { const [x, y] = XY(p); ctx[i ? 'lineTo' : 'moveTo'](x + dx, y + dy); });
+  shown.forEach(({ h, runs }) => {
+    ctx.strokeStyle = dark() ? '#c9d2d4' : '#2c3d42'; ctx.lineWidth = u; ctx.beginPath(); if (h.prov || h.planned) ctx.setLineDash([5 * u, 3 * u]);
+    runs.forEach((r) => line(r)); ctx.stroke(); ctx.setLineDash([]);
     h.ints.forEach((it) => {
       const bi = intervalShown(it) ? binIndex(it.vals[S.valueCol]) : -1; if (bi < 1) return;
-      const a = h.posAt(it.from), b = h.posAt(it.to), pa = pr(a), pb = pr(b); if (Math.abs(pa.off) > S.secW) return;
-      const x0 = X(pa.t), y0 = Y(a.z), x1 = X(pb.t), y1 = Y(b.z), ang = Math.atan2(y1 - y0, x1 - x0), len = Math.max(1.5 * u, Math.hypot(x1 - x0, y1 - y0));
+      let a = h.posAt(it.from), b = h.posAt(it.to);
+      if (!chosen) { if (clean) { const c = clipSlab(F, a, b, w); if (!c) return; [a, b] = [lerp(a, b, c[0]), lerp(a, b, c[1])]; } else if (!inW(a)) return; }
+      const [x0, y0] = XY(a), [x1, y1] = XY(b), ang = Math.atan2(y1 - y0, x1 - x0), len = Math.max(1.5 * u, Math.hypot(x1 - x0, y1 - y0));
       ctx.save(); ctx.translate(x0, y0); ctx.rotate(ang); ctx.fillStyle = BIN_COLORS[bi]; ctx.fillRect(0, -barW / 2, len + 0.5 * u, barW); ctx.restore();
     });
     // Reported interval and "incl." as bars to the right of the hole, as on the 3D figure.
     (S.ribbons ? callouts.filter((x) => x.h === h) : []).forEach((co) => [co.ic.broad, ...inclsOf(co.ic)].forEach((x, k) => {
-      k = Math.min(k, 1); const p0 = h.posAt(x.from), p1 = h.posAt(x.from + x.len), q0 = pr(p0), q1 = pr(p1);
-      let nx = -(Y(p1.z) - Y(p0.z)), ny = X(q1.t) - X(q0.t); const nl = Math.hypot(nx, ny) || 1; nx /= nl; ny /= nl; if (nx < 0) { nx = -nx; ny = -ny; }
-      const off = barW * 1.45; ctx.strokeStyle = RIB_COLORS[k]; ctx.lineWidth = barW * 0.85; ctx.lineCap = 'butt'; ctx.beginPath(); let on = false;
-      for (let d = x.from; d < x.from + x.len + 2; d += 2) { const p = h.posAt(Math.min(d, x.from + x.len)), q = pr(p); if (Math.abs(q.off) > S.secW) { on = false; continue; }
-        const sx = X(q.t) + nx * off, sy = Y(p.z) + ny * off; on ? ctx.lineTo(sx, sy) : ctx.moveTo(sx, sy); on = true; }
-      ctx.stroke();
+      const [x0, y0] = XY(h.posAt(x.from)), [x1, y1] = XY(h.posAt(x.from + x.len)), pts = [];
+      let nx = -(y1 - y0), ny = x1 - x0; const nl = Math.hypot(nx, ny) || 1; nx /= nl; ny /= nl; if (nx < 0) { nx = -nx; ny = -ny; }
+      for (let d = x.from; d < x.from + x.len + 2; d += 2) pts.push(h.posAt(Math.min(d, x.from + x.len)));
+      const off = barW * 1.45; ctx.strokeStyle = RIB_COLORS[Math.min(k, 1)]; ctx.lineWidth = barW * 0.85; ctx.lineCap = 'butt'; ctx.beginPath(); cut(pts).forEach((r) => line(r, nx * off, ny * off)); ctx.stroke();
     }));
-    const c = pr(h.c);
-    if (Math.abs(c.off) <= S.secW) { ctx.save(); ctx.translate(X(c.t), Y(h.c.z) - 8 * u); ctx.rotate(-Math.PI / 4); ctx.fillStyle = INK; font(500, 12, true); ctx.fillText(h.id, 0, 0); ctx.restore(); }
+    if (!clean && inW(h.c)) { ctx.save(); ctx.translate(X(pr(h.c).t), Y(h.c.z) - 8 * u); ctx.rotate(-Math.PI / 4); ctx.fillStyle = INK; font(500, 12, true); ctx.fillText(h.id, 0, 0); ctx.restore(); }
   });
   // Pending labels last, placed clear of the other holes on the section.
   if (S.pendingLabels) {
-    const scr = new Map(shown.map(({ h, pts }) => [h, pts.filter((p) => Math.abs(p.off) <= S.secW).map((p) => [X(p.t), Y(p.z)])]));
-    shown.filter(({ h }) => isPending(h)).forEach(({ h }) => { const vis = scr.get(h).filter((p, i, a) => i > a.length * 0.06); if (vis.length > 2) alongLabel(ctx, K, 'ASSAYS PENDING', vis, shown.filter((o) => o.h !== h).flatMap((o) => scr.get(o.h))); });
+    const scr = new Map(shown.map(({ h, runs }) => [h, runs.flat().map(XY)]));
+    const done = [];
+    shown.filter(({ h }) => isPending(h)).forEach(({ h }) => { const x0 = scr.get(h)[0]?.[0]; if (clean && done.some((x) => Math.abs(x - x0) < 30 * u)) return; done.push(x0); const vis = scr.get(h).filter((p, i, a) => i > a.length * 0.06); if (vis.length > 2) alongLabel(ctx, K, 'ASSAYS PENDING', vis, shown.filter((o) => o.h !== h).flatMap((o) => scr.get(o.h))); });
   }
-  // Callouts for holes on this section
-  let by = mt; const maxY = Hc - mb;
-  shownCallouts().filter((c) => shown.some((x) => x.h === c.h)).slice(0, narrow ? 2 : 4).forEach((c) => {
-    const M = measureCallout(ctx, K, c); if (by + M.bh + 18 * u > maxY) return;
-    const p = c.h.posAt(c.ic.broad.mid), q = pr(p); drawCallout(ctx, K, m, by, c, M, [X(q.t), Y(p.z)]); by += M.bh + 34 * u;
-  });
-  if (!narrow) { let x = m; extSections().forEach((s) => { const [w, h] = cardSize(ctx, K, [s]), y = footTop - 52 * u - h; if (y < by || x + w > ox - 10 * u) return; drawCard(ctx, K, x, y, w, h, [s]); x += w + 10 * u; }); } // EXT hook: lithology, geophysics
-  tagLabel(ctx, K, 'A', X(0), Y(profile[0][1]) - 24 * u); tagLabel(ctx, K, 'A′', X(L), Y(profile[200][1]) - 24 * u);
+  // Callouts for holes on this section. Version 3 and chosen holes: each level with its hole where it can be,
+  // stacked down then pulled up from the bottom, the lowest-ranked left out only if they still do not fit.
+  const cards = narrow ? [] : extSections().map((sec) => [sec, ...cardSize(ctx, K, [sec])]), cardTop = Math.min(Infinity, ...cards.map(([, , h]) => footTop - 52 * u - h)); // EXT hook: lithology, geophysics
+  const onSec = (c) => shown.some((x) => x.h === c.h), maxY = Math.min(Hc - mb, clean ? cardTop - 12 * u : Infinity) - 18 * u, gap = 34 * u;
+  let cos = shownCallouts(chosen ? callouts.filter(onSec) : callouts).filter(onSec).slice(0, narrow ? 2 : 4)
+    .map((c, rank) => { const p = c.h.posAt(c.ic.broad.mid); return { c, rank, s: XY(p), M: measureCallout(ctx, K, c) }; }), by = mt;
+  if (clean) {
+    cos.sort((a, b) => a.s[1] - b.s[1]);
+    for (;;) {
+      let y = mt; cos.forEach((it) => { it.y = Math.max(y, it.s[1] - it.M.bh / 2); y = it.y + it.M.bh + gap; });
+      for (let i = cos.length - 1; i >= 0; i--) cos[i].y = Math.min(cos[i].y, (i === cos.length - 1 ? maxY : cos[i + 1].y - gap) - cos[i].M.bh);
+      if (!cos.length || cos[0].y >= mt - 1) break;
+      const worst = cos.reduce((a, b) => (b.rank > a.rank ? b : a)); cos = cos.filter((it) => it !== worst);
+    }
+  } else cos = cos.filter((it) => { if (by + it.M.bh > maxY) return false; it.y = by; by += it.M.bh + gap; return true; });
+  cos.forEach((it) => { drawCallout(ctx, K, m, it.y, it.c, it.M, it.s); by = Math.max(by, it.y + it.M.bh + (clean ? 18 * u : gap)); });
+  // Hole IDs (version 3, chosen holes): in a row above the section, in the holes' order and spread clear of
+  // each other, each on a leader to its collar (two or three rows when one is full); a chosen hole off the
+  // plane says how far ("S-037 12 m NE").
+  const tagY = (i) => Y(profile[i][1]) - 24 * u;
+  if (clean && shown.length) {
+    const lh = 15 * u, gap = 10 * u, lo = (narrow ? m : ml) + 4 * u, hi = Wc - m;
+    let labs = shown.map(({ h, runs }) => { const sub = chosen && EXT.section ? EXT.section.offText(F, h.path) : ''; /* EXT hook: section.js */ font(600, 12, true); const tw = ctx.measureText(h.id).width; font(400, 11); return { h, at: XY(runs[0][0]), sub, tw, bw: tw + (sub ? ctx.measureText(` ${sub}`).width : 0) + 6 * u }; }), room = (hi - lo) * 0.8;
+    // Within the width, one row with some slack: the callout holes, then pending holes, then those nearest the line.
+    if (!chosen) { const key = (l) => (cos.some((it) => it.c.h === l.h) ? 0 : isPending(l.h) ? 1 : 2) + Math.min(0.9, Math.abs(pr(l.h.c).off) / w / 4); labs = labs.sort((p, q) => key(p) - key(q)).filter((l) => (room -= l.bw + gap) >= 0); }
+    labs.sort((p, q) => p.at[0] - q.at[0]);
+    let rows = 1; while (chosen && rows < 3 && labs.reduce((t, l) => t + l.bw + gap, 0) > rows * (hi - lo)) rows++;
+    const base = Math.max(Math.min(...profile.map(([, z]) => Y(z))) - 40 * u, headBottom + 12 * u + rows * (lh + 6 * u));
+    for (let r = 0; r < rows; r++) {
+      // Labels that would overlap join a group centred on their holes, kept inside the frame.
+      const gs = [], place = (g) => { let o = 0, t = 0; g.ls.forEach((l) => { t += l.at[0] - l.bw / 2 - o; o += l.bw + gap; }); g.w = o - gap; g.x = Math.max(lo, Math.min(hi - g.w, t / g.ls.length)); };
+      labs.filter((l, i) => i % rows === r).forEach((l) => {
+        gs.push({ ls: [l] }); place(gs.at(-1));
+        while (gs.length > 1 && gs.at(-2).x + gs.at(-2).w + gap > gs.at(-1).x) { const b = gs.pop(); gs.at(-1).ls.push(...b.ls); place(gs.at(-1)); }
+      });
+      gs.forEach((g) => { let x = g.x; g.ls.forEach((l) => { l.x = x; l.y = base - lh - r * (lh + 6 * u); x += l.bw + gap; }); });
+    }
+    ctx.strokeStyle = MUTED; ctx.lineWidth = 0.8 * u; ctx.beginPath(); labs.forEach((l) => { ctx.moveTo(l.x + l.bw / 2, l.y + lh); ctx.lineTo(l.at[0], l.at[1] - 2 * u); }); ctx.stroke();
+    ctx.textBaseline = 'middle'; ctx.lineWidth = 4 * u; ctx.strokeStyle = paper(0.95);
+    labs.forEach(({ h, sub, tw, x, y }) => {
+      font(600, 12, true); ctx.strokeText(h.id, x + 3 * u, y + lh / 2); ctx.fillStyle = INK; ctx.fillText(h.id, x + 3 * u, y + lh / 2);
+      if (sub) { font(400, 11); ctx.strokeText(` ${sub}`, x + 3 * u + tw, y + lh / 2); ctx.fillStyle = MUTED; ctx.fillText(` ${sub}`, x + 3 * u + tw, y + lh / 2); }
+    });
+    ctx.textBaseline = 'alphabetic';
+  }
+  let cx = m; cards.forEach(([sec, w, h]) => { const y = footTop - 52 * u - h; if (y < by || cx + w > ox - 10 * u) return; drawCard(ctx, K, cx, y, w, h, [sec]); cx += w + 10 * u; });
+  tagLabel(ctx, K, 'A', X(0), tagY(0)); tagLabel(ctx, K, 'A′', X(L), tagY(200));
   // Bottom strip: scale bar left, horizontal legend right
   const sy = footTop - 18 * u, sb = [10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000].find((d) => d * s >= 120 * u) || niceRound(L / 3);
   ctx.fillStyle = INK; ctx.fillRect(m, sy, sb * s / 2, 6 * u); ctx.fillStyle = paper(); ctx.fillRect(m + sb * s / 2, sy, sb * s / 2, 6 * u); ctx.strokeStyle = INK; ctx.lineWidth = u; ctx.strokeRect(m, sy, sb * s, 6 * u);
@@ -2000,13 +2044,9 @@ function refresh() {
   if (!project.empty && project.holes.length) { const az = principalAz(project.holes); if (az !== null && !refresh.secSet) S.secAz = az; }
   rebuildScene(); renderFiles(); renderSummary(); renderChecks(); renderStyle(); renderCalloutEditor(); renderLabelList(); renderWallLabelList(); renderCRS(); schedulePublish();
 }
-function principalAz(holes) {
-  const pts = holes.map((h) => [h.c.x, h.c.y]); if (pts.length < 3) return null;
-  const mx = pts.reduce((s, p) => s + p[0], 0) / pts.length, my = pts.reduce((s, p) => s + p[1], 0) / pts.length;
-  let sxx = 0, syy = 0, sxy = 0; pts.forEach(([x, y]) => { sxx += (x - mx) ** 2; syy += (y - my) ** 2; sxy += (x - mx) * (y - my); });
-  const ang = 0.5 * Math.atan2(2 * sxy, sxx - syy);
-  return Math.round(((90 - ang * 180 / Math.PI) % 180 + 180) % 180);
-}
+function principalAz(holes) { const f = holes.length > 2 && fitLine(holes.map((h) => h.c)); return f ? Math.round(f.az) % 180 : null; }
+// A line set by hand or fitted turns about its middle when the azimuth changes.
+function turnSection() { const s = S.section; if (s?.a) [s.a, s.b] = lineThrough({ x: (s.a.x + s.b.x) / 2, y: (s.a.y + s.b.y) / 2 }, S.secAz, Math.hypot(s.b.x - s.a.x, s.b.y - s.a.y) / 2); }
 function addUserFiles(arr) {
   if (!Array.isArray(arr) || !arr.length || arr.some((f) => !f || typeof f.name !== 'string' || typeof f.text !== 'string')) throw new Error('addFiles expects [{ name: "collars.csv", text: "HoleID,Easting,..." }].');
   if (usingSample) { files = []; usingSample = false; S.meshes = {}; S.valueCol = null; S.coOverrides = {}; S.valueCol2 = null; resetDerived(); }
@@ -2075,7 +2115,7 @@ function loadSample() {
 // A new data set starts without the old one's equivalent recipe, display cut-off or provisional flags.
 function resetDerived() {
   histReset(); // the history belongs to the old data
-  S.eq = null; eqApplied = false; S.displayCutoff = null; S.provisional = {}; S.shell.cutoff = null; S.libRefs = {}; S.pubOverrides = {}; S.calloutMode = 'calculated'; callouts = calcCallouts = [];
+  S.eq = null; eqApplied = false; S.displayCutoff = null; S.provisional = {}; S.shell.cutoff = null; S.libRefs = {}; S.section = null; S.pubOverrides = {}; S.calloutMode = 'calculated'; callouts = calcCallouts = [];
   S.tags.status = {}; S.tags.groups = []; S.geology.legend = []; // EXT hook: per-hole tags and codes belong to the old data
   // The shell belongs to the old data: switch it off and stop any build still running.
   S.shell.enabled = false; shell.pending = null; shell.mesh = null; shell.field = null; syncShell();
@@ -2115,7 +2155,7 @@ function setStyle(o = {}, render = true) {
     if (v !== null && !(v >= 0)) throw new Error('displayCutoff must be a grade of 0 or more, or null to show all intervals.'); S.displayCutoff = v;
   }
   [['coCount', 0, 12], ['coMin', 1, 1000], ['coCut', 0, 1e9], ['coIncl', 0, 1e9], ['secW', 5, 5000]].forEach(([k, lo, hi]) => { if (o[k] !== undefined) { const v = +o[k]; if (!Number.isFinite(v)) throw new Error(`${k} must be a number.`); S[k] = Math.max(lo, Math.min(hi, v)); } });
-  if (o.secAz !== undefined) { S.secAz = ((Math.round(+o.secAz) % 180) + 180) % 180; refresh.secSet = true; }
+  if (o.secAz !== undefined) { S.secAz = ((Math.round(+o.secAz) % 180) + 180) % 180; refresh.secSet = true; turnSection(); }
   if (o.valueCol2 !== undefined) {
     const av = project?.cols || [], v = o.valueCol2 === '' || o.valueCol2 === 'none' ? null : o.valueCol2;
     if (v !== null && !av.includes(v)) throw new Error(`Unknown grade column "${v}". Available: ${av.join(', ') || 'none'}, or null for none.`);
@@ -2459,11 +2499,11 @@ Object.assign(S, {
   tags: { at: 'toe', style: 'dark', status: {}, fadePrevious: false, newLabel: '', prevLabel: 'Previously released', plannedLabel: 'Planned', groups: [], autoGroup: false, groupRadius: 140, emphasis: 'auto', highlight: {}, highlightNew: true, idMode: 'auto', showId: {}, showTag: {}, hideRows: [], pending: 'collar' },
   histograms: false, insetStyle: 'plan',
 });
-const EXT = {}, extLoading = {}, EXT_IMPORT = { geology: () => import('./geology.js'), geophys: () => import('./geophys.js'), tags: () => import('./tags.js'), look: () => import('./look.js') };
+const EXT = {}, extLoading = {}, EXT_IMPORT = { geology: () => import('./geology.js'), geophys: () => import('./geophys.js'), tags: () => import('./tags.js'), look: () => import('./look.js'), section: () => import('./section.js') };
 const hasRole = (r) => files.some((f) => f.role === r);
 function extWanted() {
   const gp = S.geophys.mode !== 'off' && hasRole('geophys'), t = S.tags;
-  return { look: S.shell.enabled || ortho() || S.scene.haze > 0 || (uses(S, 'clearLeaders') && S.labels.some((l) => l.arrow)), geology: (S.geology.enabled && hasRole('litho')) || Object.keys(S.geology.images || {}).length > 0 || gp, geophys: gp,
+  return { look: S.shell.enabled || ortho() || S.scene.haze > 0 || (uses(S, 'clearLeaders') && S.labels.some((l) => l.arrow)), geology: (S.geology.enabled && hasRole('litho')) || Object.keys(S.geology.images || {}).length > 0 || gp, geophys: gp, section: !!S.section,
     tags: t.at !== 'toe' || t.fadePrevious || t.idMode === 'key' || (t.idMode !== 'all' && (project?.holes?.length || 0) > 12) || Object.keys(t.showId).length > 0 || Object.keys(t.showTag || {}).length > 0 || t.emphasis === 'key' || Object.keys(t.highlight || {}).length > 0
       || S.coPlacement !== 'column' || Object.values(coMap()).some((o) => o.placement || o.x !== undefined) || (S.pendingLabels && t.pending === 'collar' && !!project?.holes?.some(isPending)) || t.autoGroup || t.groups.length > 0 || Object.keys(t.status).length > 0 || S.histograms || S.insetStyle !== 'plan' || S.labels.some((l) => l.kind === 'stat') };
 }
@@ -2476,6 +2516,7 @@ const host = () => (extHost ||= {
   prominent: (h) => !!EXT.tags && (EXT.tags.weight(h) > 1 || !!EXT.tags.highlightOf(h) || EXT.tags.statusOf(h) === 'new'),
   camera, renderer, proj, sectionEnds, faceGeom, textOn, roundRect, fitText, esc, BIN_COLORS, binIndex, traceR, calloutLines, shownCallouts, coOv, isPending, setSpacing, drawCallout, brandTone, figureCanvas, exportLayers, canvasBlob,
   mosaic, zoomFor, lon2t, lat2t, IMG_URL, IMAGERY_CREDIT, status, redraw: () => { extScene(); drawSectionView(); schedulePublish(); },
+  step: () => currentStep, sectionChanged: () => { refresh.secSet = true; restyle(); renderStyle(); schedulePublish(); },
 });
 const extLoad = (k) => (extLoading[k] ||= EXT_IMPORT[k]().then((m) => { m.init(host()); EXT[k] = m; return m; }));
 async function extReady() {
@@ -2533,7 +2574,8 @@ function extState() {
 }
 function renderExtUI() {
   document.querySelectorAll('[data-ext]').forEach((el) => { const [g, k] = el.dataset.ext.split('.'), v = g === 'style' || g === 'view' ? S[k] : S[g][k]; if (el.type === 'checkbox') el.checked = !!v; else el.value = v; });
-  [['geology', 'geo-ui'], ['geophys', 'gp-ui'], ['tags', 'tag-ui']].forEach(([k, id]) => { if (EXT[k]) EXT[k].renderUI($(id)); });
+  [['geology', 'geo-ui'], ['geophys', 'gp-ui'], ['tags', 'tag-ui'], ['section', 'sec-holes']].forEach(([k, id]) => { if (EXT[k]) EXT[k].renderUI($(id)); });
+  document.querySelectorAll('[data-secmode]').forEach((b) => b.setAttribute('aria-pressed', String((b.dataset.secmode === 'chosen') === !!S.section?.holes)));
 }
 const extUI = () => renderExtUI();
 document.querySelectorAll('[data-ext]').forEach((el) => el.addEventListener('change', () => {
@@ -2544,7 +2586,10 @@ $('stat-add').addEventListener('click', () => {
   const title = $('stat-title').value.trim(); if (!title) { status('Type the stat box title first.'); $('stat-title').focus(); return; }
   showView('3d'); EXT_API.addStatBox({ title, rows: $('stat-rows').value.split('\n') }).then(() => { $('stat-title').value = ''; $('stat-rows').value = ''; }).catch((e) => status(e.message));
 });
+// Holes in the section: within the width, or chosen (section.js, loaded on first use).
+document.querySelectorAll('[data-secmode]').forEach((b) => b.addEventListener('click', () => EXT_API.setSection({ holes: b.dataset.secmode === 'chosen' ? S.section?.holes || 'auto' : null }).catch((e) => status(e.message))));
 const EXT_API = {
+  async setSection(o = {}) { (await extLoad('section')).set(o); await extReady(); return getState(); },
   async setGeology(o = {}) { (await extLoad('geology')).set(o); await extReady(); if (S.wallLabels.some((L) => L.unit)) buildWallLabels(); renderWallLabelList(); return getState(); },
   async setFaceImage(face, src) { await (await extLoad('geology')).setImage(face, src ?? null); await extReady(); status(src ? `Image painted on the ${String(face).toUpperCase()} face.` : 'Face image removed.'); return getState(); },
   async setGeophys(o = {}) { await extLoad('geology'); (await extLoad('geophys')).set(o); await extReady(); return getState(); },
@@ -2588,7 +2633,7 @@ function getState() {
       crs: S.crs, crsLabel: geo?.label || null, crsGuessed: !!geo?.guessed, status: realT.status, message: realT.message || null,
       dem: realT.dem ? (realT.dem.ok ? `z${realT.dem.z}, ${realT.dem.tiles} tiles` : `failed: ${realT.dem.error}`) : null,
       imagery: realT.img ? (realT.img.ok ? `z${realT.img.z}, ${realT.img.tiles} tiles` : `failed: ${realT.img.error}`) : null, imageryShown: imageryShown(), note: G?.terrainNote || null, credits: G ? terrainCredits(true) : [] },
-    camera: G ? getCam() : null, scene: { ...S.scene, projection: S.projection }, section: { secAz: S.secAz, secW: S.secW, lookingAz: ((S.secAz - 90) % 360 + 360) % 360 },
+    camera: G ? getCam() : null, scene: { ...S.scene, projection: S.projection }, section: { secAz: S.secAz, secW: S.secW, lookingAz: ((S.secAz - 90) % 360 + 360) % 360, holes: S.section?.holes || null, ends: S.section?.a ? [S.section.a, S.section.b] : null },
     labels: S.labels.map((l) => ({ ...l })), wallLabels: S.wallLabels.map((l) => ({ ...l })),
     display: { walls: S.walls, ids: S.ids, inset: S.inset, surface: S.surf, ribbons: S.ribbons, traceWidth: S.traceWidth, pendingLabels: S.pendingLabels, pendingNoAssays: S.pendingNoAssays, elevTicks: S.elevTicks, displayCutoff: S.displayCutoff, lockView: S.lockView, imagery: { ...S.imagery }, legend: structuredClone(S.legend), coPlacement: S.coPlacement, blockMargin: S.blockMargin, blockExtent: S.blockExtent && { ...S.blockExtent } }, meshes: S.meshes,
     shell: { ...S.shell, cutoff: shellCut(), cutoffAuto: S.shell.cutoff === null, column: S.valueCol, legend: `Grade shell ≥ ${shellCutText()}`, shown: shellShown(), status: shell.status, progress: shell.progress, message: shell.message || null,
@@ -2667,6 +2712,7 @@ async function loadProject(p) {
   await Promise.all(Object.entries(rest).filter(([, v]) => isImg(v)).map(async ([k, v]) => { imgs[k] = await loadImg(v.$image); }));
   if (isImg(logo)) await setLogo(logo.$image, { autoColor: false }); else await setLogo(null);
   Object.entries(rest).forEach(([k, v]) => { S[k] = imgs[k] || (v && typeof v === 'object' ? structuredClone(v) : v); });
+  S.section = cleanSection(S.section);
   files = []; usingSample = !!p.usingSample; addFiles(p.files.map(({ name, text }) => ({ name, text })));
   p.files.forEach((sf) => {
     const f = files.find((x) => x.name === sf.name); if (!f) return;
