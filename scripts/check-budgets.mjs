@@ -203,7 +203,14 @@ const BUDGETS = {
   // live text, and the font embedding), plus ~0.4 kB in desk.js. Fetched only when "Include editable annotations
   // (SVG)" is ticked or EM3D.exportLayers({ svg: true }) is called. The page gains only the recorder's hand-off in
   // figureCanvas and the checkbox (+0.015 kB, inside its budget).
-  threeDLazyJsGzipKb: 100.45,
+  // 100.45 → 105.0 (Oct 2026, drill database 2B, measured 104.44, configured 104.66): figures that take their holes
+  // from a property's drill database (property-data.js, ~3.7 kB: the property picker, the current rows read 1,000 at a
+  // time and written as the files an upload would be, the snapshot the figure records, the newer-imports notice and
+  // Update) and minimum-curvature paths for their surveyed holes (min-curvature.js with shared/desurvey.js, 0.64 kB);
+  // account-core.js gains the button, the hook and the check on open (+0.15 kB). Fetched only on "From property drill
+  // database" or for a figure that used it. The page gains the hooks (drillSource, the path switch; +0.18 kB, inside
+  // its budget); App and the totals are unchanged.
+  threeDLazyJsGzipKb: 105.0,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.
