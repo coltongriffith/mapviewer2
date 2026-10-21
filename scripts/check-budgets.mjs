@@ -156,7 +156,14 @@ const BUDGETS = {
   // column matcher (ALIASES, matchCols, roleOf) moved from studio.js into roles.js so the property drill importer
   // detects columns exactly as /3d does; roles.js is now a chunk the page shares with the app's lazy drill tab,
   // and a separate chunk compresses ~0.4 kB worse than the same code inside the page.
-  threeDJsGzipKb: 170.1,
+  // 169.7 → 170.1 (Oct 2026, round 5D, measured 169.95, configured 169.98; +0.60 kB over main): the hooks for plan
+  // views (the grid setting, the plan.js calls for its grid, bars, IDs and "Plan view", the tubes hidden), section IDs
+  // by pad and by grade (section.js), long legend names wrapped, claims outlined in the plan inset, and the version
+  // check (version-check.js: an open page offers a newly deployed version; a stale chunk with work on screen says so
+  // instead of reloading). The Display checkboxes and terrain selects now use the generic data-ext binding (-0.16 kB).
+  // 170.1 → 170.6 (Oct 2026, round 5D merged over drill database 2A, measured 170.33, configured 170.36): the two
+  // entries above add up; neither adds the other's code.
+  threeDJsGzipKb: 170.6,
   // /3d's own modules fetched on first use (the geology, geophysics and tag layers, the account
   // client). They never load with the page or the app, so they sit outside the page and app totals.
   // 32 → 34 (Oct 2026, round 4): per-hole tags, grouped pending tags, callouts beside or bracketed on their
@@ -203,7 +210,13 @@ const BUDGETS = {
   // live text, and the font embedding), plus ~0.4 kB in desk.js. Fetched only when "Include editable annotations
   // (SVG)" is ticked or EM3D.exportLayers({ svg: true }) is called. The page gains only the recorder's hand-off in
   // figureCanvas and the checkbox (+0.015 kB, inside its budget).
-  threeDLazyJsGzipKb: 100.45,
+  // 100.45 → 104.5 (Oct 2026, round 5D, measured 103.94, configured 104.18, + 0.3): plan.js (~2.8 kB: the plan view's
+  // interval bars, each on its own stretch of a surveyed trace, grid with its eastings and northings, and hole IDs
+  // placed on short leaders; fetched for figures of
+  // design version 5 or with the grid on), section.js +0.55 (pad-merged and staggered section IDs, grade-ranked holes),
+  // overlays.js +0.3 (claims outlined in the inset), shapes.js +0.2 (views: both, 3D or section), the callout editor's
+  // second published line with its own depths and stale-wording note (+0.2) and the location inset's outline hook in tags.js.
+  threeDLazyJsGzipKb: 104.5,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.

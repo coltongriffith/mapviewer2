@@ -561,22 +561,23 @@ html.em3d-embed .share-credit:hover { text-decoration: underline; }
       <section>
         <h3>Display</h3>
         <div class="row" style="gap:14px">
-          <label class="check"><input type="checkbox" id="opt-walls" checked>Glass block sides</label>
-          <label class="check"><input type="checkbox" id="opt-ids" checked>Hole IDs</label>
-          <label class="check"><input type="checkbox" id="opt-inset" checked>Plan inset</label>
-          <label class="check"><input type="checkbox" id="opt-ribbons" checked>Intercept bars beside holes</label>
-          <label class="check"><input type="checkbox" id="opt-elev" checked>Elevation ticks</label>
-          <label class="check"><input type="checkbox" id="opt-pending" checked>"Assays pending" from collar status</label>
-          <label class="check"><input type="checkbox" id="opt-pending-none">Label holes without assays</label>
+          <label class="check"><input type="checkbox" id="opt-walls" data-ext="style.walls" checked>Glass block sides</label>
+          <label class="check"><input type="checkbox" id="opt-ids" data-ext="style.ids" checked>Hole IDs</label>
+          <label class="check"><input type="checkbox" id="opt-inset" data-ext="style.inset" checked>Plan inset</label>
+          <label class="check"><input type="checkbox" id="opt-ribbons" data-ext="style.ribbons" checked>Intercept bars beside holes</label>
+          <label class="check"><input type="checkbox" id="opt-elev" data-ext="style.elevTicks" checked>Elevation ticks</label>
+          <label class="check" title="Eastings and northings when looking straight down"><input type="checkbox" data-ext="style.grid">Grid in plan view</label>
+          <label class="check"><input type="checkbox" id="opt-pending" data-ext="style.pendingLabels" checked>"Assays pending" from collar status</label>
+          <label class="check"><input type="checkbox" id="opt-pending-none" data-ext="style.pendingNoAssays">Label holes without assays</label>
         </div>
         <div class="grid2" style="margin-top:8px">
-          <label class="field"><span>Terrain</span><select id="terrain">
+          <label class="field"><span>Terrain</span><select id="terrain" data-ext="style.terrain">
             <option value="natural">Natural</option><option value="light">Light relief</option><option value="relief">Shaded relief</option><option value="dark">Dark slate</option>
             <option value="satellite">Satellite</option><option value="muted">Satellite, muted</option></select></label>
-          <label class="field"><span>Surface from</span><select id="terrain-src">
+          <label class="field"><span>Surface from</span><select id="terrain-src" data-ext="style.terrainSource">
             <option value="auto">Best available</option><option value="topo">Your topography</option><option value="dem">Real elevation (DEM)</option><option value="collars">Collar elevations</option></select></label>
-          <label class="field"><span>Block sides</span><select id="block-style"><option value="glass">Glass</option><option value="solid">Solid block</option></select></label>
-          <label class="field"><span>Real elevation vs collars</span><select id="collar-fit"><option value="collars">Move terrain to collars</option><option value="terrain">Hang holes from terrain</option></select></label>
+          <label class="field"><span>Block sides</span><select id="block-style" data-ext="style.blockStyle"><option value="glass">Glass</option><option value="solid">Solid block</option></select></label>
+          <label class="field"><span>Real elevation vs collars</span><select id="collar-fit" data-ext="style.collarFit"><option value="collars">Move terrain to collars</option><option value="terrain">Hang holes from terrain</option></select></label>
           <label class="field"><span>Presentation</span><select data-ext="scene.theme"><option value="light">Light</option><option value="dark">Dark</option></select></label>
         </div>
         <details style="margin-top:8px">
@@ -687,6 +688,11 @@ html.em3d-embed .share-credit:hover { text-decoration: underline; }
       <button class="btn" type="button" id="lib-update">Update</button>
       <button class="lib-x" type="button" id="lib-dismiss" aria-label="Keep the current data">×</button>
     </div>
+    <div class="lib-notice" id="ver" role="status" hidden>
+      <span>A new version is available<span id="ver-save" hidden> — save your work, then reload</span>.</span>
+      <button class="btn" type="button" id="ver-reload">Reload</button>
+      <button class="lib-x" type="button" id="ver-x" aria-label="Dismiss">×</button>
+    </div>
     <div class="status" id="status" role="status" aria-live="polite">Sample project loaded · illustrative data</div>
   </main>
 </div>
@@ -751,6 +757,8 @@ JavaScript API (run in the page console or via your agent's evaluate tool):
                  valueCol2 (second grade in callouts, e.g. "Au_gpt"; null for none),
                  pendingLabels (write ASSAYS PENDING along holes whose collar status/notes say pending),
                  pendingNoAssays (also flag holes with no assays), elevTicks (elevation ticks on the block edge),
+                 grid (eastings and northings over the block in a plan view, looking down at 80° or more; on
+                   for new figures; a plan view also draws intervals as flat bars and says "Plan view"),
                  terrain: "natural" | "light" | "dark" | "relief" | "satellite" | "muted",
                  terrainSource: "auto" | "topo" | "dem" | "collars"  (auto: uploaded topography,
                    else real elevation once a coordinate system is set, else fitted to the collars),
@@ -786,7 +794,8 @@ JavaScript API (run in the page console or via your agent's evaluate tool):
   EM3D.updateWallLabel(id, {...}) EM3D.removeWallLabel(id)
   EM3D.setCallout(holeId, {show, line1, line2, incl: false, placement: "column" | "beside" | "bracket",
                   x, y})   null resets a field; x, y place the box (0-1 of the frame), its leader follows.
-                                  In published mode the id is a result ID; line1 rewords that result only, and
+                                  In published mode the id is a result ID; line1 (and line2, the callout's second
+                                  line, its "incl." results unless reworded) rewords that result only, and
                                   stays with the depths it was written for (getState().callouts.published:
                                   records, problems such as a published length that disagrees with To - From)
   Published results table: a CSV with Result ID, Hole ID, From, To and Approved text (or Published length,
@@ -931,8 +940,9 @@ Whole projects (to keep or move a figure):
                                   the files' metres, or latitude/longitude (GeoJSON in WGS 84, KML), placed
                                   with the coordinate system set in step 1. color defaults to the brand
                                   colours; label: the legend text (null: the name, "": no legend row);
-                                  labelField: a property written beside each feature. Returns the id (or ids)
-  EM3D.updateOverlay(id, {..., show}) / removeOverlay(id)   getState().overlays
+                                  labelField: a property written beside each feature; inset: outlined in the inset
+                                  too (unset: areas yes on new figures). Returns the id (or ids)
+  EM3D.updateOverlay(id, {..., show, inset}) / removeOverlay(id)   getState().overlays
   EM3D.addShape({type: "ellipse", centre: [e, n, z?], radii: [rx, ry], rotation (azimuth of rx), vertical,
                  dash, text, color, width})   a dashed ellipse; without z it lies on the terrain; vertical:
                                   upright, ry up and down, in the plane at the rotation azimuth
@@ -941,6 +951,7 @@ Whole projects (to keep or move a figure):
   EM3D.addShape({type: "arrow", from, to, text: "OPEN", style: "outline" | "solid", size, color})   a big arrow
                                   with its text along it. Any shape given only a type is placed for you (round
                                   the top intercept, along the section). Returns the id
+  Any shape takes views: "both" (default) | "3d" | "section", where it is drawn.
   EM3D.updateShape(id, {...}) / removeShape(id)   getState().shapes
   EM3D.layersReady()              Promise; resolves once the layers, face images and inset have loaded
   EM3D.setFigureStyle(style, {brandKitId, brandRevision})   a shared figure style (version 1: colours
