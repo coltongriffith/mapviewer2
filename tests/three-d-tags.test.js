@@ -41,7 +41,7 @@ describe('grouped pending tags', () => {
 const ctx = new Proxy({}, { get: (t, k) => (k in t ? t[k] : k === 'measureText' ? (s) => ({ width: String(s).length * 7 }) : () => {}), set: (t, k, v) => { t[k] = v; return true; } });
 const K = { u: 1, font: () => {} };
 function host(holes, tags = {}, extra = {}) {
-  const S = { ids: true, pendingLabels: true, accent: '#c65322', primary: '#142126', tags: { at: 'collar', style: 'dark', status: {}, fadePrevious: false, newLabel: '', prevLabel: 'Previously released', plannedLabel: 'Planned', groups: [], groupRadius: 140, idMode: 'auto', showId: {}, showTag: {}, hideRows: [], pending: 'collar', ...tags } };
+  const S = { designVersion: extra.designVersion ?? 2, ids: true, pendingLabels: true, accent: '#c65322', primary: '#142126', tags: { at: 'collar', style: 'dark', status: {}, fadePrevious: false, newLabel: '', prevLabel: 'Previously released', plannedLabel: 'Planned', groups: [], groupRadius: 140, idMode: 'auto', showId: {}, showTag: {}, hideRows: [], pending: 'collar', ...tags } };
   const fills = [];
   ctx.fillText = (t) => fills.push(t);
   init({ S, project: { holes }, G: { V: (x, y, z) => ({ x, y, z }) }, proj: (v) => [v.x, 500 - v.y / 10, 0], shownCallouts: () => extra.callouts || [], isPending: (h) => /pending/.test(h.note),
@@ -67,6 +67,18 @@ describe('hole tags', () => {
   it('draws one "2026 · ASSAYS PENDING" tag for pending holes within the radius', () => {
     expect(host(holes).draw().filter((t) => /PENDING/.test(t))).toEqual(['2026 · ASSAYS PENDING']);
     expect(host(holes, { groupRadius: 20 }).draw().filter((t) => /PENDING/.test(t))).toHaveLength(2);
+  });
+  it('keeps the earlier tags on a figure made before October 2026 (design version 1)', () => {
+    const v1 = { designVersion: 1 };
+    expect(host(holes, {}, v1).draw().filter((t) => /PENDING/.test(t))).toEqual(['ASSAYS PENDING']); // no year, grouped 70 px apart on screen
+    expect(host(holes, { groupRadius: 20 }, v1).draw().filter((t) => /PENDING/.test(t))).toHaveLength(1);
+    host(holes, { status: { 'S-073': 'none' } }, v1);
+    expect(holes.filter(tagShown).map((h) => h.id)).toEqual(['S-076', 'S-079', 'S-037', 'S-048']);
+    const plain = holes.map((h) => ({ ...h, c: { ...h.c, raw: {} } })); // no year column: only S-073 has a status
+    host(plain, { status: { 'S-073': 'new' } });
+    expect(plain.filter(tagShown).map((h) => h.id)).toEqual(['S-073']);
+    host(plain, { status: { 'S-073': 'new' } }, v1);
+    expect(plain.filter(tagShown)).toHaveLength(5); // a pill on every hole with an ID, as before
   });
   it('lists "Previously released" only when such a pill is drawn, and never when hidden', () => {
     const rows = () => legendRows().map((r) => r.label);

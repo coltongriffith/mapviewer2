@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { readFileSync } from 'node:fs';
 
 // Exploration Maps 3D (/3d): whole-figure snapshots, and Save / My 3D maps
 // against an in-memory Supabase (auth, REST and storage are all mocked; no
@@ -19,6 +20,10 @@ const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
 const token = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: uid, role: 'authenticated', exp: Math.floor(Date.now() / 1000) + 86400 })}.test-signature`;
 const session = { user, access_token: token, refresh_token: 'synthetic-refresh', expires_in: 86400, expires_at: Math.floor(Date.now() / 1000) + 86400, token_type: 'bearer' };
 const AUTH_KEY = 'sb-example-auth-token';
+// A figure saved before figure design versions (October 2026): its settings have no designVersion.
+const LEGACY = JSON.parse(readFileSync('tests/fixtures/three-d/pre-round4-project.json', 'utf8'));
+const LEGACY_LOOK = { imagery: { saturation: 1.15, contrast: 1, warmth: 0, relief: 0 }, legend: { merge: 'separate', pos: { main: 'br' } },
+  geology: { strength: 1, hidden: 'clear' }, tags: { emphasis: 'none', highlightNew: false, idMode: 'all' }, shell: { color: '#1f9e96', throughTerrain: false } };
 
 const ORG = '00000000-0000-4000-8000-0000000003a1', PROP = '00000000-0000-4000-8000-0000000003b1';
 
@@ -160,6 +165,52 @@ test('geology, geophysics, tags and a face image survive getProject and loadProj
   expect(after.geology).toMatchObject({ enabled: true, title: 'Alteration', faces: ['N', 'E'], images: { S: true } });
   expect(after.geology.legend.find((e) => e.code === 'POR').name).toBe('Porphyry (altered)');
   expect(after.footnoteAuto).toEqual(expect.arrayContaining(['Geology on block faces interpolated from drill logs; schematic.', 'Geophysics: illustrative inversion model']));
+});
+
+test('a figure saved before design versions keeps its look; its gap callout is flagged and recalculated in one undoable step', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await open3d(page);
+  expect((await state(page)).design).toEqual({ version: 2, current: 2, optIn: [] }); // a new figure: today's design
+  const { opened, settings } = await page.evaluate(async (p) => {
+    const opened = await window.EM3D.loadProject(p);
+    await window.EM3D.history(); // the history starts at the opened figure
+    return { opened, settings: window.EM3D.getProject().settings };
+  }, LEGACY);
+  expect(opened.design).toEqual({ version: 1, current: 2, optIn: [] });
+  // What it saved is as saved; what it lacks takes the earlier look, not today's defaults.
+  for (const [k, v] of Object.entries(LEGACY.settings)) expect(settings[k], k).toEqual(v && typeof v === 'object' && !Array.isArray(v) ? expect.objectContaining(v) : v);
+  expect(settings).toMatchObject({ ...LEGACY_LOOK, designVersion: 1, designOptIn: [] });
+  expect(opened.tags).toMatchObject(LEGACY_LOOK.tags);
+
+  // The earlier callout numbers stay, flagged where they span an unsampled gap or an overlap.
+  expect(opened.callouts).toMatchObject({ sampled: false, warnings: ['S-037 callout spans a 90 m unsampled gap', 'S-038 callout spans overlapping samples'] });
+  expect(opened.callouts.shown.find((c) => c.holeId === 'S-037').line1).toBe('110 m @ 1.50% Cu from 0 m');
+  await expect(page.locator('#status')).toContainText('S-037 callout spans a 90 m unsampled gap');
+  await page.evaluate(() => window.EM3D.showStep('layout'));
+  const warn = page.locator('#callout-editor .warn');
+  await expect(warn).toContainText('S-037 callout spans a 90 m unsampled gap; S-038 callout spans overlapping samples.');
+  await warn.getByRole('button', { name: 'Recalculate' }).click();
+  await expect(warn).toBeHidden();
+  let now = await state(page);
+  expect(now.design).toEqual({ version: 1, current: 2, optIn: ['sampledIntercepts'] });
+  expect(now.callouts).toMatchObject({ sampled: true, warnings: [] });
+  expect(now.callouts.shown.map((c) => c.holeId)).toEqual(['S-035', 'S-038']); // S-037's two 10 m zones are each under the 20 m minimum
+  expect(now.callouts.shown.find((c) => c.holeId === 'S-038').line1).toBe('24 m @ 0.48% Cu from 20 m');
+  expect(now.display.legend).toEqual(LEGACY_LOOK.legend); // nothing else changes
+  // A callout reworded by hand keeps its words.
+  now = await page.evaluate(() => window.EM3D.setCallout('S-038', { line1: '24 m of copper' }));
+  expect(now.callouts.shown.find((c) => c.holeId === 'S-038')).toMatchObject({ line1: '24 m of copper' });
+
+  await page.evaluate(() => window.EM3D.undo()); // the reworded line
+  now = await page.evaluate(() => window.EM3D.undo()); // the recalculation
+  expect(now.design.optIn).toEqual([]);
+  expect(now.callouts.warnings).toHaveLength(2);
+  expect(now.callouts.shown.find((c) => c.holeId === 'S-037').line1).toBe('110 m @ 1.50% Cu from 0 m');
+  // Saved and reopened, it is still a version 1 figure.
+  const again = await page.evaluate(async () => (await window.EM3D.loadProject(JSON.parse(JSON.stringify(window.EM3D.getProject())))).design);
+  expect(again).toEqual({ version: 1, current: 2, optIn: [] });
+  expect(errors).toEqual([]);
 });
 
 test.describe('account', () => {
@@ -330,6 +381,21 @@ test.describe('account', () => {
     await conflict.getByRole('button', { name: 'Reload saved version' }).click();
     await expect.poll(async () => (await state(page)).brand.subtitle).toBe('From the other tab');
     expect(fake.upserts).toHaveLength(4);
+  });
+
+  test('a figure saved to the account before design versions opens with its earlier look and keeps it when saved', async ({ page }) => {
+    const fake = await fakeSupabase(page), id = '00000000-0000-4000-8000-0000000003d9', at = '2026-10-19T12:00:00.000Z';
+    const { files, ...snapshot } = LEGACY; // a row as account.js saved it, with the files inline
+    fake.rows.set(id, { id, user_id: uid, name: 'OLD FIGURE', settings: { ...snapshot, files }, file_paths: [], thumbnail: null, created_at: at, updated_at: at, deleted_at: null, org_id: null, property_id: null });
+    await page.addInitScript(([k, s]) => localStorage.setItem(k, JSON.stringify(s)), [AUTH_KEY, session]);
+    await open3d(page);
+    const opened = await page.evaluate((i) => window.EM3D.account.openProject(i), id);
+    expect(opened.state.design).toEqual({ version: 1, current: 2, optIn: [] });
+    expect(opened.state.display).toMatchObject({ imagery: LEGACY_LOOK.imagery, legend: LEGACY_LOOK.legend });
+    expect(opened.state.callouts.warnings).toHaveLength(2);
+    await page.evaluate((i) => window.EM3D.account.saveProject('OLD FIGURE', i), id);
+    await expect.poll(() => fake.upserts.length).toBe(1);
+    expect(fake.upserts[0].settings.settings).toMatchObject({ ...LEGACY_LOOK, designVersion: 1, designOptIn: [], title: LEGACY.settings.title });
   });
 
   test('a figure in a property takes files from its data library and offers newer versions', async ({ page }) => {

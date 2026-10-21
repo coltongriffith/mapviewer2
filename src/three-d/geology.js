@@ -57,11 +57,13 @@ export const applyLegendFile = (legend, file) => legend.map((e) => {
   return { ...e, ...(f.name && !e.nameSet ? { name: f.name } : {}), ...(f.color && !e.colorSet ? { color: f.color } : {}) };
 });
 // Hidden codes. "nearest": their intervals are left out, so the faces are interpolated as if they did not
-// exist and the nearest visible units fill in; "other": they fold into one muted "Other" unit. Returns the
-// class of each code (codes left out have none) and the classes in order (codes, plus OTHER at the end).
+// exist and the nearest visible units fill in; "other": they fold into one muted "Other" unit; "clear" (figures
+// made before October 2026): they still shape the faces, their own areas left unpainted (in `clear`). Returns
+// the class of each code (codes left out have none) and the classes in order (codes, plus OTHER at the end).
 export const OTHER = '\u0000other', OTHER_COLOR = '#d5d1c8';
 export function foldCodes(legend, codes, mode = 'nearest') {
   const by = new Map((legend || []).map((e) => [e.code, e])), shown = codes.filter((c) => by.get(c)?.show !== false), index = new Map(shown.map((c, i) => [c, i]));
+  if (mode === 'clear') return { index: new Map(codes.map((c, i) => [c, i])), classes: codes, other: false, clear: new Set(codes.filter((c) => !index.has(c))) };
   const other = mode === 'other' && shown.length < codes.length;
   if (other) codes.forEach((c) => { if (!index.has(c)) index.set(c, shown.length); });
   return { index, classes: other ? [...shown, OTHER] : shown, other };
@@ -236,8 +238,9 @@ const searchNow = () => (Number.isFinite(cfg().search) && cfg().search > 0 ? cfg
 function samplesNow() {
   const L = logsNow(), G = H.G, codes = L.codes.map((c) => c.code), fold = foldCodes(cfg().legend, codes, cfg().hidden), key = `${cache.logsKey}|${[...fold.index].join(',')}`;
   if (cache.samplesKey !== key || cache.samplesG !== G) {
-    cache.samples = logSamples(H.project.holes.filter((h) => h.path), L.byHole, fold.index); cache.samplesKey = key; cache.samplesG = G; cache.codes = codes; cache.fold = fold; cache.grids = {};
+    cache.samples = logSamples(H.project.holes.filter((h) => h.path), L.byHole, fold.index); cache.samplesKey = key; cache.samplesG = G; cache.codes = codes; cache.grids = {};
   }
+  cache.fold = fold; // the same classes for the same key; "clear" can still change which are unpainted
   return cache.samples;
 }
 // The code index of every cell on a plane, cached by plane and method settings.
@@ -251,7 +254,7 @@ export function planeClasses(key, a, b, sizeOverride) {
 // Face colours: the legend colour at the wall colour strength, the same as the legend swatches.
 const strength = () => cfg().strength ?? 1.3;
 const colorOf = (code) => deepen(code === OTHER ? OTHER_COLOR : cfg().legend.find((e) => e.code === code)?.color || OTHER_COLOR, strength());
-function colorsNow() { return cache.fold.classes.map(colorOf); }
+function colorsNow() { return cache.fold.classes.map((c) => (cache.fold.clear?.has(c) ? null : colorOf(c))); }
 function geologyCanvas(key, a, b) {
   const hit = planeClasses(key, a, b), cols = colorsNow(), ck = `${cols.join()}|${cfg().texture}`;
   if (!hit.canvas || hit.ck !== ck) { hit.canvas = classCanvas(hit.cls, hit.nx, hit.ny, cols, cfg().texture !== false); hit.ck = ck; }
@@ -324,7 +327,7 @@ export function set(o = {}) {
   if (o.search !== undefined) { if (o.search === null || o.search === 'auto' || o.search === '') g.search = null; else { const v = +o.search; if (!(v > 0)) throw new Error('search must be a distance in metres, or null for automatic.'); g.search = Math.min(20000, v); } }
   if (o.smooth !== undefined) g.smooth = Math.max(0, Math.min(8, Math.round(+o.smooth) || 0));
   if (o.strength !== undefined) { const v = +o.strength; if (!Number.isFinite(v)) throw new Error('strength must be 0.5-2 (1: the legend colour; higher: deeper).'); g.strength = Math.max(0.5, Math.min(2, v)); }
-  if (o.hidden !== undefined) { if (!['nearest', 'other'].includes(o.hidden)) throw new Error('hidden must be "nearest" (hidden codes give way to the nearest visible unit) or "other" (one muted "Other" unit).'); g.hidden = o.hidden; }
+  if (o.hidden !== undefined) { if (!['nearest', 'other', 'clear'].includes(o.hidden)) throw new Error('hidden must be "nearest" (hidden codes give way to the nearest visible unit), "other" (one muted "Other" unit) or "clear" (left unpainted).'); g.hidden = o.hidden; }
   ['texture', 'section'].forEach((k) => { if (o[k] !== undefined) g[k] = !!o[k]; });
   if (o.title !== undefined) g.title = String(o.title).slice(0, 40) || 'Lithology';
   if (o.note !== undefined) g.note = o.note === null ? '' : String(o.note).slice(0, 200);
@@ -366,7 +369,7 @@ export function renderUI(el) {
       <label class="field"><span>Colour strength <output class="mono">${(g.strength ?? 1.3).toFixed(1)}×</output></span><input type="range" min="50" max="200" step="10" data-g="strength" value="${Math.round((g.strength ?? 1.3) * 100)}"></label>
     </div>
     <details style="margin-top:8px"><summary>Advanced</summary>
-    <label class="field" style="margin-top:6px"><span>Hidden codes</span><select data-g="hidden"><option value="nearest" ${g.hidden !== 'other' ? 'selected' : ''}>Give way to the nearest visible unit</option><option value="other" ${g.hidden === 'other' ? 'selected' : ''}>One muted "Other" unit</option></select></label>
+    <label class="field" style="margin-top:6px"><span>Hidden codes</span><select data-g="hidden"><option value="nearest" ${!['other', 'clear'].includes(g.hidden) ? 'selected' : ''}>Give way to the nearest visible unit</option><option value="other" ${g.hidden === 'other' ? 'selected' : ''}>One muted "Other" unit</option><option value="clear" ${g.hidden === 'clear' ? 'selected' : ''}>Left unpainted</option></select></label>
     <div class="grid2" style="margin-top:6px">
       <label class="field"><span>Anisotropy (sideways ÷ vertical reach)</span><input type="number" min="1" max="20" step="0.5" data-g="anisotropy" value="${esc(g.anisotropy)}"></label>
       <label class="field"><span>Search radius (m)</span><input type="number" min="5" data-g="search" value="${esc(g.search ?? '')}" placeholder="auto${H.G ? ` (${searchNow()} m)` : ''}"></label>
