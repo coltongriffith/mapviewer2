@@ -49,7 +49,10 @@ const BUDGETS = {
   // 148 → 148.3 (Oct 2026, measured 147.99 configured): hole-ID labels at their collar (#307) pass the layout
   // version and callout font to the lazy scorer and draw a pushed label's leader (~+0.07 kB in App), which left
   // 6 B of the ±20 B chunk-hash churn.
-  maxJsChunkGzipKb: 148.3,
+  // 148.3 → 148.6 (Oct 2026, export options, measured 148.32 configured, ~+0.33 kB): legend height and note-in-legend
+  // sizing must stay in App because the editor's live legend box uses the same template code as the exporter, plus
+  // the lazy ExportBackground hook (owner-requested 2D transparent/standalone).
+  maxJsChunkGzipKb: 148.6,
   initialJsGzipKb: 75,
   initialAuthJsGzipKb: 135,
   // The former configured check omitted VITE_ADMIN_EMAIL, which pruned the
@@ -101,7 +104,12 @@ const BUDGETS = {
   // ~+0.9 kB: ID labels measured in the callout font and sized to it, tried beside their collar, a leader when pushed
   // out, the ambiguity check, the crowded-first retry, and placed labels kept clear of intercept cards); the editor
   // chunk only passes the layout version and font and draws a pushed label's leader (~+0.07 kB).
-  totalAuthJsGzipKb: 915.6,
+  // 915.6 → 917.1 (Oct 2026, export options merged over drill database 2B and #307, measured 916.80): /3d's
+  // transparent background, drop shadow toggle and Map use (+0.6 kB on the page, mapuse.js lazy; see threeDJsGzipKb)
+  // and the 2D export options: the footer note always exported (its wrapping and the free-strip fallback in the lazy
+  // renderScene chunk), Standalone's note in the legend, the fitted legend for new maps, the blank-basemap transparent
+  // toggle (a lazy ExportBackground chunk) and the Map use and Fit controls (the lazy LegendEditor chunk).
+  totalAuthJsGzipKb: 917.1,
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
@@ -119,7 +127,8 @@ const BUDGETS = {
   // 838.7 → 847.2 (Oct 2026, measured 846.93): the drill results section, as totalAuthJsGzipKb above.
   // 847.2 → 847.4 (measured 847.05): the results review fixes, as totalAuthJsGzipKb above.
   // 847.4 → 848.5 (measured 848.21): hole-ID labels at their collar, as totalAuthJsGzipKb above.
-  totalJsGzipKb: 848.5,
+  // 848.5 → 850.0 (measured 849.70): the export options, as totalAuthJsGzipKb above.
+  totalJsGzipKb: 850.0,
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the
   // totals above. /3d carries three.js (~109 kB gzip) and its editor.
@@ -186,7 +195,12 @@ const BUDGETS = {
   // hole-path switch (+0.18 kB); 170.6 left ~30 B, inside chunk-hash churn.
   // 170.9 → 170.95 (Oct 2026, published figure versions 5A merged over 2B, measured 170.62, configured 170.63, + ~0.3):
   // the four EM3D.account version names and the gap note skipped over a published version (+0.03 kB); the rest is lazy.
-  threeDJsGzipKb: 170.95,
+  // 170.95 → 171.6 (Oct 2026, export options, measured 171.21, configured 171.24, merged over figure versions 5A): a transparent background for exportPNG and the
+  // layers ZIP (no scene colour, section paper or footer band; drawn synchronously, so in the page), the drop shadow
+  // setting and its export override, the Export step's Background select, exports that wait for the layers they
+  // need (pending setMapUse and module loads), and the hooks for Map use (the footer's notes and credits moved out,
+  // the details atop the legend card, EM3D.setMapUse, the saved settings). The standalone block is lazy (mapuse.js).
+  threeDJsGzipKb: 171.6,
   // /3d's own modules fetched on first use (the geology, geophysics and tag layers, the account
   // client). They never load with the page or the app, so they sit outside the page and app totals.
   // 32 → 34 (Oct 2026, round 4): per-hole tags, grouped pending tags, callouts beside or bracketed on their
@@ -257,7 +271,10 @@ const BUDGETS = {
   // version on its own; and its hooks in account-core.js (~0.55 kB: saveProject refusing while a version is open, the
   // change notices ignored, the lazy loader, the menu button, the ?version= boot, and opening a version clearing 2B's
   // drill notice and pending Update, with no drill check while it is shown). Neither adds the other's code.
-  threeDLazyJsGzipKb: 114.6,
+  // 114.6 → 115.7 (Oct 2026, export options, measured 115.19, configured 115.42, merged over figure versions 5A): mapuse.js (~1 kB: a standalone map's details, sources
+  // and notes as the top section of the legend card), fetched only for a standalone figure; desk.js passes the
+  // background to every layer.
+  threeDLazyJsGzipKb: 115.7,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.
@@ -266,7 +283,8 @@ const BUDGETS = {
   adminAuthJsGzipKb: 150,
   adminJsGzipKb: 85,
   // 335 → 335.3 (Oct 2026, measured 334.98): the same ~0.07 kB in App, as maxJsChunkGzipKb above.
-  editorAuthJsGzipKb: 335.3,
+  // 335.3 → 335.6 (Oct 2026, export options, measured 335.30): the same App code as maxJsChunkGzipKb above.
+  editorAuthJsGzipKb: 335.6,
   editorJsGzipKb: 270,
   claimsAuthJsGzipKb: 355,
   claimsJsGzipKb: 290,

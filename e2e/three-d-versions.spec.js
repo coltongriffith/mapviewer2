@@ -180,6 +180,13 @@ test.describe('published versions', () => {
     expect(fake.rows.get(id).settings.settings.title).toBe('RAILS EDITED');
     const [download] = await Promise.all([page.waitForEvent('download'), page.locator('#ver-bar').getByRole('button', { name: 'Download PNG' }).click()]);
     expect(download.suggestedFilename()).toMatch(/\.png$/);
+    // The exports that wait for pending layers (exportLayers, the Export buttons) finish on a read-only version too,
+    // and leave its PNG byte-identical to the one published. The wait itself is immediate here (nothing pending); the
+    // bound covers the ZIP's four full-size PNGs, which take 20-45 s under software WebGL on a loaded runner.
+    expect(await page.evaluate(() => Promise.race([window.EM3D.layersReady().then(() => true), new Promise((r) => setTimeout(() => r('timed out'), 5000))]))).toBe(true);
+    const waited = await page.evaluate(() => Promise.race([window.EM3D.exportLayers({ as: 'blob' }).then((b) => b.size > 0), new Promise((r) => setTimeout(() => r('timed out'), 120000))]));
+    expect(waited).toBe(true);
+    expect((await exports(page)).fig).toBe(v1.fig);
 
     // Back to the figure as last saved.
     await page.getByRole('button', { name: 'Back to the current figure' }).click();
