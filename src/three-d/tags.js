@@ -229,22 +229,36 @@ export function drawGroup(ctx, K, x, y, g) {
   ctx.textBaseline = 'alphabetic';
 }
 
+// EM3D.groupCallouts: the given holes' callouts as one box (ticked on), "auto" for nearby ones, null to clear.
+// callouts: the figure's candidates, every hole with an intercept.
+export function group(ids, callouts) {
+  const t = H.S.tags, has = (id) => callouts.some((c) => c.h.id === id);
+  if (ids === null || (Array.isArray(ids) && !ids.length)) { t.groups = []; return; }
+  if (ids === 'auto') { t.autoGroup = true; return; }
+  if (!Array.isArray(ids) || ids.length < 2) throw new Error('groupCallouts takes two or more hole IDs, "auto" (group nearby callouts), or null to clear the groups.');
+  const known = new Set((H.project?.holes || []).map((h) => h.id)), bad = ids.filter((id) => !known.has(id)); if (bad.length) throw new Error(`No hole ${bad.map((b) => `"${b}"`).join(', ')}.`);
+  const none = ids.filter((id) => !has(id)); if (none.length) H.status(`${none.join(', ')} ${none.length > 1 ? 'have' : 'has'} no interval above the broad cut-off, so no callout to group.`);
+  t.groups = t.groups.map((g) => g.filter((id) => !ids.includes(id))).filter((g) => g.length > 1).concat([[...new Set(ids)]]);
+  ids.forEach((id) => { if (has(id)) H.S.coOverrides[id] = { ...(H.S.coOverrides[id] || {}), show: true }; });
+}
+
 // ---------- callouts off the column: beside the hole, as a bracket on it, or where dragged ----------
 // The callouts whose placement (per hole, else S.coPlacement) is not the left column, or which were
 // dragged (x, y in 0-1 of the frame), apart from the column's: { col, free }. The page draws the column
 // first, then drawFree places these clear of it and of its leaders.
-const placementOf = (it) => { const o = H.S.coOverrides[it.c?.h.id] || {}; return Number.isFinite(o.x) && Number.isFinite(o.y) ? 'free' : it.group ? 'column' : o.placement || H.S.coPlacement || 'column'; };
+const placementOf = (it) => { const o = it.c ? H.coOv(it.c) : {}; // per hole, or per result in published mode
+  return Number.isFinite(o.x) && Number.isFinite(o.y) ? 'free' : it.group ? 'column' : o.placement || H.S.coPlacement || 'column'; };
 export const splitCallouts = (items) => ({ col: items.filter((it) => placementOf(it) === 'column'), free: items.filter((it) => placementOf(it) !== 'column') });
 export function drawFree(ctx, K, items, { lay, W, H: Hh, hits }) {
-  const S = H.S, { u } = K;
+  const { u } = K;
   items.forEach((it) => {
-    const o = S.coOverrides[it.c.h.id] || {}, free = placementOf(it) === 'free';
-    if (placementOf(it) === 'bracket') { hits.push({ kind: 'callout', id: it.c.h.id, box: drawBracket(ctx, K, it, lay) }); return; }
+    const o = H.coOv(it.c), free = placementOf(it) === 'free';
+    if (placementOf(it) === 'bracket') { hits.push({ kind: 'callout', id: it.c.key, box: drawBracket(ctx, K, it, lay) }); return; }
     const { M, s } = it, tag = 18 * u, at = (x, y) => [x, y, x + M.bw, y + M.bh + tag];
     const cands = free ? [at(Math.min(o.x * W, W - M.bw), Math.min(o.y * Hh, Hh - M.bh - tag))]
       : [[1, -0.5], [-1, -0.5], [1, -1.4], [-1, -1.4], [1, 0.4], [-1, 0.4], [1.8, -0.5], [-1.8, -0.5]].map(([sx, sy]) => at(sx > 0 ? s[0] + 40 * u * sx : s[0] + 40 * u * sx - M.bw, s[1] + sy * M.bh));
     const box = free ? lay.add(cands[0]) : lay.place(cands, Infinity) || lay.add(cands[0]);
-    H.drawCallout(ctx, K, box[0], box[1], it.c, M, s); hits.push({ kind: 'callout', id: it.c.h.id, box });
+    H.drawCallout(ctx, K, box[0], box[1], it.c, M, s); hits.push({ kind: 'callout', id: it.c.key, box });
   });
 }
 // A bracket along the reported interval, a hair to the side of the hole, with the hole ID and the grade

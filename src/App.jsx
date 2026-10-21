@@ -4020,6 +4020,14 @@ export default function App({ initialAction = null }) {
     setSelectedCalloutId(calloutId);
   };
 
+  // Published results (a release table the user picks): each approved result's text on its hole's collar,
+  // labelled as at the collar; the parsing and matching load on first use (utils/publishedCallouts.js).
+  const publishedInputRef = useRef(null);
+  const addPublishedResults = (file) => file && import('./utils/publishedCallouts.js').then((m) => m.fromFile(file, project.layers)).then(({ callouts, status }) => {
+    callouts.forEach((c) => addCalloutAtAnchor(c));
+    setUploadStatus(status);
+  });
+
   const addCalloutFromSelectedLayer = () => {
     if (!selectedLayer?.geojson) return;
     // NOT geojsonCenter(layer.geojson), which is the mean of every feature's
@@ -6754,6 +6762,8 @@ export default function App({ initialAction = null }) {
             <h2>Callouts</h2>
             <div className="button-row" style={{ marginBottom: 10 }}>
               <button className="btn primary" type="button" onClick={addCalloutFromSelectedLayer} disabled={!selectedLayer}>Add From Selected Layer</button>
+              <button className="btn" type="button" onClick={() => publishedInputRef.current?.click()} title="A table of published results (Result ID, Hole ID, From, To, Approved text): each goes on its hole's collar">Add Published Results</button>
+              <input ref={publishedInputRef} type="file" accept=".csv,.txt" hidden aria-label="Published results table" onChange={(e) => { addPublishedResults(e.target.files?.[0]); e.target.value = ''; }} />
             </div>
             <div className="callout-list">
               {project.callouts.map((callout, index) => {

@@ -75,6 +75,9 @@ const FIELD_LABEL = { hole: 'Hole ID', east: 'Easting', north: 'Northing', elev:
 // lithlegend: a code-to-name (and colour) list for the lithology legend.
 Object.assign(ROLE_LABEL, { litho: 'Lithology / alteration', geophys: 'Geophysics', lithlegend: 'Lithology legend' }); Object.assign(FIELD_LABEL, { code: 'Code', desc: 'Description', value: 'Value', line: 'Line', color: 'Colour' });
 Object.assign(ROLE_FIELDS, { litho: ['hole', 'from', 'to', 'code', 'desc'], geophys: ['east', 'north', 'elev', 'value', 'line'], lithlegend: ['code', 'desc', 'color'] });
+// Published results: a release table, only ever by the user's choice; its columns (published-results.js PUB_FIELDS)
+// are mapped once that module loads.
+ROLE_LABEL.published = 'Published results';
 
 function parseOBJ(text) {
   const v = [], f = [];
@@ -160,6 +163,8 @@ const S = {              // style
   // legend: one card or several ("auto" merges three or more blocks), each card "auto", a corner or {x, y}.
   // coPlacement: where callouts go unless set per hole. Block: margin (m) around the drilling, extent limits.
   legend: { merge: 'auto', pos: {} }, coPlacement: 'column', blockMargin: null, blockExtent: null,
+  // calloutMode: where the callouts come from (computeCallouts); pubOverrides: per published result, as coOverrides per hole.
+  calloutMode: 'calculated', pubOverrides: {},
   // Files taken from the property's data library: { [file name]: { libFileId, version } } (library.js).
   libRefs: {},
   // shell.color null: the brand accent (brandTone). throughTerrain: a faint ghost where the terrain hides it.
@@ -178,7 +183,7 @@ function addFiles(list) {
     else {
       const { header, rows } = isXYZ(f.name, f.text) ? parseXYZ(f.text) : parseCSV(f.text); // EXT hook: Geosoft XYZ
       Object.assign(entry, { header, rows, cols: matchCols(header) });
-      entry.role = refineRole(entry, roleOf(entry.cols, f.name), f.name); // EXT hook: lithology, geophysics
+      entry.role = f.role === 'published' ? f.role : refineRole(entry, roleOf(entry.cols, f.name), f.name); // EXT hook: lithology, geophysics; a release table only when said
       entry.grades = entry.role === 'assay' ? gradeCols(header, entry.cols, rows) : [];
     }
     files = files.filter((x) => x.name !== entry.name);
@@ -985,7 +990,7 @@ function placeRibbons() {
       G.ribbons[k].setMatrixAt(n[k]++, mx);
     }
   };
-  if (S.ribbons) callouts.forEach(({ h, ic }) => { put(0, h, ic.broad.from, ic.broad.from + ic.broad.len); if (ic.incl) put(1, h, ic.incl.from, ic.incl.from + ic.incl.len); });
+  if (S.ribbons) callouts.forEach(({ h, ic }) => { put(0, h, ic.broad.from, ic.broad.from + ic.broad.len); inclsOf(ic).forEach((x) => put(1, h, x.from, x.from + x.len)); });
   G.ribbons.forEach((rb, k) => { rb.count = n[k]; rb.instanceMatrix.needsUpdate = true; });
   EXT.tags?.placeHistograms(); // EXT hook: grade histogram bars
 }
@@ -1032,14 +1037,27 @@ function sectionEnds() {
 }
 
 // Intercepts (intercepts.js): sampled metres only, or the earlier numbers for a version 1 figure.
-let callouts = [];
+// S.calloutMode: "calculated" (these, the top coCount), "published" (the release table's approved results,
+// published-results.js) or "manual" (holes ticked by hand at the depths fixed when ticked). key: the hole ID,
+// or the result ID of a published callout; its settings are coMap()[key].
+let callouts = [], calcCallouts = [], PR = null, prP = null;
+const prWanted = () => S.calloutMode !== 'calculated' || hasRole('published');
+const prLoad = () => (prP ||= import('./published-results.js').then((m) => { PR = m; ROLE_FIELDS.published = Object.keys(m.PUB_FIELDS); Object.assign(FIELD_LABEL, m.PUB_FIELDS); if (G) restyle(); renderFiles(); renderCalloutEditor(); schedulePublish(); }));
+const coMap = () => (S.calloutMode === 'published' ? S.pubOverrides : S.coOverrides);
+const coOv = (c) => coMap()[c.key] || {};
+const prRead = () => PR.readAll(files, project?.holes);
 function computeCallouts() {
-  callouts = [];
-  if (!G || !S.valueCol) return;
+  callouts = calcCallouts = [];
+  if (!G) return;
+  if (prWanted() && !PR) { prLoad(); if (S.calloutMode !== 'calculated') return; }
+  if (S.calloutMode === 'published') { callouts = PR.pubCallouts(prRead().results, project.holes, S.pubOverrides); return; }
+  if (!S.valueCol) return;
   const sampled = uses(S, 'sampledIntercepts');
-  project.holes.forEach((h) => { const ic = intercept(h.ints, S.valueCol, S.coCut, S.coIncl, S.coMin, sampled); if (ic) callouts.push({ h, ic }); });
-  callouts.sort((a, b) => b.ic.broad.len * b.ic.broad.avg - a.ic.broad.len * a.ic.broad.avg);
+  project.holes.forEach((h) => { const ic = intercept(h.ints, S.valueCol, S.coCut, S.coIncl, S.coMin, sampled); if (ic) calcCallouts.push({ h, ic, key: h.id }); });
+  calcCallouts.sort((a, b) => b.ic.broad.len * b.ic.broad.avg - a.ic.broad.len * a.ic.broad.avg);
+  callouts = S.calloutMode === 'manual' ? PR.manualCallouts(calcCallouts, project.holes, S.coOverrides, (h, a, b) => avgOver(h.ints, S.valueCol, a, b, sampled)) : calcCallouts;
 }
+const inclsOf = (ic) => ic.incls || (ic.incl ? [ic.incl] : []);
 const fmt = (v) => (v >= 100 ? v.toFixed(0) : v >= 10 ? v.toFixed(1) : v > 0 && v < 0.01 ? v.toFixed(3) : v.toFixed(2));
 const gradeText = (v, label) => { const unit = (label.match(/(%|g\/t|ppm|ppb)$/) || [''])[0], el = label.replace(/\s*(%|g\/t|ppm|ppb)$/, ''); return `${fmt(v)}${unit === '%' ? '%' : ' ' + unit} ${el}`; };
 const icText = (x, h) => {
@@ -1229,12 +1247,13 @@ function tagLabel(ctx, K, t, x, y) {
 
 // Callouts: the top intercepts, minus any hidden, plus any forced on, with optional reworded lines.
 function shownCallouts() {
-  const ov_ = (c) => S.coOverrides[c.h.id] || {};
+  const ov_ = coOv;
+  if (S.calloutMode !== 'calculated') return callouts.slice(); // published: the ticked results; manual: the ticked holes
   const list = callouts.filter((c) => ov_(c).show !== false).slice(0, S.coCount);
   callouts.forEach((c) => { if (ov_(c).show === true && !list.includes(c)) list.push(c); });
   return list;
 }
-const calloutLines = (c) => calloutText(c.ic, S.coOverrides[c.h.id] || {}, (x) => icText(x, c.h));
+const calloutLines = (c) => (c.pub ? PR.pubLines(c, S.pubOverrides) : calloutText(c.ic, S.coOverrides[c.key] || {}, (x) => icText(x, c.h)));
 // Version 1 numbers that span an unsampled gap or overlapping samples: kept as published, with a warning in
 // the callout panel and a one-click (undoable) recalculation on sampled metres.
 const gapCallouts = () => shownCallouts().filter((c) => c.ic.gap || c.ic.overlap);
@@ -1260,6 +1279,7 @@ function drawCallout(ctx, K, x, y, c, M, target) {
   font(600, 11, true); const tw = ctx.measureText(c.h.id).width + 12 * u;
   ctx.fillStyle = S.primary; ctx.fillRect(x, y + bh + u, tw, 17 * u); ctx.fillStyle = textOn(S.primary); ctx.fillText(c.h.id, x + 6 * u, y + bh + 13.5 * u);
 }
+const ribLabel = () => (S.calloutMode === 'published' ? 'Published interval' : 'Reported interval');
 const legendRows = () => binRows(S.bins, S.displayCutoff, BIN_COLORS); // rows under the cut-off merge into its "trace only" row
 const meshName = (n) => n.replace(/\.obj$/i, '').replace(/^sample_/, '').replace(/_/g, ' ');
 // Legend sections: { key, title, rows: [{ label, mono, sep, draw(ctx, x, cy, u) } or { h, full(ctx, K, x, y, w) }] },
@@ -1271,7 +1291,7 @@ function legendSecs() {
   holes.push(...extLegendRows()); // EXT hook: planned, new and previous rows
   const assays = legendRows().map(([label, c]) => ({ label, mono: true, draw: (ctx, x, cy, u) => { ctx.fillStyle = c; roundRect(ctx, x, cy - 4 * u, 22 * u, 8 * u, 4 * u); ctx.fill(); } }));
   if (S.displayCutoff !== null) assays.push({ label: `< ${S.displayCutoff}: trace only`, mono: true, draw: swLine('#59646a', 1.5) });
-  if (S.ribbons && callouts.length) [['Reported interval', RIB_COLORS[0]], ...(callouts.some((c) => c.ic.incl) ? [['incl.', RIB_COLORS[1]]] : [])].forEach(([label, c], i) => assays.push({ label, sep: !i, draw: (ctx, x, cy, u) => { ctx.fillStyle = c; ctx.fillRect(x, cy - 3 * u, 22 * u, 6 * u); } }));
+  if (S.ribbons && callouts.length) [[ribLabel(), RIB_COLORS[0]], ...(callouts.some((c) => c.ic.incl) ? [['incl.', RIB_COLORS[1]]] : [])].forEach(([label, c], i) => assays.push({ label, sep: !i, draw: (ctx, x, cy, u) => { ctx.fillStyle = c; ctx.fillRect(x, cy - 3 * u, 22 * u, 6 * u); } }));
   const model = G.meshes.filter(({ name }) => S.meshes[name].show).map(({ name }) => [meshName(name), S.meshes[name].color]);
   if (shellShown()) model.unshift([`Grade shell ≥ ${shellCutText()}`, shellColor()]);
   return [{ key: 'holes', rows: holes }, { key: 'assays', title: `Assay · ${S.valueLabel}`, rows: assays },
@@ -1557,7 +1577,7 @@ function drawOverlay(ctx, k, forExport) {
     const worst = items.reduce((a, b) => (b.rank > a.rank ? b : a)); items = items.filter((it) => it !== worst);
   }
   const leaders = [];
-  items.forEach((it) => { const { c, s, M, y } = it; if (it.group) EXT.tags.drawGroup(ctx, K, m, y, it); else { drawCallout(ctx, K, m, y, c, M, s); hits.push({ kind: 'callout', id: c.h.id, box: [m, y, m + M.bw, y + M.bh] }); } boxes.push([m, y, m + M.bw, y + M.bh + tag]); leaders.push(...M.leader); });
+  items.forEach((it) => { const { c, s, M, y } = it; if (it.group) EXT.tags.drawGroup(ctx, K, m, y, it); else { drawCallout(ctx, K, m, y, c, M, s); hits.push({ kind: 'callout', id: c.key, box: [m, y, m + M.bw, y + M.bh] }); } boxes.push([m, y, m + M.bw, y + M.bh + tag]); leaders.push(...M.leader); });
   occ.push(...boxes.map((b) => [b[0], b[1], b[2] + 10 * u, b[3]]));
   // Callouts beside or bracketed on their hole: placed clear of the column and of its leaders.
   if (free.length) {
@@ -1613,15 +1633,14 @@ function drawSection(ctx, Wc, Hc, forExport) {
       ctx.save(); ctx.translate(x0, y0); ctx.rotate(ang); ctx.fillStyle = BIN_COLORS[bi]; ctx.fillRect(0, -barW / 2, len + 0.5 * u, barW); ctx.restore();
     });
     // Reported interval and "incl." as bars to the right of the hole, as on the 3D figure.
-    const co = S.ribbons && callouts.find((x) => x.h === h);
-    if (co) [co.ic.broad, co.ic.incl].forEach((x, k) => {
-      if (!x) return; const p0 = h.posAt(x.from), p1 = h.posAt(x.from + x.len), q0 = pr(p0), q1 = pr(p1);
+    (S.ribbons ? callouts.filter((x) => x.h === h) : []).forEach((co) => [co.ic.broad, ...inclsOf(co.ic)].forEach((x, k) => {
+      k = Math.min(k, 1); const p0 = h.posAt(x.from), p1 = h.posAt(x.from + x.len), q0 = pr(p0), q1 = pr(p1);
       let nx = -(Y(p1.z) - Y(p0.z)), ny = X(q1.t) - X(q0.t); const nl = Math.hypot(nx, ny) || 1; nx /= nl; ny /= nl; if (nx < 0) { nx = -nx; ny = -ny; }
       const off = barW * 1.45; ctx.strokeStyle = RIB_COLORS[k]; ctx.lineWidth = barW * 0.85; ctx.lineCap = 'butt'; ctx.beginPath(); let on = false;
       for (let d = x.from; d < x.from + x.len + 2; d += 2) { const p = h.posAt(Math.min(d, x.from + x.len)), q = pr(p); if (Math.abs(q.off) > S.secW) { on = false; continue; }
         const sx = X(q.t) + nx * off, sy = Y(p.z) + ny * off; on ? ctx.lineTo(sx, sy) : ctx.moveTo(sx, sy); on = true; }
       ctx.stroke();
-    });
+    }));
     const c = pr(h.c);
     if (Math.abs(c.off) <= S.secW) { ctx.save(); ctx.translate(X(c.t), Y(h.c.z) - 8 * u); ctx.rotate(-Math.PI / 4); ctx.fillStyle = INK; font(500, 12, true); ctx.fillText(h.id, 0, 0); ctx.restore(); }
   });
@@ -1645,7 +1664,7 @@ function drawSection(ctx, Wc, Hc, forExport) {
   let items = legendRows().slice(0, 4).reverse(); font(400, 12, true);
   // The interval bars join the strip when a hole on the section has them and there is room.
   const ribs = S.ribbons ? callouts.filter((c) => shown.some((x) => x.h === c.h)) : [];
-  const withRibs = items.concat(ribs.length ? [['Reported interval', RIB_COLORS[0]], ...(ribs.some((c) => c.ic.incl) ? [['incl.', RIB_COLORS[1]]] : [])] : []);
+  const withRibs = items.concat(ribs.length ? [[ribLabel(), RIB_COLORS[0]], ...(ribs.some((c) => c.ic.incl) ? [['incl.', RIB_COLORS[1]]] : [])] : []);
   const widthOf = (list) => list.map(([t]) => ctx.measureText(t).width + 36 * u);
   if (withRibs.length > items.length && widthOf(withRibs).reduce((a, b) => a + b, 0) < Wc - 2 * m - sb * s - 200 * u) items = withRibs;
   const iw = widthOf(items); font(700, 13); const hw = ctx.measureText(S.valueLabel).width + 14 * u;
@@ -1766,7 +1785,7 @@ function showStep(name) {
   if (!STEPS.includes(name)) throw new Error(`Unknown step "${name}". Use one of: ${STEPS.join(', ')}.`);
   const idx = STEPS.indexOf(name); currentStep = name;
   STEPS.forEach((s, i) => { $(`pane-${s}`).hidden = s !== name; const b = $(`step-${s}`); b.setAttribute('aria-selected', String(s === name)); if (i < idx) b.classList.add('done'); });
-  $(`pane-${name}`).scrollTop = 0; schedulePublish();
+  $(`pane-${name}`).scrollTop = 0; if (name === 'layout') renderCalloutEditor(); schedulePublish();
 }
 STEPS.forEach((s) => $(`step-${s}`).addEventListener('click', () => showStep(s)));
 document.querySelectorAll('[data-goto]').forEach((b) => b.addEventListener('click', () => showStep(b.dataset.goto)));
@@ -1794,7 +1813,7 @@ function renderFiles() {
   list.innerHTML = '';
   files.forEach((f, fi) => {
     const div = document.createElement('div'); div.className = 'file';
-    const roles = ['collar', 'survey', 'assay', 'topo', 'mesh', 'litho', 'lithlegend', 'geophys', 'unknown']; // EXT hook: litho, lithlegend, geophys
+    const roles = ['collar', 'survey', 'assay', 'topo', 'mesh', 'litho', 'lithlegend', 'geophys', 'published', 'unknown']; // EXT hook: litho, lithlegend, geophys, published
     let html = `<div class="file-head"><span class="name" title="${esc(f.name)}">${esc(f.name)}</span>
       <select data-role="${fi}" aria-label="File type for ${esc(f.name)}">${roles.map((r) => `<option value="${r}" ${r === f.role ? 'selected' : ''}>${ROLE_LABEL[r]}</option>`).join('')}</select></div>`;
     if (f.role === 'mesh') html += `<span class="muted">${f.mesh.v.length.toLocaleString()} vertices · ${(f.mesh.f.length / 3).toLocaleString()} triangles</span>`;
@@ -1803,16 +1822,19 @@ function renderFiles() {
       const fields = ROLE_FIELDS[f.role] || [];
       if (fields.length) {
         html += '<div class="maps">' + fields.map((k) => `<label for="m-${fi}-${k}">${FIELD_LABEL[k]}</label><select id="m-${fi}-${k}" data-map="${fi}" data-key="${k}"><option value="">—</option>${f.header.map((h, i) => `<option value="${i}" ${f.cols[k] === i ? 'selected' : ''}>${esc(h)}</option>`).join('')}</select>`).join('') + '</div>';
-        const req = { collar: ['hole', 'east', 'north'], survey: ['hole', 'depth'], assay: ['hole', 'from', 'to'], topo: ['east', 'north', 'elev'], litho: ['hole', 'from', 'to', 'code'], lithlegend: ['code', 'desc'], geophys: ['east', 'north', 'elev', 'value'] }[f.role] || [];
+        const req = { collar: ['hole', 'east', 'north'], survey: ['hole', 'depth'], assay: ['hole', 'from', 'to'], topo: ['east', 'north', 'elev'], litho: ['hole', 'from', 'to', 'code'], lithlegend: ['code', 'desc'], geophys: ['east', 'north', 'elev', 'value'], published: ['resultId', 'hole', 'from', 'to'] }[f.role] || [];
         const miss = req.filter((k) => f.cols[k] === undefined);
         if (miss.length) html += `<span class="bad">Pick a column for ${miss.map((k) => FIELD_LABEL[k]).join(', ')}.</span>`;
+        if (f.role === 'published' && PR && !miss.length) html += PR.fileNote(f, esc);
         if (f.role === 'assay') html += f.grades.length ? `<span class="muted">Grade columns: ${f.grades.map((g) => esc(g.name)).join(', ')}</span>` : '<span class="bad">No numeric grade columns found.</span>';
-      } else if (f.role === 'unknown') html += '<span class="warn">Choose what this file holds.</span>';
+      } else if (f.role === 'unknown') html += `<span class="warn">${f.hint ? 'Published results? Choose that type to use them.' : 'Choose what this file holds.'}</span>`;
     }
     div.innerHTML = html; list.appendChild(div);
   });
   list.querySelectorAll('[data-role]').forEach((s) => s.addEventListener('change', () => {
-    const f = files[+s.dataset.role]; f.role = s.value; if (f.role === 'assay') f.grades = gradeCols(f.header, f.cols, f.rows); refresh();
+    const f = files[+s.dataset.role]; f.role = s.value; if (f.role === 'assay') f.grades = gradeCols(f.header, f.cols, f.rows);
+    if (f.role === 'published') S.calloutMode = 'published'; // a release table, chosen by hand: the callouts come from it
+    refresh();
   }));
   list.querySelectorAll('[data-map]').forEach((s) => s.addEventListener('change', () => {
     const f = files[+s.dataset.map]; if (s.value === '') delete f.cols[s.dataset.key]; else f.cols[s.dataset.key] = +s.value;
@@ -1858,23 +1880,11 @@ function renderStyle() {
     const [cb, , cp] = d.children; cb.addEventListener('change', () => { st.show = cb.checked; restyle(); schedulePublish(); }); cp.addEventListener('input', () => { st.color = cp.value; restyle(); schedulePublish(); });
     ml.appendChild(d); });
 }
+// The callout editor (callout-editor.js), loaded when the Layout step first shows.
+let CE = null;
 function renderCalloutEditor() {
-  const el = $('callout-editor'), shownIds = new Set(shownCallouts().map((c) => c.h.id)), cands = callouts.slice(0, Math.max(6, S.coCount + 3));
-  callouts.forEach((c) => { if (shownIds.has(c.h.id) && !cands.includes(c)) cands.push(c); });
-  if (!cands.length) { el.innerHTML = '<p class="muted">No hole has an interval above the broad cut-off over the minimum length. Lower either one.</p>'; return; }
-  const gaps = gapCallouts(), warn = gaps.length ? `<p class="warn" role="status">${esc(gaps.map(gapText).join('; '))}. <button class="btn" type="button" id="co-recalc">Recalculate</button> to count sampled metres only.</p>` : '';
-  el.innerHTML = `${warn}<p class="muted">Tick to show. Type over a line to reword it; leave it blank for the automatic text.</p>` + cands.map((c) => {
-    const id = esc(c.h.id), o = S.coOverrides[c.h.id] || {}, a1 = `${icText(c.ic.broad, c.h)} from ${Math.round(c.ic.broad.from)} m`, a2 = c.ic.incl ? `incl. ${icText(c.ic.incl, c.h)}` : '(no "incl." line)';
-    return `<div class="callout-ed"><input type="checkbox" data-co="${id}" ${shownIds.has(c.h.id) ? 'checked' : ''} aria-label="Show callout for ${id}"><span class="id">${id}</span>`
-      + `<input type="text" data-co1="${id}" value="${esc(o.line1 || '')}" placeholder="${esc(a1)}" aria-label="First line for ${id}">`
-      + `<input type="text" data-co2="${id}" value="${esc(o.line2 || '')}" placeholder="${esc(a2)}" aria-label="Second line for ${id}"></div>`;
-  }).join('');
-  $('co-recalc')?.addEventListener('click', () => { setStyle({ designOptIn: [...S.designOptIn, 'sampledIntercepts'] }); status('Callouts recalculated on sampled metres only. Undo restores the earlier numbers.'); });
-  el.querySelectorAll('[data-co]').forEach((cb) => cb.addEventListener('change', () => setCallout(cb.dataset.co, { show: cb.checked })));
-  el.querySelectorAll('[data-co1],[data-co2]').forEach((inp) => inp.addEventListener('input', () => {
-    const id = inp.dataset.co1 || inp.dataset.co2, key = inp.dataset.co1 ? 'line1' : 'line2';
-    const o = S.coOverrides[id] || (S.coOverrides[id] = {}); if (inp.value) o[key] = inp.value; else delete o[key]; drawSectionView(); schedulePublish();
-  }));
+  if (CE) CE.render($('callout-editor'), { S, esc, PR, read: prRead, callouts, calc: calcCallouts, shown: shownCallouts(), icText, gaps: gapCallouts().map(gapText), setCallout, setStyle, status, redraw: () => { drawSectionView(); schedulePublish(); } });
+  else if (currentStep === 'layout') import('./callout-editor.js').then((m) => { CE = m; renderCalloutEditor(); });
 }
 function renderSizes() {
   $('sizes').innerHTML = Object.entries(FORMATS).map(([k, f]) => `<label><input type="radio" name="size" value="${k}" ${k === S.format ? 'checked' : ''}><span><b>${f.label}</b><br><span class="muted">${f.use}</span></span><small>${f.w} × ${f.h}</small></label>`).join('');
@@ -1965,7 +1975,7 @@ function loadSample() {
 // A new data set starts without the old one's equivalent recipe, display cut-off or provisional flags.
 function resetDerived() {
   histReset(); // the history belongs to the old data
-  S.eq = null; eqApplied = false; S.displayCutoff = null; S.provisional = {}; S.shell.cutoff = null; S.libRefs = {};
+  S.eq = null; eqApplied = false; S.displayCutoff = null; S.provisional = {}; S.shell.cutoff = null; S.libRefs = {}; S.pubOverrides = {}; S.calloutMode = 'calculated'; callouts = calcCallouts = [];
   S.tags.status = {}; S.tags.groups = []; S.geology.legend = []; // EXT hook: per-hole tags and codes belong to the old data
   // The shell belongs to the old data: switch it off and stop any build still running.
   S.shell.enabled = false; shell.pending = null; shell.mesh = null; shell.field = null; syncShell();
@@ -2015,6 +2025,7 @@ function setStyle(o = {}, render = true) {
   if (S.valueCol2 === S.valueCol) S.valueCol2 = null;
   ['walls', 'ids', 'inset', 'ribbons', 'pendingLabels', 'pendingNoAssays', 'elevTicks', 'lockView'].forEach((k) => { if (o[k] !== undefined) S[k] = !!o[k]; });
   extStyle(o); // EXT hook: histograms, insetStyle
+  if (o.calloutMode !== undefined) { if (!['calculated', 'published', 'manual'].includes(o.calloutMode)) throw new Error('calloutMode must be "calculated", "published" or "manual".'); S.calloutMode = o.calloutMode; }
   if (o.coPlacement !== undefined) { if (!['column', 'beside', 'bracket'].includes(o.coPlacement)) throw new Error('coPlacement must be "column" (left column), "beside" (a box beside each hole) or "bracket" (a bracket on the hole with the grade beside it).'); S.coPlacement = o.coPlacement; extScene(); }
   if (o.legend !== undefined) {
     const l = o.legend || {}, LG = S.legend;
@@ -2196,15 +2207,20 @@ $('crs').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.prevent
 $('value-col2').addEventListener('change', (e) => setStyle({ valueCol2: e.target.value || null }));
 $('trace-w').addEventListener('input', (e) => { setStyle({ traceWidth: +e.target.value / 100 }, false); $('trace-out').textContent = `${S.traceWidth.toFixed(1)}×`; });
 $('surf').addEventListener('input', (e) => { setStyle({ surface: +e.target.value / 100 }, false); $('surf-out').textContent = `${e.target.value}%`; });
+// holeId: a hole, or in published mode a result ID (its wording stays with that result and its depths).
 function setCallout(holeId, o = {}) {
-  if (!project?.holes?.some((h) => h.id === holeId)) throw new Error(`No hole "${holeId}".`);
-  const cur = S.coOverrides[holeId] || {};
+  const pub = S.calloutMode === 'published', res = pub && PR ? prRead().results : [];
+  if (pub ? !res.some((r) => r.resultId === holeId) : !project?.holes?.some((h) => h.id === holeId)) throw new Error(`No ${pub ? 'published result' : 'hole'} "${holeId}".`);
+  const M = coMap(), cur = M[holeId] || {};
   ['show', 'line1', 'line2', 'incl'].forEach((k) => { if (o[k] === null) delete cur[k]; else if (o[k] !== undefined) cur[k] = k === 'show' || k === 'incl' ? !!o[k] : String(o[k]); });
+  // The depths the wording describes (published-results.js tie); a hand-picked hole keeps those it was ticked at.
+  PR?.tie(cur, o, S.calloutMode, pub ? PR.atOf(res, holeId) : PR.icAt(calcCallouts.find((c) => c.key === holeId)?.ic));
   if (o.placement === null) delete cur.placement; else if (o.placement !== undefined) { if (!['column', 'beside', 'bracket'].includes(o.placement)) throw new Error('placement must be "column", "beside" or "bracket", or null for the figure\'s setting.'); cur.placement = o.placement; }
   ['x', 'y'].forEach((k) => { if (o[k] === null) delete cur[k]; else if (o[k] !== undefined) cur[k] = clamp01(o[k], 0.5); }); // the box's top-left, 0-1 of the frame
   if (o.placement !== undefined || o.x !== undefined) extScene();
-  S.coOverrides[holeId] = cur;
-  if (cur.show && !callouts.some((c) => c.h.id === holeId)) status(`${holeId} has no interval above the broad cut-off, so it has no callout.`);
+  M[holeId] = cur;
+  if (S.calloutMode !== 'calculated') restyle();
+  if (cur.show && !pub && !callouts.some((c) => c.h.id === holeId)) status(`${holeId} has no interval above the broad cut-off, so it has no callout.`);
   renderCalloutEditor(); drawSectionView(); schedulePublish();
   return getState();
 }
@@ -2317,7 +2333,7 @@ frameEl.addEventListener('pointerdown', (e) => {
   if (hit.h.kind === 'legend' || hit.h.kind === 'callout') {
     // A legend card or a callout: dragged by its top-left corner, kept (x, y) from the first move on.
     const { kind, id, box } = hit.h; e.stopPropagation(); e.preventDefault();
-    labelDrag = { kind, dx: hit.x - box[0], dy: hit.y - box[1], make: () => (kind === 'legend' ? (S.legend.pos[id] = {}) : (S.coOverrides[id] ||= {})) };
+    labelDrag = { kind, dx: hit.x - box[0], dy: hit.y - box[1], make: () => (kind === 'legend' ? (S.legend.pos[id] = {}) : (coMap()[id] ||= {})) };
     try { frameEl.setPointerCapture(e.pointerId); } catch { /* synthetic events */ }
     return;
   }
@@ -2376,18 +2392,18 @@ function extWanted() {
   const gp = S.geophys.mode !== 'off' && hasRole('geophys'), t = S.tags;
   return { geology: (S.geology.enabled && hasRole('litho')) || Object.keys(S.geology.images || {}).length > 0 || gp, geophys: gp,
     tags: t.at !== 'toe' || t.fadePrevious || t.idMode === 'key' || (t.idMode !== 'all' && (project?.holes?.length || 0) > 12) || Object.keys(t.showId).length > 0 || Object.keys(t.showTag || {}).length > 0 || t.emphasis === 'key' || Object.keys(t.highlight || {}).length > 0
-      || S.coPlacement !== 'column' || Object.values(S.coOverrides).some((o) => o.placement || o.x !== undefined) || (S.pendingLabels && t.pending === 'collar' && !!project?.holes?.some(isPending)) || t.autoGroup || t.groups.length > 0 || Object.keys(t.status).length > 0 || S.histograms || S.insetStyle !== 'plan' || S.labels.some((l) => l.kind === 'stat') };
+      || S.coPlacement !== 'column' || Object.values(coMap()).some((o) => o.placement || o.x !== undefined) || (S.pendingLabels && t.pending === 'collar' && !!project?.holes?.some(isPending)) || t.autoGroup || t.groups.length > 0 || Object.keys(t.status).length > 0 || S.histograms || S.insetStyle !== 'plan' || S.labels.some((l) => l.kind === 'stat') };
 }
 let extHost = null;
 const host = () => (extHost ||= {
   S, get G() { return G; }, get project() { return project; }, get root() { return root; }, get api() { return EXT_API; }, files: () => files, digest: (f) => fileDigest(f), geo: () => geo,
-  camera, renderer, proj, sectionEnds, faceGeom, textOn, roundRect, fitText, esc, INK, MUTED, RULE, BIN_COLORS, binIndex, traceR, calloutLines, shownCallouts, isPending, setSpacing, drawCallout, brandTone, figureCanvas, exportLayers, canvasBlob,
+  camera, renderer, proj, sectionEnds, faceGeom, textOn, roundRect, fitText, esc, INK, MUTED, RULE, BIN_COLORS, binIndex, traceR, calloutLines, shownCallouts, coOv, isPending, setSpacing, drawCallout, brandTone, figureCanvas, exportLayers, canvasBlob,
   mosaic, zoomFor, lon2t, lat2t, IMG_URL, IMAGERY_CREDIT, status, redraw: () => { extScene(); drawSectionView(); schedulePublish(); },
 });
 const extLoad = (k) => (extLoading[k] ||= EXT_IMPORT[k]().then((m) => { m.init(host()); EXT[k] = m; return m; }));
 async function extReady() {
   const want = extWanted(), hadTags = !!EXT.tags;
-  await Promise.all(Object.keys(EXT_IMPORT).filter((k) => want[k]).map(extLoad));
+  await Promise.all(Object.keys(EXT_IMPORT).filter((k) => want[k]).map(extLoad).concat(prWanted() && prLoad()));
   // Hole fade and weights are read while the scene is built: rebuild once tags.js arrives.
   if (!hadTags && EXT.tags && G) rebuildScene(true);
   extScene();
@@ -2460,19 +2476,7 @@ const EXT_API = {
     if (o.fadePrevious !== undefined || o.status !== undefined || o.emphasis !== undefined) rebuildScene(true); else restyle();
     await extReady(); drawSectionView(); return getState();
   },
-  async groupCallouts(ids) {
-    const t = S.tags;
-    if (ids === null || (Array.isArray(ids) && !ids.length)) t.groups = [];
-    else if (ids === 'auto') t.autoGroup = true;
-    else {
-      if (!Array.isArray(ids) || ids.length < 2) throw new Error('groupCallouts takes two or more hole IDs, "auto" (group nearby callouts), or null to clear the groups.');
-      const known = new Set((project?.holes || []).map((h) => h.id)), bad = ids.filter((id) => !known.has(id)); if (bad.length) throw new Error(`No hole ${bad.map((b) => `"${b}"`).join(', ')}.`);
-      const none = ids.filter((id) => !callouts.some((c) => c.h.id === id)); if (none.length) status(`${none.join(', ')} ${none.length > 1 ? 'have' : 'has'} no interval above the broad cut-off, so no callout to group.`);
-      t.groups = t.groups.map((g) => g.filter((id) => !ids.includes(id))).filter((g) => g.length > 1).concat([[...new Set(ids)]]);
-      ids.forEach((id) => { if (callouts.some((c) => c.h.id === id)) S.coOverrides[id] = { ...(S.coOverrides[id] || {}), show: true }; });
-    }
-    await extReady(); renderCalloutEditor(); drawSectionView(); schedulePublish(); return getState();
-  },
+  async groupCallouts(ids) { (await extLoad('tags')).group(ids, callouts); await extReady(); renderCalloutEditor(); drawSectionView(); schedulePublish(); return getState(); },
   async addStatBox(o = {}) {
     const rows = (Array.isArray(o.rows) ? o.rows : o.rows === undefined ? [] : [o.rows]).map((r) => String(r).trim()).filter(Boolean).slice(0, 12).map((r) => r.slice(0, 120));
     await extLoad('tags');
@@ -2498,9 +2502,10 @@ function getState() {
     project: ok ? { holes: project.holes.length, holeIds: project.holes.map((h) => h.id), metresDrilled: Math.round(project.holes.reduce((s, h) => s + h.len, 0)), pendingHoles: project.holes.filter(isPending).map((h) => h.id), intervals: project.holes.reduce((s, h) => s + h.ints.length, 0), dipsPositiveDown: project.posDown, warnings: project.warnings } : null,
     grade: { column: S.valueCol, label: S.valueLabel, available: project?.cols || [], bins: S.bins, binColors: BIN_COLORS },
     design: { version: S.designVersion, current: DESIGN_VERSION, optIn: S.designOptIn },
-    callouts: { coCount: S.coCount, coMin: S.coMin, coCut: S.coCut, coIncl: S.coIncl, sampled: uses(S, 'sampledIntercepts'), warnings: gapCallouts().map(gapText),
-      shown: shownCallouts().map((c) => { const L = calloutLines(c); return { holeId: c.h.id, line1: L.l1 + L.l1b, line2: L.l2 }; }),
-      candidates: callouts.slice(0, 15).map((c) => ({ holeId: c.h.id, broad: icText(c.ic.broad, c.h), fromM: Math.round(c.ic.broad.from), incl: c.ic.incl ? icText(c.ic.incl, c.h) : null })), overrides: S.coOverrides, valueCol2: S.valueCol2 },
+    callouts: { mode: S.calloutMode, coCount: S.coCount, coMin: S.coMin, coCut: S.coCut, coIncl: S.coIncl, sampled: uses(S, 'sampledIntercepts'), warnings: gapCallouts().map(gapText),
+      shown: shownCallouts().map((c) => { const L = calloutLines(c); return { holeId: c.h.id, ...PR?.ids(c), line1: L.l1 + L.l1b, line2: L.l2 }; }),
+      published: PR?.summary(files, project?.holes, S.pubOverrides) || null,
+      candidates: calcCallouts.slice(0, 15).map((c) => ({ holeId: c.h.id, broad: icText(c.ic.broad, c.h), fromM: Math.round(c.ic.broad.from), incl: c.ic.incl ? icText(c.ic.incl, c.h) : null })), overrides: coMap(), valueCol2: S.valueCol2 },
     brand: { company: S.company, title: S.title, subtitle: S.subtitle, footnote: S.footnote, primary: S.primary, accent: S.accent, hasLogo: !!S.logo, credit: S.credit },
     terrain: { style: S.terrain, styles: TERRAINS, source: S.terrainSource, surfaceFrom: G?.using || null, verticalExaggeration: S.vex, collarFit: S.collarFit, blockStyle: S.blockStyle,
       crs: S.crs, crsLabel: geo?.label || null, crsGuessed: !!geo?.guessed, status: realT.status, message: realT.message || null,
@@ -2639,16 +2644,10 @@ function getThumbnail(width = 320) {
   else { renderer.render(scene, camera); ctx.drawImage(glCanvas, 0, 0, width, h); ctx.drawImage(ov, 0, 0, width, h); }
   return c.toDataURL('image/jpeg', 0.8);
 }
-const PROJECT_HELP = `${HELP}
-
-Whole projects (to keep or move a figure):
-  EM3D.getProject()               { v: 1, settings, camera, files: [{name, text, role, cols}] }
-  EM3D.loadProject(project)       Promise. Reopens a getProject() result exactly
-  EM3D.getThumbnail(320)          small JPEG data URL of the preview`;
-$('ai-help').textContent = PROJECT_HELP;
-window.EM3D = Object.freeze({ ...window.EM3D, help: () => PROJECT_HELP, getProject, loadProject, getThumbnail, filesDigest });
+// Their API notes (whole projects) end #core-help, in the page.
+window.EM3D = Object.freeze({ ...window.EM3D, getProject, loadProject, getThumbnail, filesDigest });
 // EXT hook: the geology, geophysics and hole-tag methods, in one block (section 10b).
-const FULL_HELP = `${PROJECT_HELP}\n${EXT_HELP}`; $('ai-help').textContent = FULL_HELP;
+const FULL_HELP = `${HELP}\n${EXT_HELP}`; $('ai-help').textContent = FULL_HELP;
 window.EM3D = Object.freeze({ ...window.EM3D, help: () => FULL_HELP, ...EXT_API,
   undo: async () => { (await histFlush()).undo(); return getState(); }, redo: async () => { (await histFlush()).redo(); return getState(); }, history: async () => (await histLoad()).state() });
 

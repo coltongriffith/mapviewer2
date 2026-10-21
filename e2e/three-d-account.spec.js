@@ -25,6 +25,10 @@ const LEGACY = JSON.parse(readFileSync('tests/fixtures/three-d/pre-round4-projec
 const LEGACY_LOOK = { imagery: { saturation: 1.15, contrast: 1, warmth: 0, relief: 0 }, legend: { merge: 'separate', pos: { main: 'br' } },
   geology: { strength: 1, hidden: 'clear' }, tags: { emphasis: 'none', highlightNew: false, idMode: 'all' }, shell: { color: '#1f9e96', throughTerrain: false } };
 
+// A release table for the built-in sample (fictional): EX-021 with an "incl." result, two results on EX-014, a draft.
+const RELEASE = readFileSync('tests/fixtures/three-d/published-results.csv', 'utf8');
+const LONG = '508.00 m @ 0.5300000000000001% Cu, 0.1234567890123 g/t Au from 8.000 m';
+
 const ORG = '00000000-0000-4000-8000-0000000003a1', PROP = '00000000-0000-4000-8000-0000000003b1';
 
 // library: { files } for a user in one company with one property (Rails) whose data library lists `files`.
@@ -165,6 +169,57 @@ test('geology, geophysics, tags and a face image survive getProject and loadProj
   expect(after.geology).toMatchObject({ enabled: true, title: 'Alteration', faces: ['N', 'E'], images: { S: true } });
   expect(after.geology.legend.find((e) => e.code === 'POR').name).toBe('Porphyry (altered)');
   expect(after.footnoteAuto).toEqual(expect.arrayContaining(['Geology on block faces interpolated from drill logs; schematic.', 'Geophysics: illustrative inversion model']));
+});
+
+test('published results: never read as assays, drawn on their own depths, reworded per result and kept verbatim', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await open3d(page);
+  const before = await page.evaluate(async (rel) => {
+    const E = window.EM3D, base = E.getProject().files.map(({ name, text }) => ({ name, text }));
+    E.addFiles([...base, { name: 'release.csv', text: rel }]);
+    const s = await E.setShell({ enabled: true, cutoff: 0.3 });
+    return { roles: s.files.map((f) => f.role), intervals: s.project.intervals, cols: s.grade.available, composites: s.shell.composites, cells: s.shell.cells, mode: s.callouts.mode };
+  }, RELEASE);
+  // Holes, From and To, but a release table: held back, not read as assays.
+  expect(before.roles.at(-1)).toBe('unknown');
+  expect(before.mode).toBe('calculated');
+  await expect(page.locator('#file-list')).toContainText('Published results? Choose that type to use them.');
+  await page.locator('[data-role="5"]').selectOption('published');
+  await expect.poll(async () => (await state(page)).callouts.mode).toBe('published');
+  let now = await page.evaluate(async () => { await window.EM3D.setShell({ enabled: true, cutoff: 0.3 }); return window.EM3D.layersReady(); });
+  // The assays, their colours, histogram and shell are as they were.
+  expect({ intervals: now.project.intervals, cols: now.grade.available, composites: now.shell.composites, cells: now.shell.cells }).toEqual({ intervals: before.intervals, cols: before.cols, composites: before.composites, cells: before.cells });
+  // Two releases on EX-014 stay two callouts; EX-021's "incl." is a line on its parent's, not a callout; the draft is left off.
+  expect(now.callouts.shown.map((c) => [c.resultId, c.holeId, c.fromM, c.toM, c.incl])).toEqual([['EX21-01', 'EX-021', 8, 516, ['EX21-01a']], ['EX14-01', 'EX-014', 40, 70, []], ['EX14-02', 'EX-014', 300, 342, []]]);
+  expect(now.callouts.shown[0]).toMatchObject({ line1: LONG, line2: 'incl. 60.0 m @ 0.81% Cu from 120 m' });
+  expect(now.callouts.published.problems.map((p) => `${p.kind} ${p.resultId}`)).toEqual(['length-discrepancy EX14-02', 'not-approved EX22-01']);
+  await expect(page.locator('#file-list')).toContainText('the published length (40) is not To − From (342 − 300 = 42 m)');
+
+  // Reword one result on EX-014 in the panel: the other keeps its own text.
+  await page.evaluate(() => window.EM3D.showStep('layout'));
+  await page.locator('[data-pt="EX14-01"]').fill('30.000 m @ 0.6100000000000001% Cu, near surface');
+  now = await state(page);
+  expect(now.callouts.shown.map((c) => c.line1)).toEqual([LONG, '30.000 m @ 0.6100000000000001% Cu, near surface', '40 m @ 0.48% Cu from 300 m']);
+  expect(now.callouts.overrides['EX14-01']).toEqual({ line1: '30.000 m @ 0.6100000000000001% Cu, near surface', at: [40, 70] });
+
+  // Saved and reopened, everything as it was, the long decimals verbatim.
+  const { after, project } = await page.evaluate(async () => {
+    const project = JSON.parse(JSON.stringify(window.EM3D.getProject()));
+    window.EM3D.clearFiles();
+    return { project, after: await window.EM3D.loadProject(project) };
+  });
+  expect(after.callouts).toEqual(now.callouts);
+  expect(project.files.at(-1)).toMatchObject({ role: 'published', text: RELEASE });
+  expect(project.settings).toMatchObject({ calloutMode: 'published', pubOverrides: { 'EX14-01': { line1: '30.000 m @ 0.6100000000000001% Cu, near surface' } } });
+
+  // A corrected table moves EX14-01: the wording written for 40–70 m is not carried to the new depths.
+  const moved = await page.evaluate(async (p) => { p.files.at(-1).text = p.files.at(-1).text.replace('EX14-01,EX-014,40,70', 'EX14-01,EX-014,40,75'); return window.EM3D.loadProject(p); }, project);
+  expect(moved.callouts.shown.find((c) => c.resultId === 'EX14-01')).toMatchObject({ fromM: 40, toM: 75, line1: '30 m @ 0.61% Cu from 40 m' });
+  expect(moved.callouts.published.staleWording).toEqual(['EX14-01: your wording was written for 40–70 m; the result is now 40–75 m, so its approved text is shown. Retype it to keep yours.']);
+  await page.evaluate(() => window.EM3D.showStep('layout'));
+  await expect(page.locator('#callout-editor .warn').first()).toContainText('your wording was written for 40–70 m');
+  expect(errors).toEqual([]);
 });
 
 test('a figure saved before design versions keeps its look; its gap callout is flagged and recalculated in one undoable step', async ({ page }) => {
@@ -330,6 +385,40 @@ test.describe('account', () => {
     expect(fake.patches).toEqual([id]);
     expect(fake.rows.get(id).deleted_at).toBeTruthy();
     expect((await state(page)).brand.title).toBe('NORTH ZONE'); // the figure on screen stays
+  });
+
+  test('published results and their wording survive an account save and reopen verbatim', async ({ page }) => {
+    const fake = await fakeSupabase(page);
+    await page.addInitScript(([k, s]) => localStorage.setItem(k, JSON.stringify(s)), [AUTH_KEY, session]);
+    await open3d(page);
+    const made = await page.evaluate(async (rel) => {
+      const E = window.EM3D, base = E.getProject().files.map(({ name, text }) => ({ name, text }));
+      E.addFiles([...base, { name: 'release.csv', text: rel, role: 'published' }]);
+      E.setStyle({ calloutMode: 'published' }); await E.layersReady();
+      E.setCallout('EX14-02', { line1: '42.000 m @ 0.4800000000000001% Cu' });
+      E.setBrand({ title: 'RELEASED RESULTS' });
+      return E.getState().callouts;
+    }, RELEASE);
+    expect(made.shown.map((c) => c.line1)).toEqual([LONG, '30 m @ 0.61% Cu from 40 m', '42.000 m @ 0.4800000000000001% Cu']);
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Save to your account' });
+    await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect.poll(() => fake.upserts.length).toBe(1);
+    // The table goes up as its own text, the wording with the settings.
+    const saved = fake.upserts[0], rel = saved.file_paths.find((f) => f.name === 'release.csv');
+    expect(rel.role).toBe('published');
+    expect(fake.objects.get(`three-d-files/${rel.path}`)).toBe(RELEASE);
+    expect(saved.settings.settings.pubOverrides['EX14-02']).toEqual({ line1: '42.000 m @ 0.4800000000000001% Cu', at: [300, 342] });
+
+    await page.evaluate(() => { window.EM3D.loadSample(); window.EM3D.setBrand({ title: 'SOMETHING ELSE' }); });
+    await page.getByRole('button', { name: 'My 3D maps' }).click();
+    const open = page.getByRole('region', { name: 'My 3D maps' }).getByRole('button', { name: 'Open RELEASED RESULTS' });
+    await open.click();
+    // Unsaved work asks first; whether it counts yet depends on the change notice having landed.
+    await expect(open).toHaveText(/Replace current figure\?|Opening…/).catch(() => {});
+    if (await open.isVisible() && (await open.textContent()) === 'Replace current figure?') await open.click();
+    await expect.poll(async () => (await state(page)).callouts.shown.map((c) => c.line1)).toEqual(made.shown.map((c) => c.line1));
+    expect((await state(page)).callouts).toEqual(made);
   });
 
   test('a save over a newer copy warns first: overwrite, save as new or reload', async ({ page }) => {

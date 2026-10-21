@@ -60,13 +60,17 @@ const BUDGETS = {
   // 876 → 877: the lazy /oauth/consent page for MCP account sign-in.
   // 877 → 878: Download PNG on shared maps (the MCP png_download_url).
   // 878 → 879: patterned legend swatches (shared/fillPattern.js) and the property data library client.
-  totalAuthJsGzipKb: 879,
+  // 879 → 881: "Add Published Results" on 2D callouts (Oct 2026): approved release text on its hole's
+  // collar. The reader is a lazy chunk (utils/publishedCallouts.js, ~1.5 kB) fetched on the button's first
+  // use; the editor chunk keeps only the button and the hand-off (~0.3 kB).
+  totalAuthJsGzipKb: 881,
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
   // 810 → 812: Download PNG on shared maps (the MCP png_download_url).
   // 812 → 813: patterned legend swatches (shared/fillPattern.js) and the property data library client.
-  totalJsGzipKb: 813,
+  // 813 → 815: "Add Published Results" on 2D callouts, as for totalAuthJsGzipKb.
+  totalJsGzipKb: 815,
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the
   // totals above. /3d carries three.js (~109 kB gzip) and its editor.
@@ -104,7 +108,12 @@ const BUDGETS = {
   // 47 → 48 (Oct 2026): the property data library picker and newer-data notice (library.js, ~1.4 kB),
   // fetched by account-core.js only for a figure in a company property. Counted here now that the
   // walk follows lazy imports of lazy modules; before, it would have landed in the app's totals.
-  threeDLazyJsGzipKb: 48,
+  // 48 → 54 (Oct 2026): published results (published-results.js, ~3.8 kB: release-table records, checks and
+  // the callouts drawn from them, fetched once a figure has a release table or another callout source) and
+  // the callout editor (callout-editor.js, ~2 kB), moved out of the page and fetched when the Layout step
+  // first shows. groupCallouts moved into tags.js and the whole-project API notes into the page's HTML, so
+  // the page itself stays inside its 170 kB.
+  threeDLazyJsGzipKb: 54,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.

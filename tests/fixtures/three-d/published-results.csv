@@ -1,0 +1,6 @@
+Result ID,Hole ID,From (m),To (m),Published length,Grade,Unit,Analyte,Parent result,Approved text,Release date,Source,Approval status
+EX21-01,EX-021,8,516,508,0.53,%,Cu,,"508.00 m @ 0.5300000000000001% Cu, 0.1234567890123 g/t Au from 8.000 m",2026-09-29,Example Ridge release 2026-09-29 Table 1,Approved
+EX21-01a,EX-021,120,180,60.0,0.81,%,Cu,EX21-01,,2026-09-29,Example Ridge release 2026-09-29 Table 1,Approved
+EX14-01,EX-014,40,70,30,0.61,%,Cu,,,2026-09-29,Example Ridge release 2026-09-29 Table 1,Approved
+EX14-02,EX-014,300,342,40,0.48,%,Cu,,,2026-09-29,Example Ridge release 2026-09-29 Table 1,Approved
+EX22-01,EX-022,128,528,400,0.45,%,Cu,,,2026-10-14,Example Ridge release 2026-10-14 (draft),Draft
