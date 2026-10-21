@@ -14,6 +14,7 @@
 // can now switch it on (layout.showCoordinateFrame); NI keeps it always on.
 
 import { autoProjectionName } from './geo.js';
+import { studioOn } from './studioLayout.js';
 
 export const TICK_MARGIN = 28;
 export const STRIP_H = 72;
@@ -48,6 +49,7 @@ export function getMapFrame(layout, stage, opts = {}) {
   return {
     left: TICK_MARGIN, top: TICK_MARGIN, right: areaRight - TICK_MARGIN, bottom: height - TICK_MARGIN,
     area: { left: 0, top: 0, right: areaRight, bottom: height },
+    ...(studioOn(layout) && { font: frameFont(layout) }),
   };
 }
 
@@ -201,5 +203,7 @@ export function scaleBarHeight(layout, base = 48) {
 }
 
 export const FRAME_FONT = "'Courier New', Courier, monospace";
+// The Studio style sets its frame ticks in its mono numerals; every other look keeps Courier.
+export const frameFont = (layout) => (studioOn(layout) ? "'IBM Plex Mono', monospace" : FRAME_FONT);
 export const FRAME_FONT_PX = 9;
 export const FRAME_TICK_PX = 8;

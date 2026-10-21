@@ -8,6 +8,7 @@ import {
 } from '../src/utils/studioCards.js';
 import { resolveTemplateZones, technicalResultsTemplate } from '../src/templates/technicalResultsTemplate.js';
 import { renderLegendSvg, renderInsetSvg, studioPrims } from '../src/export/renderScene.js';
+import { getMapFrame, frameFont, FRAME_FONT } from '../src/utils/coordinateFrame.js';
 
 // The opt-in 2D Studio style: the /3d figure look (rounded cards, one accent, caps kicker, mono numerals,
 // scale bar beside the north arrow, dark locator card, label halos). Every other theme is untouched.
@@ -173,9 +174,36 @@ describe('Studio cards as primitives', () => {
     for (const [x, y] of points(prims)) expect(inside(card, x, y)).toBe(true);
   });
 
-  it('picks the longest round length that fits', () => {
+  it('picks the longest round length that fits, down to half a metre, and none when nothing fits', () => {
     expect(scaleStep(2, 150)).toMatchObject({ metres: 250, px: 125, label: '250 m', half: '125' });
     expect(scaleStep(null, 150)).toBe(null);
+    // About z21: 0.07 m a pixel. A 10 m bar would be 140 px; it used to be drawn anyway, into the north arrow.
+    expect(scaleStep(0.07, 100)).toMatchObject({ metres: 5, label: '5 m' });
+    expect(scaleStep(0.07, 20)).toMatchObject({ metres: 1 });
+    expect(scaleStep(0.07, 5)).toBe(null);
+  });
+
+  it('keeps the bar clear of the north arrow at a very close zoom, or leaves it out', () => {
+    const card = { x: 0, y: 0, w: STUDIO_PANEL.w, h: STUDIO_PANEL.h };
+    for (const mpp of [0.07, 0.03, 0.002]) {
+      const prims = scaleCardPrims(studio(), card, { metresPerPx: mpp, datum: 'WGS84' });
+      const n = prims.filter((p) => p.t === 'poly' || p.t === 'circle'), bar = prims.find((p) => p.t === 'rect' && !p.fill && p !== prims[0]);
+      const roseLeft = Math.min(...n.flatMap((p) => (p.t === 'poly' ? p.pts.map(([x]) => x) : [p.cx - p.r])));
+      if (bar) expect(bar.x + bar.w).toBeLessThan(roseLeft);
+      for (const [x, y] of points(prims)) expect(inside(card, x, y)).toBe(true);
+    }
+    expect(scaleCardPrims(studio(), card, { metresPerPx: 0.002 }).some((p) => p.t === 'rect' && !p.fill && p.stroke)).toBe(false);
+  });
+
+  it('sizes the north arrow in the scale card to the card, N included', () => {
+    const card = { x: 0, y: 0, w: STUDIO_PANEL.w, h: STUDIO_PANEL.h };
+    const prims = scaleCardPrims(studio(), card, { metresPerPx: 2.5 });
+    const rose = prims.filter((p) => p.t === 'poly');
+    const ys = rose.flatMap((p) => p.pts.map(([, y]) => y));
+    const inner = card.h - 2 * 12;
+    expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThanOrEqual(0.7 * inner);
+    const n = prims.find((p) => p.t === 'text' && p.s === 'N');
+    expect(n.y - n.size * 0.72).toBeGreaterThanOrEqual(card.y);
   });
 
   it('draws the north arrow alone, sized to its card', () => {
@@ -220,6 +248,16 @@ describe('Studio cards as primitives', () => {
     expect(defs.filter((d) => d.includes('em-studio-shadow'))).toHaveLength(1);
     paintSvg(titleCardPrims(studio(), box), 2, defs);
     expect(defs.filter((d) => d.includes('em-studio-shadow'))).toHaveLength(1);
+  });
+});
+
+describe('Studio coordinate frame', () => {
+  it('sets the frame ticks in the mono numerals in Studio, Courier everywhere else', () => {
+    const stage = { width: 1600, height: 1000 };
+    expect(getMapFrame(studio({ showCoordinateFrame: true }), stage).font).toBe(frameFont(studio()));
+    expect(frameFont(studio())).toContain('IBM Plex Mono');
+    expect(frameFont(base())).toBe(FRAME_FONT);
+    expect(getMapFrame({ ...base(), showCoordinateFrame: true }, stage)).not.toHaveProperty('font');
   });
 });
 

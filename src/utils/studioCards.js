@@ -184,12 +184,13 @@ export function studioMetresPerPx(map) {
     return (typeof a.distanceTo === 'function' ? a.distanceTo(b) : haversineMeters(a.lat, a.lng, b.lat, b.lng)) / 200;
   } catch { return null; }
 }
-// The longest round length whose bar fits maxPx, drawn at its true length.
+// The longest round length whose bar fits maxPx, drawn at its true length: down to half a metre for a close
+// zoom, and none (no bar) when not even that fits, so a bar never runs into the north arrow.
+const STEPS = [0.5, 1, 2, 5, ...SCALE_STEPS];
 export function scaleStep(mpp, maxPx) {
   if (!(mpp > 0) || !(maxPx > 0)) return null;
-  const fit = SCALE_STEPS.filter((n) => n / mpp <= maxPx);
-  const metres = fit.length ? fit[fit.length - 1] : SCALE_STEPS[0];
-  return { metres, px: metres / mpp, label: formatScaleLength(metres), half: formatScaleHalf(metres) };
+  const metres = STEPS.filter((n) => n / mpp <= maxPx).at(-1);
+  return metres ? { metres, px: metres / mpp, label: formatScaleLength(metres), half: formatScaleHalf(metres) } : null;
 }
 
 // A four-part bar, alternating ink and paper, with 0 / middle / end in mono under it.
@@ -204,13 +205,14 @@ function barPrims(c, x, y, step) {
   return out;
 }
 
-// The scale and north row inside box r: the north arrow at the right, vertically centred; the bar at the
-// left with the datum note above it (stacked, the scale card) or beside it (the title card's row).
+// The scale and north row inside box r: the north arrow (north: its height, which may reach into the card's
+// padding) at the right, vertically centred; the bar at the left with the datum note above it (stacked, the
+// scale card) or beside it (the title card's row).
 function scaleRow(layout, c, r, opts, { stacked, north, scale }) {
   const out = [];
   let right = r.x + r.w;
   if (north) {
-    const nh = Math.min(r.h, 56), nw = nh * 0.9;
+    const nh = north, nw = nh * 0.9;
     out.push(...northPrims(layout, c, right - nw, r.y + (r.h - nh) / 2, nw, nh));
     right -= nw + 12;
   }
@@ -261,17 +263,18 @@ export function titleCardPrims(layout, box, opts = {}) {
     } else if (r.kind === 'rule') {
       out.push({ t: 'line', x1: x0, y1: top, x2: x0 + maxW, y2: top, stroke: c.rule, sw: 1 });
     } else if (r.kind === 'scale') {
-      out.push(...scaleRow(layout, c, { x: x0, y: top, w: maxW, h: STUDIO_SCALE_ROW }, opts, { north: layout.showNorthArrow !== false, scale: layout.showScaleBar !== false }));
+      out.push(...scaleRow(layout, c, { x: x0, y: top, w: maxW, h: STUDIO_SCALE_ROW }, opts, { north: layout.showNorthArrow !== false && STUDIO_SCALE_ROW + 8, scale: layout.showScaleBar !== false }));
     }
   }
   return out;
 }
 
-// The scale card: the bar with its datum note, and the north arrow beside it when they share the card.
+// The scale card: the bar with its datum note, and the north arrow beside it when they share the card,
+// as tall as the card less 5 px top and bottom (its N included), so it reads at the bar's weight.
 export function scaleCardPrims(layout, box, opts = {}) {
   const c = studioCard(layout, 'scale'), p = Math.min(c.pad, 12);
   return [...cardShell(c, box.x, box.y, box.w, box.h), ...scaleRow(layout, c, { x: box.x + p, y: box.y + p, w: box.w - 2 * p, h: box.h - 2 * p }, opts,
-    { stacked: true, north: studioScaleHome(layout) === 'panel', scale: true })];
+    { stacked: true, north: studioScaleHome(layout) === 'panel' && box.h - 10, scale: true })];
 }
 
 // The north arrow on its own card (when the scale bar is off, or kept apart).

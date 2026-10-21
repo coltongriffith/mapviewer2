@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useId, useState } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import { lazyGuarded } from '../utils/preloadGuard';
 import {
   studioOn, studioCard, titleCardPrims, scaleCardPrims, northCardPrims, insetCardPrims, studioScaleHome,
@@ -7,6 +7,7 @@ import {
 import { projectionLabel } from '../utils/coordinateFrame.js';
 import { geojsonBounds, unionBounds } from '../utils/geometry';
 import { visibleGeojson } from '../utils/featureIdentity.js';
+import { detectRegion } from '../utils/detectRegion';
 const SatelliteInset = lazyGuarded(() => import('./SatelliteInset'));
 
 // The Studio look's cards on the editor stage (and the shared map page), drawn from the same primitives the
@@ -94,7 +95,10 @@ function StudioStyle({ layout }) {
     ].filter(Boolean).join(';');
     const lg = studioCard(layout, 'legend'), co = studioCard(layout, 'callout'), dark = co.tone === 'dark';
     css.push(`${st} .legend-card{${shell(lg, true)}}${st} .legend-card h3{font-weight:650;color:${lg.head}}${st} .legend-group-title{font-weight:600;letter-spacing:0.08em;color:${lg.muted}}${st} .legend-item,${st} .legend-note{color:${lg.ink}}`);
-    css.push(`${st} .map-callout.boxed,${st} .map-callout.leader{${shell(co, dark)}}`);
+    // Light results cards keep each callout's own colour (--co-bg, set by CalloutsOverlay) at the card's opacity,
+    // as the exporters fill them.
+    const coPaper = dark ? '' : `;background:${co.opacity ? `color-mix(in srgb, var(--co-bg) ${Math.round(co.opacity * 100)}%, transparent)` : 'transparent'}!important`;
+    css.push(`${st} .map-callout.boxed,${st} .map-callout.leader{${shell(co, dark)}${coPaper}}`);
     if (dark) css.push(`${st} .map-callout.boxed .map-callout-title,${st} .map-callout.leader .map-callout-title{color:#fff!important}${st} .map-callout.boxed .map-callout-subtext,${st} .map-callout.leader .map-callout-subtext{color:rgba(255,255,255,0.78)!important}`);
   }
   return css.length ? <style data-studio-stage="">{css.join('\n')}</style> : null;
@@ -112,9 +116,25 @@ function SatelliteSlot({ slot, layout, layers, onMarker }) {
   );
 }
 
+// The project's extent, and its province or state: the saved one, else found from the extent as LocatorInset
+// finds it (a shared map made outside the editor can arrive without one).
+function useRegion(layout, layers, on) {
+  const bounds = useMemo(() => unionBounds((layers || []).filter((l) => l.visible !== false && l.geojson).map((l) => geojsonBounds(visibleGeojson(l))).filter(Boolean)), [layers]);
+  const [found, setFound] = useState(null);
+  const need = on && !layout.autoInsetRegion && !!bounds;
+  useEffect(() => {
+    if (!need) return undefined;
+    let live = true;
+    detectRegion(bounds).then((r) => { if (live) setFound(r || null); }).catch(() => {});
+    return () => { live = false; };
+  }, [need, bounds?.minLng, bounds?.minLat, bounds?.maxLng, bounds?.maxLat]); // eslint-disable-line react-hooks/exhaustive-deps
+  return { bounds, region: layout.autoInsetRegion || (need ? found : null) };
+}
+
 export default function StudioCard({ kind, layout, zones, map, layers }) {
   const id = `studio-${kind}-${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
   const [marker, setMarker] = useState(null);
+  const { bounds, region } = useRegion(layout, layers, kind === 'inset');
   const onMarker = useCallback((p) => setMarker((m) => (m && Math.abs(m.x - p.x) < 0.5 && Math.abs(m.y - p.y) < 0.5 ? m : { x: p.x, y: p.y })), []);
   useMapTick(map, kind === 'title' || kind === 'scale');
   if (kind === 'style') return <StudioStyle layout={layout} />;
@@ -128,10 +148,8 @@ export default function StudioCard({ kind, layout, zones, map, layers }) {
   else if (kind === 'scale') prims = home === 'title' ? [] : scaleCardPrims(layout, box, opts);
   else if (kind === 'north') prims = home === 'apart' ? northCardPrims(layout, box) : [];
   else if (kind === 'inset') {
-    const visible = (layers || []).filter((l) => l.visible !== false && l.geojson);
-    const bounds = unionBounds(visible.map((l) => geojsonBounds(visibleGeojson(l))).filter(Boolean));
     const mode = layout.insetMode === 'custom_image' ? (layout.insetImage ? 'image' : null) : layout.insetMode === 'satellite_locator' ? 'satellite' : 'region';
-    prims = insetCardPrims(layout, box, { mode, image: layout.insetImage, region: layout.autoInsetRegion, bounds, marker: mode === 'satellite' ? marker : null });
+    prims = insetCardPrims(layout, box, { mode, image: layout.insetImage, region, bounds, marker: mode === 'satellite' ? marker : null });
   }
   if (!prims.length) return null;
   const at = prims.findIndex((p) => p.t === 'slot');

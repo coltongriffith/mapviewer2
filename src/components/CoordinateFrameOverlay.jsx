@@ -26,7 +26,7 @@ export default function CoordinateFrameOverlay({ map, frame, stage }) {
   const W = stage.width, H = stage.height;
   const { left, top, right, bottom, area } = frame;
   const t = FRAME_TICK_PX;
-  const text = { fontFamily: FRAME_FONT, fontSize: FRAME_FONT_PX, fill: '#000' };
+  const text = { fontFamily: frame.font || FRAME_FONT, fontSize: FRAME_FONT_PX, fill: '#000' };
 
   return (
     <svg

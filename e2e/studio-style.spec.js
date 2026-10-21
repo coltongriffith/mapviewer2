@@ -173,7 +173,7 @@ test('Studio: the title card holds the scale bar and north arrow (Fig 2), bottom
   await setup(page);
   await open(page, sampleProject({
     themeId: 'studio', titleCorner: 'bl', legendCorner: 'br', cornerLayout: null,
-    studio: { kicker: 'Fig. 2 · Cedar Ridge · TSXV: ARM', titleScale: true, datumSub: 'Grid: true UTM ticks on frame', cards: { inset: { tone: 'dark' }, legend: { accent: 'top' } } },
+    studio: { kicker: 'Fig. 2 · Cedar Ridge · TSXV: ARM', projectLabel: 'Cedar Ridge', titleScale: true, datumSub: 'Grid: true UTM ticks on frame', cards: { inset: { tone: 'dark' }, legend: { accent: 'top' } } },
   }));
   await expect(page.locator('.studio-card--title')).toBeVisible();
   await expect(page.locator('.studio-card--scale')).toHaveCount(0);
@@ -182,6 +182,7 @@ test('Studio: the title card holds the scale bar and north arrow (Fig 2), bottom
   const texts = await page.evaluate(() => window.__texts);
   expect(texts).toContain('FIG. 2 · CEDAR RIDGE · TSXV: ARM');
   expect(texts).toContain('Grid: true UTM ticks on frame');
+  expect(texts).toContain('CEDAR RIDGE'); // the project's name stays on the locator's marker
   await save(page, 'studio-fig2-title-scale', png, null);
 
   // Full bleed: the map fills the frame; no title, legend or locator, the scale-north card stays.

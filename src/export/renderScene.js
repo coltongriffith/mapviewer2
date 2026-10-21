@@ -24,7 +24,7 @@ import { pickScaleBar } from '../utils/scaleBar.js';
 import { resolvePointSymbol, symbolPath } from '../utils/pointSymbol.js';
 import { screenScale } from '../utils/stageScale.js';
 import { tileLayerCredits } from '../utils/rasterOverlay.js';
-import { getMapFrame, scaleFrame, computeGridTicks, projectionLabel, FRAME_FONT, FRAME_FONT_PX } from '../utils/coordinateFrame.js';
+import { getMapFrame, scaleFrame, computeGridTicks, projectionLabel, frameFont, FRAME_FONT_PX } from '../utils/coordinateFrame.js';
 import { fillPatternSpec, hasFillPattern } from '../../shared/fillPattern.js';
 import { diagnostic } from '../../shared/figureDiagnostics.js';
 import { studioOn, studioScaleHome, studioCard, cardShell, titleCardPrims, scaleCardPrims, northCardPrims, insetCardPrims, insetArea, paintCanvas, paintSvg, studioMetresPerPx, labelHalo, studioFontFamilies, studioFontQuery, loadStudioFonts, STUDIO_WEIGHTS } from '../utils/studioCards.js';
@@ -2014,7 +2014,7 @@ function drawDistanceTicksCanvas(ctx, scene, scale) {
 
   const tickLen = 10 * scale;
   ctx.fillStyle = '#000000';
-  ctx.font = `${FRAME_FONT_PX * scale}px ${FRAME_FONT}`;
+  ctx.font = `${FRAME_FONT_PX * scale}px ${frameFont(scene.project.layout)}`;
   ctx.lineWidth = scale;
   ctx.strokeStyle = '#000000';
 
@@ -2056,7 +2056,7 @@ function renderDistanceTicksSvg(scene, scale) {
   const ticks = computeGridTicks(scene.map, getMapFrame(scene.project.layout || {}, { width: scene.width, height: scene.height }, { sidebarFrac: scene.template?.sidebarFrac }), scale);
   if (!ticks) return '';
   const tickLen = 10 * scale;
-  const fontSize = FRAME_FONT_PX * scale;
+  const fontSize = FRAME_FONT_PX * scale, FRAME_FONT = frameFont(scene.project.layout);
   const t = (x, y, extra, label) => `<text x="${x}" y="${y}" text-anchor="middle" font-family="${FRAME_FONT}" font-size="${fontSize}" fill="#000"${extra}>${escapeXml(label)}</text>`;
   const parts = [
     `<rect x="${area.left}" y="${area.top}" width="${area.right - area.left}" height="${mapTop - area.top}" fill="#ffffff" />`,
