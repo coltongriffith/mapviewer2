@@ -60,3 +60,7 @@ export function avgOver(ints, col, from, to, sampled = true) {
 export function calloutText(ic, o, text) {
   return { l1: o.line1 || text(ic.broad), l1b: o.line1 ? '' : ` from ${Math.round(ic.broad.from)} m`, l2: o.incl === false ? null : (o.line2 || (ic.incl ? `incl. ${text(ic.incl)}` : null)) };
 }
+
+// Ribbon pieces the callouts could need on either ribbon mesh: one per 8 m of every interval, reported and
+// "incl.", plus one each (the page draws at most that many on each); the meshes are sized to hold them.
+export const ribbonPieces = (callouts) => callouts.reduce((s, { ic }) => s + [ic.broad, ...(ic.incls || [ic.incl])].reduce((t, x) => t + (x ? Math.ceil(x.len / 8) + 1 : 0), 0), 0);

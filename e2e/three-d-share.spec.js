@@ -249,6 +249,28 @@ test.describe('sharing', () => {
     expect(errors).toEqual([]);
   });
 
+  test('a shared figure shows its published results, wording and long decimals exactly as saved', async ({ page, context }) => {
+    const fake = await fakeSupabase(context), rel = await readFile('tests/fixtures/three-d/published-results.csv', 'utf8');
+    await open3d(page);
+    const made = await page.evaluate(async (text) => {
+      const E = window.EM3D, base = E.getProject().files.map(({ name, text: t }) => ({ name, text: t }));
+      E.addFiles([...base, { name: 'release.csv', text, role: 'published' }]);
+      E.setStyle({ calloutMode: 'published' }); await E.layersReady();
+      E.setCallout('EX14-01', { line1: '30.000 m @ 0.6100000000000001% Cu' });
+      return E.getState().callouts;
+    }, rel);
+    await page.getByRole('button', { name: 'Share', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Share this 3D figure' });
+    await dialog.getByRole('button', { name: 'Create link' }).click();
+    const id = (await dialog.getByLabel('Share link').inputValue()).split('/').pop();
+    expect(fake.shares.get(id).state.files.find((f) => f.name === 'release.csv')).toMatchObject({ role: 'published', text: rel });
+    await openShared(page, `/3d/share/${id}`);
+    await expect.poll(async () => (await state(page)).callouts.shown.length).toBe(3);
+    const viewed = (await state(page)).callouts;
+    expect(viewed).toEqual(made);
+    expect(viewed.shown.map((c) => c.line1)).toEqual(['508.00 m @ 0.5300000000000001% Cu, 0.1234567890123 g/t Au from 8.000 m', '30.000 m @ 0.6100000000000001% Cu', '40 m @ 0.48% Cu from 300 m']);
+  });
+
   test('the embed opens in an iframe with minimal chrome; the share page refuses to be framed', async ({ page, context }, testInfo) => {
     const fake = await fakeSupabase(context);
     await open3d(page);
