@@ -301,6 +301,7 @@ test('map overlays and shapes: draped, listed, saved and reopened unchanged, and
 });
 
 test('named sections: B–B′ through two holes with fences, saved and reopened unchanged, each exported on its own; a figure without them is untouched', async ({ page }) => {
+  test.setTimeout(150_000); // three page loads and a dozen full-size exports under SwiftShader
   const errors = [], chunks = [];
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('request', (q) => { if (/\/assets\/sections-[\w-]+\.js/.test(q.url())) chunks.push(q.url()); });
@@ -331,7 +332,7 @@ test('named sections: B–B′ through two holes with fences, saved and reopened
     let bad = null; try { E.exportPNG({ view: 'section', section: 'Z' }); } catch (e) { bad = e.message; }
     const activeA = (await E.setActiveSection('A')).section;
     let last = null; await E.removeSection('B'); try { await E.removeSection('A'); } catch (e) { last = e.message; }
-    return { id, through, before, after, saved: project.settings.sections, savedActive: project.settings.secActive, same: JSON.stringify(exp) === JSON.stringify(exp2),
+    return { id, through, before, after, project, exp, saved: project.settings.sections, savedActive: project.settings.secActive, same: JSON.stringify(exp) === JSON.stringify(exp2),
       sizes: [exp.a.length, exp.b.length, exp.d3.length], differ: exp.a !== exp.b, bad, activeA, left: E.getState().sections.list.map((s) => s.id), last, tab: document.getElementById('view-section').textContent };
   });
   expect(r.id).toBe('B');
@@ -361,6 +362,15 @@ test('named sections: B–B′ through two holes with fences, saved and reopened
   await expect(page.locator('#sec-tabs [data-sid="B"]')).toHaveAttribute('aria-pressed', 'true');
   await page.locator('#sec-tabs [data-sid="A"]').click();
   await expect.poll(async () => (await state(page)).sections.active).toBe('A');
+
+  // Opened in a new page, where sections.js has not loaded yet: the fences, their lines on the terrain and each
+  // section export exactly as the saved figure did.
+  await open3d(page);
+  const fresh = await page.evaluate(async ({ p, exp }) => {
+    const E = window.EM3D, loaded = !!E.getState().sections; await E.loadProject(p);
+    return { loaded, d3: E.exportPNG({ view: '3d' }) === exp.d3, a: E.exportPNG({ view: 'section', section: 'A' }) === exp.a, b: E.exportPNG({ view: 'section', section: 'B' }) === exp.b };
+  }, { p: r.project, exp: r.exp });
+  expect(fresh).toEqual({ loaded: false, d3: true, a: true, b: true });
   expect(errors).toEqual([]);
 });
 

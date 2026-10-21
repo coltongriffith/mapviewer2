@@ -180,11 +180,11 @@ const BUDGETS = {
   // dimension lines and arrows on the figure and section, and their list), the draping maths both share
   // (drape.js, 0.9 kB) and zipped shapefiles read in unzip.js (shp.js, +1.1 kB). Fetched only for a figure with
   // an overlay or a shape, or a ZIP.
-  // 89.7 → 94.3 (Oct 2026, round 5C, measured 93.80, configured 94.03): named sections and fences (sections.js with
+  // 89.7 → 94.4 (Oct 2026, round 5C, measured 93.9, configured 94.1): named sections and fences (sections.js with
   // shared/sectionGeometry.js, ~4.6 kB: addSection / updateSection / removeSection / setActiveSection, the section
   // tabs, the old single section kept as A–A′, each section swapped in for its export, and the fences built as
   // painted slabs with their letters). Fetched only for a figure with named sections.
-  threeDLazyJsGzipKb: 94.3,
+  threeDLazyJsGzipKb: 94.4,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.

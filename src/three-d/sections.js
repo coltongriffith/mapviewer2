@@ -96,6 +96,7 @@ export function sync() {
   if (S.sections) { S.sections = cleanSections(S.sections); if (S.sections && !act()) put(S.sections[0]); }
   keep();
   const G = H.G, on = G && S.sections ? S.sections.filter((e) => e.fence) : [];
+  if (G && (G.secPainted || '') !== paintKey()) { H.restyle(); return; } // restyle paints the terrain, then syncs again
   const k = JSON.stringify([on, S.secActive, S.bins, S.valueCol, S.displayCutoff, S.vex, S.primary, S.terrain]);
   const v = document.getElementById('view-section'); if (v) v.textContent = `Section ${act()?.name || 'A–A′'}`; // the view tab
   if (k === key && meshes.every((m) => m.parent === H.root)) return;
@@ -131,11 +132,13 @@ function build(e) {
   const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
   m.renderOrder = 3.5; m.userData.fence = e.id; H.root.add(m); meshes.push(m);
 }
-// Each other fence's line on the terrain, solid (the active section's is dashed).
+// Each other fence's line on the terrain, solid (the active section's is dashed). G.secPainted records which, so
+// sync() repaints the terrain when this module arrives after the figure was drawn (a project opened in a new page).
+const others = () => (S.sections || []).filter((e) => e.fence && e.id !== S.secActive), paintKey = () => (others().length ? JSON.stringify(others()) : '');
 export function paint(ctx, P, lk) {
-  if (!H.G || !S.sections) return;
-  S.sections.forEach((e) => {
-    if (!e.fence || e.id === S.secActive) return; const [A, B] = using(e.id, H.sectionEnds), c = clipToBox(A, B, H.G.B); if (!c) return;
+  if (!H.G) return; H.G.secPainted = paintKey();
+  others().forEach((e) => {
+    const [A, B] = using(e.id, H.sectionEnds), c = clipToBox(A, B, H.G.B); if (!c) return;
     const at = (f) => P({ x: A.x + (B.x - A.x) * f, y: A.y + (B.y - A.y) * f });
     ctx.beginPath(); ctx.moveTo(...at(c[0])); ctx.lineTo(...at(c[1])); ctx.lineWidth = 5 * lk; ctx.strokeStyle = S.terrain === 'dark' ? '#fff' : S.primary; ctx.stroke();
     ctx.lineWidth = 1.6 * lk; ctx.strokeStyle = S.terrain === 'dark' ? S.primary : '#fff'; ctx.stroke();
