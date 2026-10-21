@@ -10,6 +10,8 @@ import { markerIconSvgFragment, drawMarkerIconCanvas } from '../utils/markerIcon
 import { safeColor } from '../utils/colorUtils.js';
 import regionsNA from '../assets/regionsNA.json';
 import { resolveCalloutBoxes, panelObstacles, intersects, leaderEndpoint, arrowheadPoints, calloutLogoSize } from '../utils/calloutLayout';
+import { resolveScoredBoxes } from '../utils/calloutScorer.js';
+import { leaderGeometry, leaderTangentFrom, leaderSvgD, anchorMark } from '../../shared/leaderGeometry.js';
 import dissolveGeo from '@turf/dissolve';
 import { exportCreditLines } from '../utils/claimProvenance';
 import { referenceOverlayCredits } from '../utils/referenceOverlayCredits.js';
@@ -1177,8 +1179,12 @@ function drawFooterCanvas(ctx, scene, scale) {
 // Panels (legend, inset, logo, title…) are obstacles for automatic cards, the
 // same zones the editor passes, and any card still overlapping one is reported.
 function placeCallouts(scene, scale) {
-  const obstacles = panelObstacles(getOverlayMetrics(scene), scene.project.layout || {});
-  const placed = resolveCalloutBoxes(scene.project.callouts || [], scene.map, { obstacles });
+  const layout = scene.project.layout || {};
+  const obstacles = panelObstacles(getOverlayMetrics(scene), layout);
+  // A project saved before the scored layout (no layoutAlgorithm) keeps the
+  // legacy placement until the user runs Auto-arrange, as in the editor.
+  const resolve = layout.layoutAlgorithm >= 2 ? resolveScoredBoxes : resolveCalloutBoxes;
+  const placed = resolve(scene.project.callouts || [], scene.map, { obstacles });
   const colliding = placed.filter((c) => c.collidesWith?.length);
   if (colliding.length) {
     const what = [...new Set(colliding.flatMap((c) => c.collidesWith))].slice(0, 3).join(', ');
@@ -1196,21 +1202,31 @@ function fitText(ctx, text, maxWidth) {
   return t + '…';
 }
 
+// The leader path, arrowhead and anchor mark come from shared/leaderGeometry.js,
+// the same geometry the editor overlay and the SVG draw.
 function drawCalloutLeaderCanvas(ctx, c, scale) {
   if (c.type !== 'leader' && c.type !== 'boxed') return;
-  const ep = leaderEndpoint(c.anchorPx, c);
-  ctx.beginPath(); ctx.moveTo(c.anchorPx.x, c.anchorPx.y); ctx.lineTo(ep.x, ep.y);
-  ctx.strokeStyle = c.style?.border || '#102640'; ctx.lineWidth = 1.4 * scale; ctx.setLineDash(c.type === 'leader' ? [5 * scale, 3 * scale] : []); ctx.stroke();
+  const g = leaderGeometry(c.anchorPx, c, c.style?.leaderShape, scale);
+  const color = c.style?.border || '#102640';
+  ctx.beginPath(); ctx.moveTo(g.start.x, g.start.y);
+  if (g.bend && g.curve) ctx.quadraticCurveTo(g.bend.x, g.bend.y, g.end.x, g.end.y);
+  else { if (g.bend) ctx.lineTo(g.bend.x, g.bend.y); ctx.lineTo(g.end.x, g.end.y); }
+  ctx.strokeStyle = color; ctx.lineWidth = 1.4 * scale; ctx.setLineDash(c.type === 'leader' ? [5 * scale, 3 * scale] : []); ctx.stroke();
   if (c.style?.arrowhead) {
-    const head = arrowheadPoints(ep, c.anchorPx, 9 * scale);
+    const head = arrowheadPoints(leaderTangentFrom(g), g.start, 9 * scale);
     ctx.setLineDash([]);
     ctx.beginPath(); ctx.moveTo(head[0].x, head[0].y); ctx.lineTo(head[1].x, head[1].y); ctx.lineTo(head[2].x, head[2].y); ctx.closePath();
-    ctx.fillStyle = c.style?.border || '#102640'; ctx.fill();
+    ctx.fillStyle = color; ctx.fill();
   }
   ctx.setLineDash([]);
+  const mark = anchorMark(c.style);
+  if (mark) {
+    ctx.beginPath(); ctx.arc(g.start.x, g.start.y, mark.r * scale, 0, Math.PI * 2);
+    if (mark.filled) { ctx.fillStyle = color; ctx.fill(); } else { ctx.strokeStyle = color; ctx.stroke(); }
+  }
 }
 
-async function drawCalloutsCanvas(ctx, scene, scale) {
+export async function drawCalloutsCanvas(ctx, scene, scale) {
   const calloutFont = `${scene.project.layout?.fonts?.callout || 'Inter'}, Arial, sans-serif`;
   const placed = placeCallouts(scene, scale);
   // Every leader first, then every card — as the editor layers them — so a
@@ -2679,7 +2695,23 @@ function renderLogoSvg(scene, scale) {
   const align = inRail ? 'xMinYMid' : 'xMidYMid';
   return `<g id="em-logo" class="em-panel">${panel}<image href="${escapeXml(logo)}" x="${x + padding}" y="${y + padding}" width="${w - padding * 2}" height="${h - padding * 2}" preserveAspectRatio="${align} meet" opacity="${Number(scene.project.layout?.logoOpacity ?? 1)}" /></g>`;
 }
-function renderCalloutsSvg(scene, scale, svgDefs) {
+// Mirrors drawCalloutLeaderCanvas. A straight leader stays a <line>, exactly
+// as before; a bent or curved one is a <path> of the same geometry.
+export function calloutLeaderSvg(c, scale) {
+  const g = leaderGeometry(c.anchorPx, c, c.style?.leaderShape, scale);
+  const color = c.style?.border || '#102640';
+  const stroke = `stroke="${color}" stroke-width="${1.4 * scale}" ${c.type === 'leader' ? `stroke-dasharray="${5 * scale} ${3 * scale}"` : ''}`;
+  const line = g.bend
+    ? `<path d="${leaderSvgD(g)}" fill="none" ${stroke} />`
+    : `<line x1="${g.start.x}" y1="${g.start.y}" x2="${g.end.x}" y2="${g.end.y}" ${stroke} />`;
+  const head = c.style?.arrowhead
+    ? `<polygon points="${arrowheadPoints(leaderTangentFrom(g), g.start, 9 * scale).map((pt) => `${pt.x.toFixed(1)},${pt.y.toFixed(1)}`).join(' ')}" fill="${color}" />`
+    : '';
+  const mark = anchorMark(c.style);
+  const dot = mark ? `<circle cx="${g.start.x}" cy="${g.start.y}" r="${mark.r * scale}" ${mark.filled ? `fill="${color}"` : `fill="none" stroke="${color}" stroke-width="${1.4 * scale}"`} />` : '';
+  return `${line}${head}${dot}`;
+}
+export function renderCalloutsSvg(scene, scale, svgDefs) {
   const calloutFont = `${scene.project.layout?.fonts?.callout || 'Inter'}, Arial, sans-serif`;
   const leaders = [];
   const cards = placeCallouts(scene, scale).map((c) => {
@@ -2702,12 +2734,7 @@ function renderCalloutsSvg(scene, scale, svgDefs) {
       return `<g id="em-callout-${safeId}" class="em-callout">${line}${dot}${chipRect}${labelRect}${chipText}${labelText}</g>`;
     }
 
-    const svgEp = leaderEndpoint(c.anchorPx, c);
-    const hasLeader = c.type === 'leader' || c.type === 'boxed';
-    const head = hasLeader && c.style?.arrowhead
-      ? `<polygon points="${arrowheadPoints(svgEp, c.anchorPx, 9 * scale).map((pt) => `${pt.x.toFixed(1)},${pt.y.toFixed(1)}`).join(' ')}" fill="${leaderColor}" />`
-      : '';
-    if (hasLeader) leaders.push(`<line x1="${c.anchorPx.x}" y1="${c.anchorPx.y}" x2="${svgEp.x}" y2="${svgEp.y}" stroke="${leaderColor}" stroke-width="${1.4 * scale}" ${c.type === 'leader' ? `stroke-dasharray="${5 * scale} ${3 * scale}"` : ''} />${head}`);
+    if (c.type === 'leader' || c.type === 'boxed') leaders.push(calloutLeaderSvg(c, scale));
     // Mirrors drawCalloutsCanvas line for line — same theme colours, corner
     // radius, measured wrapping and text tops — so PNG and SVG cards match.
     const theme = getTheme(scene);
@@ -2750,8 +2777,8 @@ function renderCalloutsSvg(scene, scale, svgDefs) {
     const textGroup = clipId ? `<g clip-path="url(#${clipId})">${logoEl}${mainText}${subtextEl}</g>` : `${logoEl}${mainText}${subtextEl}`;
     return `<g id="em-callout-${safeId}" class="em-callout">${box}${textGroup}</g>`;
   });
-  // All leaders under all cards, as the editor draws them. No anchor dot on a
-  // leader: neither the editor nor the PNG draws one.
+  // All leaders under all cards, as the editor draws them. An anchor mark is
+  // drawn only when the callout asks for one, in all three renderers.
   return `${leaders.length ? `<g id="em-callout-leaders">${leaders.join('')}</g>` : ''}\n${cards.join('\n')}`;
 }
 

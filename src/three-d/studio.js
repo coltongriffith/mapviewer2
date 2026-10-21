@@ -7,7 +7,7 @@ import { METAL_DEFAULTS, defaultUnit, priceUnit, eqFactors, eqFormula, eqValue }
 import { isXYZ, parseXYZ, refineRole } from './roles.js';
 import { makeLayout, isClick, legendRows as binRows, wrapNotes, shouldMerge } from './layout.js';
 import { DESIGN_VERSION, FEATURES, uses, withDefaults } from './design-version.js';
-import { intercept, calloutText, avgOver } from './intercepts.js';
+import { intercept, calloutText, avgOver, ribbonPieces } from './intercepts.js';
 
 const $ = (id) => document.getElementById(id);
 // ============================================================
@@ -504,11 +504,8 @@ function rebuildScene(keepCam) {
   const tube = (mat) => { const t = new THREE.InstancedMesh(new THREE.CylinderGeometry(1, 1, 1, 8), mat, Math.max(1, nInt)); t.frustumCulled = false; root.add(t); return t; };
   G.tubes = tube(new THREE.MeshLambertMaterial()); G.tubesP = tube(new THREE.MeshLambertMaterial({ transparent: true, opacity: 0.55 })); G.tubesP.renderOrder = 3;
   // Intercept ribbons: flat bars beside each trace, broad then "incl." nudged toward the camera.
-  // Turned to face the view in placeRibbons, so capacity is one piece per 8 m of hole.
-  const ribCap = holes.reduce((s, h) => s + Math.ceil(h.len / 8) + 1, 0), rg = new THREE.PlaneGeometry(1, 1);
-  G.ribbons = RIB_COLORS.map((c, i) => { const rm = new THREE.InstancedMesh(rg, new THREE.MeshBasicMaterial({ color: c, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2 * i, polygonOffsetUnits: -2 * i }), Math.max(1, ribCap));
-    rm.frustumCulled = false; rm.count = 0; rm.renderOrder = 1 + i; root.add(rm); return rm; });
-  G.ribbonCap = ribCap; G.ribbonView = null;
+  // Turned to face the view in placeRibbons, so capacity is one piece per 8 m of hole (grown there if needed).
+  ribbonMeshes(holes.reduce((s, h) => s + Math.ceil(h.len / 8) + 1, 0)); G.ribbonView = null;
   // Meshes
   G.meshes = [];
   project.meshF.forEach((f, k) => {
@@ -969,6 +966,15 @@ function renderShellUI() {
 
 const terrainCredits = (withImagery) => [...new Set([withImagery && imageryShown() && IMAGERY_CREDIT, G?.using === 'dem' && DEM_CREDIT].filter(Boolean).concat(withImagery ? extCredits() : []))]; // EXT hook: map inset
 
+// The ribbon meshes, room for cap pieces each; replaced by larger ones when the callouts need more (several
+// published results on one hole, overlapping, can outrun one piece per 8 m of hole).
+function ribbonMeshes(cap) {
+  (G.ribbons || []).forEach((rm) => { root.remove(rm); rm.geometry.dispose(); rm.material.dispose(); });
+  const rg = new THREE.PlaneGeometry(1, 1);
+  G.ribbons = RIB_COLORS.map((c, i) => { const rm = new THREE.InstancedMesh(rg, new THREE.MeshBasicMaterial({ color: c, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2 * i, polygonOffsetUnits: -2 * i }), Math.max(1, cap));
+    rm.frustumCulled = false; rm.count = 0; rm.renderOrder = 1 + i; root.add(rm); return rm; });
+  G.ribbonCap = cap;
+}
 const traceR = () => Math.max(1.5, G.diag / 330) * S.traceWidth;
 // Ribbon pieces sit 3 tube radii to the screen-right of the trace, in the plane facing the camera,
 // so they read as a bar beside the hole from any angle. Re-placed when the view turns (loop).
@@ -978,6 +984,7 @@ function placeRibbons() {
   const view = camera.getWorldDirection(new THREE.Vector3()), right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0).normalize();
   G.ribbonView = view.clone();
   const r = traceR(), w = 2 * r, off = 3.2 * r, mx = new THREE.Matrix4(), side = new THREE.Vector3(), nrm = new THREE.Vector3(), n = [0, 0];
+  const need = S.ribbons ? ribbonPieces(callouts) : 0; if (need > G.ribbonCap) ribbonMeshes(need);
   const put = (k, h, from, to) => {
     const pieces = Math.max(1, Math.ceil((to - from) / 8));
     for (let i = 0; i < pieces && n[k] < G.ribbonCap; i++) {

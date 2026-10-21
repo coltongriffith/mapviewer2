@@ -58,17 +58,20 @@ export function readResults(header, rows, cols, file = '') {
     const rec = { version: RECORD_VERSION, resultId: id, holeId: get('hole'), fromM: depth(r[cols.from]), toM: depth(r[cols.to]), publishedLengthText: get('length'), gradeText: get('grade'), analyte: get('analyte'), unit: get('unit'),
       parentResultId: get('parent'), approvedText: get('approved'), releaseDate: get('date'), sourceRef: get('source'), approvalStatus: noStatus ? 'approved' : get('status') };
     if (!rec.holeId) return flag('no-hole', id, `${id} has no hole ID, so it is left out.`);
-    if (!Number.isFinite(rec.fromM) || !Number.isFinite(rec.toM) || rec.toM <= rec.fromM) return flag('bad-depths', id, `${id}: From and To must be depths in metres with To below From, so it is left out.`);
+    // Depths down the hole from the collar: never above it (a negative From would pin the interval to the collar).
+    if (!Number.isFinite(rec.fromM) || !Number.isFinite(rec.toM) || rec.fromM < 0 || rec.toM <= rec.fromM) return flag('bad-depths', id, `${id}: From and To must be depths down the hole in metres (0 or more), with To below From, so it is left out.`);
     if (!rec.approvedText && !rec.gradeText) return flag('no-text', id, `${id} has neither approved text nor a grade, so it is left out.`);
     const d = lengthCheck(rec.publishedLengthText, rec.fromM, rec.toM);
     if (d) flag('length-discrepancy', id, `${id}: the published length (${rec.publishedLengthText}) is not To − From (${m(rec.toM)} − ${m(rec.fromM)} = ${m(d.depths)} m). Both are kept: the text as published, the depths for where it sits. Check the release.`);
     if (!isApproved(rec)) flag('not-approved', id, `${id} is ${rec.approvalStatus ? `"${rec.approvalStatus}"` : 'without an approval status'}, so it is not drawn.`);
     results.push(rec);
   });
+  const byId = new Map(results.map((r) => [r.resultId, r]));
   results.forEach((r) => {
     if (!r.parentResultId) return;
-    const p = results.find((x) => x.resultId === r.parentResultId);
-    if (!p) flag('unknown-parent', r.resultId, `${r.resultId}: its parent ${r.parentResultId} is not in the table, so it is drawn on its own.`);
+    const p = byId.get(r.parentResultId);
+    if (inCycle(r, byId)) flag('parent-cycle', r.resultId, `${r.resultId}: its parent results lead back to itself (${cycleOf(r, byId).join(' → ')}), so it is drawn on its own.`);
+    else if (!p) flag('unknown-parent', r.resultId, `${r.resultId}: its parent ${r.parentResultId} is not in the table, so it is drawn on its own.`);
     else if (p.holeId !== r.holeId) flag('parent-other-hole', r.resultId, `${r.resultId} is on ${r.holeId} but its parent ${p.resultId} is on ${p.holeId}, so it is drawn on its own.`);
     else if (r.fromM < p.fromM - TOL || r.toM > p.toM + TOL) flag('outside-parent', r.resultId, `${r.resultId} (${m(r.fromM)}–${m(r.toM)} m) is not inside its parent ${p.resultId} (${m(p.fromM)}–${m(p.toM)} m), so it is drawn on its own.`);
   });
@@ -103,9 +106,16 @@ export function readAll(files, holes = []) {
 }
 
 // The parent a result is drawn under: another result on the same hole that contains it (no loops).
+// The chain of parent links up from a result, as result IDs, stopping where one repeats.
+function cycleOf(r, byId) {
+  const ids = [r.resultId]; for (let p = byId.get(r.parentResultId); p && !ids.includes(p.resultId); p = byId.get(p.parentResultId)) ids.push(p.resultId);
+  const last = byId.get(byId.get(ids[ids.length - 1])?.parentResultId); return last ? ids.concat(last.resultId) : ids;
+}
+// A result whose parent links come back round to it: those links are not used (each is its own callout).
+const inCycle = (r, byId) => { const c = cycleOf(r, byId); return c.length > 1 && c[c.length - 1] === r.resultId; };
 export function parentOf(r, byId) {
   const p = r.parentResultId && byId.get(r.parentResultId);
-  return p && p !== r && p.holeId === r.holeId && r.fromM >= p.fromM - TOL && r.toM <= p.toM + TOL ? p : null;
+  return p && p !== r && !inCycle(r, byId) && p.holeId === r.holeId && r.fromM >= p.fromM - TOL && r.toM <= p.toM + TOL ? p : null;
 }
 const span = (r) => ({ from: r.fromM, len: r.toM - r.fromM, mid: (r.fromM + r.toM) / 2, avg: null });
 

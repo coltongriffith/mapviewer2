@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import Papa from 'papaparse';
 import { readResults, readFiles, readAll, lengthCheck, pubCallouts, pubLines, staleNotes, headline, pubCols, manualCallouts, tie, icAt, PUB_FIELDS, RECORD_VERSION } from '../src/three-d/published-results.js';
 import { refineRole } from '../src/three-d/roles.js';
+import { ribbonPieces } from '../src/three-d/intercepts.js';
 import { createHistory } from '../src/three-d/history.js';
 
 // A release table for the built-in Example Ridge sample (fictional): a parent and its "incl." on EX-021, two
@@ -95,6 +96,29 @@ describe('callouts from published results', () => {
     expect(pubCallouts(odd, holes).filter((c) => c.h.id === 'EX-021').map((c) => c.key)).toEqual(['EX21-01', 'EX21-01a']);
     const rows2 = rows.map((r) => (r[0] === 'EX21-01a' ? [r[0], r[1], '500', '530', ...r.slice(4)] : r));
     expect(readResults(header, rows2, COLS).problems.map((p) => p.kind)).toContain('outside-parent');
+  });
+
+  it('rejects depths above the collar instead of pinning the interval to it', () => {
+    const { results, problems } = readResults(['id', 'hole', 'from', 'to', 'approved'], [['N1', 'EX-1', '-10', '5', 'x'], ['N2', 'EX-1', '0', '5', 'y']], { resultId: 0, hole: 1, from: 2, to: 3, approved: 4 });
+    expect(results.map((r) => r.resultId)).toEqual(['N2']);
+    expect(problems[0]).toMatchObject({ kind: 'bad-depths', resultId: 'N1', message: 'N1: From and To must be depths down the hole in metres (0 or more), with To below From, so it is left out.' });
+  });
+
+  it('ignores parent links that lead back round (A in B, B in A): each is drawn once, as its own callout', () => {
+    const cyc = [['A', 'EX-014', '40', '70', 'B', 'Text A'], ['B', 'EX-014', '40', '70', 'A', 'Text B'], ['C', 'EX-014', '50', '60', 'C', 'Text C'], ['D', 'EX-014', '45', '55', 'B', 'Text D']];
+    const { results, problems } = readResults(['id', 'hole', 'from', 'to', 'parent', 'approved'], cyc, { resultId: 0, hole: 1, from: 2, to: 3, parent: 4, approved: 5 });
+    expect(problems.filter((p) => p.kind === 'parent-cycle').map((p) => p.message)).toEqual([
+      'A: its parent results lead back to itself (A → B → A), so it is drawn on its own.', 'B: its parent results lead back to itself (B → A → B), so it is drawn on its own.', 'C: its parent results lead back to itself (C → C), so it is drawn on its own.']);
+    const cs = pubCallouts(results, holes);
+    expect(cs.map((c) => [c.key, c.kids.map((r) => r.resultId)])).toEqual([['A', []], ['B', ['D']], ['C', []]]); // D's link to B still holds
+    expect(cs.flatMap((c) => [c.key, ...c.kids.map((r) => r.resultId)]).sort()).toEqual(['A', 'B', 'C', 'D']);
+  });
+
+  it('sizes the ribbons for every published interval, beyond one per 8 m of hole', () => {
+    const many = ['R1', 'R2', 'R3'].map((id) => ({ ...read().results[2], resultId: id, fromM: 0, toM: 100 }));
+    const cs = pubCallouts(many.concat(read().results.slice(0, 2)), holes);
+    expect(ribbonPieces(cs)).toBe(3 * (13 + 1) + (64 + 1) + (8 + 1)); // three overlapping 100 m results on EX-014; EX-021's 508 m and its 60 m "incl."
+    expect(ribbonPieces(cs.filter((c) => c.h.id === 'EX-014'))).toBeGreaterThan(Math.ceil(100 / 8) + 1); // more than the hole alone was given
   });
 
   it('rewords two results on one hole independently', () => {

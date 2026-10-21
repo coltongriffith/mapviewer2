@@ -40,7 +40,12 @@ const BUDGETS = {
   // 146 → 147: hatch/cross/dot legend swatches (Oct 2026). The shared pattern
   // description (shared/fillPattern.js), the patterned area swatch and the
   // pattern-spacing control land in the editor chunk; ~0.6 KiB.
-  maxJsChunkGzipKb: 147,
+  // 147 → 148: callout leader routing (Oct 2026). The scorer is a lazy chunk
+  // (loaded only for scored-layout projects, Auto-arrange and export); the
+  // editor keeps the shared leader geometry the overlay must draw (elbow,
+  // curve, anchor mark), the Auto-arrange action, the overlap list and the
+  // leader/anchor-mark controls; ~1.0 KiB.
+  maxJsChunkGzipKb: 148,
   initialJsGzipKb: 75,
   initialAuthJsGzipKb: 135,
   // The former configured check omitted VITE_ADMIN_EMAIL, which pruned the
@@ -60,17 +65,15 @@ const BUDGETS = {
   // 876 → 877: the lazy /oauth/consent page for MCP account sign-in.
   // 877 → 878: Download PNG on shared maps (the MCP png_download_url).
   // 878 → 879: patterned legend swatches (shared/fillPattern.js) and the property data library client.
-  // 879 → 881: "Add Published Results" on 2D callouts (Oct 2026): approved release text on its hole's
-  // collar. The reader is a lazy chunk (utils/publishedCallouts.js, ~1.5 kB) fetched on the button's first
-  // use; the editor chunk keeps only the button and the hand-off (~0.3 kB).
-  totalAuthJsGzipKb: 881,
+  // 879 → 884 (measured 883.2): 2D callout leader routing (#291, lazy scored layout + shared leader geometry) and Add Published Results (lazy reader + button).
+  totalAuthJsGzipKb: 884,
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
   // 810 → 812: Download PNG on shared maps (the MCP png_download_url).
   // 812 → 813: patterned legend swatches (shared/fillPattern.js) and the property data library client.
-  // 813 → 815: "Add Published Results" on 2D callouts, as for totalAuthJsGzipKb.
-  totalJsGzipKb: 815,
+  // 813 → 819 (measured 817.8): callout leader routing and "Add Published Results", as totalAuthJsGzipKb above.
+  totalJsGzipKb: 819,
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the
   // totals above. /3d carries three.js (~109 kB gzip) and its editor.
@@ -112,8 +115,9 @@ const BUDGETS = {
   // the callouts drawn from them, fetched once a figure has a release table or another callout source) and
   // the callout editor (callout-editor.js, ~2 kB), moved out of the page and fetched when the Layout step
   // first shows. groupCallouts moved into tags.js and the whole-project API notes into the page's HTML, so
-  // the page itself stays inside its 170 kB.
-  threeDLazyJsGzipKb: 54,
+  // the page itself stays inside its 170 kB. 54 → 55: parent-cycle and negative-depth checks in
+  // published-results.js left the configured build 45 bytes under 54.
+  threeDLazyJsGzipKb: 55,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.

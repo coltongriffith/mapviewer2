@@ -7,6 +7,7 @@ import InspectorGroup from './components/InspectorGroup';
 import LayerList from './components/LayerList';
 import LocatorInset from './components/LocatorInset';
 import CalloutsOverlay from './components/CalloutsOverlay';
+import { panelObstacles } from './utils/calloutLayout';
 import LandingPage from './components/LandingPage';
 
 import SharedMapViewer from './components/SharedMapViewer';
@@ -783,6 +784,7 @@ export default function App({ initialAction = null }) {
   // which is the difference between a bug report and an informed shrug.
   const [overlayErrors, setOverlayErrors] = useState({});
   const [selectedCalloutId, setSelectedCalloutId] = useState(null);
+  const [calloutConflicts, setCalloutConflicts] = useState([]);
   const [selectedFeature, setSelectedFeature] = useState(null);
   const [selectedMarkerId, setSelectedMarkerId] = useState(null);
   const [selectedEllipseId, setSelectedEllipseId] = useState(null);
@@ -4149,6 +4151,22 @@ export default function App({ initialAction = null }) {
     }));
   };
 
+  // Auto-arrange: the scored layout (lazy chunk) places every automatic card
+  // and saves the result as its offset; pinned cards never move. It also opts
+  // a project saved before the scored layout into it — until then such a
+  // project keeps its legacy placement exactly.
+  const autoArrangeCallouts = async () => {
+    const map = leafletMapRef.current;
+    if (!map) return;
+    const { autoArrangeCallouts: arrange } = await import('./utils/calloutScorer.js');
+    setProject((prev) => ({
+      ...prev,
+      layout: { ...prev.layout, layoutAlgorithm: 2 },
+      callouts: arrange(prev.callouts, map, { obstacles: panelObstacles(resolvedZones, prev.layout) }),
+    }));
+    setUploadStatus({ type: 'info', message: 'Callouts arranged — press Ctrl+Z to undo.' });
+  };
+
   const removeCallout = (calloutId) => {
     setProject((prev) => ({ ...prev, callouts: prev.callouts.filter((callout) => callout.id !== calloutId) }));
     if (selectedCalloutId === calloutId) setSelectedCalloutId(null);
@@ -6764,7 +6782,19 @@ export default function App({ initialAction = null }) {
               <button className="btn primary" type="button" onClick={addCalloutFromSelectedLayer} disabled={!selectedLayer}>Add From Selected Layer</button>
               <button className="btn" type="button" onClick={() => publishedInputRef.current?.click()} title="A table of published results (Result ID, Hole ID, From, To, Approved text): each goes on its hole's collar">Add Published Results</button>
               <input ref={publishedInputRef} type="file" accept=".csv,.txt" hidden aria-label="Published results table" onChange={(e) => { addPublishedResults(e.target.files?.[0]); e.target.value = ''; }} />
+              <button className="secondary-btn" type="button" onClick={autoArrangeCallouts} disabled={!project.callouts.length}>Auto-arrange</button>
             </div>
+            {calloutConflicts.length > 0 && (
+              <div className="callout-conflicts small-note" role="status">
+                <strong>Still overlapping</strong>
+                {calloutConflicts.map((c) => (
+                  <div key={c.id}>
+                    {c.text || 'Callout'}: {c.with.join(', ')}{' '}
+                    <button type="button" className="link-btn" onClick={() => setSelectedCalloutId(c.id)}>Focus</button>
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="callout-list">
               {project.callouts.map((callout, index) => {
                 const isOpen = selectedCalloutId === callout.id;
@@ -6920,12 +6950,26 @@ export default function App({ initialAction = null }) {
                                 <button type="button" className="secondary-btn" onClick={() => updateCallout(callout.id, { style: { ...(callout.style || {}), background: '#111827', border: '#111827', textColor: '#ffffff', subtextColor: '#e5e7eb', textAlign: 'center', fontSize: Math.max(callout.style?.fontSize || 12, 13) } })}>Banner</button>
                               </div>
                             </div>
-                            {(callout.type === 'leader' || callout.type === 'boxed') && (
+                            {(callout.type === 'leader' || callout.type === 'boxed') && (<>
+                              <div className="control-row inline-2">
+                                {[['leaderShape', 'Leader', { straight: 'Straight', elbow: 'Elbow', curve: 'Curved' }], ['anchorMark', 'Anchor mark', { none: 'None', dot: 'Dot', ring: 'Circle' }]].map(([key, label, opts]) => {
+                                  const value = callout.style?.[key] || Object.keys(opts)[0];
+                                  return (
+                                    <div key={key}>
+                                      <label htmlFor={`f-${key}-${callout.id}`}>{label}</label>
+                                      <select id={`f-${key}-${callout.id}`} value={value} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), [key]: e.target.value } })}>
+                                        {Object.entries(opts).map(([v, t]) => <option key={v} value={v}>{t}</option>)}
+                                      </select>
+                                      {applyAllLink(key, value)}
+                                    </div>
+                                  );
+                                })}
+                              </div>
                               <label className="toggle-row">
                                 <input type="checkbox" checked={!!callout.style?.arrowhead} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), arrowhead: e.target.checked } })} />
                                 <span>Arrowhead on the leader line</span>
                               </label>
-                            )}
+                            </>)}
                           </>
                         )}
                         <div className="control-label">Nudge</div>
@@ -7468,6 +7512,7 @@ export default function App({ initialAction = null }) {
               onSelect={(id) => { setSelectedCalloutId(id); setSelectedMarkerId(null); setSelectedEllipseId(null); setSelectedFeature(null); }}
               onMove={(id, offset) => updateCallout(id, { offset: { x: offset.x, y: offset.y }, isManualPosition: true })}
               onUpdate={updateCallout}
+              onConflicts={setCalloutConflicts}
               fontFamily={project.layout.fonts?.callout}
               zones={resolvedZones}
               layout={project.layout}

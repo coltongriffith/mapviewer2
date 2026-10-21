@@ -365,6 +365,7 @@ button, input, select, textarea { font: inherit; }
 .map-callout-logo { display: block; object-fit: contain; pointer-events: none; user-select: none; }
 .map-callout.selected { outline: 2px solid rgba(198,83,34,0.9); outline-offset: 1px; }
 .map-callout.collides:not(.selected) { outline: 2px dashed rgba(220,38,38,0.85); outline-offset: 1px; }
+.callout-conflicts { margin: 0 0 10px; padding: 4px 8px; border-left: 3px dashed rgba(220,38,38,0.85); }
 .badge-callout { display: flex; height: 32px; border-radius: inherit; overflow: hidden; }
 .badge-chip { padding: 0 10px; display: flex; align-items: center; font-size: 12px; font-weight: 700; color: #fff; white-space: nowrap; flex-shrink: 0; }
 .badge-label { padding: 0 10px; display: flex; align-items: center; font-size: 12px; font-weight: 600; flex: 1; white-space: nowrap; overflow: hidden; }

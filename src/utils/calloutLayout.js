@@ -66,20 +66,8 @@ export function intersects(a, b, padding = 10) {
   );
 }
 
-export function leaderEndpoint(anchorPx, box) {
-  const cx = box.left + box.width / 2;
-  const cy = box.top + box.height / 2;
-  const dx = anchorPx.x - cx;
-  const dy = anchorPx.y - cy;
-  if (Math.abs(dx) / box.width > Math.abs(dy) / box.height) {
-    return dx > 0
-      ? { x: box.left + box.width, y: cy }
-      : { x: box.left, y: cy };
-  }
-  return dy > 0
-    ? { x: cx, y: box.top + box.height }
-    : { x: cx, y: box.top };
-}
+// Moved to shared/leaderGeometry.js with the rest of the leader geometry.
+export { leaderEndpoint } from '../../shared/leaderGeometry.js';
 
 const DIRECTIONS = [
   { dx: 0, dy: 1 },
@@ -114,6 +102,11 @@ export function panelObstacles(zones, layout = {}) {
  * dragged (isManualPosition) never moves. Any card still overlapping another
  * card or a panel carries `collidesWith` so the editor and the exporters can
  * warn instead of silently printing a card over the legend.
+ *
+ * This is the legacy placement, kept exactly for projects saved without
+ * layout.layoutAlgorithm. New projects, and any project after Auto-arrange,
+ * use the scored layout in calloutScorer.js (lazy), which also places pinned
+ * cards before automatic ones.
  */
 export function resolveCalloutBoxes(callouts, map, { obstacles = [] } = {}) {
   if (!map) return [];
