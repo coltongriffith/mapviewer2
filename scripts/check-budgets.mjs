@@ -46,7 +46,10 @@ const BUDGETS = {
   // editor keeps the shared leader geometry the overlay must draw (elbow,
   // curve, anchor mark), the Auto-arrange action, the overlap list and the
   // leader/anchor-mark controls; ~1.0 KiB.
-  maxJsChunkGzipKb: 148,
+  // 148 → 148.6 (Oct 2026, measured 148.25 configured, +0.33 kB): legend height and note-in-legend sizing must stay in
+  // App because the editor's live legend box uses the same template code as the exporter, plus the lazy
+  // ExportBackground hook (owner-requested 2D transparent/standalone).
+  maxJsChunkGzipKb: 148.6,
   initialJsGzipKb: 75,
   initialAuthJsGzipKb: 135,
   // The former configured check omitted VITE_ADMIN_EMAIL, which pruned the
@@ -248,7 +251,8 @@ const BUDGETS = {
   teamsJsGzipKb: 10,
   adminAuthJsGzipKb: 150,
   adminJsGzipKb: 85,
-  editorAuthJsGzipKb: 335,
+  // 335 → 335.6 (Oct 2026, measured 335.24): the same App code as maxJsChunkGzipKb above.
+  editorAuthJsGzipKb: 335.6,
   editorJsGzipKb: 270,
   claimsAuthJsGzipKb: 355,
   claimsJsGzipKb: 290,
