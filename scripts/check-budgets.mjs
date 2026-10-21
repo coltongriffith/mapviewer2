@@ -216,7 +216,14 @@ const BUDGETS = {
   // design version 5 or with the grid on), section.js +0.55 (pad-merged and staggered section IDs, grade-ranked holes),
   // overlays.js +0.3 (claims outlined in the inset), shapes.js +0.2 (views: both, 3D or section), the callout editor's
   // second published line with its own depths and stale-wording note (+0.2) and the location inset's outline hook in tags.js.
-  threeDLazyJsGzipKb: 104.5,
+  // 104.5 → 109.6 (Oct 2026, published figure versions, Phase 5A, measured 109.05, configured 109.29, + 0.3): versions.js
+  // (~4.6 kB: Publish version with its label and release date, the Versions list, a version opened read-only with its
+  // banner, Download PNG, "Start a new figure from this version" and "Back to the current figure", the plain-words
+  // refusals) fetched only from "Versions…" in My 3D maps, the EM3D.account version methods or a ?version= link, and
+  // its hooks in account-core.js (+0.4 kB: the read-only guard on Save and the change notices, the lazy loader, the
+  // menu button and the ?version= boot). The page gains only the four EM3D.account names and the gap-note check
+  // (+0.03 kB, inside its budget).
+  threeDLazyJsGzipKb: 109.6,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.
