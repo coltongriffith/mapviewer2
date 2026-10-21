@@ -368,18 +368,18 @@ export function renderUI(el) {
     <details style="margin-top:8px"><summary>Advanced</summary>
     <label class="field" style="margin-top:6px"><span>Hidden codes</span><select data-g="hidden"><option value="nearest" ${g.hidden !== 'other' ? 'selected' : ''}>Give way to the nearest visible unit</option><option value="other" ${g.hidden === 'other' ? 'selected' : ''}>One muted "Other" unit</option></select></label>
     <div class="grid2" style="margin-top:6px">
-      <label class="field"><span>Anisotropy (sideways ÷ vertical reach)</span><input type="number" min="1" max="20" step="0.5" data-g="anisotropy" value="${g.anisotropy}"></label>
-      <label class="field"><span>Search radius (m)</span><input type="number" min="5" data-g="search" value="${g.search ?? ''}" placeholder="auto${H.G ? ` (${searchNow()} m)` : ''}"></label>
+      <label class="field"><span>Anisotropy (sideways ÷ vertical reach)</span><input type="number" min="1" max="20" step="0.5" data-g="anisotropy" value="${esc(g.anisotropy)}"></label>
+      <label class="field"><span>Search radius (m)</span><input type="number" min="5" data-g="search" value="${esc(g.search ?? '')}" placeholder="auto${H.G ? ` (${searchNow()} m)` : ''}"></label>
     </div>
     <div class="row" style="gap:14px;margin-top:6px"><label class="check"><input type="checkbox" data-g="texture" ${g.texture !== false ? 'checked' : ''}>Subtle texture</label><label class="check"><input type="checkbox" data-g="section" ${g.section ? 'checked' : ''}>Also on the A–A′ plane</label></div>
     </details>
     ${legend.length ? `<div class="files geo-legend" style="margin-top:8px">${legend.map((e, i) => `<div class="label-row" style="${present.size && !present.has(e.code) ? 'opacity:.55' : ''}">
-      <input type="checkbox" data-gs="${i}" ${e.show !== false ? 'checked' : ''} aria-label="Show ${esc(e.code)}"><input type="color" data-gc="${i}" value="${e.color}" aria-label="Colour of ${esc(e.code)}">
+      <input type="checkbox" data-gs="${i}" ${e.show !== false ? 'checked' : ''} aria-label="Show ${esc(e.code)}"><input type="color" data-gc="${i}" value="${esc(e.color)}" aria-label="Colour of ${esc(e.code)}">
       <input type="text" data-gn="${i}" value="${esc(e.name)}" aria-label="Name of ${esc(e.code)}" title="Code ${esc(e.code)}">
       <span style="display:flex;gap:2px"><button class="btn" type="button" data-gu="${i}" aria-label="Move ${esc(e.code)} up" ${i ? '' : 'disabled'}>↑</button><button class="btn" type="button" data-gd="${i}" aria-label="Move ${esc(e.code)} down" ${i < legend.length - 1 ? '' : 'disabled'}>↓</button></span></div>`).join('')}</div>` : ''}
     <div class="grid2" style="margin-top:8px"><label class="field"><span>Section image on a face</span><select id="geo-img-face">${FACE_KEYS.map((f) => `<option>${f}</option>`).join('')}</select></label>
       <span class="field"><span>Image (PNG or JPG)</span><input type="file" id="geo-img" accept="image/png,image/jpeg,image/webp"></span></div>
-    ${Object.keys(g.images || {}).length ? `<div class="row" style="margin-top:6px">${Object.keys(g.images).map((f) => `<button class="btn" type="button" data-gx="${f}">Remove ${f} image</button>`).join('')}</div>` : ''}`;
+    ${Object.keys(g.images || {}).length ? `<div class="row" style="margin-top:6px">${Object.keys(g.images).map((f) => `<button class="btn" type="button" data-gx="${esc(f)}">Remove ${esc(f)} image</button>`).join('')}</div>` : ''}`;
   const apply = (o) => H.api.setGeology(o).catch((e) => H.status(e.message));
   el.querySelectorAll('[data-g]').forEach((inp) => inp.addEventListener(inp.type === 'range' || inp.type === 'text' ? 'change' : 'change', () => {
     const k = inp.dataset.g; let v = inp.type === 'checkbox' ? inp.checked : inp.value;

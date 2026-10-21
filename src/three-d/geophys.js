@@ -245,10 +245,10 @@ export function renderUI(el) {
       <label class="field"><span>Line IDs (comma)</span><input type="text" data-p="lineIds" value="${esc(lines)}" placeholder="e.g. 6458300N"></label>
       <label class="field"><span>Colour ramp</span><select data-p="ramp">${Object.keys(RAMPS).map((r) => `<option value="${r}" ${g.ramp === r ? 'selected' : ''}>${{ geophys: 'Geophysics rainbow', viridis: 'Viridis', grey: 'Greyscale' }[r]}</option>`).join('')}</select></label>
       <label class="field"><span>Scale</span><select data-p="log"><option value="auto" ${g.log === null ? 'selected' : ''}>Automatic${I ? ` (${I.log ? 'log' : 'linear'})` : ''}</option><option value="lin" ${g.log === false ? 'selected' : ''}>Linear</option><option value="log" ${g.log === true ? 'selected' : ''}>Logarithmic</option></select></label>
-      <label class="field"><span>Minimum</span><input type="number" step="any" data-p="min" value="${g.min ?? ''}" placeholder="auto"></label>
-      <label class="field"><span>Maximum</span><input type="number" step="any" data-p="max" value="${g.max ?? ''}" placeholder="auto"></label>
+      <label class="field"><span>Minimum</span><input type="number" step="any" data-p="min" value="${esc(g.min ?? '')}" placeholder="auto"></label>
+      <label class="field"><span>Maximum</span><input type="number" step="any" data-p="max" value="${esc(g.max ?? '')}" placeholder="auto"></label>
       <label class="field"><span>Faces (on the block)</span><select data-p="faces"><option value="far" ${g.faces === 'far' ? 'selected' : ''}>The far two</option><option value="all" ${g.faces === 'all' ? 'selected' : ''}>All four</option>${['S', 'E', 'N', 'W'].map((f) => `<option value="${f}" ${Array.isArray(g.faces) && g.faces.join() === f ? 'selected' : ''}>${f} only</option>`).join('')}</select></label>
-      <label class="field"><span>Search radius (m)</span><input type="number" min="1" data-p="search" value="${g.search ?? ''}" placeholder="auto"></label>
+      <label class="field"><span>Search radius (m)</span><input type="number" min="1" data-p="search" value="${esc(g.search ?? '')}" placeholder="auto"></label>
     </div>
     <label class="field" style="margin-top:6px"><span>Opacity <output class="mono">${Math.round(g.opacity * 100)}%</output></span><input type="range" min="10" max="100" data-p="opacity" value="${Math.round(g.opacity * 100)}"></label>`;
   const apply = (o) => H.api.setGeophys(o).catch((e) => H.status(e.message));

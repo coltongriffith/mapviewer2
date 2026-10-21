@@ -431,7 +431,7 @@ export function renderUI(el) {
       ${(t.groups || []).length ? '<button class="btn" type="button" data-tx="groups">Clear callout groups</button>' : ''}</div>
     <div class="grid2" style="margin-top:6px">
       <label class="field"><span>Hole display</span><select data-t="emphasis"><option value="auto" ${(t.emphasis || 'auto') === 'auto' ? 'selected' : ''}>Automatic (key holes bold past 12 holes)</option><option value="key" ${t.emphasis === 'key' ? 'selected' : ''}>Key holes bold, others thin and grey</option><option value="none" ${t.emphasis === 'none' ? 'selected' : ''}>All the same</option></select></label>
-      <label class="field"><span>Group pending holes and callouts within (m)</span><input type="number" min="5" step="10" data-t="groupRadius" value="${t.groupRadius}"></label>
+      <label class="field"><span>Group pending holes and callouts within (m)</span><input type="number" min="5" step="10" data-t="groupRadius" value="${esc(t.groupRadius)}"></label>
     </div>
     <label class="check" style="margin-top:6px"><input type="checkbox" data-t="highlightNew" ${hs.some((h) => statusOf(h) === 'new') && hs.filter((h) => statusOf(h) === 'new').every((h) => highlightOf(h)) ? 'checked' : ''}>New holes in the brand colour</label>
     ${hs.length ? `<details style="margin-top:6px"><summary>Holes: ID, tag and status</summary><p class="muted">ID: the hole ID at the end of the hole. Tag: a pill at the collar. Status from the collar status, year or campaign columns; "none" means no status pill.</p>

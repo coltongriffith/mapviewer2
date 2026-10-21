@@ -90,7 +90,10 @@ const BUDGETS = {
   // emphasis and highlighted holes (tags.js), and the logo colour picker moved out of the page
   // (logo-colours.js) to keep the page inside its budget; the save-conflict check in the account client.
   // 39 → 40: the configured (Supabase) build of the account client is ~0.3 kB larger than the plain one.
-  threeDLazyJsGzipKb: 40,
+  // 40 → 47 (Oct 2026): share links (share.js: the Share dialog, EM3D.share and the read-only viewer for
+  // /3d/share/<id> and /3d/embed/<id>, ~6.5 kB). Loaded on the first click on Share, or at once on a shared
+  // figure; the page itself only gains the hook in account.js.
+  threeDLazyJsGzipKb: 47,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.

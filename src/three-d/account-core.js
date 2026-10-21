@@ -63,7 +63,7 @@ function explain(err, doing) {
 // ── Lazy client ─────────────────────────────────────────────────────────────
 let clientPromise = null;
 let homes = null; // company workspaces for one signed-in user: { uid, promise } (see listHomes)
-function client() {
+export function client() {
   if (!configured) {
     const e = plain(`Saving to an account is not available on this site right now. ${KEEP}`, null, 'NOT_CONFIGURED');
     e.plain = true; return Promise.reject(e);

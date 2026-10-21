@@ -50,11 +50,25 @@ Exploration Maps account (all Promises; saving needs a signed-in visitor):
   EM3D.account.deleteProject(id)  removes it from the list
 The Save button (or Ctrl/Cmd+S) does the same for a person, and asks them to sign in first.`;
 
+// Share links: the Share button, EM3D.share and the read-only viewer at
+// /3d/share/<id> and /3d/embed/<id>, all in share.js (loaded on first use, or
+// at once for a shared figure). Help text: <script id="share-help">.
+const viewing = /^\/3d\/(share|embed)(\/|$)/i.test(location.pathname);
+let shareP = null;
+const shareCore = () => (shareP ||= import('./share.js').then(async (m) => { await m.start(); return m; }).catch((err) => { shareP = null; throw err; }));
+const via = (name) => (...args) => shareCore().then((m) => m[name](...args));
+const share = Object.freeze({ create: via('create'), update: via('update'), revoke: via('revoke'), list: via('list'), open: via('openDialog') });
+const SHARE_HELP = `\n\n${$('share-help')?.textContent.trim() || ''}`;
+
 if (window.EM3D && $('acct-save')) {
   const base = window.EM3D;
-  window.EM3D = Object.freeze({ ...base, help: () => base.help() + ACCOUNT_HELP, account });
+  window.EM3D = Object.freeze({ ...base, help: () => base.help() + ACCOUNT_HELP + SHARE_HELP, account, share });
   const help = $('ai-help'); if (help) help.textContent = window.EM3D.help();
   window.addEventListener('em3d:change', (e) => { if (!baseline) baseline = { ...e.detail, $files: base.filesDigest() }; });
+  if (viewing) shareCore().catch(failed);
+  $('share-open')?.addEventListener('click', () => share.open().catch(failed));
+}
+if (window.EM3D && $('acct-save') && !viewing) {
   $('acct-save').addEventListener('click', () => run((m) => m.save()));
   $('acct-maps').addEventListener('click', () => run((m) => m.toggleMenu()));
   document.addEventListener('keydown', (e) => {
