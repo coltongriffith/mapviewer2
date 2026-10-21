@@ -184,7 +184,12 @@ const BUDGETS = {
   // entries above add up; neither adds the other's code.
   // 170.6 → 170.9 (Oct 2026, drill database 2B, measured 170.56, configured 170.57): the drillSource hooks and the
   // hole-path switch (+0.18 kB); 170.6 left ~30 B, inside chunk-hash churn.
-  threeDJsGzipKb: 170.9,
+  // 170.9 → 171.3 (Oct 2026, round 5E, measured 171.00, configured 171.02; +0.41 kB over main): the block section's hooks (~0.4 kB): the holes
+  // shown (holeOn on the traces, tubes, collars, callouts, pending tags and section), the block.js entry in drawOverlay (its
+  // traces; the logo, title block, legend cards, scale bar and elevation ticks it takes onto the side face), no section
+  // letters or line on a block section, the "heading" wall label handed to block.js, the settings and the three EM3D methods.
+  // The preset, the furniture in face perspective, the hole picker and the styles are lazy (block.js, below).
+  threeDJsGzipKb: 171.3,
   // /3d's own modules fetched on first use (the geology, geophysics and tag layers, the account
   // client). They never load with the page or the app, so they sit outside the page and app totals.
   // 32 → 34 (Oct 2026, round 4): per-hole tags, grouped pending tags, callouts beside or bracketed on their
@@ -247,7 +252,12 @@ const BUDGETS = {
   // 109.0 → 109.3 (review fixes, measured 108.79, configured 109.02): the newer-data notice is cleared when another figure
   // opens and Update checks it still belongs to the figure on screen; collars in more than one coordinate system are
   // refused with their counts (~0.2 kB in property-data.js, account-core.js +0.02).
-  threeDLazyJsGzipKb: 109.3,
+  // 109.3 → 119.7 (Oct 2026, round 5E, measured 119.21, configured 119.44): the block section (block.js, ~7.4 kB: the
+  // preset, holes shown, the furniture drawn in the side face's perspective, the heading and its picker), softer geology
+  // faces (blend, dashed contacts, fade, names in capitals; geology.js +1.4), grade bars in the face's plane with a halo,
+  // plain brackets and plain IDs (tags.js +1.2), the thin arrow with text (shapes.js +0.35). Fetched only for a figure
+  // with holes hidden, a block look or a heading on the block, or on "Block section".
+  threeDLazyJsGzipKb: 119.7,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.

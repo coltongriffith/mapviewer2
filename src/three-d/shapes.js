@@ -73,7 +73,7 @@ function patch(s, x) {
   if (x.size !== undefined) s.size = num(x.size, 'size', 0.4, 3);
   if (x.dash !== undefined) s.dash = !!x.dash;
   if (x.views !== undefined) { if (!VIEWS.includes(x.views)) throw new Error('views must be "both", "3d" or "section".'); s.views = x.views; }
-  if (x.style !== undefined) { if (!['outline', 'solid'].includes(x.style)) throw new Error('style must be "outline" (hollow) or "solid".'); s.style = x.style; }
+  if (x.style !== undefined) { if (!['outline', 'solid', 'line'].includes(x.style)) throw new Error('style must be "outline" (hollow), "solid" or "line" (a thin arrow with its text along it).'); s.style = x.style; }
   if (s.type === 'ellipse' && s.vertical && s.at.length < 3) throw new Error('An upright ellipse needs a centre with an elevation: [easting, northing, elevation].');
 }
 const done = () => { H.redraw(); renderUI(document.getElementById('shape-ui')); };
@@ -128,6 +128,7 @@ function drawShape(ctx, K, s, geo, occ) {
     [a, b].forEach((p) => { ctx.beginPath(); ctx.moveTo(p[0] - Math.sin(ang) * 7 * u, p[1] + Math.cos(ang) * 7 * u); ctx.lineTo(p[0] + Math.sin(ang) * 7 * u, p[1] - Math.cos(ang) * 7 * u); ctx.lineWidth = w; ctx.strokeStyle = c; ctx.stroke(); });
     pill(ctx, K, t, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, ang, H.INK, occ); return;
   }
+  if (s.style === 'line') { lineArrow(ctx, K, s, a, b, ang, c, t, occ); return; }
   // The arrow: long enough for its text and head, drawn back from the tip where the view shortens it.
   const k = s.size || 1, sh = 15 * u * k, hw = 30 * u * k, hl = 34 * u * k;
   font(800, 14 * k); if ('letterSpacing' in ctx) ctx.letterSpacing = `${1.6 * u * k}px`;
@@ -144,6 +145,22 @@ function drawShape(ctx, K, s, geo, occ) {
   }
   if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
   const xs = poly.map((q) => q[0]), ys = poly.map((q) => q[1]); occ?.push([Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]);
+}
+// A thin arrow with its text written along it, above the line (style "line"), as an annotation on a block face
+// ("Grade increasing"): set its ends at depth on the face and it lies in the face's perspective.
+function lineArrow(ctx, K, s, a, b, ang, c, t, occ) {
+  const { u, font } = K, k = s.size || 1, w = (s.width || 2.2) * u, hl = 16 * u * k, L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+  if (L < hl * 2 || a.some((v) => !Number.isFinite(v))) return;
+  const light = H.textOn(c) !== '#ffffff', halo = light ? 'rgba(20,33,38,0.3)' : H.paper(0.75);
+  ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0] - Math.cos(ang) * hl * 0.7, b[1] - Math.sin(ang) * hl * 0.7);
+  ctx.strokeStyle = halo; ctx.lineWidth = w + 2 * u; ctx.stroke(); ctx.strokeStyle = c; ctx.lineWidth = w; ctx.stroke(); ctx.lineCap = 'butt';
+  head(ctx, b, ang, hl, c);
+  if (t) {
+    let r = ang; if (r > Math.PI / 2 || r < -Math.PI / 2) r += Math.PI;
+    font(600, 16 * k); ctx.save(); ctx.translate((a[0] + b[0]) / 2 + Math.sin(r) * 13 * u * k, (a[1] + b[1]) / 2 - Math.cos(r) * 13 * u * k); ctx.rotate(r);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round'; ctx.lineWidth = 3 * u; ctx.strokeStyle = halo; ctx.strokeText(t, 0, 0); ctx.fillStyle = c; ctx.fillText(t, 0, 0); ctx.restore();
+  }
+  occ?.push([Math.min(a[0], b[0]) - 8 * u, Math.min(a[1], b[1]) - 24 * u, Math.max(a[0], b[0]) + 8 * u, Math.max(a[1], b[1]) + 8 * u]);
 }
 // On the 3D figure, over the overlays and collars, under the callouts and labels.
 export function draw(ctx, K, occ) {
@@ -201,7 +218,7 @@ export function renderUI(el) {
       <details data-id="${i}" ${open.has(s.id) ? 'open' : ''}><summary>Position and size</summary><div class="grid2">
         ${s.type === 'ellipse' ? `${xyz(s, 'at', 'Centre')}${nb('rx', 'Radius along (m)', s.rx, 'min="1"')}${nb('ry', s.vertical ? 'Radius up and down (m)' : 'Radius across (m)', s.ry, 'min="1"')}${nb('rotation', 'Azimuth (°)', s.rotation)}
           <label class="check"><input type="checkbox" data-sh="${i}" data-k="vertical" ${s.vertical ? 'checked' : ''}>Upright</label><label class="check"><input type="checkbox" data-sh="${i}" data-k="dash" ${s.dash !== false ? 'checked' : ''}>Dashed</label>`
-          : `${xyz(s, 'from', 'From')}${xyz(s, 'to', 'To')}${s.type === 'arrow' ? `${nb('size', 'Size', s.size, 'min="0.4" max="3" step="0.1"')}<label class="field"><span>Style</span><select data-sh="${i}" data-k="style"><option value="outline" ${s.style !== 'solid' ? 'selected' : ''}>Hollow</option><option value="solid" ${s.style === 'solid' ? 'selected' : ''}>Solid</option></select></label>` : ''}`}
+          : `${xyz(s, 'from', 'From')}${xyz(s, 'to', 'To')}${s.type === 'arrow' ? `${nb('size', 'Size', s.size, 'min="0.4" max="3" step="0.1"')}<label class="field"><span>Style</span><select data-sh="${i}" data-k="style"><option value="outline" ${!s.style || s.style === 'outline' ? 'selected' : ''}>Hollow</option><option value="solid" ${s.style === 'solid' ? 'selected' : ''}>Solid</option><option value="line" ${s.style === 'line' ? 'selected' : ''}>Line with text</option></select></label>` : ''}`}
       </div></details></div>`;
   }).join('');
   el.querySelectorAll('[data-sh]').forEach((c) => c.addEventListener('change', () => {
