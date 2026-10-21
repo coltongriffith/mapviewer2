@@ -339,10 +339,10 @@ function geologyCanvas(key, a, b) {
   if (key === 'section' || cfg().labels === false) return hit.base;
   // Unit names in about 22 px type in the export, mirrored on a face seen from inside the block; none on a
   // face seen nearly edge-on (under 300 px across in the export, foreshortened to under 45%, or receding so
-  // steeply that its names would slope by more than about 30°).
+  // steeply that its names would slope by more than about 50°).
   const G = H.G, len = Math.hypot(b[0] - a[0], b[1] - a[1]), ht = G.zmax - G.B.z0, zm = G.B.z0 + ht / 2, at = (u, z) => H.proj(G.V(a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, z));
   const p0 = at(0.5, zm), p1 = at(0.5, zm + 10), pv = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) / 10, e0 = at(0, zm), e1 = at(1, zm), ph = Math.hypot(e1[0] - e0[0], e1[1] - e0[1]) / len, k = H.exportScale();
-  if (ph * len * k < 300 || ph < 0.45 * pv / H.S.vex || Math.abs(e1[1] - e0[1]) > 0.6 * Math.abs(e1[0] - e0[0])) return hit.base; // and none sloping steeply
+  if (ph * len * k < 300 || ph < 0.45 * pv / H.S.vex || Math.abs(e1[1] - e0[1]) > 1.2 * Math.abs(e1[0] - e0[0])) return hit.base; // and none sloping steeply
   const size = Math.min(ht * 0.06, Math.max(ht * 0.015, 22 / (pv * k || 1))), bucket = Math.round(Math.log(size) / Math.log(1.2));
   const mirror = faceWanted('far', key), lk = `${ck}|${bucket}|${mirror}|${cfg().legend.map((e) => e.name).join()}|${viewKey()}`;
   if (hit.lk !== lk) { hit.canvas = labelCanvas(hit, cols, 1.2 ** bucket, len, ht, mirror, { at, ph, pv }); hit.lk = lk; }
@@ -350,14 +350,21 @@ function geologyCanvas(key, a, b) {
 }
 // Each name goes where it fits inside its unit's largest patch and lies farthest from the holes, collars,
 // pills and cards over the face (as last drawn); a unit with no clear spot goes unnamed.
+// A short fingerprint of the overlay's boxes to the nearest 8 px: names are re-placed when a card, label or
+// pill moves, not only when one comes or goes.
+export function boxesKey(boxes) {
+  let h = 0x811c9dc5; for (const b of boxes) for (const v of b) h = Math.imul(h ^ Math.round(v / 8), 0x01000193);
+  return `${boxes.length}:${(h >>> 0).toString(36)}`;
+}
 // Names are re-placed when the view turns 5°, zooms 10% or the overlay changes.
-const viewKey = () => { const c = H.getCam(); return `${Math.round(c.azimuth / 5)}|${Math.round(c.plunge / 5)}|${Math.round(c.zoom / 10)}|${H.occ.length}|${H.frame()}`; };
+const viewKey = () => { const c = H.getCam(); return `${Math.round(c.azimuth / 5)}|${Math.round(c.plunge / 5)}|${Math.round(c.zoom / 10)}|${boxesKey(H.occ)}|${H.frame()}`; };
 function labelCanvas(hit, cols, size, len, ht, mirror, scr) {
   const c = document.createElement('canvas'), { nx, ny, f } = hit; c.width = hit.base.width; c.height = hit.base.height;
   const g = c.getContext('2d'), kx = c.width / len, ky = c.height / ht, names = cache.fold.classes.map((code) => (code === OTHER ? null : cfg().legend.find((e) => e.code === code)?.name || code));
-  // What a name keeps clear of: the holes and the grade shell on screen, and the pills, cards and labels as
-  // last drawn.
-  const pts = H.project.holes.flatMap((h) => h.path.filter((p, i) => i % 2 === 0).map((p) => H.proj(H.G.V(p.x, p.y, p.z)))), v = new THREE.Vector3();
+  // What a name keeps clear of: the key, highlighted and new holes and the grade shell on screen, and the
+  // collars, pills, cards and brackets as last drawn. Plain and faded traces may pass over a name, as on
+  // hand-drawn sections.
+  const pts = H.project.holes.filter(H.prominent).flatMap((h) => h.path.filter((p, i) => i % 2 === 0).map((p) => H.proj(H.G.V(p.x, p.y, p.z)))), v = new THREE.Vector3();
   (H.G.shellMesh?.children || []).forEach((m) => { const a = m.geometry.attributes.position; for (let i = 0; i < a.count; i += 2) pts.push(H.proj(v.fromBufferAttribute(a, i))); });
   const boxes = H.occ.filter((b) => b[2] - b[0] < H.frame()[0] - 1), zt = H.G.zmax;
   g.drawImage(hit.base, 0, 0); g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = `600 ${size * kx}px "Source Sans 3", "Segoe UI", sans-serif`;

@@ -167,6 +167,13 @@ test('geology, geophysics, tags and a face image survive getProject and loadProj
   expect(after.footnoteAuto).toEqual(expect.arrayContaining(['Geology on block faces interpolated from drill logs; schematic.', 'Geophysics: illustrative inversion model']));
 });
 
+test('setShell resolves with the shell already on the figure, so an export straight after includes it', async ({ page }) => {
+  await open3d(page);
+  const s = await page.evaluate(async () => { const r = await window.EM3D.setShell({ enabled: true }); return { ...r.shell, notes: r.footnoteAuto }; });
+  expect(s).toMatchObject({ status: 'ready', shown: true, shading: 'solid+edges' });
+  expect(s.notes.some((t) => t.startsWith('Grade shell'))).toBe(true);
+});
+
 test('a figure saved before design versions keeps its look; its gap callout is flagged and recalculated in one undoable step', async ({ page }) => {
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));

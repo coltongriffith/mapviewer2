@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { segHits, routeLeader, placePills, leaderSpot } from '../src/three-d/leaders.js';
-import { modeFilter, dropSpecks, refine, patches, labelSpots } from '../src/three-d/geology.js';
+import { modeFilter, dropSpecks, refine, patches, labelSpots, boxesKey } from '../src/three-d/geology.js';
 import { windOutward, shellOpacity, shade, patchScene, patchShell, tone } from '../src/three-d/look.js';
 import { buildShell } from '../src/three-d/shell-mesh.js';
 
@@ -55,6 +55,12 @@ describe('geology faces', () => {
     const g = grid(['0011', '0011', '....', '....']), f = refine(g, 4, 4, 2, 3);
     expect(f.length).toBe(144);
     expect(f[0]).toBe(0); expect(f[11]).toBe(1); expect(f[143]).toBe(-1);
+  });
+  it('re-places the names when a card moves, not only when one comes or goes', () => {
+    const cards = [[10, 10, 200, 80], [300, 400, 520, 470]], key = boxesKey(cards);
+    expect(boxesKey([[10, 10, 200, 80], [300, 400, 520, 470]])).toBe(key);
+    expect(boxesKey([[11, 10, 201, 80], [300, 400, 520, 470]])).toBe(key); // a pixel's jitter
+    expect(boxesKey([[10, 10, 200, 80], [360, 400, 580, 470]])).not.toBe(key); // dragged 60 px
   });
   it('names each unit at the deepest point of its largest patch', () => {
     const rows = []; for (let j = 0; j < 20; j++) rows.push(j < 6 ? '0'.repeat(30) : '1'.repeat(30));

@@ -373,11 +373,8 @@ camera.updateProjectionMatrix = () => {
   camera.projectionMatrix.makeOrthographic(-w, w, h, -h, camera.near, camera.far); camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
 };
 scene.add(new THREE.HemisphereLight('#ffffff', '#c9c4bb', 0.9));
-// The sun (S.scene): lights the model shapes and casts soft shadows of the relief onto the terrain, from a
-// shadow map fitted to the block and redrawn only when the block or the sun changes.
-const sun = new THREE.DirectionalLight('#ffffff', 0.55); sun.position.set(-1, 2, 1.2); scene.add(sun, sun.target);
-renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; renderer.shadowMap.autoUpdate = false;
-sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0004; sun.shadow.radius = 3;
+const sun = new THREE.DirectionalLight('#ffffff', 0.55); sun.position.set(-1, 2, 1.2); scene.add(sun);
+// The terrain's sun (S.scene): its hillshade and the relief's soft cast shadows, baked into the terrain image.
 const sunDir = () => { const a = S.scene.sunAz * Math.PI / 180, e = Math.max(5, S.scene.sunAlt) * Math.PI / 180; return [Math.sin(a) * Math.cos(e), Math.cos(a) * Math.cos(e), Math.sin(e)]; }; // east, north, up
 const controls = new OrbitControls(camera, glCanvas);
 controls.enableDamping = true; controls.dampingFactor = 0.08; controls.maxPolarAngle = Math.PI * 0.49;
@@ -473,9 +470,6 @@ function rebuildScene(keepCam) {
   const TS = using === 'dem' ? 220 : 140, tg = new THREE.PlaneGeometry(bw, bh, TS, Math.max(20, Math.round(TS * bh / bw)));
   { const pos = tg.attributes.position; for (let i = 0; i < pos.count; i++) { const x = pos.getX(i) + cx, y = pos.getY(i) + cy, v = V(x, y, surf(x, y)); pos.setXYZ(i, v.x, v.y, v.z); } }
   G.top = new THREE.Mesh(tg, new THREE.MeshBasicMaterial({ map: G.topTex, side: THREE.DoubleSide, transparent: true })); G.top.renderOrder = 6; root.add(G.top);
-  // The relief's cast shadows: the terrain casts, and a shadow-only copy over it receives.
-  tg.computeVertexNormals(); G.top.castShadow = true;
-  G.topShadow = new THREE.Mesh(tg, new THREE.ShadowMaterial({ opacity: S.scene.shadow, depthWrite: false })); G.topShadow.receiveShadow = true; G.topShadow.renderOrder = 6.1; root.add(G.topShadow);
 
   // Walls, base, edges, shadow
   G.walls = [];
@@ -556,7 +550,9 @@ function boxMean(a, w, h, n, step) {
     if (k + r < len) { sum += a[at(l, k + r)]; c++; } if (k - r - 1 >= 0) { sum -= a[at(l, k - r - 1)]; c--; } if (k >= 0 && k < len) out[at(l, k)] = sum / c; } }
   return out;
 }
-// Hillshade from the sun (S.scene), cached per build; the sun's shadow camera fitted to the block.
+// Hillshade and cast shadows from the sun (S.scene), cached per build and sun. Shadows are traced over a
+// half-size grid of the (exaggerated) relief toward the sun and softened, then multiplied into the terrain
+// image by paintTerrain: no shadow map, so no cost per frame.
 function shadeTerrain() {
   const T = G.terr, { TW, TH, hs, shade, cell } = T, sv = sunDir(), ry = G.bh / TH;
   for (let py = 0; py < TH; py++) for (let px = 0; px < TW; px++) {
@@ -564,10 +560,18 @@ function shadeTerrain() {
     const nx = -hx / (2 * cell), ny = -hy / (2 * ry), l = Math.hypot(nx, ny, 1);
     shade[i] = Math.max(0, (nx * sv[0] + ny * sv[1] + sv[2]) / l);
   }
-  const c = G.V(G.cx, G.cy, G.zref), R = G.diag * 0.75, cam = sun.shadow.camera;
-  sun.target.position.copy(c); sun.position.copy(c).add(new THREE.Vector3(sv[0], sv[2], -sv[1]).multiplyScalar(R * 2));
-  Object.assign(cam, { left: -R, right: R, top: R, bottom: -R, near: R * 0.2, far: R * 4 }); cam.updateProjectionMatrix();
-  sun.castShadow = S.scene.shadow > 0; if (G.topShadow) G.topShadow.material.opacity = S.scene.shadow; renderer.shadowMap.needsUpdate = true;
+  T.cast = S.scene.shadow > 0 ? castShadows(hs, TW, TH, cell, ry, sv, S.vex, T.hi) : null;
+}
+function castShadows(hs, TW, TH, cx, cy, sv, vex, hi) {
+  // Steps of two cells toward the sun; the ray climbs at the sun's altitude over the exaggerated relief.
+  const w = TW >> 1, h = TH >> 1, out = new Float32Array(w * h), hz = Math.hypot(sv[0], sv[1]) || 1e-6, D = 2 * Math.min(cx, cy);
+  const dx = sv[0] / hz * D / cx, dy = -sv[1] / hz * D / cy, rise = D * sv[2] / hz / vex, at = (x, y) => hs[Math.min(TH - 1, Math.round(y)) * TW + Math.min(TW - 1, Math.round(x))];
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+    let x = i * 2, y = j * 2, z = at(x, y);
+    for (let k = 0; k < 400 && z < hi; k++) { x += dx; y += dy; z += rise; if (x < 0 || y < 0 || x >= TW || y >= TH) break; if (at(x, y) > z) { out[j * w + i] = 1; break; } }
+  }
+  const soft = boxMean(boxMean(out, w, h, 5, 1), w, h, 5, w);
+  return { w, h, soft };
 }
 function paintTerrain() {
   if (!G) return;
@@ -578,7 +582,8 @@ function paintTerrain() {
     G.topTex.dispose(); G.topTex = new THREE.CanvasTexture(G.topCanvas); G.topTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
     if (G.top) { G.top.material.map = G.topTex; G.top.material.needsUpdate = true; }
   }
-  const ctx = G.topBase.getContext('2d'), out = ctx.createImageData(tw, th), d = out.data, { TW, TH, hs, shade, speck, lo, hi, hol } = T, ao = 0.45 * S.scene.ao;
+  const ctx = G.topBase.getContext('2d'), out = ctx.createImageData(tw, th), d = out.data, { TW, TH, hs, shade, speck, lo, hi, hol, cast: C } = T, ao = 0.45 * S.scene.ao;
+  const castAt = (x, y) => (C ? C.soft[Math.min(C.h - 1, y >> 1) * C.w + Math.min(C.w - 1, x >> 1)] : 0); // cast shadow, 0-1
   const step = Math.max(5, niceRound((hi - lo) / 14)), band = (v) => Math.floor(v / step);
   const natural = (i) => {
     const sh = shade[i], t = (hs[i] - lo) / ((hi - lo) || 1), right = hs[Math.min(i + 1, hs.length - 1)];
@@ -598,7 +603,7 @@ function paintTerrain() {
           if (rel || uses(S, 'imageryRelief')) f = 1 - 0.6 * rel + 0.85 * rel * sh; // the hillshade multiplied in, so slopes read
         }
         if (st === 'muted') { const l = 0.3 * r + 0.59 * g + 0.11 * b; r = (l + (r - l) * 0.4) * 0.6 + 98; g = (l + (g - l) * 0.4) * 0.6 + 100; b = (l + (b - l) * 0.4) * 0.6 + 97; f = 0.86 + 0.22 * sh; }
-        f *= 1 - ao * hol[si];
+        f *= (1 - ao * hol[si]) * (1 - S.scene.shadow * castAt(si % TW, sy));
         d[i * 4] = Math.min(255, Math.max(0, r * f)); d[i * 4 + 1] = Math.min(255, Math.max(0, g * f)); d[i * 4 + 2] = Math.min(255, Math.max(0, b * f)); d[i * 4 + 3] = 255;
       } }
   } else {
@@ -610,7 +615,7 @@ function paintTerrain() {
       else if (st === 'relief') { const v = Math.max(0, Math.min(1, 1.25 * sh - 0.1)) * (edge ? (index ? 0.82 : 0.92) : 1); c = [(70 + 182 * v) + 8 * (t - 0.5), 78 + 175 * v, (84 + 166 * v) - 8 * (t - 0.5)]; }
       else if (st === 'dark') { const f = (0.42 + 0.85 * sh) * (edge ? 0.86 : 1); c = [(40 + 46 * t) * f, (55 + 44 * t) * f, (61 + 42 * t) * f]; }
       else c = natural(i); // natural, and satellite before its imagery arrives
-      const k = 1 - ao * hol[i]; d[i * 4] = Math.min(255, c[0] * k); d[i * 4 + 1] = Math.min(255, c[1] * k); d[i * 4 + 2] = Math.min(255, c[2] * k); d[i * 4 + 3] = 255;
+      const k = (1 - ao * hol[i]) * (1 - S.scene.shadow * castAt(i % TW, Math.floor(i / TW))); d[i * 4] = Math.min(255, c[0] * k); d[i * 4 + 1] = Math.min(255, c[1] * k); d[i * 4 + 2] = Math.min(255, c[2] * k); d[i * 4 + 3] = 255;
     }
   }
   ctx.putImageData(out, 0, 0);
@@ -902,7 +907,7 @@ function removeWallLabel(id) {
 // Composites and grouping here; the estimate and the marching-cubes surface in shell-worker.js, so the
 // page never freezes. Results are cached by their inputs: a rebuilt scene (new vertical exaggeration,
 // label, colour) reuses the mesh, and a new cut-off reuses the estimated grid.
-const shell = { status: 'off', progress: 0, message: '', job: 0, worker: null, busy: false, field: null, mesh: null, waiters: [] };
+const shell = { status: 'off', progress: 0, message: '', job: 0, worker: null, busy: false, field: null, mesh: null, waiters: [], placing: Promise.resolve() };
 const shellCut = () => (Number.isFinite(S.shell.cutoff) ? S.shell.cutoff : S.coCut);
 // "0.3% CuEq", or "0.2, 0.5 and 1% CuEq" for nested shells.
 const shellCutText = (cuts = shellList().map((x) => x.cutoff)) => { const unit = (S.valueLabel.match(/(%|g\/t|ppm|ppb)$/) || [''])[0], el = S.valueLabel.replace(/\s*(%|g\/t|ppm|ppb)$/, ''), v = cuts.map((c) => +c.toPrecision(4)); return `${v.length > 1 ? `${v.slice(0, -1).join(', ')} and ${v[v.length - 1]}` : v[0]}${unit === '%' ? '%' : unit ? ` ${unit}` : ''} ${el}`.trim(); };
@@ -934,13 +939,14 @@ function shellInput() {
 function settleShell(status, message = '') {
   shell.status = status; shell.message = message; shell.busy = status === 'building';
   renderShellUI(); schedulePublish();
-  if (!shell.busy) shell.waiters.splice(0).forEach((res) => res(getState()));
+  // EM3D.setShell resolves once the surfaces are on the figure (look.js may still be loading), state published.
+  if (!shell.busy) { const w = shell.waiters.splice(0); shell.placing.then(() => { schedulePublish(); w.forEach((res) => res(getState())); }); }
 }
 const shellColor = () => shellList()[0].color;
 // The surfaces are drawn by look.js (solid, outlined, nested), loaded with the first shell.
 const styleShell = () => EXT.look?.styleShells();
 function dropShell() { const g = G?.shellMesh; if (!g) return; root.remove(g); g.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); }); G.shellMesh = null; }
-const placeShell = () => extLoad('look').then((m) => { if (G && shell.mesh && S.shell.enabled) m.placeShells(); });
+const placeShell = () => (shell.placing = extLoad('look').then((m) => { if (G && shell.mesh && S.shell.enabled) m.placeShells(); schedulePublish(); }).catch((e) => status(e.message)));
 const shellParts = () => shell.mesh?.parts.some((p) => p.indices.length);
 function stopWorker() { if (shell.worker && shell.busy) { shell.worker.terminate(); shell.worker = null; } shell.job++; }
 function syncShell() {
@@ -2443,7 +2449,8 @@ const host = () => (extHost ||= {
   S, get G() { return G; }, get project() { return project; }, get root() { return root; }, get api() { return EXT_API; }, files: () => files, digest: (f) => fileDigest(f), geo: () => geo,
   get INK() { return INK; }, get MUTED() { return MUTED; }, get RULE() { return RULE; }, paper, pri, shell, shellList, dropShell, exportScale: () => FORMATS[S.format].w / W,
   frame: () => [W, H], aim, controls, getCam, setCamera, blockOverflow, scene,
-  get occ() { return overlayOcc; }, // what the painted unit names keep clear of (geology.js)
+  get occ() { return overlayOcc; }, // what the painted unit names keep clear of (geology.js), with the prominent holes:
+  prominent: (h) => !!EXT.tags && (EXT.tags.weight(h) > 1 || !!EXT.tags.highlightOf(h) || EXT.tags.statusOf(h) === 'new'),
   camera, renderer, proj, sectionEnds, faceGeom, textOn, roundRect, fitText, esc, BIN_COLORS, binIndex, traceR, calloutLines, shownCallouts, isPending, setSpacing, drawCallout, brandTone, figureCanvas, exportLayers, canvasBlob,
   mosaic, zoomFor, lon2t, lat2t, IMG_URL, IMAGERY_CREDIT, status, redraw: () => { extScene(); drawSectionView(); schedulePublish(); },
 });

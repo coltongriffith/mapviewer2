@@ -88,12 +88,12 @@ const BUDGETS = {
   // 169 → 170 (Oct 2026): figure design versions (design-version.js: earlier figures keep their look) and
   // gap-aware intercepts (intercepts.js) with the warning on earlier figures, ~0.9 kB. Both run as a figure
   // opens and on every restyle, so they stay in the page.
-  // 170 → 172 (Oct 2026, round 5A): the sun's soft terrain shadows, the darker hollows and the light/dark
-  // presentation palette are on from the first frame, as are the orthographic projection's hooks and the
-  // section markers kept off labels; three.js gains the shadow, matcap, edge and fog classes they use (0.7 kB,
-  // in the shared vendor chunk). The shells' drawing and checks, the orthographic framing, the haze and the
-  // scene checks went to look.js, the leaders and pills to leaders.js, and the metal-equivalent form and the
-  // data checks list to panels.js (1.1 kB), to keep the rest out of the page.
+  // 170 → 172 (Oct 2026, round 5A): the sun's soft terrain shadows (traced into the terrain image), the darker
+  // hollows and the light/dark presentation palette are on from the first frame, as are the orthographic
+  // projection's hooks and the section markers kept off labels; three.js gains the matcap, edge and fog
+  // classes they use (0.6 kB, in the shared vendor chunk). The shells' drawing and checks, the orthographic
+  // framing, the haze and the scene checks went to look.js, the leaders and pills to leaders.js, and the
+  // metal-equivalent form and the data checks list to panels.js (1.1 kB), to keep the rest out of the page.
   threeDJsGzipKb: 172,
   // /3d's own modules fetched on first use (the geology, geophysics and tag layers, the account
   // client). They never load with the page or the app, so they sit outside the page and app totals.
