@@ -100,8 +100,12 @@ test('standalone map: its details and notes in the legend, not the footer; prese
   expect(plainTexts.filter((t) => t.includes(foot.slice(0, 30))).length).toBe(1); // in the footer
   await page.evaluate(() => window.EM3D.setMapUse({ use: 'standalone', what: 'Drill plan · Main zone, 2026 program', date: 'October 2026', sources: 'Drilling and assays: company database' }));
   const texts = await textsOf(page, () => window.EM3D.exportPNG({ view: '3d' }));
-  for (const t of ['Drill plan · Main zone, 2026 program', 'PROJECT', 'DATE', 'October 2026', 'COORDINATES', 'SOURCES', 'NOTES']) expect(texts, t).toContain(t);
-  const all = texts.join(' '); // wrapped values, line by line
+  // Lines wrap by the measured width of the font the page has (the brand font, or a fallback where it has not
+  // loaded), so the values are checked as running text.
+  for (const t of ['PROJECT', 'DATE', 'COORDINATES', 'SOURCES', 'NOTES']) expect(texts, t).toContain(t);
+  const all = texts.join(' ');
+  expect(all).toContain('Drill plan · Main zone, 2026 program');
+  expect(all).toContain('October 2026');
   expect(all).toContain('Drilling and assays: company database');
   expect(all).toContain('EXAMPLE RIDGE · Example Resources');
   // The footnote moved into the legend: drawn once, word-wrapped, never also in the footer.
@@ -118,7 +122,7 @@ test('standalone map: its details and notes in the legend, not the footer; prese
   keep('3d-standalone-transparent.png', await page.evaluate(() => window.EM3D.exportPNG({ view: '3d', background: 'transparent' })));
   // The editable annotations carry the block as live text.
   const zip = unzipSync(Buffer.from((await page.evaluate(() => window.EM3D.exportLayers({ svg: true }))).split(',')[1], 'base64'));
-  expect(new TextDecoder().decode(zip['annotations.svg'])).toContain('Drill plan · Main zone, 2026 program');
+  expect(new TextDecoder().decode(zip['annotations.svg']).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ')).toContain('Drill plan · Main zone, 2026 program');
   // Saved and reopened; then back to a presentation figure, byte for byte as before.
   const saved = await page.evaluate(() => JSON.parse(JSON.stringify(window.EM3D.getProject())));
   expect(saved.settings.mapInfo.use).toBe('standalone');
@@ -132,6 +136,22 @@ test('standalone map: its details and notes in the legend, not the footer; prese
   await expect(page.locator('#mapinfo-ui')).toBeVisible();
   await page.locator('#map-use').selectOption('presentation');
   await expect(page.locator('#mapinfo-ui')).toBeHidden();
+});
+
+test('an export straight after switching to standalone waits for its layer (no waits in between)', async ({ page }) => {
+  // The page: Map use switched and Download pressed in the same turn, before mapuse.js could have loaded.
+  await open3d(page);
+  await page.evaluate(() => { window.__texts = []; const P = CanvasRenderingContext2D.prototype, f = P.fillText; P.fillText = function (t, ...a) { window.__texts.push(String(t)); return f.call(this, t, ...a); }; });
+  const dl = page.waitForEvent('download', { timeout: 60_000 });
+  await page.evaluate(() => { const sel = document.getElementById('map-use'); sel.value = 'standalone'; sel.dispatchEvent(new Event('change')); document.getElementById('export-3d').click(); });
+  expect((await dl).suggestedFilename()).toMatch(/-3d-.*\.png$/);
+  expect(await page.evaluate(() => window.__texts)).toContain('PROJECT');
+  // The API, on a fresh page: setMapUse not awaited, the layers ZIP asked for in the same turn.
+  await open3d(page);
+  const url = await page.evaluate(() => { const E = window.EM3D; E.setMapUse({ use: 'standalone', what: 'Exported at once' }); return E.exportLayers({ svg: true }); });
+  const svg = new TextDecoder().decode(unzipSync(Buffer.from(url.split(',')[1], 'base64'))['annotations.svg']);
+  expect(svg.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ')).toContain('Exported at once');
+  expect(svg).toContain('>PROJECT<');
 });
 
 test('a figure saved before these options opens as a presentation figure with its shadow, unchanged', async ({ page }) => {

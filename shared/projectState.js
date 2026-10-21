@@ -195,9 +195,10 @@ export function createInitialProjectState() {
       insetWidthPx: 244,
       insetHeightPx: 190,
       // Scored callout layout (src/utils/calloutScorer.js). New projects only:
-      // a saved project without the field keeps the legacy placement until
-      // the user runs Auto-arrange.
-      layoutAlgorithm: 2,
+      // a saved project without the field keeps the legacy placement, and one
+      // saved with 2 keeps layout 2's, until the user runs Auto-arrange. 3 adds
+      // ID labels (hole IDs) placed at their own collar.
+      layoutAlgorithm: 3,
       exportSettings: {
         pixelRatio: 2,
         filename: 'exploration-maps-export',

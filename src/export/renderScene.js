@@ -1275,9 +1275,10 @@ export function placeCallouts(scene, scale) {
   const layout = scene.project.layout || {};
   const obstacles = panelObstacles(getOverlayMetrics(scene), layout);
   // A project saved before the scored layout (no layoutAlgorithm) keeps the
-  // legacy placement until the user runs Auto-arrange, as in the editor.
+  // legacy placement, and one saved with layout 2 keeps layout 2's, until the
+  // user runs Auto-arrange, as in the editor.
   const resolve = layout.layoutAlgorithm >= 2 ? resolveScoredBoxes : resolveCalloutBoxes;
-  const placed = resolve(scene.project.callouts || [], scene.map, { obstacles });
+  const placed = resolve(scene.project.callouts || [], scene.map, { obstacles, algorithm: layout.layoutAlgorithm, font: layout.fonts?.callout });
   const colliding = placed.filter((c) => c.collidesWith?.length);
   if (colliding.length) {
     const what = [...new Set(colliding.flatMap((c) => c.collidesWith))].slice(0, 3).join(', ');
@@ -1298,7 +1299,7 @@ export function fitText(ctx, text, maxWidth) {
 // The leader path, arrowhead and anchor mark come from shared/leaderGeometry.js,
 // the same geometry the editor overlay and the SVG draw.
 function drawCalloutLeaderCanvas(ctx, c, scale) {
-  if (c.type !== 'leader' && c.type !== 'boxed') return;
+  if (c.type !== 'leader' && c.type !== 'boxed' && !c.pushLeader) return;
   const g = leaderGeometry(c.anchorPx, c, c.style?.leaderShape, scale);
   const color = c.style?.border || '#102640';
   ctx.beginPath(); ctx.moveTo(g.start.x, g.start.y);
@@ -2858,7 +2859,7 @@ export function renderCalloutsSvg(scene, scale, svgDefs) {
       return `<g id="em-callout-${safeId}" class="em-callout">${line}${dot}${chipRect}${labelRect}${chipText}${labelText}</g>`;
     }
 
-    if (c.type === 'leader' || c.type === 'boxed') leaders.push(calloutLeaderSvg(c, scale));
+    if (c.type === 'leader' || c.type === 'boxed' || c.pushLeader) leaders.push(calloutLeaderSvg(c, scale));
     // Mirrors drawCalloutsCanvas line for line — same theme colours, corner
     // radius, measured wrapping and text tops — so PNG and SVG cards match.
     const theme = getTheme(scene);
