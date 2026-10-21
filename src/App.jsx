@@ -43,6 +43,7 @@ const AddClaimsModal = lazyGuarded(() => import('./components/AddClaimsModal'));
 const UpgradeModal = lazyGuarded(() => import('./components/UpgradeModal'));
 const FullResOfferModal = lazyGuarded(() => import('./components/FullResOfferModal'));
 const PublicationCheck = lazyGuarded(() => import('./components/PublicationCheck'));
+const ExportBackground = lazyGuarded(() => import('./components/ExportBackground'));
 import { loadGeoJSON, loadCSV, loadShapefileSet, MAX_FEATURES } from './utils/importers';
 import {
   CALLOUT_TYPES,
@@ -88,7 +89,7 @@ import { CLAIM_NAME_CAVEAT } from './utils/claimProvenance';
 import { OVERLAY_DESCRIPTIONS } from './utils/referenceOverlayCredits.js';
 import { BASEMAPS, BASEMAP_KEYS, basemapThumb, basemapConfig } from './utils/basemapConfig.js';
 import { insetStyle, insetStylePatch } from './utils/insetStyle';
-import { applyLegendCustomization, groupLegendItems, renameLegendHeading } from './utils/legendCustomization.js';
+import { applyLegendCustomization, groupLegendItems, renameLegendHeading, noteInLegend } from './utils/legendCustomization.js';
 import { getMapFrame, projectionLabel, scaleBarHeight } from './utils/coordinateFrame.js';
 import { pickScaleBar } from './utils/scaleBar.js';
 import CoordinateFrameOverlay from './components/CoordinateFrameOverlay.jsx';
@@ -7371,6 +7372,7 @@ export default function App({ initialAction = null }) {
                 <input type="checkbox" checked={pubCheck} onChange={(e) => setPubCheck(e.target.checked)} />
                 <span>Publication check before download</span>
               </label>
+              {project.layout.basemap === 'blank' && <React.Suspense fallback={null}><ExportBackground layout={project.layout} updateLayout={updateLayout} /></React.Suspense>}
               {exportError && <div className="export-error-msg">{exportError}</div>}
             </div>
           </section>
@@ -7693,6 +7695,7 @@ export default function App({ initialAction = null }) {
                   </div>
                 ))}
               </div>
+              {noteInLegend(project.layout, allLegendItems) && <div className="legend-note">{project.layout.footerText}</div>}
             </div>
             {makeResizeHandles(project.layout.legendCorner || 'bl', {
               elemId: 'legend', startW: resolvedZones.legend?.width ?? project.layout.legendWidthPx ?? 300, startH: project.layout.legendHeightPx ?? resolvedZones.legend?.height ?? 168,
@@ -7735,7 +7738,7 @@ export default function App({ initialAction = null }) {
             })}
           </div>
         )}
-        {project.layout.templateId !== 'ni_43101_technical' && project.layout.footerText && project.layout.footerEnabled !== false ? (
+        {project.layout.templateId !== 'ni_43101_technical' && project.layout.footerText && project.layout.footerEnabled !== false && !noteInLegend(project.layout, allLegendItems) ? (
           <div className="template-zone" style={{ ...zoneStyle(resolvedZones.footer), zIndex: 408, height: project.layout.footerHeightPx || resolvedZones.footer?.height, opacity: dragging?.id === 'footer' ? 0.3 : 1 }} onMouseDown={makeDragHandler('footer', resolvedZones.footer?.width ?? 260, project.layout.footerHeightPx || resolvedZones.footer?.height || 28)}>
             <div className="template-card footer-card">{project.layout.footerText}</div>
             <button className="panel-delete-btn" title="Hide disclaimer" onClick={() => updateLayout({ footerEnabled: false })}>×</button>

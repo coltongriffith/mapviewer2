@@ -95,7 +95,7 @@ ol.how { margin: 0; padding-left: 20px; display: grid; gap: 3px; font-size: 14px
 .file input[type="text"], .file input[type="number"] { box-sizing: border-box; }
 .maps { display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; align-items: center; font-size: 13px; }
 .maps label { color: var(--slate-600); }
-select, input[type="text"], input[type="email"], input[type="number"], textarea { font: inherit; font-size: 14px; color: var(--slate-950); background: #fff; border: 1px solid var(--slate-200); border-radius: 5px; padding: 5px 7px; min-width: 0; width: 100%; }
+select, input[type="text"], input[type="email"], input[type="number"], input[type="date"], textarea { font: inherit; font-size: 14px; color: var(--slate-950); background: #fff; border: 1px solid var(--slate-200); border-radius: 5px; padding: 5px 7px; min-width: 0; width: 100%; }
 textarea { font-family: var(--mono); font-size: 12px; resize: vertical; }
 .warn { color: var(--warn); font-size: 13px; }
 .bad { color: var(--bad); font-size: 13px; }
@@ -275,6 +275,13 @@ html.em3d-embed .share-credit:hover { text-decoration: underline; }
 @media (max-width: 820px) {
   html.em3d-viewer .stage { height: 100vh; height: 100dvh; }
 }
+/* A published version open read-only in the editor (src/three-d/versions.js). Nothing moves, so the figure draws
+   and exports exactly as published: the panel stays in place, inert and faded; the account buttons give way to
+   the version bar. */
+html.em3d-version .panel { opacity: 0.45; }
+html.em3d-version .toolbar .acct, html.em3d-version .frame-label { display: none; }
+html.em3d-version .share-bar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; margin-left: auto; }
+html.em3d-version .share-bar .btn { padding: 6px 11px; }
 </style>
 </head>
 <body>
@@ -403,6 +410,17 @@ html.em3d-embed .share-credit:hover { text-decoration: underline; }
         <label class="field" style="grid-column:1/-1"><span>Footnote</span><input type="text" id="footnote" value="Intervals are core lengths; true widths are not known. Illustrative data."></label>
       </section>
       <label class="check"><input type="checkbox" id="credit" checked>Show "Made with Exploration Maps" (removed on Pro)</label>
+      <section>
+        <h3>Map use</h3>
+        <label class="field"><span>What this figure is for</span><select id="map-use" data-ext="mapInfo.use"><option value="presentation">Presentation figure (details in the slide or release)</option><option value="standalone">Standalone map (details in the legend)</option></select></label>
+        <div class="grid2" id="mapinfo-ui" style="margin-top:8px" hidden>
+          <label class="field" style="grid-column:1/-1"><span>What it shows (one line)</span><input type="text" data-ext="mapInfo.what" placeholder="e.g. Drill plan · Star Main zone, 2026 program"></label>
+          <label class="field"><span>Project or property</span><input type="text" data-ext="mapInfo.project" placeholder="From the title"></label>
+          <label class="field"><span>Date</span><input type="text" data-ext="mapInfo.date" placeholder="Today"></label>
+          <label class="field" style="grid-column:1/-1"><span>Data sources</span><input type="text" data-ext="mapInfo.sources" placeholder="e.g. Drilling and assays: company database"></label>
+          <p class="muted" style="grid-column:1/-1">A standalone map carries its details: the title, what it shows (the subtitle if left blank), project and company, date, coordinate system, sources, credits and notes go in a block at the top of the legend, and leave the footer.</p>
+        </div>
+      </section>
       <button class="btn primary next" type="button" data-goto="layout">Next: Layout →</button>
     </div>
 
@@ -531,8 +549,9 @@ html.em3d-embed .share-credit:hover { text-decoration: underline; }
       <!-- Map overlays and annotation shapes: their lists load with the first one (overlays.js, shapes.js). -->
       <section id="ext-overlays">
         <h3>Map overlays</h3>
-        <p class="muted">Claims, targets, faults or soil points draped on the terrain, from GeoJSON, KML or a zipped shapefile.</p>
-        <label class="btn" for="ov-file" style="margin-top:8px">Add GeoJSON, KML or shapefile</label>
+        <p class="muted">Claims, targets, faults or soil points draped on the terrain, from GeoJSON, KML or a zipped shapefile, or claims found in the registries.</p>
+        <div class="row" style="margin-top:8px"><label class="btn" for="ov-file">Add GeoJSON, KML or shapefile</label><button class="btn" type="button" id="ov-claims">Find claims</button></div>
+        <div id="ov-claims-ui" style="margin-top:8px"></div>
         <input type="file" id="ov-file" multiple accept=".geojson,.json,.kml,.zip" hidden>
         <div class="files" id="ov-ui" style="margin-top:8px"></div>
       </section>
@@ -560,7 +579,7 @@ html.em3d-embed .share-credit:hover { text-decoration: underline; }
           <label class="field"><span>Hole ID tags</span><select data-ext="tags.at"><option value="toe">At the end of the hole</option><option value="collar">Pills at the collar</option><option value="both">Both</option></select></label>
           <label class="field"><span>Which holes get IDs and tags</span><select data-ext="tags.idMode"><option value="auto">Automatic (all up to 12 holes, else key holes)</option><option value="all">All holes</option><option value="key">Key holes only (callouts, new, ticked)</option></select></label>
           <label class="field"><span>"Assays pending"</span><select data-ext="tags.pending"><option value="collar">Small tag at the collars</option><option value="trace">Along each hole</option></select></label>
-          <label class="field"><span>Inset</span><select data-ext="style.insetStyle"><option value="plan">Plan of drilling</option><option value="satellite">Location map, satellite</option><option value="topo">Location map, topographic</option></select></label>
+          <label class="field"><span>Inset</span><select data-ext="style.insetStyle"><option value="plan">Plan of drilling</option><option value="satellite">Location map, satellite</option><option value="topo">Location map, topographic</option><option value="claims">Claim map</option></select></label>
         </div>
         <label class="check" style="margin-top:6px"><input type="checkbox" data-ext="style.histograms">Grade histogram bars along holes</label>
         <div id="tag-ui" style="margin-top:8px"></div>
@@ -638,6 +657,11 @@ html.em3d-embed .share-credit:hover { text-decoration: underline; }
       <section>
         <h3>Figure size</h3>
         <div class="sizes" id="sizes" role="radiogroup" aria-label="Figure size"></div>
+      </section>
+      <section>
+        <label class="field"><span>Background</span><select id="export-bg"><option value="white">White</option><option value="transparent">Transparent</option></select></label>
+        <label class="check" style="margin-top:6px"><input type="checkbox" id="opt-shadow" data-ext="style.dropShadow" checked>Drop shadow under the block</label>
+        <p class="muted" style="margin-top:4px">Transparent: no page colour or footer band behind the figure; the legend, inset and callout cards keep their fill and text keeps its halo. For the PNGs and the layers ZIP; saved previews stay white. Choosing it turns the drop shadow off (tick it to keep it). Terrain shadows are in Layout, Sun, shadows and haze.</p>
       </section>
       <section class="row">
         <button class="btn primary" type="button" id="export-3d">Download 3D figure (PNG)</button>
@@ -771,7 +795,7 @@ JavaScript API (run in the page console or via your agent's evaluate tool):
   EM3D.setLogo(dataUrl)           Promise. Also picks primary and accent from the logo
   EM3D.setStyle({valueCol, valueLabel, bins: [4 lower limits], autoBins: true,
                  coCount, coMin, coCut, coIncl, secAz (0-179), secW,
-                 walls, ids, inset, surface (0.15-1), meshes: {name: {show, color, opacity}},
+                 walls, ids, inset, surface (0.15-1), dropShadow (the block's soft shadow, default on), meshes: {name: {show, color, opacity}},
                  ribbons (bars beside each hole: tan = reported interval, green = incl.),
                  traceWidth (0.5-3, drill trace thickness, default 1.4),
                  valueCol2 (second grade in callouts, e.g. "Au_gpt"; null for none),
@@ -856,8 +880,15 @@ JavaScript API (run in the page console or via your agent's evaluate tool):
   EM3D.setFigureSize("slide" | "release" | "square" | "portrait" | "a4")
   EM3D.showStep("data" | "brand" | "layout" | "export")
   EM3D.showView("3d" | "section")
-  EM3D.exportPNG({view: "3d" | "section", download: false})   returns a PNG data URL;
-                                  download: true also saves the file
+  EM3D.exportPNG({view: "3d" | "section", download: false, background: "white" | "transparent", shadow})
+                                  returns a PNG data URL; download: true also saves the file.
+                                  background "transparent": no page colour or footer band (cards keep
+                                  their fill); the block's drop shadow is left off unless shadow: true.
+                                  exportLayers takes background and shadow too
+  EM3D.setMapUse({use: "presentation" | "standalone", what, project, date, sources})   Promise.
+                                  standalone: the title, what it shows (one line; else the subtitle),
+                                  project and company, date (else today), coordinate system, sources,
+                                  credits and notes in a block atop the legend instead of the footer
   EM3D.exportLayers({download: false, as: "base64" | "blob", svg: false})   Promise. A ZIP for designers
                                   at the figure size: figure.png, scene.png (3D alone, transparent),
                                   annotations.png (overlay alone, transparent), section.png and
@@ -949,8 +980,18 @@ Whole projects (to keep or move a figure):
   EM3D.addStatBox({title, rows: ["Indicated: 133 koz @ 1.07 g/t Au"], x, y})   returns its id; a label of
                                   kind "stat" (EM3D.updateLabel / removeLabel; drag it on the preview)
   EM3D.setStyle({histograms: true})   grade bars along each hole, length by grade
-  EM3D.setStyle({insetStyle: "plan" | "satellite" | "topo"})   a map inset around the property (needs the
-                                  coordinate system)
+  EM3D.setStyle({insetStyle: "plan" | "satellite" | "topo" | "claims"})   a map inset around the property (needs
+                                  the coordinate system); "claims": the claim map, the claims (findClaims, else
+                                  the area overlays) round the block, the project's in the accent, others grey
+  EM3D.findClaims({query, type: "company" | "number" | "name", province: "bc" | "on" | "sk" | "mb" | "nl" | "yt"
+                   | "qc", owner})   claims from the registries (the 2D app's search), added as area overlays
+                                  with role "claims" and the registry's credit in the footer; type "number"
+                                  takes several numbers at once; owner keeps only that holder's claims
+  EM3D.findClaims({around: true, province, owner, numbers, pad, byOwner, inset})   every claim round the block
+                                  (needs the coordinate system): the project's (owner's, the numbers given, else
+                                  the holder under the block) in the accent, the neighbours grey (byOwner: a few
+                                  holders in their own colour). The inset turns to the claim map unless inset:
+                                  false. Returns { registry, found, project, neighbours, owners, overlays }
   EM3D.addOverlay({name, data | file, kind: "fill" | "line" | "points", color, dash: "solid" | "dashed" |
                    "dotted" (or true / false), width, opacity (0-1; an area's fill), label, labelField, crs})   a map overlay
                                   draped on the terrain: claims, targets, faults, soil points. data: GeoJSON
@@ -1013,6 +1054,13 @@ Whole projects (to keep or move a figure):
                                   here (force: true overwrites it)
   EM3D.account.openProject(id)    reopens a saved figure
   EM3D.account.deleteProject(id)  removes it from the list
+  EM3D.account.publishVersion({ label, releaseDate })   freezes the open figure AS SAVED (no unsaved changes) as
+                                  a published version: { id, version, label, releaseDate, contentHash, link }.
+                                  It never changes afterwards; later edits are not part of it
+  EM3D.account.listVersions(id?)  the open (or given) figure's versions, newest first
+  EM3D.account.openVersion(n)     shows version n read-only, exactly as published (PNG export works);
+                                  /3d?project=<id>&version=<n> opens it directly
+  EM3D.account.closeVersion()     back to the figure as last saved
 The Save button (or Ctrl/Cmd+S) does the same for a person, and asks them to sign in first.
 </script>
 <!-- API notes for share links (src/three-d/share.js; shown with EM3D.help()). -->

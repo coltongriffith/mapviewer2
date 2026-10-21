@@ -155,6 +155,9 @@ const S = {              // style
   scene: { sunAz: 315, sunAlt: 40, shadow: 0.35, ao: 0.5, haze: 0, theme: 'light', edge: '#1e1d26' }, projection: 'perspective',
   // autoLabels: a label whose arrow cannot run straight or bend once moves near its tip (unless dragged).
   autoLabels: true,
+  // dropShadow: the floating block's soft footprint shadow. mapInfo: what the figure is for, "presentation" (beside a
+  // slide or release) or "standalone" (its details and notes in a block atop the legend, mapuse.js), and those details.
+  dropShadow: true, mapInfo: { use: 'presentation', what: '', project: '', date: '', sources: '' },
   // Satellite imagery tone: saturation, contrast, warmth (-1 cool to 1 warm) and shaded-relief blend (0-1).
   imagery: { saturation: 1.05, contrast: 1.12, warmth: 0.25, relief: 0.55 },
 };
@@ -488,7 +491,7 @@ function rebuildScene(keepCam) {
     const c = document.createElement('canvas'); c.width = c.height = 256; const g = c.getContext('2d');
     g.shadowColor = 'rgba(28,36,40,0.5)'; g.shadowBlur = 30; g.shadowOffsetX = 1000; g.fillStyle = '#000'; g.fillRect(64 - 1000, 64, 128, 128);
     const sh = new THREE.Mesh(new THREE.PlaneGeometry(bw * 2, bh * 2), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false }));
-    sh.rotation.x = -Math.PI / 2; sh.position.copy(V(cx + bw * 0.03, cy - bh * 0.03, B.z0 - diag * 0.07 / vex)); root.add(sh);
+    sh.rotation.x = -Math.PI / 2; sh.position.copy(V(cx + bw * 0.03, cy - bh * 0.03, B.z0 - diag * 0.07 / vex)); root.add(G.foot = sh);
   }
 
   // Holes: grey trace, then coloured assay intervals. Provisional positions: dashed and fainter.
@@ -1187,7 +1190,7 @@ function autoNotes(view) {
 }
 // The automatic notes go on one line joined by " · ", wrapping to at most two; longer, they become a
 // compact "Notes" block in smaller type.
-function drawFooter(ctx, K, Wc, Hc, credits = [], notes = []) {
+function drawFooter(ctx, K, Wc, Hc, credits = [], notes = [], fn = S.footnote) {
   const { u, m, font } = K, y = Hc - 17 * u, wide = Wc - 2 * m, mw = (t) => ctx.measureText(t).width;
   const band = uses(S, 'footerBand'); // version 1: one note per line, no band
   font(400, 10.5); let lines = band ? wrapNotes(notes, mw, wide) : notes.map((t) => fitText(ctx, t, wide)), block = !lines, lh = 15 * u;
@@ -1197,7 +1200,7 @@ function drawFooter(ctx, K, Wc, Hc, credits = [], notes = []) {
   if (block) { for (;;) { font(400, fs); lines = wrapNotes(notes, mw, wide - 44 * u, 99); if (lines.length <= 3 || fs <= 8) break; fs -= 0.5; } lh = (fs + 3.5) * u; }
   const g = band ? 3 * u : 0, rule = y - 16 * u - lines.length * lh - (lines.length ? g : 0);
   // The footer is a white band: the block or its shadow never shows through the notes and credits.
-  if (band) { ctx.fillStyle = paper(); ctx.fillRect(0, rule, Wc, Hc - rule); }
+  if (band && !clearBg) { ctx.fillStyle = paper(); ctx.fillRect(0, rule, Wc, Hc - rule); } // a transparent export: none
   ctx.strokeStyle = RULE; ctx.lineWidth = u; ctx.beginPath(); ctx.moveTo(m, rule); ctx.lineTo(Wc - m, rule); ctx.stroke();
   ctx.textBaseline = 'alphabetic'; let creditW = 0;
   // A white halo keeps the footer legible where the block or its shadow runs under it.
@@ -1207,7 +1210,7 @@ function drawFooter(ctx, K, Wc, Hc, credits = [], notes = []) {
     const s = 10 * u, mx = Wc - m - creditW, my = y - s + u; ctx.fillStyle = INK; ctx.fillRect(mx, my, s, s); ctx.fillStyle = '#c65322'; ctx.fillRect(mx + s * 0.52, my + s * 0.18, s * 0.3, s * 0.3);
   }
   if (credits.length) { font(400, 10.5); ctx.textAlign = 'right'; ctx.fillStyle = '#7c898c'; const t = credits.join(' · '); halo(t, Wc - m - creditW - (creditW ? 10 * u : 0), y); creditW += ctx.measureText(t).width + 10 * u; }
-  if (S.footnote) { font(400, 11.5); ctx.textAlign = 'left'; ctx.fillStyle = MUTED; halo(fitText(ctx, S.footnote, Wc - 2 * m - creditW - 24 * u), m, y); }
+  if (fn) { font(400, 11.5); ctx.textAlign = 'left'; ctx.fillStyle = MUTED; halo(fitText(ctx, fn, Wc - 2 * m - creditW - 24 * u), m, y); }
   ctx.textAlign = 'left'; ctx.fillStyle = MUTED; const ny = (i) => y - g - (lines.length - i) * lh;
   if (block && lines.length) { font(700, 9.5); ctx.fillStyle = INK; halo('Notes', m, ny(0)); ctx.fillStyle = MUTED; }
   font(400, block ? fs : 10.5); lines.forEach((t, i) => halo(t, m + (block ? 44 * u : 0), ny(i)));
@@ -1280,7 +1283,7 @@ function cardSize(ctx, K, secs) {
     if (s.title) { font(700, 13); w = Math.max(w, ctx.measureText(s.title).width + 24 * u); h += 19 * u; }
     s.rows.forEach((r) => { h += ((r.h || 19) + (r.sep ? 6 : 0)) * u; if (r.label) { font(400, r.mono ? 12 : 13, r.mono); w = Math.max(w, ctx.measureText(r.label).width + 56 * u); } });
   });
-  w = Math.min(w, 280 * u); if (uses(S, 'legendWrap')) secs.forEach((s) => s.rows.forEach((r) => { if (r.label) { font(400, r.mono ? 12 : 13, r.mono); h += (rowLines(ctx, r.label, w - 56 * u).length - 1) * 14 * u; } }));
+  w = Math.min(Math.max(w, (secs.find((s) => s.minW)?.minW || 0) * u), 280 * u); if (uses(S, 'legendWrap')) secs.forEach((s) => s.rows.forEach((r) => { if (r.label) { font(400, r.mono ? 12 : 13, r.mono); h += (rowLines(ctx, r.label, w - 56 * u).length - 1) * 14 * u; } }));
   return [w, h + 6 * u];
 }
 // A legend name in lines: cut short to fit, or (design version 5) wrapped to a second line first.
@@ -1509,7 +1512,9 @@ function drawOverlay(ctx, k, forExport) {
   // Frame furniture
   const logo = BK?.logo ? { w: 0, bottom: m } : drawLogo(ctx, K, W, forExport);
   const headBottom = BK?.head ? m : drawHeader(ctx, K, W, S.title, S.subtitle, logo.w);
-  const footTop = BK?.foot ? BK.foot(terrainCredits(true)) : drawFooter(ctx, K, W, H, terrainCredits(true), autoNotes('3d')); // EXT hook: a block section's credits alone
+  // EXT hook: a standalone map's credits and notes go in the legend (mapuse.js), not the footer; a bare block section
+  // keeps its credits alone, small (block.js).
+  const SA = EXT.mapuse?.on(), footTop = BK?.foot && !SA ? BK.foot(terrainCredits(true)) : drawFooter(ctx, K, W, H, SA ? [] : terrainCredits(true), SA ? [] : autoNotes('3d'), SA ? '' : S.footnote);
   // The layout pass: everything below registers its box in occ; the text labels, placed by hand, first.
   occ.push(...idBoxes, [0, 0, W, headBottom], [0, footTop, W, H], ...labBoxes);
   const lay = makeLayout(W, H, 6 * u, occ);
@@ -1535,7 +1540,8 @@ function drawOverlay(ctx, k, forExport) {
   const hs = main.filter((s) => s.key === 'holes'), one = [...main.filter((s) => s.key !== 'holes'), ...ext, ...hs.map((s) => ({ ...s, title: 'Holes' }))];
   let merge = shouldMerge([...main, ...ext], LG.merge);
   if (merge && LG.merge === 'auto' && !LG.pos.main) { const [w, h] = cardSize(ctx, K, one); merge = lay.clear([W - m - w, footTop - 12 * u - h, W - m, footTop - 12 * u], soft) || lay.clear([W - m - w, trTop, W - m, trTop + h], soft); } // only where one card fits at the right
-  const cards = BK?.legend ? [] : merge ? [['main', one]] : [['main', main], ...ext.map((s) => [s.key, [s]])], cardBoxes = [];
+  const cards = BK?.legend ? [] : merge ? [['main', one]] : [['main', main], ...ext.map((s) => [s.key, [s]])], cardBoxes = []; // EXT hook: the legend on a block's side face
+  if (SA) { const x = EXT.mapuse.secs(ctx, K); if (cards[0]) cards[0][1] = [...x, ...cards[0][1]]; else cards.push(['main', x]); } // EXT hook: a standalone map's details, atop the legend card
   let prev = null;
   const fixed = (k) => +(!!LG.pos[k] && LG.pos[k] !== 'auto'); // cards placed by hand go first
   cards.sort((a, b) => fixed(b[0]) - fixed(a[0])).forEach(([key, secs]) => {
@@ -1599,7 +1605,7 @@ function drawOverlay(ctx, k, forExport) {
 // 7. Section A–A′
 // ============================================================
 function drawSection(ctx, Wc, Hc, forExport) {
-  ctx.fillStyle = paper(); ctx.fillRect(0, 0, Wc, Hc);
+  if (!clearBg) { ctx.fillStyle = paper(); ctx.fillRect(0, 0, Wc, Hc); }
   const K = kit(ctx, Wc, Hc), { u, m, font, narrow } = K;
   if (!G) { font(600, 18); ctx.fillStyle = MUTED; ctx.textAlign = 'center'; ctx.fillText('Add a collar file and an assay file to build the section.', Wc / 2, Hc / 2); ctx.textAlign = 'left'; return; }
   const [A, Bp] = sectionEnds(), F = secFrame(A, Bp), L = F.L, pr = (p) => toSection(F, p), w = S.secW;
@@ -1737,31 +1743,41 @@ function loop(now) {
     camera.position.lerpVectors(tween.from, tween.to, e); controls.target.lerpVectors(tween.fromT, tween.toT, e); if (k >= 1) tween = null; }
   controls.update(); if (ortho()) camera.updateProjectionMatrix(); hazeNow();
   if (G && S.view === '3d') { camera.updateMatrixWorld(); if (!G.ribbonView || camera.getWorldDirection(tmpV).dot(G.ribbonView) < 0.99998) { placeRibbons(); faceWalls(); } }
-  if (S.view === '3d') { renderer.render(scene, camera); drawOverlay(ov.getContext('2d'), DPR, false); syncCamUI(); }
+  if (S.view === '3d') { foot(S.dropShadow); renderer.render(scene, camera); drawOverlay(ov.getContext('2d'), DPR, false); syncCamUI(); }
   requestAnimationFrame(loop);
 }
 // One export canvas at the chosen size. layer "scene" is the WebGL render alone on transparent;
 // "annotations" is the overlay alone (both for designers); "figure" is the two together.
 // wrap(ctx) can stand in for the canvas's context (desk.js: the annotations SVG's recorder).
-function figureCanvas(view, layer = 'figure', wrap = (c) => c) {
+// o (xopts): background "transparent" leaves out the scene's colour, the section's paper and the footer band (cards
+// keep their fill, text its halo); shadow sets the block's drop shadow for this export. Without o, as before.
+let clearBg = false;
+const foot = (v) => { if (G?.foot) G.foot.visible = !!v; };
+function figureCanvas(view, layer = 'figure', wrap = (c) => c, o = {}) {
   const f = FORMATS[S.format], out = document.createElement('canvas'); out.width = f.w; out.height = f.h; const ctx = wrap(out.getContext('2d'));
-  if (view === 'section') { ctx.scale(f.w / W, f.h / H); drawSection(ctx, W, H, true); return out; }
-  const k = f.w / W; tween = null; controls.update(); camera.updateProjectionMatrix(); hazeNow(); placeRibbons(); faceWalls();
-  if (layer !== 'annotations') {
-    const bg = scene.background; if (layer === 'scene') scene.background = null; // the renderer has alpha, so this clears to transparent
-    renderer.setPixelRatio(k); renderer.setSize(W, H, false); renderer.render(scene, camera);
-    ctx.drawImage(glCanvas, 0, 0, f.w, f.h);
-    scene.background = bg; renderer.setPixelRatio(DPR); renderer.setSize(W, H, false); renderer.render(scene, camera);
-  }
-  if (layer !== 'scene') drawOverlay(ctx, k, true);
-  return out;
+  clearBg = o.background === 'transparent';
+  try {
+    if (view === 'section') { ctx.scale(f.w / W, f.h / H); drawSection(ctx, W, H, true); return out; }
+    const k = f.w / W; tween = null; controls.update(); camera.updateProjectionMatrix(); hazeNow(); placeRibbons(); faceWalls();
+    if (layer !== 'annotations') {
+      const bg = scene.background; if (layer === 'scene' || clearBg) scene.background = null; // the renderer has alpha, so this clears to transparent
+      foot(o.shadow ?? S.dropShadow); renderer.setPixelRatio(k); renderer.setSize(W, H, false); renderer.render(scene, camera);
+      ctx.drawImage(glCanvas, 0, 0, f.w, f.h);
+      scene.background = bg; foot(S.dropShadow); renderer.setPixelRatio(DPR); renderer.setSize(W, H, false); renderer.render(scene, camera);
+    }
+    if (layer !== 'scene') drawOverlay(ctx, k, true);
+    return out;
+  } finally { clearBg = false; }
 }
 const fileSlug = () => (S.title.split('·')[0].trim() || 'figure').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'figure';
 function downloadURL(url, name) { const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
 const nope = (m) => { throw new Error(m); };
+// Export options: background "white" (as before) or "transparent"; a transparent export leaves the drop shadow off
+// unless shadow: true.
+const xopts = (o) => { if (![undefined, 'white', 'transparent'].includes(o.background)) nope('background must be "white" or "transparent".'); return { background: o.background, shadow: o.shadow ?? (o.background === 'transparent' ? false : undefined) }; };
 function exportPNG(opts = {}) {
   if (!G) throw new Error('Nothing to export yet: add a collar file and an assay file.');
-  const id = opts.section, view = opts.view === 'section' || id ? 'section' : opts.view === '3d' ? '3d' : S.view, f = FORMATS[S.format], fig = () => figureCanvas(view);
+  const id = opts.section, view = opts.view === 'section' || id ? 'section' : opts.view === '3d' ? '3d' : S.view, f = FORMATS[S.format], X = xopts(opts), fig = () => figureCanvas(view, 'figure', undefined, X);
   // EXT hook: one of the named sections (sections.js); "A" is a figure's only section.
   const url = (id ? EXT.sections?.using(id, fig) ?? (id === 'A' ? fig() : nope(`No section "${id}": EM3D.addSection first.`)) : fig()).toDataURL('image/png');
   if (opts.download) downloadURL(url, `${fileSlug()}-${view === 'section' ? `section${id ? `-${id}` : ''}` : '3d'}-${S.format}.png`);
@@ -1770,8 +1786,19 @@ function exportPNG(opts = {}) {
 }
 // Designer handoff: the figure, its 3D render and annotations as separate transparent layers, the section
 // and the settings in one ZIP (desk.js, loaded on first use, like the design desk that sends it).
-const exportLayers = (o) => desk().then((m) => m.exportLayers(o));
-$('export-layers').addEventListener('click', () => exportLayers({ download: true, as: 'blob', svg: $('export-svg').checked }).catch((e) => status(e.message)));
+// Exports wait for the layers they draw: setters still in flight (EXT_API, such as setMapUse, whose module loads
+// first) and the lazy modules the figure wants (extReady), so an export made right after a change is never drawn
+// without them. exportPNG stays synchronous for the API (call it after the setter's promise or layersReady); the
+// Export buttons, exportLayers and the design desk wait here.
+// The wait is bounded: a layer whose module or data never arrives fails the export with a plain message after 20 s
+// instead of leaving it waiting. A turn first: a change event's setter starts in a microtask.
+const extPending = new Set(), settled = () => Promise.race([Promise.resolve().then(() => Promise.allSettled([...extPending])).then(extReady),
+  new Promise((ok, no) => setTimeout(() => no(new Error('A layer of this figure is still loading after 20 seconds, so nothing was exported. Check the connection and export again.')), 20000))]);
+const exportLayers = (o) => settled().then(desk).then((m) => m.exportLayers(o));
+// The Export step's Background and Drop shadow; Transparent turns the shadow off (one click to keep it).
+const xui = (o) => ({ ...o, download: true, background: $('export-bg').value, shadow: S.dropShadow });
+$('export-bg').addEventListener('change', (e) => { if (e.target.value === 'transparent' && S.dropShadow) { setStyle({ dropShadow: false }, false); renderExtUI(); status('Drop shadow off for the transparent background: tick it to keep it.'); } });
+$('export-layers').addEventListener('click', () => exportLayers(xui({ as: 'blob', svg: $('export-svg').checked })).catch((e) => status(e.message)));
 
 // ============================================================
 // 8b. Send to the design desk (the Teams enquiry, with the figure and layers attached)
@@ -1790,10 +1817,9 @@ addEventListener('vite:preloadError', (e) => {
   e.preventDefault(); location.reload();
 });
 const desk = () => import('./desk.js').then((m) => { m.init(host()); return m; });
-const sendToDesignDesk = (o) => desk().then((m) => m.sendToDesignDesk(o));
-$('desk').addEventListener('submit', (e) => { e.preventDefault(); desk().then((m) => m.submit(), (err) => status(err.message)); });
-$('export-3d').addEventListener('click', () => exportPNG({ view: '3d', download: true }));
-$('export-section').addEventListener('click', () => exportPNG({ view: 'section', download: true }));
+const sendToDesignDesk = (o) => settled().then(desk).then((m) => m.sendToDesignDesk(o));
+$('desk').addEventListener('submit', (e) => { e.preventDefault(); settled().then(desk).then((m) => m.submit(), (err) => status(err.message)); });
+['3d', 'section'].forEach((v) => $(`export-${v}`).addEventListener('click', () => settled().then(() => exportPNG(xui({ view: v }))).catch((e) => status(e.message))));
 
 // ============================================================
 // 9. Logo colours
@@ -1977,7 +2003,7 @@ function setStyle(o = {}, render = true) {
     S.valueCol2 = v;
   }
   if (S.valueCol2 === S.valueCol) S.valueCol2 = null;
-  ['walls', 'ids', 'inset', 'ribbons', 'pendingLabels', 'pendingNoAssays', 'elevTicks', 'lockView', 'grid'].forEach((k) => { if (o[k] !== undefined) S[k] = !!o[k]; });
+  ['walls', 'ids', 'inset', 'ribbons', 'pendingLabels', 'pendingNoAssays', 'elevTicks', 'lockView', 'grid', 'dropShadow'].forEach((k) => { if (o[k] !== undefined) S[k] = !!o[k]; });
   extStyle(o); // EXT hook: histograms, insetStyle
   if (o.calloutMode !== undefined) { if (!['calculated', 'published', 'manual'].includes(o.calloutMode)) throw new Error('calloutMode must be "calculated", "published" or "manual".'); S.calloutMode = o.calloutMode; }
   if (o.coPlacement !== undefined) { if (!['column', 'beside', 'bracket'].includes(o.coPlacement)) throw new Error('coPlacement must be "column" (left column), "beside" (a box beside each hole) or "bracket" (a bracket on the hole with the grade beside it).'); S.coPlacement = o.coPlacement; extScene(); }
@@ -2285,13 +2311,13 @@ Object.assign(S, {
   histograms: false, insetStyle: 'plan', overlays: [], shapes: [], // overlays.js, shapes.js
   holesShown: null, block: null, // block.js: the holes drawn (null: all) and the block section's look
 });
-const EXT = {}, extLoading = {}, EXT_IMPORT = { geology: () => import('./geology.js'), geophys: () => import('./geophys.js'), tags: () => import('./tags.js'), look: () => import('./look.js'), section: () => import('./section.js'), type: () => import('./typography.js'), overlays: () => import('./overlays.js'), shapes: () => import('./shapes.js'), sections: () => import('./sections.js'), plan: () => import('./plan.js'), desurvey: () => import('./min-curvature.js'), block: () => import('./block.js') };
+const EXT = {}, extLoading = {}, EXT_IMPORT = { geology: () => import('./geology.js'), geophys: () => import('./geophys.js'), tags: () => import('./tags.js'), look: () => import('./look.js'), section: () => import('./section.js'), type: () => import('./typography.js'), overlays: () => import('./overlays.js'), shapes: () => import('./shapes.js'), sections: () => import('./sections.js'), plan: () => import('./plan.js'), desurvey: () => import('./min-curvature.js'), mapuse: () => import('./mapuse.js'), claims: () => import('./claims.js'), block: () => import('./block.js') };
 const hasRole = (r) => files.some((f) => f.role === r);
 // Holes from a property's drill database follow their surveys by minimum curvature (shared/desurvey.js).
 const mcWanted = () => !!S.drillSource && hasRole('survey'), mcPath = (h) => h.surveyed && mcWanted() && !!EXT.desurvey;
 function extWanted() {
   const gp = S.geophys.mode !== 'off' && hasRole('geophys'), t = S.tags;
-  return { look: S.shell.enabled || ortho() || S.scene.haze > 0 || (uses(S, 'clearLeaders') && S.labels.some((l) => l.arrow)), geology: (S.geology.enabled && hasRole('litho')) || Object.keys(S.geology.images || {}).length > 0 || gp, geophys: gp, section: !!(S.section || S.sections) || uses(S, 'padIds'), sections: !!S.sections, plan: uses(S, 'planView') || S.grid, overlays: S.overlays.length > 0 || hasRole('overlay'), shapes: S.shapes.length > 0, desurvey: mcWanted(), block: !!(S.block || S.holesShown) || S.wallLabels.some((l) => l.size === 'heading'),
+  return { look: S.shell.enabled || ortho() || S.scene.haze > 0 || (uses(S, 'clearLeaders') && S.labels.some((l) => l.arrow)), geology: (S.geology.enabled && hasRole('litho')) || Object.keys(S.geology.images || {}).length > 0 || gp, geophys: gp, section: !!(S.section || S.sections) || uses(S, 'padIds'), sections: !!S.sections, plan: uses(S, 'planView') || S.grid, mapuse: S.mapInfo.use === 'standalone', overlays: S.overlays.length > 0 || hasRole('overlay'), shapes: S.shapes.length > 0, desurvey: mcWanted(), block: !!(S.block || S.holesShown) || S.wallLabels.some((l) => l.size === 'heading'),
     tags: t.at !== 'toe' || t.fadePrevious || t.idMode === 'key' || (t.idMode !== 'all' && (project?.holes?.length || 0) > 12) || Object.keys(t.showId).length > 0 || Object.keys(t.showTag || {}).length > 0 || t.emphasis === 'key' || Object.keys(t.highlight || {}).length > 0
       || S.coPlacement !== 'column' || Object.values(coMap()).some((o) => o.placement || o.x !== undefined) || (S.pendingLabels && t.pending === 'collar' && !!project?.holes?.some(isPending)) || t.autoGroup || t.groups.length > 0 || Object.keys(t.status).length > 0 || S.histograms || S.insetStyle !== 'plan' || S.labels.some((l) => l.kind === 'stat') };
 }
@@ -2302,13 +2328,13 @@ const host = () => (extHost ||= {
   frame: () => [W, H], aim, controls, getCam, setCamera, blockOverflow, scene,
   get occ() { return overlayOcc; }, // what the painted unit names keep clear of (geology.js), with the prominent holes:
   prominent: (h) => !!EXT.tags && (EXT.tags.weight(h) > 1 || !!EXT.tags.highlightOf(h) || EXT.tags.statusOf(h) === 'new'),
-  camera, renderer, proj, sectionEnds, faceGeom, textOn, roundRect, fitText, esc, BIN_COLORS, binIndex, traceR, calloutLines, shownCallouts, coOv, isPending, setSpacing, drawCallout, brandTone, figureCanvas, getState, format: () => FORMATS[S.format], fileSlug, downloadURL,
+  camera, renderer, proj, sectionEnds, faceGeom, textOn, roundRect, fitText, esc, BIN_COLORS, binIndex, traceR, calloutLines, shownCallouts, coOv, isPending, setSpacing, drawCallout, brandTone, figureCanvas, xopts, getState, format: () => FORMATS[S.format], fileSlug, downloadURL,
   terrain: rtLoad, IMAGERY_CREDIT, status, redraw: () => { extScene(); drawSectionView(); schedulePublish(); },
   ROLE_LABEL, ROLE_FIELDS, FIELD_LABEL, gradeCols, refresh, get PR() { return PR; }, setStyle, pad3, labelFor, dcutChoices, meshName, restyle, schedulePublish,
   renderShellUI, renderEq, renderExtUI, renderLegendUI, FORMATS, setFigureSize, updateLabel, removeLabel, updateWallLabel, removeWallLabel,
   metalCols, unitOf, setEquivalent, getChecks, setProvisional,
   step: () => currentStep, renderFiles, sectionChanged: () => { refresh.secSet = true; restyle(); renderStyle(); schedulePublish(); },
-  fonts(s) { if (s) SANS = s; return SANS; }, buildWallLabels, tagLabel, intervalShown, load: (k) => extLoad(k), ext: (k) => EXT[k],
+  fonts(s) { if (s) SANS = s; return SANS; }, buildWallLabels, tagLabel, intervalShown, terrainCredits, autoNotes, load: (k) => extLoad(k), ext: (k) => EXT[k],
   holeOn, drawCard, cardSize, legendSecs, extSections, rebuild: rebuildScene, hasRole, // block.js
 });
 const extLoad = (k) => (extLoading[k] ||= EXT_IMPORT[k]().then((m) => { m.init(host()); EXT[k] = m; return m; }));
@@ -2335,7 +2361,7 @@ const unitInk = (code) => { const e = code && S.geology.legend.find((x) => x.cod
 // Planned holes: a status of "planned" (collar column or set by hand) and no assays. Drawn dashed in the
 // brand colour, following the provisional-position pattern.
 const isPlanned = (h) => (S.tags.status[h.id] ? S.tags.status[h.id] === 'planned' : /\b(planned|proposed)\b/i.test(`${h.note || ''} ${h.c.raw ? Object.values(h.c.raw).join(' ') : ''}`) && !h.ints.length);
-const extCredits = () => EXT.tags?.insetCredits() || [];
+const extCredits = () => [...(EXT.tags?.insetCredits() || []), ...(EXT.overlays?.credits() || [])]; // and the claims' registry
 const extNotes = () => [EXT.geology?.note(), EXT.geophys?.note()].filter(Boolean);
 function extLegendRows() {
   const rows = project.holes.some((h) => h.planned) ? [{ label: S.tags.plannedLabel || 'Planned', draw: (ctx, x, cy, u) => { ctx.strokeStyle = pri(); ctx.lineWidth = 2 * u; ctx.setLineDash([5 * u, 3 * u]); ctx.beginPath(); ctx.moveTo(x, cy); ctx.lineTo(x + 22 * u, cy); ctx.stroke(); ctx.setLineDash([]); } }] : [];
@@ -2358,7 +2384,7 @@ function extAutoOn(arr) { // a lithology or geophysics file added by the user sw
 }
 function extStyle(o) {
   if (o.histograms !== undefined) S.histograms = !!o.histograms;
-  if (o.insetStyle !== undefined) { if (!['plan', 'satellite', 'topo'].includes(o.insetStyle)) throw new Error('insetStyle must be "plan" (plan of drilling), "satellite" or "topo" (a map around the property; needs the coordinate system).'); S.insetStyle = o.insetStyle; }
+  if (o.insetStyle !== undefined) { if (!['plan', 'satellite', 'topo', 'claims'].includes(o.insetStyle)) throw new Error('insetStyle must be "plan" (plan of drilling), "satellite" or "topo" (a map around the property; needs the coordinate system) or "claims" (the claim map).'); S.insetStyle = o.insetStyle; }
   if (o.histograms !== undefined || o.insetStyle !== undefined) extReady().catch((e) => status(e.message));
 }
 function extState() {
@@ -2367,12 +2393,12 @@ function extState() {
 }
 function renderExtUI() {
   document.querySelectorAll('[data-ext]').forEach((el) => { const [g, k] = el.dataset.ext.split('.'), v = g === 'style' || g === 'view' ? S[k] : S[g][k]; if (el.type === 'checkbox') el.checked = !!v; else el.value = v; });
-  [['geology', 'geo-ui'], ['geophys', 'gp-ui'], ['tags', 'tag-ui'], ['section', 'sec-holes'], ['overlays', 'ov-ui'], ['shapes', 'shape-ui'], ['sections', 'sec-tabs'], ['block', 'block-ui']].forEach(([k, id]) => { if (EXT[k]) EXT[k].renderUI($(id)); });
+  [['geology', 'geo-ui'], ['geophys', 'gp-ui'], ['tags', 'tag-ui'], ['section', 'sec-holes'], ['overlays', 'ov-ui'], ['shapes', 'shape-ui'], ['sections', 'sec-tabs'], ['mapuse', 'mapinfo-ui'], ['block', 'block-ui']].forEach(([k, id]) => { if (EXT[k]) EXT[k].renderUI($(id)); });
   document.querySelectorAll('[data-secmode]').forEach((b) => b.setAttribute('aria-pressed', String((b.dataset.secmode === 'chosen') === !!S.section?.holes)));
 }
 document.querySelectorAll('[data-ext]').forEach((el) => el.addEventListener('change', () => {
   const [g, k] = el.dataset.ext.split('.'), v = el.type === 'checkbox' ? el.checked : el.value;
-  Promise.resolve().then(() => (g === 'style' ? setStyle({ [k]: v }, false) : g === 'imagery' ? setStyle({ imagery: { [k]: +v } }, false) : g === 'scene' ? setScene({ [k]: el.type === 'range' ? +v : v }) : g === 'view' ? setView({ [k]: v }) : EXT_API[{ geology: 'setGeology', geophys: 'setGeophys', tags: 'setTags' }[g]]({ [k]: v }))).catch((e) => status(e.message));
+  Promise.resolve().then(() => (g === 'style' ? setStyle({ [k]: v }, false) : g === 'imagery' ? setStyle({ imagery: { [k]: +v } }, false) : g === 'scene' ? setScene({ [k]: el.type === 'range' ? +v : v }) : g === 'view' ? setView({ [k]: v }) : EXT_API[{ geology: 'setGeology', geophys: 'setGeophys', tags: 'setTags', mapInfo: 'setMapUse' }[g]]({ [k]: v }))).catch((e) => status(e.message));
 }));
 $('stat-add').addEventListener('click', () => {
   const title = $('stat-title').value.trim(); if (!title) { status('Type the stat box title first.'); $('stat-title').focus(); return; }
@@ -2398,6 +2424,7 @@ const EXT_API = {
     L.kind = 'stat'; L.rows = rows; if (o.x === undefined && o.y === undefined && G) [L.x, L.y] = freeSpot(L);
     renderLabelList(); schedulePublish(); status(`Stat box "${L.text}" added. Drag it on the preview to place it.`); return id;
   },
+  async setMapUse(o = {}) { (await extLoad('mapuse')).set(o); await extReady(); return getState(); },
   layersReady: async () => { await extReady(); return getState(); },
   async setFigureStyle(style, meta) { await (await extLoad('type')).setFigureStyle(style, meta); return getState(); },
 };
@@ -2407,7 +2434,12 @@ document.querySelectorAll('[data-block]').forEach((b) => b.addEventListener('cli
 // Map overlays and shapes (overlays.js, shapes.js): addOverlay, updateOverlay, removeOverlay, and the same for shapes.
 // Named sections (sections.js): addSection, updateSection, removeSection, setActiveSection.
 [['overlays', 'Overlay'], ['shapes', 'Shape'], ['sections', 'Section']].forEach(([k, n]) => ['add', 'update', 'remove', 'setActive'].forEach((a) => { if (a !== 'setActive' || n === 'Section') EXT_API[a + n] = async (...x) => { const r = await (await extLoad(k))[a](...x); await extReady(); return r ?? getState(); }; }));
+// Each call is tracked until it settles, so exports can wait for it (settled, section 8).
+Object.entries(EXT_API).forEach(([k, f]) => { EXT_API[k] = (...a) => { const p = f(...a); if (p?.finally) { extPending.add(p); p.finally(() => extPending.delete(p)).catch(() => {}); } return p; }; });
 $('sec-add').addEventListener('click', () => EXT_API.addSection().catch((e) => status(e.message)));
+// Claims from the registries (claims.js): EM3D.findClaims and the Find claims panel.
+EXT_API.findClaims = async (o) => { const r = await (await extLoad('claims')).find(o); await extReady(); return r; };
+$('ov-claims').addEventListener('click', () => extLoad('claims').then((m) => m.renderUI($('ov-claims-ui'))).catch((e) => status(e.message)));
 $('ov-file').addEventListener('change', (e) => { if (e.target.files.length) readFileList(e.target.files); e.target.value = ''; });
 document.querySelectorAll('[data-shape]').forEach((b) => b.addEventListener('click', () => { showView('3d'); EXT_API.addShape({ type: b.dataset.shape }).catch((e) => status(e.message)); }));
 // The API notes for these layers are kept in the page (#ext-help), out of the script bundle.
@@ -2437,11 +2469,11 @@ function getState() {
       imagery: realT.img ? (realT.img.ok ? `z${realT.img.z}, ${realT.img.tiles} tiles` : `failed: ${realT.img.error}`) : null, imageryShown: imageryShown(), note: G?.terrainNote || null, credits: G ? terrainCredits(true) : [] },
     camera: G ? getCam() : null, scene: { ...S.scene, projection: S.projection }, section: { secAz: S.secAz, secW: S.secW, lookingAz: ((S.secAz - 90) % 360 + 360) % 360, holes: S.section?.holes || null, ends: S.section?.a ? [S.section.a, S.section.b] : null },
     labels: S.labels.map((l) => ({ ...l })), wallLabels: S.wallLabels.map((l) => ({ ...l })), holesShown: S.holesShown && [...S.holesShown], block: structuredClone(S.block),
-    display: { walls: S.walls, ids: S.ids, inset: S.inset, surface: S.surf, ribbons: S.ribbons, traceWidth: S.traceWidth, pendingLabels: S.pendingLabels, pendingNoAssays: S.pendingNoAssays, elevTicks: S.elevTicks, grid: S.grid, displayCutoff: S.displayCutoff, lockView: S.lockView, imagery: { ...S.imagery }, legend: structuredClone(S.legend), coPlacement: S.coPlacement, blockMargin: S.blockMargin, blockExtent: S.blockExtent && { ...S.blockExtent } }, meshes: S.meshes,
+    display: { walls: S.walls, ids: S.ids, inset: S.inset, surface: S.surf, ribbons: S.ribbons, traceWidth: S.traceWidth, pendingLabels: S.pendingLabels, pendingNoAssays: S.pendingNoAssays, elevTicks: S.elevTicks, grid: S.grid, displayCutoff: S.displayCutoff, lockView: S.lockView, dropShadow: S.dropShadow, imagery: { ...S.imagery }, legend: structuredClone(S.legend), coPlacement: S.coPlacement, blockMargin: S.blockMargin, blockExtent: S.blockExtent && { ...S.blockExtent } }, meshes: S.meshes,
     shell: { ...S.shell, cutoff: shellCut(), cutoffAuto: S.shell.cutoff === null, column: S.valueCol, legend: `Grade shell ≥ ${shellCutText()}`, shown: shellShown(), status: shell.status, progress: shell.progress, message: shell.message || null,
       ...(shell.status === 'ready' || shell.status === 'empty' ? { cells: shell.mesh?.stats.cells ?? 0, triangles: shell.mesh?.stats.triangles ?? 0, holesUsed: shell.mesh?.stats.holesUsed ?? 0, collarGroups: shell.mesh?.stats.groups ?? 0, composites: shell.mesh?.stats.composites ?? 0, searchUsed: shell.mesh?.stats.search ?? null, cellUsed: shell.mesh?.stats.cell ?? null, grid: shell.mesh?.stats.grid ?? null, buildMs: shell.mesh?.stats.ms ?? null } : {}) },
     equivalent: S.eq ? (() => { const i = eqInfo(); return { column: i.name, formula: i.formula, note: i.note, factors: Object.fromEntries(i.factors.map((f) => [f.metal, +f.factor.toPrecision(6)])), ...structuredClone(S.eq) }; })() : null,
-    footnoteAuto: G ? autoNotes(S.view) : [], checks: getChecks(),
+    mapInfo: { ...S.mapInfo }, footnoteAuto: G ? autoNotes(S.view) : [], checks: getChecks(),
     ...extState(), // EXT hook: geology, geophys, tags
     overlays: S.overlays.map((o) => ({ ...o, data: undefined, ...EXT.overlays?.info(o) })), shapes: structuredClone(S.shapes), sections: EXT.sections?.state() || null,
     figureSize: { key: S.format, width: f.w, height: f.h, label: f.label }, figureSizes: Object.fromEntries(Object.entries(FORMATS).map(([k, v]) => [k, `${v.label}, ${v.w}×${v.h}`])),
@@ -2525,7 +2557,7 @@ async function loadProject(p) {
   });
   histReset(); refresh.secSet = true; refresh(); refresh.secSet = !!p.secSet;
   await settle(p.camera);
-  const gaps = document.documentElement.classList.contains('em3d-viewer') ? [] : gapCallouts().map(gapText); // the owner is told, not a viewer
+  const gaps = document.documentElement.matches('.em3d-viewer,.em3d-version') ? [] : gapCallouts().map(gapText); // the owner is told, not a viewer (nor over a published version)
   status(project && !project.empty ? `Figure opened · ${project.holes.length} holes.${gaps.length ? ` ${gaps.join('; ')}: Recalculate in Layout, Intercept callouts.` : ''}` : 'Figure opened. Add a collar file to see the holes.');
   return getState();
 }

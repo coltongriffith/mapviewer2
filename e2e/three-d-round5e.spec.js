@@ -176,6 +176,33 @@ test('the grade bars as spikes (the preset) or merged bars, and back to the same
   expect(r.bad).toMatch(/hist.style must be/);
 });
 
+test('a block section with the export options (#308) and the claim map inset (#309)', async ({ page }) => {
+  const errors = []; page.on('pageerror', (e) => errors.push(e.message));
+  // The registry, answered here: three project claims over the block.
+  await page.route('**/api/bc-claims?**', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ type: 'FeatureCollection', features: [0, 1, 2].map((i) => ({ type: 'Feature', properties: { TENURE_NUMBER_ID: 1090001 + i, CLAIM_NAME: `ER ${i}`, OWNER_NAME: 'Example Resources Ltd.', TITLE_TYPE_DESCRIPTION: 'Mineral' }, geometry: { type: 'Polygon', coordinates: [[[-130.49 + i * 0.012, 57.93], [-130.478 + i * 0.012, 57.93], [-130.478 + i * 0.012, 57.95], [-130.49 + i * 0.012, 57.95], [-130.49 + i * 0.012, 57.93]]] } })), meta: { returned: 3, truncated: false } }) }));
+  await open3d(page);
+  await withLogs(page);
+  const r = await page.evaluate(async (holes) => {
+    const E = window.EM3D; E.setFigureSize('release'); await E.applyPreset('blockSection', { holes });
+    // Transparent: the corners clear, the block and its furniture still drawn.
+    const alpha = async (url) => { const img = new Image(); img.src = url; await img.decode(); const c = document.createElement('canvas'); c.width = img.width; c.height = img.height; const x = c.getContext('2d'); x.drawImage(img, 0, 0); return [x.getImageData(2, 2, 1, 1).data[3], x.getImageData(img.width / 2, img.height / 2, 1, 1).data[3]]; };
+    const clear = await alpha(E.exportPNG({ view: '3d', background: 'transparent' })), white = await alpha(E.exportPNG({ view: '3d' }));
+    return { clear, white };
+  }, HOLES);
+  expect(r.clear).toEqual([0, 255]); expect(r.white).toEqual([255, 255]);
+  // Standalone: its details join a card on the page while the legend stays on the side face; no footer notes.
+  const t = await textsOf(page, async () => { await window.EM3D.setMapUse({ use: 'standalone', what: 'Target zone · block section', date: 'October 2026', sources: 'Company database' }); return window.EM3D.exportPNG({ view: '3d' }); });
+  expect(t).toContain('Target zone · block section'); expect(t).toContain('Lithology');
+  // The claim map inset, turned back on by hand over the block section, draws with the claims found around it.
+  const ins = await page.evaluate(async () => {
+    const E = window.EM3D; await E.setCRS('EPSG:26909'); await E.terrainReady(); const off = E.exportPNG({ view: '3d' });
+    await E.findClaims({ around: true, province: 'bc' }); E.setStyle({ inset: true, insetStyle: 'claims' }); await E.layersReady();
+    return { differs: E.exportPNG({ view: '3d' }) !== off, style: E.getState().tags.insetStyle };
+  });
+  expect(ins).toEqual({ differs: true, style: 'claims' });
+  expect(errors).toEqual([]);
+});
+
 test('a hidden hole leaves the section too, chosen or not: no trace, bars or ID', async ({ page }) => {
   await open3d(page);
   const t = await textsOf(page, async () => {

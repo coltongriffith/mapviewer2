@@ -16,7 +16,8 @@ import { collars, planMap, planCallouts, holeIdCallout, STAGE } from './fixtures
 beforeAll(() => { vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null); });
 
 const map = planMap();
-const layout = { ...createInitialProjectState().layout, legendItems: [{ id: 'collars', label: 'Drill collars' }] };
+// legendFit off: the hashes below were recorded with the legend sized as before new maps fitted it (a saved map).
+const layout = { ...createInitialProjectState().layout, legendFit: undefined, legendItems: [{ id: 'collars', label: 'Drill collars' }] };
 const obstacles = panelObstacles(resolveTemplateZones(technicalResultsTemplate, layout, STAGE), layout);
 const collarPx = collars.map((c) => ({ id: c.hole_id, ...map.latLngToContainerPoint([c.lat, c.lng]) }));
 const NEAR = 20; // px: a label's edge this close to its collar needs no leader

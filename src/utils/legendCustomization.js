@@ -257,6 +257,7 @@ export function renameLegendHeading(derivedItems, layout = {}, from, to) {
 // 24 px per entry and 20 px per heading, ×0.75 for the compact legend) plus a
 // 12 px bottom margin. A dragged legend height is never allowed below this,
 // so no entry is clipped in an export.
+// A standalone map's note (below) counts too.
 export function legendContentHeight(items, layout = {}) {
   const density = layout?.legendCompact ? 0.75 : 1;
   let h = 0;
@@ -264,5 +265,26 @@ export function legendContentHeight(items, layout = {}) {
     if (group.heading) h += 20 * density;
     h += group.items.length * 24 * density;
   }
-  return items && items.length ? Math.ceil(40 + h + 12) : 0;
+  return items && items.length ? Math.ceil(40 + h + 12 + noteHeight(layout, items)) : 0;
 }
+
+// The legend panel's height: a dragged height (never below the entries); else fitted to the entries
+// (layout.legendFit: new maps, or a saved map that ticks "Fit to entries"); else the older estimate the
+// template passes, which leaves room below the last row, so a saved map keeps its legend.
+export function legendPanelHeight(items, layout = {}, estimate = 0) {
+  const content = legendContentHeight(items, layout);
+  if (layout?.legendHeightPx != null) return Math.max(60, content, Math.min(900, layout.legendHeightPx));
+  return !items?.length ? 0 : layout?.legendFit ? Math.min(900, content) : estimate + noteHeight(layout, items);
+}
+
+// Map use (layout.mapUse): a "standalone" map carries its footer note (the source or disclaimer line) in the
+// legend, under the entries (11 px lines 14 px apart, 8 px below the last entry), instead of a footer strip; a
+// presentation map (the default) keeps the footer. Only where the legend is drawn: hidden or empty, the note stays
+// in the footer (or with the source credit). Not for the side-panel template, whose footer has its own row. Wrapped
+// at word breaks by an estimate of the text's width (5.4 px a character), so the panel height, the editor's legend
+// card and both exporters agree.
+export const noteInLegend = (layout = {}, items = layout?.legendItems) => layout?.mapUse === 'standalone' && !!layout.footerText && layout.footerEnabled !== false
+  && layout.showLegend !== false && !!items?.length && layout.templateId !== 'side_panel';
+export const legendNoteLines = (layout = {}, items = layout?.legendItems) => (noteInLegend(layout, items)
+  ? String(layout.footerText).match(new RegExp(`\\S.{0,${Math.floor((legendWidthFor(layout, items) - 32) / 5.4) - 1}}(?=\\s|$)|\\S+`, 'g')) : []);
+const noteHeight = (layout, items) => { const n = legendNoteLines(layout, items).length; return n && 8 + n * 14; };
