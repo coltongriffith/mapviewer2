@@ -158,7 +158,10 @@ const S = {              // style
   // legend: one card or several ("auto" merges three or more blocks), each card "auto", a corner or {x, y}.
   // coPlacement: where callouts go unless set per hole. Block: margin (m) around the drilling, extent limits.
   legend: { merge: 'auto', pos: {} }, coPlacement: 'column', blockMargin: null, blockExtent: null,
-  shell: { enabled: false, cutoff: null, opacity: 0.3, color: '#1f9e96', search: null, cell: null },
+  // shell.color null: the brand accent (brandTone). throughTerrain: a faint ghost where the terrain hides it.
+  shell: { enabled: false, cutoff: null, opacity: 0.3, color: null, search: null, cell: null, throughTerrain: false },
+  // Satellite imagery tone: saturation, contrast, warmth (-1 cool to 1 warm) and shaded-relief blend (0-1).
+  imagery: { saturation: 1.05, contrast: 1.12, warmth: 0.25, relief: 0.55 },
 };
 const BIN_COLORS = ['#a3abaf', '#e2dc4f', '#ff9a1f', '#ef3b2c', '#e93ad1'];
 const MESH_COLORS = ['#ff9a1f', '#e93ad1', '#2b8fd6', '#6aa84f', '#8e5bd6'];
@@ -481,6 +484,7 @@ function rebuildScene(keepCam) {
   // Holes: grey trace, then coloured assay intervals. Provisional positions: dashed and fainter.
   const traceSeg = [[], [], [], []]; // EXT hook: [2] planned, [3] faded previously released
   holes.forEach((h) => { h.planned = isPlanned(h); }); // EXT hook: before extFade reads the statuses
+  computeCallouts(); // the key holes (EXT hook: emphasis) include the callout holes
   holes.forEach((h) => { h.prov = isProvisional(h); for (let i = 0; i + 1 < h.path.length; i++) traceSeg[h.planned ? 2 : h.prov ? 1 : extFade(h) ? 3 : 0].push(V(h.path[i].x, h.path[i].y, h.path[i].z), V(h.path[i + 1].x, h.path[i + 1].y, h.path[i + 1].z)); });
   root.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(traceSeg[0]), new THREE.LineBasicMaterial({ color: '#59646a' })));
   if (traceSeg[1].length) { const dl = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(traceSeg[1]), new THREE.LineDashedMaterial({ color: '#59646a', dashSize: diag / 120, gapSize: diag / 180, transparent: true, opacity: 0.75 })); dl.computeLineDistances(); root.add(dl); }
@@ -534,14 +538,19 @@ function paintTerrain() {
     return [(78 + 96 * t) * f * contour, (100 + 74 * t) * f * contour, (66 + 82 * t) * f * contour];
   };
   if (img) {
+    const { saturation: sat = 1, contrast: con = 1, warmth: warm = 0, relief: rel = 0 } = S.imagery || {};
     for (let py = 0; py < th; py++) { const sy = Math.min(TH - 1, Math.floor(py * TH / th));
       for (let px = 0; px < tw; px++) {
         const i = py * tw + px, si = sy * TW + Math.min(TW - 1, Math.floor(px * TW / tw)), sh = shade[si];
         if (img.data[i * 4 + 3] < 128) { const c = natural(si); d[i * 4] = Math.min(255, c[0]); d[i * 4 + 1] = Math.min(255, c[1]); d[i * 4 + 2] = Math.min(255, c[2]); d[i * 4 + 3] = 255; continue; }
         let r = img.data[i * 4], g = img.data[i * 4 + 1], b = img.data[i * 4 + 2], f = 0.9 + 0.14 * sh;
-        if (st === 'satellite') { r = TONE[r]; g = TONE[g]; b = TONE[b]; const l = 0.3 * r + 0.59 * g + 0.11 * b; r = l + (r - l) * 1.15; g = l + (g - l) * 1.15; b = l + (b - l) * 1.15; }
+        if (st === 'satellite') {
+          r = TONE[r]; g = TONE[g]; b = TONE[b]; const l = 0.3 * r + 0.59 * g + 0.11 * b;
+          r = 128 + (l + (r - l) * sat - 128) * con + 16 * warm; g = 128 + (l + (g - l) * sat - 128) * con + 3 * warm; b = 128 + (l + (b - l) * sat - 128) * con - 16 * warm;
+          f = 1 - 0.6 * rel + 0.85 * rel * sh; // the hillshade multiplied in, so slopes read
+        }
         if (st === 'muted') { const l = 0.3 * r + 0.59 * g + 0.11 * b; r = (l + (r - l) * 0.4) * 0.6 + 98; g = (l + (g - l) * 0.4) * 0.6 + 100; b = (l + (b - l) * 0.4) * 0.6 + 97; f = 0.86 + 0.22 * sh; }
-        d[i * 4] = Math.min(255, r * f); d[i * 4 + 1] = Math.min(255, g * f); d[i * 4 + 2] = Math.min(255, b * f); d[i * 4 + 3] = 255;
+        d[i * 4] = Math.min(255, Math.max(0, r * f)); d[i * 4 + 1] = Math.min(255, Math.max(0, g * f)); d[i * 4 + 2] = Math.min(255, Math.max(0, b * f)); d[i * 4 + 3] = 255;
       } }
   } else {
     for (let i = 0; i < TW * TH; i++) {
@@ -870,19 +879,27 @@ function settleShell(status, message = '') {
   renderShellUI(); schedulePublish();
   if (!shell.busy) shell.waiters.splice(0).forEach((res) => res(getState()));
 }
-function styleShell() { if (G?.shellMesh) { G.shellMesh.material.color.set(S.shell.color); G.shellMesh.material.opacity = S.shell.opacity; } }
+const shellColor = () => S.shell.color || brandTone('shell');
+function styleShell() {
+  const m = G?.shellMesh; if (!m) return; m.material.color.set(shellColor()); m.material.opacity = S.shell.opacity;
+  const gh = m.userData.ghost; gh.material.color.set(shellColor()); gh.material.opacity = Math.min(0.4, S.shell.opacity + 0.1); gh.visible = !!S.shell.throughTerrain;
+}
+function dropShell() { const m = G?.shellMesh; if (!m) return; root.remove(m); m.geometry.dispose(); m.material.dispose(); m.userData.ghost.material.dispose(); G.shellMesh = null; }
 function placeShell() {
-  if (G.shellMesh) { root.remove(G.shellMesh); G.shellMesh.geometry.dispose(); G.shellMesh.material.dispose(); G.shellMesh = null; }
+  dropShell();
   const M = shell.mesh; if (!M.indices.length) return;
   const pos = new Float32Array(M.positions.length), [ox, oy, oz] = M.origin;
   for (let i = 0; i < pos.length; i += 3) { const v = G.V(ox + M.positions[i], oy + M.positions[i + 1], oz + M.positions[i + 2]); pos[i] = v.x; pos[i + 1] = v.y; pos[i + 2] = v.z; }
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setIndex(new THREE.BufferAttribute(M.indices, 1)); g.computeVertexNormals();
   G.shellMesh = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide }));
-  G.shellMesh.renderOrder = 4; G.shellMesh.userData.key = M.key; root.add(G.shellMesh); styleShell();
+  G.shellMesh.renderOrder = 4; G.shellMesh.userData.key = M.key;
+  // The ghost: the same surface drawn after the terrain only where something nearer (the terrain) hides it.
+  const gh = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, depthFunc: THREE.GreaterDepth, side: THREE.DoubleSide }));
+  gh.renderOrder = 6.5; G.shellMesh.userData.ghost = gh; G.shellMesh.add(gh); root.add(G.shellMesh); styleShell();
 }
 function stopWorker() { if (shell.worker && shell.busy) { shell.worker.terminate(); shell.worker = null; } shell.job++; }
 function syncShell() {
-  const drop = () => { if (G?.shellMesh) { root.remove(G.shellMesh); G.shellMesh.geometry.dispose(); G.shellMesh.material.dispose(); G.shellMesh = null; } };
+  const drop = dropShell;
   if (!S.shell.enabled) { stopWorker(); drop(); if (shell.status !== 'cancelled') settleShell('off'); return; }
   const inp = shellInput(), iso = shellCut();
   if (!inp || inp.groups < 3) { stopWorker(); drop(); settleShell('empty', 'A grade shell needs assays in at least three separate collar locations (collars within 20 m count as one).'); return; }
@@ -920,7 +937,8 @@ function setShell(o = {}) {
     const v = +o[k]; if (!Number.isFinite(v)) throw new Error(`${k} must be a number, or null for automatic.`); sh[k] = Math.max(lo, Math.min(hi, v));
   });
   if (o.opacity !== undefined) { const v = +o.opacity; if (!Number.isFinite(v)) throw new Error('opacity must be 0.05-0.9.'); sh.opacity = Math.max(0.05, Math.min(0.9, v > 1 ? v / 100 : v)); }
-  if (o.color !== undefined) { if (!/^#[0-9a-f]{6}$/i.test(String(o.color))) throw new Error('color must be a hex colour like #1f9e96.'); sh.color = String(o.color).toLowerCase(); }
+  if (o.color !== undefined) { if (o.color !== null && !/^#[0-9a-f]{6}$/i.test(String(o.color))) throw new Error('color must be a hex colour like #1f9e96, or null for the brand accent.'); sh.color = o.color && String(o.color).toLowerCase(); }
+  if (o.throughTerrain !== undefined) sh.throughTerrain = !!o.throughTerrain;
   const done = new Promise((res) => shell.waiters.push(res));
   if (sh.enabled && shell.status === 'cancelled') shell.status = 'off';
   syncShell(); renderShellUI(); schedulePublish();
@@ -929,7 +947,7 @@ function setShell(o = {}) {
 }
 function renderShellUI() {
   const sh = S.shell, busy = shell.busy, st = shell.mesh?.stats;
-  $('shell-on').checked = sh.enabled; $('shell-color').value = sh.color;
+  $('shell-on').checked = sh.enabled; $('shell-color').value = shellColor(); $('shell-ghost').checked = !!sh.throughTerrain;
   if (document.activeElement?.id !== 'shell-cut') $('shell-cut').value = +shellCut().toPrecision(4);
   $('shell-unit').textContent = S.valueLabel; $('shell-op').value = Math.round(sh.opacity * 100); $('shell-op-out').textContent = `${Math.round(sh.opacity * 100)}%`;
   $('shell-search').value = sh.search ?? ''; $('shell-cell').value = sh.cell ?? '';
@@ -972,6 +990,7 @@ const intervalShown = (it) => { const v = it.vals[S.valueCol]; return Number.isF
 const binIndex = (v) => { if (!Number.isFinite(v)) return -1; let k = 0; S.bins.forEach((b, i) => { if (v >= b) k = i + 1; }); return k; };
 function restyle() {
   if (!G) return;
+  computeCallouts(); // first: the key holes (EXT hook: emphasis) include the callout holes
   // Title wall labels without their own colour are painted in the brand colour.
   if (G.wallPrimary !== S.primary && S.wallLabels.some((L) => !L.color)) buildWallLabels();
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), col = new THREE.Color();
@@ -980,7 +999,7 @@ function restyle() {
     const v = it.vals[S.valueCol], bi = intervalShown(it) ? binIndex(v) : -1, T = h.prov ? G.tubesP : G.tubes, k = n[+h.prov]++;
     const a = h.posAt(it.from), b = h.posAt(it.to), va = G.V(a.x, a.y, a.z), vb = G.V(b.x, b.y, b.z), dir = vb.clone().sub(va), len = dir.length();
     q.setFromUnitVectors(up, dir.normalize());
-    sc.set(bi < 0 ? 0.001 : r, Math.max(0.01, len), bi < 0 ? 0.001 : r);
+    const rw = r * (EXT.tags?.weight(h) ?? 1); sc.set(bi < 0 ? 0.001 : rw, Math.max(0.01, len), bi < 0 ? 0.001 : rw); // EXT hook: key holes bold
     m.compose(va.clone().add(vb).multiplyScalar(0.5), q, sc);
     T.setMatrixAt(k, m); col.set(BIN_COLORS[Math.max(0, bi)]); if (extFade(h)) col.lerp(new THREE.Color('#ffffff'), 0.6); T.setColorAt(k, col); // EXT hook: fade
   }));
@@ -997,7 +1016,7 @@ function restyle() {
   ctx.setLineDash([14 * lk, 9 * lk]); const dk = S.terrain === 'dark'; // a dark line would vanish on dark slate
   ctx.lineWidth = 5 * lk; ctx.strokeStyle = dk ? '#fff' : S.primary; ctx.beginPath(); ctx.moveTo(...P(A)); ctx.lineTo(...P(Bp)); ctx.stroke();
   ctx.lineWidth = 2 * lk; ctx.strokeStyle = dk ? S.accent : '#fff'; ctx.stroke(); ctx.setLineDash([]); G.topTex.needsUpdate = true;
-  computeCallouts(); placeRibbons(); extRestyle(); // EXT hook
+  placeRibbons(); extRestyle(); // EXT hook
   drawSectionView();
 }
 function sectionEnds() {
@@ -1207,6 +1226,8 @@ function drawFooter(ctx, K, Wc, Hc, credits = [], notes = []) {
   let fs = 9.5;
   if (block) { for (;;) { font(400, fs); lines = wrapNotes(notes, mw, wide - 44 * u, 99); if (lines.length <= 3 || fs <= 8) break; fs -= 0.5; } lh = (fs + 3.5) * u; }
   const rule = y - 16 * u - lines.length * lh - (lines.length ? 3 * u : 0);
+  // The footer is a white band: the block or its shadow never shows through the notes and credits.
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, rule, Wc, Hc - rule);
   ctx.strokeStyle = RULE; ctx.lineWidth = u; ctx.beginPath(); ctx.moveTo(m, rule); ctx.lineTo(Wc - m, rule); ctx.stroke();
   ctx.textBaseline = 'alphabetic'; let creditW = 0;
   // A white halo keeps the footer legible where the block or its shadow runs under it.
@@ -1273,7 +1294,7 @@ function legendSecs() {
   if (S.displayCutoff !== null) assays.push({ label: `< ${S.displayCutoff}: trace only`, mono: true, draw: swLine('#59646a', 1.5) });
   if (S.ribbons && callouts.length) [['Reported interval', RIB_COLORS[0]], ...(callouts.some((c) => c.ic.incl) ? [['incl.', RIB_COLORS[1]]] : [])].forEach(([label, c], i) => assays.push({ label, sep: !i, draw: (ctx, x, cy, u) => { ctx.fillStyle = c; ctx.fillRect(x, cy - 3 * u, 22 * u, 6 * u); } }));
   const model = G.meshes.filter(({ name }) => S.meshes[name].show).map(({ name }) => [meshName(name), S.meshes[name].color]);
-  if (shellShown()) model.unshift([`Grade shell ≥ ${shellCutText()}`, S.shell.color]);
+  if (shellShown()) model.unshift([`Grade shell ≥ ${shellCutText()}`, shellColor()]);
   return [{ key: 'holes', rows: holes }, { key: 'assays', title: `Assay · ${S.valueLabel}`, rows: assays },
     { key: 'model', title: 'Model', rows: model.map(([label, c]) => ({ label, draw: (ctx, x, cy, u) => { ctx.globalAlpha = 0.6; ctx.fillStyle = c; ctx.fillRect(x, cy - 6 * u, 22 * u, 12 * u); ctx.globalAlpha = 1; } })) }].filter((s) => s.rows.length);
 }
@@ -1465,7 +1486,7 @@ function drawOverlay(ctx, k, forExport) {
   const placed = wallLabelBoxes(), idBoxes = [], occ = [], hits = [];
   project.holes.forEach((h) => {
     const [cx, cy] = proj(G.V(h.c.x, h.c.y, h.c.z)), e = h.path[h.path.length - 1], [ex, ey] = proj(G.V(e.x, e.y, e.z));
-    ctx.beginPath(); ctx.arc(cx, cy, 5 * u, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 2.4 * u; ctx.strokeStyle = INK; if (h.prov || h.planned) ctx.setLineDash([2.5 * u, 2 * u]); ctx.stroke(); ctx.setLineDash([]);
+    ctx.beginPath(); ctx.arc(cx, cy, 5 * u, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 2.4 * u; ctx.strokeStyle = EXT.tags?.highlightOf(h) || INK; if (h.prov || h.planned) ctx.setLineDash([2.5 * u, 2 * u]); ctx.stroke(); ctx.setLineDash([]);
     occ.push([cx - 8 * u, cy - 8 * u, cx + 8 * u, cy + 8 * u]);
     // EXT hook: key holes only (the default past 12 holes, when tags.js decides), and no ID where a pill is.
     if (!S.ids || (EXT.tags ? !EXT.tags.idShown(h) || (S.tags.at === 'collar' && EXT.tags.tagShown(h)) : S.tags.at === 'collar' || project.holes.length > 12)) return;
@@ -1549,7 +1570,7 @@ function drawOverlay(ctx, k, forExport) {
   const maxY = Math.min(oy - 36 * u, ...left.filter((b) => b[1] > H / 2).map((b) => b[1] - 12 * u)), top = Math.max(headBottom + 18 * u, ...left.filter((b) => b[1] <= H / 2).map((b) => b[3] + 12 * u));
   let items = shownCallouts().map((c, rank) => { const p = c.h.posAt(c.ic.broad.mid); return { c, rank, s: proj(G.V(p.x, p.y, p.z)), M: measureCallout(ctx, K, c) }; }).filter(({ s }) => s[2] < 1).sort((a, b) => a.s[1] - b.s[1]);
   items = extGroups(ctx, K, items); // EXT hook: grouped intercept boxes
-  if (EXT.tags) items = EXT.tags.freeCallouts(ctx, K, items, { lay, W, H, hits }); // EXT hook: beside, bracket or dragged
+  let free = []; if (EXT.tags) ({ col: items, free } = EXT.tags.splitCallouts(items)); // EXT hook: beside, bracket or dragged
   for (;;) {
     let y = top; items.forEach((it) => { it.y = Math.max(y, it.s[1] - it.M.bh / 2); y = it.y + it.M.bh + gap; });
     for (let i = items.length - 1; i >= 0; i--) items[i].y = Math.min(items[i].y, i === items.length - 1 ? maxY - tag - items[i].M.bh : items[i + 1].y - gap - items[i].M.bh);
@@ -1559,6 +1580,11 @@ function drawOverlay(ctx, k, forExport) {
   const leaders = [];
   items.forEach((it) => { const { c, s, M, y } = it; if (it.group) EXT.tags.drawGroup(ctx, K, m, y, it); else { drawCallout(ctx, K, m, y, c, M, s); hits.push({ kind: 'callout', id: c.h.id, box: [m, y, m + M.bw, y + M.bh] }); } boxes.push([m, y, m + M.bw, y + M.bh + tag]); leaders.push(...M.leader); });
   occ.push(...boxes.map((b) => [b[0], b[1], b[2] + 10 * u, b[3]]));
+  // Callouts beside or bracketed on their hole: placed clear of the column and of its leaders.
+  if (free.length) {
+    leaders.forEach(([x0, y0, x1, y1]) => { const n = Math.ceil(Math.hypot(x1 - x0, y1 - y0) / (12 * u)); for (let i = 0; i <= n; i++) { const x = x0 + (x1 - x0) * i / n, y = y0 + (y1 - y0) * i / n; occ.push([x - 2 * u, y - 2 * u, x + 2 * u, y + 2 * u]); } });
+    EXT.tags.drawFree(ctx, K, free, { lay, W, H, hits });
+  }
   // Placed after the callouts so a tick never hides under a callout box; the deferred items (scale bar,
   // ticks) are drawn now, those pushed out by something more important left out.
   if (S.elevTicks) drawElevTicks(ctx, K, headBottom, footTop, lay, leaders);
@@ -1728,42 +1754,14 @@ $('export-section').addEventListener('click', () => exportPNG({ view: 'section',
 // 9. Logo colours
 // ============================================================
 const toHex = (rgb) => `#${rgb.map((v) => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0')).join('')}`;
-function hslOf([r, g, b]) { r /= 255; g /= 255; b /= 255; const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn;
-  if (!d) return [0, 0, l]; const s = d / (1 - Math.abs(2 * l - 1)); let h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; return [(h * 60 + 360) % 360, s, l]; }
-const contrastWhite = (rgb) => 1.05 / (lumOf(rgb) + 0.05);
-// Primary: the most common logo colour dark enough for text on white (darkened if none is).
-// Accent: the most common saturated colour with a different hue; one-colour logos use it for both.
-function brandFromLogo(img) {
-  const c = document.createElement('canvas'), n = 80, r = (img.naturalWidth / img.naturalHeight) || 1;
-  c.width = r >= 1 ? n : Math.max(8, Math.round(n * r)); c.height = r >= 1 ? Math.max(8, Math.round(n / r)) : n;
-  const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(img, 0, 0, c.width, c.height);
-  let data; try { data = g.getImageData(0, 0, c.width, c.height).data; } catch { return null; }
-  const bins = new Map(); let total = 0;
-  for (let i = 0; i < data.length; i += 4) {
-    if (data[i + 3] < 200) continue; const R = data[i], Gc = data[i + 1], B = data[i + 2];
-    if (Math.min(R, Gc, B) > 225) continue;
-    const key = ((R >> 4) << 8) | ((Gc >> 4) << 4) | (B >> 4), b = bins.get(key) || { n: 0, r: 0, g: 0, b: 0 };
-    b.n++; b.r += R; b.g += Gc; b.b += B; bins.set(key, b); total++;
-  }
-  const cols = [...bins.values()].filter((b) => b.n >= Math.max(2, total * 0.004)).map((b) => { const rgb = [b.r / b.n, b.g / b.n, b.b / b.n]; return { n: b.n, rgb, hsl: hslOf(rgb), con: contrastWhite(rgb) }; }).sort((a, b) => b.n - a.n);
-  if (!cols.length) return null;
-  let primary = cols.find((x) => x.con >= 4.5 && x.n >= cols[0].n * 0.12);
-  if (!primary) { let rgb = cols[0].rgb.slice(); for (let i = 0; i < 30 && contrastWhite(rgb) < 4.5; i++) rgb = rgb.map((v) => v * 0.9); primary = { rgb, hsl: hslOf(rgb) }; }
-  const hueGap = (a, b) => { const d = Math.abs(a - b) % 360; return Math.min(d, 360 - d); };
-  const sat = cols.filter((x) => x.hsl[1] >= 0.35 && x.hsl[2] > 0.2 && x.hsl[2] < 0.78 && x.n >= total * 0.02);
-  let accent = sat.find((x) => primary.hsl[1] < 0.2 || hueGap(x.hsl[0], primary.hsl[0]) >= 25), note;
-  if (accent) note = 'Colours picked from your logo. Change them if they are not quite right.';
-  else if (sat.length) { accent = sat[0]; note = 'Your logo has one main colour, so it is used for both.'; }
-  else { accent = primary; note = 'Your logo has no strong colour, so the dark logo colour is used for both. Pick an accent if you have one.'; }
-  return { primary: toHex(primary.rgb), accent: toHex(accent.rgb), note };
-}
 function setLogo(src, opts = {}) {
   return new Promise((resolve, reject) => {
     if (!src) { S.logo = null; $('logo-prev').textContent = 'No logo'; drawSectionView(); schedulePublish(); status('Logo removed.'); resolve(getState()); return; }
     const img = new Image();
-    img.onload = () => {
+    img.onload = async () => {
       S.logo = img; $('logo-prev').innerHTML = ''; const pv = new Image(); pv.src = src; pv.alt = 'Your logo'; $('logo-prev').appendChild(pv);
-      const picked = opts.autoColor === false ? null : brandFromLogo(img);
+      let picked = null; // the colour picker (logo-colours.js) loads with the first logo
+      if (opts.autoColor !== false) try { picked = (await import('./logo-colours.js')).brandFromLogo(img); } catch { /* keep the colours */ }
       if (picked) { setBrand({ primary: picked.primary, accent: picked.accent }); $('col-note').textContent = picked.note; }
       drawSectionView(); schedulePublish(); status(picked ? 'Logo added and brand colours applied.' : 'Logo added.'); resolve(getState());
     };
@@ -1978,6 +1976,7 @@ function loadSample() {
 }
 // A new data set starts without the old one's equivalent recipe, display cut-off or provisional flags.
 function resetDerived() {
+  histReset(); // the history belongs to the old data
   S.eq = null; eqApplied = false; S.displayCutoff = null; S.provisional = {}; S.shell.cutoff = null;
   S.tags.status = {}; S.tags.groups = []; S.geology.legend = []; // EXT hook: per-hole tags and codes belong to the old data
   // The shell belongs to the old data: switch it off and stop any build still running.
@@ -1994,13 +1993,13 @@ function setBrand(o = {}) {
   if (o.credit !== undefined) S.credit = !!o.credit;
   if (o.primary !== undefined) S.primary = hex(o.primary, 'primary');
   if (o.accent !== undefined) S.accent = hex(o.accent, 'accent');
-  syncBrandUI(); if (o.primary !== undefined) restyle(); drawSectionView(); schedulePublish();
+  syncBrandUI(); if (o.primary !== undefined || o.accent !== undefined) restyle(); drawSectionView(); schedulePublish(); // brand colours restyle live
   return getState();
 }
 [['company', 'company'], ['title', 'title'], ['subtitle', 'subtitle'], ['footnote', 'footnote']].forEach(([id, k]) => $(id).addEventListener('input', (e) => { S[k] = e.target.value; drawSectionView(); schedulePublish(); }));
 $('credit').addEventListener('change', (e) => { S.credit = e.target.checked; drawSectionView(); schedulePublish(); });
 $('col-primary').addEventListener('input', (e) => { S.primary = e.target.value; $('col-note').textContent = 'Custom colours.'; restyle(); schedulePublish(); });
-$('col-accent').addEventListener('input', (e) => { S.accent = e.target.value; $('col-note').textContent = 'Custom colours.'; drawSectionView(); schedulePublish(); });
+$('col-accent').addEventListener('input', (e) => { S.accent = e.target.value; $('col-note').textContent = 'Custom colours.'; restyle(); drawSectionView(); schedulePublish(); });
 
 // Layout inputs
 function rebin() { const assays = new Map(); (project?.holes || []).forEach((h) => assays.set(h.id, h.ints)); autoBins(assays); }
@@ -2042,6 +2041,11 @@ function setStyle(o = {}, render = true) {
   if (o.traceWidth !== undefined) { const v = +o.traceWidth; if (!Number.isFinite(v)) throw new Error('traceWidth must be a number from 0.5 to 3.'); S.traceWidth = Math.max(0.5, Math.min(3, v)); }
   if (o.surface !== undefined) S.surf = Math.max(0.15, Math.min(1, +o.surface > 1 ? +o.surface / 100 : +o.surface));
   let rebuild = false;
+  if (o.imagery !== undefined) {
+    const lim = { saturation: [0, 2], contrast: [0.5, 2], warmth: [-1, 1], relief: [0, 1] }, im = S.imagery;
+    Object.entries(o.imagery || {}).forEach(([k, v]) => { if (!lim[k] || !Number.isFinite(+v)) throw new Error('imagery takes saturation (0-2), contrast (0.5-2), warmth (-1 to 1) and relief (0-1) as numbers.'); im[k] = Math.max(lim[k][0], Math.min(lim[k][1], +v)); });
+    paintTerrain();
+  }
   if (o.blockMargin !== undefined) { const v = [null, '', 'auto'].includes(o.blockMargin) ? null : +o.blockMargin; if (v !== null && !(v >= 0)) throw new Error('blockMargin must be metres around the drilling (0 or more), or null for automatic.'); rebuild = rebuild || v !== S.blockMargin; S.blockMargin = v === null ? null : Math.min(v, 20000); }
   if (o.blockExtent !== undefined) {
     const e = o.blockExtent ? Object.fromEntries(['x0', 'x1', 'y0', 'y1', 'z0'].map((k) => [k, [null, undefined, ''].includes(o.blockExtent[k]) ? null : +o.blockExtent[k]]).filter(([, v]) => v !== null)) : null;
@@ -2083,6 +2087,7 @@ $('shell-cut').addEventListener('change', (e) => { try { setShell({ cutoff: e.ta
 $('shell-op').addEventListener('input', (e) => setShell({ opacity: +e.target.value / 100 }));
 $('shell-color').addEventListener('input', (e) => setShell({ color: e.target.value }));
 [['shell-search', 'search'], ['shell-cell', 'cell']].forEach(([id, k]) => $(id).addEventListener('change', (e) => { try { setShell({ [k]: e.target.value === '' ? null : +e.target.value }); } catch (err) { status(err.message); } }));
+$('shell-ghost').addEventListener('change', (e) => setShell({ throughTerrain: e.target.checked }));
 $('shell-cancel').addEventListener('click', () => { cancelShell(); status('Grade shell cancelled.'); });
 // Metal equivalent
 const capMetal = (t) => String(t).charAt(0).toUpperCase() + String(t).slice(1).toLowerCase();
@@ -2360,7 +2365,7 @@ function stopOrbit() { const p = camera.position.clone(), t = controls.target.cl
 Object.assign(S, {
   geology: { enabled: false, title: 'Lithology', faces: 'far', opacity: 0.85, strength: 1.3, hidden: 'nearest', anisotropy: 4, search: null, smooth: 2, texture: true, section: false, legend: [], images: {}, note: 'Geology on block faces interpolated from drill logs; schematic.' },
   geophys: { mode: 'off', lines: 'auto', ramp: 'geophys', log: null, min: null, max: null, opacity: 0.85, faces: 'far', search: null, width: null, property: null, label: null, unit: null, note: 'Geophysics: illustrative inversion model' },
-  tags: { at: 'toe', style: 'dark', status: {}, fadePrevious: false, newLabel: '', prevLabel: 'Previously released', plannedLabel: 'Planned', groups: [], autoGroup: false, groupRadius: 140, idMode: 'auto', showId: {}, showTag: {}, hideRows: [], pending: 'collar' },
+  tags: { at: 'toe', style: 'dark', status: {}, fadePrevious: false, newLabel: '', prevLabel: 'Previously released', plannedLabel: 'Planned', groups: [], autoGroup: false, groupRadius: 140, emphasis: 'auto', highlight: {}, idMode: 'auto', showId: {}, showTag: {}, hideRows: [], pending: 'collar' },
   histograms: false, insetStyle: 'plan',
 });
 const EXT = {}, extLoading = {}, EXT_IMPORT = { geology: () => import('./geology.js'), geophys: () => import('./geophys.js'), tags: () => import('./tags.js') };
@@ -2368,7 +2373,7 @@ const hasRole = (r) => files.some((f) => f.role === r);
 function extWanted() {
   const gp = S.geophys.mode !== 'off' && hasRole('geophys'), t = S.tags;
   return { geology: (S.geology.enabled && hasRole('litho')) || Object.keys(S.geology.images || {}).length > 0 || gp, geophys: gp,
-    tags: t.at !== 'toe' || t.fadePrevious || t.idMode === 'key' || (t.idMode !== 'all' && (project?.holes?.length || 0) > 12) || Object.keys(t.showId).length > 0 || Object.keys(t.showTag || {}).length > 0
+    tags: t.at !== 'toe' || t.fadePrevious || t.idMode === 'key' || (t.idMode !== 'all' && (project?.holes?.length || 0) > 12) || Object.keys(t.showId).length > 0 || Object.keys(t.showTag || {}).length > 0 || t.emphasis === 'key' || Object.keys(t.highlight || {}).length > 0
       || S.coPlacement !== 'column' || Object.values(S.coOverrides).some((o) => o.placement || o.x !== undefined) || (S.pendingLabels && t.pending === 'collar' && !!project?.holes?.some(isPending)) || t.autoGroup || t.groups.length > 0 || Object.keys(t.status).length > 0 || S.histograms || S.insetStyle !== 'plan' || S.labels.some((l) => l.kind === 'stat') };
 }
 let extHost = null;
@@ -2388,10 +2393,10 @@ async function extReady() {
 function extScene() {
   if (Object.entries(extWanted()).some(([k, v]) => v && !EXT[k])) { extReady().catch((e) => status(e.message)); return; }
   if (!G) return;
-  EXT.geophys?.syncCurtains(); faceWalls(); EXT.tags?.placeHistograms(); EXT.tags?.syncInset();
+  EXT.geophys?.syncCurtains(); faceWalls(); EXT.tags?.placeHistograms(); EXT.tags?.syncInset(); EXT.tags?.syncHoles();
 }
 const extView = () => { if (G) EXT.geology?.syncFaces(); };
-const extRestyle = () => { if (G) { EXT.geophys?.syncCurtains(); faceWalls(); } };
+const extRestyle = () => { if (G) { EXT.geophys?.syncCurtains(); faceWalls(); EXT.tags?.syncHoles(); } };
 const extPainted = () => new Set(EXT.geology ? Object.keys(EXT.geology.faceState()).filter((k) => k !== 'section') : []);
 const extFade = (h) => !!EXT.tags?.fade(h);
 // A wall label linked to a geology unit is written in a darker shade of the unit's legend colour.
@@ -2436,7 +2441,7 @@ function renderExtUI() {
 const extUI = () => renderExtUI();
 document.querySelectorAll('[data-ext]').forEach((el) => el.addEventListener('change', () => {
   const [g, k] = el.dataset.ext.split('.'), v = el.type === 'checkbox' ? el.checked : el.value;
-  Promise.resolve().then(() => (g === 'style' ? setStyle({ [k]: v }, false) : EXT_API[{ geology: 'setGeology', geophys: 'setGeophys', tags: 'setTags' }[g]]({ [k]: v }))).catch((e) => status(e.message));
+  Promise.resolve().then(() => (g === 'style' ? setStyle({ [k]: v }, false) : g === 'imagery' ? setStyle({ imagery: { [k]: +v } }, false) : EXT_API[{ geology: 'setGeology', geophys: 'setGeophys', tags: 'setTags' }[g]]({ [k]: v }))).catch((e) => status(e.message));
 }));
 $('stat-add').addEventListener('click', () => {
   const title = $('stat-title').value.trim(); if (!title) { status('Type the stat box title first.'); $('stat-title').focus(); return; }
@@ -2448,7 +2453,7 @@ const EXT_API = {
   async setGeophys(o = {}) { await extLoad('geology'); (await extLoad('geophys')).set(o); await extReady(); return getState(); },
   async setTags(o = {}) {
     (await extLoad('tags')).set(o);
-    if (o.fadePrevious !== undefined || o.status !== undefined) rebuildScene(true); else restyle();
+    if (o.fadePrevious !== undefined || o.status !== undefined || o.emphasis !== undefined) rebuildScene(true); else restyle();
     await extReady(); drawSectionView(); return getState();
   },
   async groupCallouts(ids) {
@@ -2497,7 +2502,7 @@ function getState() {
       imagery: realT.img ? (realT.img.ok ? `z${realT.img.z}, ${realT.img.tiles} tiles` : `failed: ${realT.img.error}`) : null, imageryShown: imageryShown(), note: G?.terrainNote || null, credits: G ? terrainCredits(true) : [] },
     camera: G ? getCam() : null, section: { secAz: S.secAz, secW: S.secW, lookingAz: ((S.secAz - 90) % 360 + 360) % 360 },
     labels: S.labels.map((l) => ({ ...l })), wallLabels: S.wallLabels.map((l) => ({ ...l })),
-    display: { walls: S.walls, ids: S.ids, inset: S.inset, surface: S.surf, ribbons: S.ribbons, traceWidth: S.traceWidth, pendingLabels: S.pendingLabels, pendingNoAssays: S.pendingNoAssays, elevTicks: S.elevTicks, displayCutoff: S.displayCutoff }, meshes: S.meshes,
+    display: { walls: S.walls, ids: S.ids, inset: S.inset, surface: S.surf, ribbons: S.ribbons, traceWidth: S.traceWidth, pendingLabels: S.pendingLabels, pendingNoAssays: S.pendingNoAssays, elevTicks: S.elevTicks, displayCutoff: S.displayCutoff, lockView: S.lockView, imagery: { ...S.imagery }, legend: structuredClone(S.legend), coPlacement: S.coPlacement, blockMargin: S.blockMargin, blockExtent: S.blockExtent && { ...S.blockExtent } }, meshes: S.meshes,
     shell: { ...S.shell, cutoff: shellCut(), cutoffAuto: S.shell.cutoff === null, column: S.valueCol, legend: `Grade shell ≥ ${shellCutText()}`, shown: shellShown(), status: shell.status, progress: shell.progress, message: shell.message || null,
       ...(shell.status === 'ready' || shell.status === 'empty' ? { cells: shell.mesh?.stats.cells ?? 0, triangles: shell.mesh?.stats.triangles ?? 0, holesUsed: shell.mesh?.stats.holesUsed ?? 0, collarGroups: shell.mesh?.stats.groups ?? 0, composites: shell.mesh?.stats.composites ?? 0, searchUsed: shell.mesh?.stats.search ?? null, cellUsed: shell.mesh?.stats.cell ?? null, grid: shell.mesh?.stats.grid ?? null, buildMs: shell.mesh?.stats.ms ?? null } : {}) },
     equivalent: S.eq ? (() => { const i = eqInfo(); return { column: i.name, formula: i.formula, note: i.note, factors: Object.fromEntries(i.factors.map((f) => [f.metal, +f.factor.toPrecision(6)])), ...structuredClone(S.eq) }; })() : null,
@@ -2509,7 +2514,7 @@ function getState() {
 let pubT = 0;
 function schedulePublish() {
   if (pubT) return;
-  pubT = setTimeout(() => { pubT = 0; const st = getState(); $('em3d-state').textContent = JSON.stringify(st); window.dispatchEvent(new CustomEvent('em3d:change', { detail: st })); }, 60);
+  pubT = setTimeout(() => { pubT = 0; const st = getState(); $('em3d-state').textContent = JSON.stringify(st); window.dispatchEvent(new CustomEvent('em3d:change', { detail: st })); histTick(); }, 60);
 }
 // The API notes are kept in the page (#core-help), out of the script bundle, like the layers' (#ext-help).
 const HELP = $('core-help').textContent.trim();
@@ -2579,14 +2584,37 @@ async function loadProject(p) {
     if (sf.role && (sf.role === 'mesh' ? !!f.mesh : !!f.header && ROLE_LABEL[sf.role])) f.role = sf.role;
     if (f.header) f.grades = f.role === 'assay' ? gradeCols(f.header, f.cols, f.rows) : [];
   });
-  refresh.secSet = true; refresh(); refresh.secSet = !!p.secSet;
-  syncBrandUI(); renderSizes(); layoutFrame(); restyle(); showView(S.view === 'section' ? 'section' : '3d');
-  if (p.camera && G) setCamera(p.camera, true);
-  await extReady(); // EXT hook: layers, face images and the map inset
-  lastCamKey = ''; syncCamUI(); drawSectionView(); schedulePublish();
+  histReset(); refresh.secSet = true; refresh(); refresh.secSet = !!p.secSet;
+  await settle(p.camera);
   status(project && !project.empty ? `Figure opened · ${project.holes.length} holes.` : 'Figure opened. Add a collar file to see the holes.');
   return getState();
 }
+// After settings are put into S wholesale (a project opened, a history step): the panel, frame and layers.
+async function settle(cam) {
+  syncBrandUI(); renderSizes(); layoutFrame(); restyle(); showView(S.view === 'section' ? 'section' : '3d');
+  if (cam && G) setCamera(cam, true);
+  await extReady(); // EXT hook: layers, face images and the map inset
+  lastCamKey = ''; syncCamUI(); drawSectionView(); schedulePublish();
+}
+// History (history.js, loaded on the first change): snapshots of S, settings only (no files, no logo image),
+// taken 0.5 s after changes settle. Undo, redo and restore put a snapshot back and keep the camera.
+let HIST = null, histP = null, histBase = null, histT = 0;
+const snapS = () => toPlain({ ...S, logo: null });
+function histTick() { clearTimeout(histT); histT = setTimeout(() => { const s = snapS(); if (HIST) HIST.note(s); else if (!histBase) histBase = s; else histLoad().then((h) => h.note(s)); }, 500); }
+const histLoad = () => (histP ||= import('./history.js').then((m) => (HIST = m.init({ base: histBase || snapS(), apply: applySnap, el: $('hist') }))));
+function histReset() { HIST = null; histP = null; histBase = null; clearTimeout(histT); }
+function applySnap(snap) {
+  const cam = G ? getCam() : null, sec = refresh.secSet;
+  Object.entries(snap).forEach(([k, v]) => { if (k !== 'logo') S[k] = v && typeof v === 'object' ? structuredClone(v) : v; });
+  refresh.secSet = true; refresh(); refresh.secSet = sec; settle(cam).catch((e) => status(e.message));
+}
+const TEXT_ENTRY = 'textarea, [contenteditable], input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]):not([type=button]):not([type=file])';
+document.addEventListener('keydown', (e) => {
+  const k = e.key.toLowerCase(); if (!(e.ctrlKey || e.metaKey) || e.altKey || (k !== 'z' && k !== 'y') || e.target.matches?.(TEXT_ENTRY)) return; // text fields keep their own undo
+  e.preventDefault(); histLoad().then((h) => (k === 'y' || e.shiftKey ? h.redo() : h.undo()));
+});
+$('hist-btn').addEventListener('click', (e) => { e.stopPropagation(); const el = $('hist'), open = el.hidden; el.hidden = !open; $('hist-btn').setAttribute('aria-expanded', String(open)); if (open) histLoad().then((h) => h.render()); });
+document.addEventListener('click', (e) => { if (!$('hist').hidden && !e.target.closest('#hist')) { $('hist').hidden = true; $('hist-btn').setAttribute('aria-expanded', 'false'); } });
 // A small JPEG of the preview, for project lists.
 function getThumbnail(width = 320) {
   if (!G) return null;
@@ -2606,7 +2634,8 @@ $('ai-help').textContent = PROJECT_HELP;
 window.EM3D = Object.freeze({ ...window.EM3D, help: () => PROJECT_HELP, getProject, loadProject, getThumbnail, filesDigest });
 // EXT hook: the geology, geophysics and hole-tag methods, in one block (section 10b).
 const FULL_HELP = `${PROJECT_HELP}\n${EXT_HELP}`; $('ai-help').textContent = FULL_HELP;
-window.EM3D = Object.freeze({ ...window.EM3D, help: () => FULL_HELP, ...EXT_API });
+window.EM3D = Object.freeze({ ...window.EM3D, help: () => FULL_HELP, ...EXT_API,
+  undo: async () => { (await histLoad()).undo(); return getState(); }, redo: async () => { (await histLoad()).redo(); return getState(); }, history: async () => (await histLoad()).state() });
 
 // ============================================================
 // 12. Start

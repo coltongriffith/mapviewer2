@@ -261,6 +261,57 @@ test.describe('account', () => {
     expect((await state(page)).brand.title).toBe('NORTH ZONE'); // the figure on screen stays
   });
 
+  test('a save over a newer copy warns first: overwrite, save as new or reload', async ({ page }) => {
+    const fake = await fakeSupabase(page);
+    await page.addInitScript(([k, s]) => localStorage.setItem(k, JSON.stringify(s)), [AUTH_KEY, session]);
+    await open3d(page);
+    await page.evaluate(() => window.EM3D.setBrand({ title: 'EAST ZONE' }));
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await page.getByRole('dialog', { name: 'Save to your account' }).getByRole('button', { name: 'Save', exact: true }).click();
+    await expect.poll(() => fake.upserts.length).toBe(1);
+    await expect(page.locator('#acct-note')).toHaveText(/^Saved /);
+    const id = fake.upserts[0].id;
+    // Another tab (or computer) saves the same figure later.
+    const elsewhere = (rid, subtitle) => { const r = fake.rows.get(rid); r.updated_at = new Date(Date.now() + 60_000).toISOString(); if (subtitle) r.settings.settings.subtitle = subtitle; };
+    const conflict = page.getByRole('dialog', { name: 'Saved somewhere else since you opened it' });
+
+    elsewhere(id);
+    await page.evaluate(() => window.EM3D.setBrand({ subtitle: 'Edited here' }));
+    await page.locator('body').press('Control+s');
+    await expect(conflict).toBeVisible();
+    expect(fake.upserts).toHaveLength(1); // nothing written yet
+    await conflict.getByRole('button', { name: 'Overwrite' }).click();
+    await expect.poll(() => fake.upserts.length).toBe(2);
+    expect(fake.upserts[1]).toMatchObject({ id });
+    expect(fake.upserts[1].settings.settings.subtitle).toBe('Edited here');
+    await expect(page.locator('#acct-note')).toHaveText(/^Saved /); // the save has finished
+
+    // A save straight after our own save is not a conflict.
+    await page.evaluate(() => window.EM3D.setBrand({ subtitle: 'Edited again' }));
+    await page.locator('body').press('Control+s');
+    await expect.poll(() => fake.upserts.length).toBe(3);
+    await expect(conflict).toBeHidden();
+    await expect(page.locator('#acct-note')).toHaveText(/^Saved /); // the save has finished
+
+    elsewhere(id);
+    await page.locator('body').press('Control+s');
+    await conflict.getByRole('button', { name: 'Save as new' }).click();
+    const named = page.getByRole('dialog', { name: 'Save to your account' });
+    await expect(named.getByLabel('Name')).toHaveValue('EAST ZONE (copy)');
+    await named.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect.poll(() => fake.upserts.length).toBe(4);
+    const copy = fake.upserts[3].id;
+    expect(copy).not.toBe(id);
+    await expect(page.locator('#acct-note')).toHaveText(/^Saved /); // the save has finished
+
+    elsewhere(copy, 'From the other tab');
+    await page.evaluate(() => window.EM3D.setBrand({ subtitle: 'Not wanted' }));
+    await page.locator('body').press('Control+s');
+    await conflict.getByRole('button', { name: 'Reload saved version' }).click();
+    await expect.poll(async () => (await state(page)).brand.subtitle).toBe('From the other tab');
+    expect(fake.upserts).toHaveLength(4);
+  });
+
   test('a failed save says so plainly and keeps the figure', async ({ page }) => {
     const fake = await fakeSupabase(page, { failUpload: true });
     await page.addInitScript(([k, s]) => localStorage.setItem(k, JSON.stringify(s)), [AUTH_KEY, session]);
