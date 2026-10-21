@@ -72,7 +72,10 @@ const BUDGETS = {
   // (0.8 kB); the export renderer gains the per-export context and structured findings (~1 kB). The editor chunk
   // keeps only the toggle and the hand-off (~0.4 kB).
   // 891 → 891.0 (Oct 2026, after the /3d trim; measured 890.7): lowered to what ships, plus 0.3.
-  totalAuthJsGzipKb: 891.0,
+  // 891.0 → 894.0 (Oct 2026, measured 893.7): the shared figure style (shared/figureStyle.js: versioned spec and
+  // its validation) and the brand kit's style-only / full-template apply with the 2D and 3D adapters
+  // (shared/brandKit.js), one 2.5 kB chunk shared by the editor and /3d's lazy typography adapter.
+  totalAuthJsGzipKb: 894.0,
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
@@ -81,7 +84,8 @@ const BUDGETS = {
   // 813 → 819 (measured 817.8): callout leader routing and "Add Published Results", as totalAuthJsGzipKb above.
   // 819 → 826 (measured 824.8): the publication check, as totalAuthJsGzipKb above.
   // 826 → 825.5 (Oct 2026, after the /3d trim below; measured 825.2): lowered to what ships, plus 0.3.
-  totalJsGzipKb: 825.5,
+  // 825.5 → 828.5 (measured 828.2): the figure style and brand kit style apply, as totalAuthJsGzipKb above.
+  totalJsGzipKb: 828.5,
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the
   // totals above. /3d carries three.js (~109 kB gzip) and its editor.
@@ -121,6 +125,9 @@ const BUDGETS = {
   // reading in unzip.js; the file list, the Layout step's controls, the figure sizes and the label lists in
   // panels.js (fetched with the first data, like the checks); the account API notes in the page's HTML.
   // Collars in latitude/longitude, the credits and everything drawn or exported synchronously stay here.
+  // 168.5 kept (Oct 2026, figure style, measured 168.34, configured 168.36): the typography hook fits — the brand style
+  // saved with a figure, the wait for its fonts as a figure settles, EM3D.setFigureStyle and the lazy chunk's
+  // entry. The adapter and the font loading are lazy (typography.js, below).
   threeDJsGzipKb: 168.5,
   // /3d's own modules fetched on first use (the geology, geophysics and tag layers, the account
   // client). They never load with the page or the app, so they sit outside the page and app totals.
@@ -151,7 +158,9 @@ const BUDGETS = {
   // and EM3D.setSection (~2.5 kB), fetched when a figure first chooses holes for its section.
   // 67 → 73.3 (Oct 2026, measured 72.7, configured 73.0): the page trim above moved ~5.8 kB here (terrain.js
   // 3.2, panels.js +2.6, desk.js +0.6, unzip.js 0.5; split chunks compress a little less well together).
-  threeDLazyJsGzipKb: 73.3,
+  // 73.3 → 74.4 (Oct 2026, measured 73.9, configured 74.15): typography.js (~1.2 kB), the brand fonts and
+  // EM3D.setFigureStyle, fetched only for a figure with a brand style.
+  threeDLazyJsGzipKb: 74.4,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.

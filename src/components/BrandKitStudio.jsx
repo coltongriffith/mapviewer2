@@ -343,7 +343,10 @@ export default function BrandKitStudio({
                         onChange={(e) => onPatchName(e.target.value)}
                       />
                       <div className="bks-header-actions">
-                        <button className="btn compact" type="button" onClick={() => applyToProject?.(draft.config)}>Apply to map</button>
+                        <button className="btn compact" type="button" onClick={() => applyToProject?.(draft.config, 'style', { ...selectedKit, ...draft })}
+                          title="Colours, fonts and logo only. The map's layout, extent, layers and data stay as they are.">Apply style to map</button>
+                        <button className="btn compact secondary" type="button" onClick={() => applyToProject?.(draft.config, 'full', { ...selectedKit, ...draft })}
+                          title="The kit's whole saved layout (template, panel positions and sizes, inset, footer) as well as its style.">Full template</button>
                         <button
                           className={`btn compact secondary bks-star${isDefault ? ' active' : ''}`}
                           type="button"

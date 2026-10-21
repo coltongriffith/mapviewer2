@@ -888,6 +888,13 @@ Whole projects (to keep or move a figure):
   EM3D.setStyle({insetStyle: "plan" | "satellite" | "topo"})   a map inset around the property (needs the
                                   coordinate system)
   EM3D.layersReady()              Promise; resolves once the layers, face images and inset have loaded
+  EM3D.setFigureStyle(style, {brandKitId, brandRevision})   a shared figure style (version 1: colours
+                                  {primary, accent, ...}, type {title, subtitle, label, note: {family, weight,
+                                  size}}, logo {assetRef}, ...) on this figure: primary and accent, a data-URL
+                                  logo, and the label (else title) family for all text once its fonts have
+                                  loaded. Recorded in the figure (getProject().settings.brandStyle: the kit,
+                                  its revision and the style); null returns to Source Sans 3.
+                                  Grade, geology and geophysics colours never change
   getState().geology / .geophys / .tags
 </script>
 <!-- API notes for the account (src/three-d/account.js; shown with EM3D.help()). -->

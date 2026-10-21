@@ -1036,6 +1036,7 @@ const icText = (x, h) => {
 Object.assign(S, {
   subtitle: $('subtitle').value, company: $('company').value, footnote: $('footnote').value,
   primary: '#142126', accent: '#c65322', credit: true, format: 'slide', coOverrides: {}, view: '3d',
+  brandStyle: null, // a figure style applied (typography.js); null keeps the fonts below
 });
 const FORMATS = {
   slide: { w: 1920, h: 1080, label: 'Slide 16:9', use: 'Presentations and decks' },
@@ -1144,7 +1145,7 @@ async function setView(o = {}) {
 // ============================================================
 // 6. Figure overlay (drawn on a canvas so exports match the preview exactly)
 // ============================================================
-const SANS = '"Source Sans 3", "Segoe UI", sans-serif', MONO = '"IBM Plex Mono", monospace';
+let SANS = '"Source Sans 3", "Segoe UI", sans-serif'; const MONO = '"IBM Plex Mono", monospace'; // SANS: a brand family once loaded (typography.js)
 // The overlay palette, light or dark (S.scene.theme): ink, muted text, rules and the paper (cards, halos).
 let INK = '#142126', MUTED = '#5f6e72', RULE = '#c6cecf', PAPER = '255,255,255';
 const paper = (a = 1) => `rgba(${PAPER},${a})`, dark = () => S.scene.theme === 'dark';
@@ -2281,7 +2282,7 @@ Object.assign(S, {
   tags: { at: 'toe', style: 'dark', status: {}, fadePrevious: false, newLabel: '', prevLabel: 'Previously released', plannedLabel: 'Planned', groups: [], autoGroup: false, groupRadius: 140, emphasis: 'auto', highlight: {}, highlightNew: true, idMode: 'auto', showId: {}, showTag: {}, hideRows: [], pending: 'collar' },
   histograms: false, insetStyle: 'plan',
 });
-const EXT = {}, extLoading = {}, EXT_IMPORT = { geology: () => import('./geology.js'), geophys: () => import('./geophys.js'), tags: () => import('./tags.js'), look: () => import('./look.js'), section: () => import('./section.js') };
+const EXT = {}, extLoading = {}, EXT_IMPORT = { geology: () => import('./geology.js'), geophys: () => import('./geophys.js'), tags: () => import('./tags.js'), look: () => import('./look.js'), section: () => import('./section.js'), type: () => import('./typography.js') };
 const hasRole = (r) => files.some((f) => f.role === r);
 function extWanted() {
   const gp = S.geophys.mode !== 'off' && hasRole('geophys'), t = S.tags;
@@ -2302,6 +2303,7 @@ const host = () => (extHost ||= {
   renderShellUI, renderEq, renderExtUI, renderLegendUI, FORMATS, setFigureSize, updateLabel, removeLabel, updateWallLabel, removeWallLabel,
   metalCols, unitOf, setEquivalent, getChecks, setProvisional,
   step: () => currentStep, sectionChanged: () => { refresh.secSet = true; restyle(); renderStyle(); schedulePublish(); },
+  fonts(s) { if (s) SANS = s; return SANS; }, buildWallLabels,
 });
 const extLoad = (k) => (extLoading[k] ||= EXT_IMPORT[k]().then((m) => { m.init(host()); EXT[k] = m; return m; }));
 async function extReady() {
@@ -2391,6 +2393,7 @@ const EXT_API = {
     renderLabelList(); schedulePublish(); status(`Stat box "${L.text}" added. Drag it on the preview to place it.`); return id;
   },
   layersReady: async () => { await extReady(); return getState(); },
+  async setFigureStyle(style, meta) { await (await extLoad('type')).setFigureStyle(style, meta); return getState(); },
 };
 // The API notes for these layers are kept in the page (#ext-help), out of the script bundle.
 const EXT_HELP = `\n${$('ext-help').textContent.trim()}`;
@@ -2512,6 +2515,7 @@ async function loadProject(p) {
 }
 // After settings are put into S wholesale (a project opened, a history step): the panel, frame and layers.
 async function settle(cam) {
+  if (S.brandStyle || EXT.type) await extLoad('type').then((m) => m.sync(), () => {}); // EXT hook: brand fonts, loaded before anything is measured
   applyTheme(); syncBrandUI(); renderSizes(); layoutFrame(); restyle(); showView(S.view === 'section' ? 'section' : '3d');
   if (cam && G) setCamera(cam, true);
   await extReady(); // EXT hook: layers, face images and the map inset
