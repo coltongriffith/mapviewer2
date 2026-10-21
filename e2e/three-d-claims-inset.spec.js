@@ -111,6 +111,13 @@ test('claims around the model: project in the accent, neighbours grey, the claim
   const plan = await textsOf(page, () => window.EM3D.exportPNG({ view: '3d' }));
   expect(plan).toContain('Plan of drilling'); expect(plan).not.toContain('Claims');
   expect(plan.some((t) => t.includes(credit))).toBe(true);
+  // A standalone map: the registry credit once, among the sources atop the legend, not in the footer.
+  await page.evaluate(() => window.EM3D.setMapUse({ use: 'standalone' }));
+  const sa = await textsOf(page, () => window.EM3D.exportPNG({ view: '3d' })), saAll = sa.join(' ');
+  expect(saAll.split(credit).length - 1).toBe(1);
+  expect(saAll.indexOf(credit)).toBeGreaterThan(saAll.indexOf('SOURCES'));
+  expect(saAll.indexOf(credit)).toBeLessThan(saAll.indexOf('Drill hole collar')); // in the legend card's details block
+  await page.evaluate(() => window.EM3D.setMapUse({ use: 'presentation' }));
   // Removed, the claims take their credit with them, and the figure is what it was.
   await page.evaluate(async () => { for (const o of window.EM3D.getState().overlays) await window.EM3D.removeOverlay(o.id); });
   expect(await page.evaluate(() => window.EM3D.exportPNG({ view: '3d' })) === before).toBe(true);
