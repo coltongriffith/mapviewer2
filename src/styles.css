@@ -943,6 +943,16 @@ button, input, select, textarea { font: inherit; }
   transition: background-color 0.1s ease, border-color 0.1s ease;
 }
 .export-hd-skip:hover { background: var(--ui-surface-subtle); border-color: var(--ui-text-muted); color: var(--ui-text); }
+/* Publication check: one summary line, findings on demand. */
+.pubcheck-card { width: min(480px, 92vw); }
+.pubcheck-summary { color: var(--ui-text); }
+.pubcheck-details summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--ui-action); }
+.pubcheck-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; max-height: 40vh; overflow-y: auto; }
+.pubcheck-item { display: grid; grid-template-columns: 64px 1fr; gap: 8px; font-size: 13px; line-height: 1.45; color: var(--ui-text); }
+.pubcheck-mark { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; padding-top: 1px; color: var(--ui-text-muted); }
+.pubcheck-item.is-error .pubcheck-mark { color: var(--ui-danger); }
+.pubcheck-item.is-warning .pubcheck-mark { color: #b45309; }
+.pubcheck-action { color: var(--ui-text-muted); }
 
 /* ── Panel drag-resize handles ── */
 .panel-delete-btn {
