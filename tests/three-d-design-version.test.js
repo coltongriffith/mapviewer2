@@ -58,6 +58,14 @@ describe('figure design versions', () => {
     expect(withDefaults({ designVersion: 3 }, now)).toMatchObject({ scene: now.scene, autoLabels: true, shell: { shading: 'solid+edges' } });
   });
 
+  it('a version 2 or 3 figure keeps its section drawing; version 4 cuts traces at the slab and spreads the IDs', () => {
+    const S = withDefaults({ designVersion: 2, title: 'V2' }, NOW);
+    expect(uses(S, 'sampledIntercepts')).toBe(true);
+    expect(uses(S, 'cleanSection')).toBe(false);
+    expect(FEATURES.cleanSection).toBe(4);
+    expect(uses(withDefaults({ designVersion: 3 }, NOW), 'cleanSection')).toBe(false); // round 5 figures too
+  });
+
   it('keeps the version through a save and reopen', () => {
     for (const v of [1, 2]) {
       const opened = withDefaults(v === 1 ? legacy.settings : { ...legacy.settings, designVersion: 2 }, NOW);

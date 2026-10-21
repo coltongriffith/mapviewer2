@@ -5,7 +5,7 @@
 // Equal snapshots compare equal however long their embedded images are.
 const keyOf = (snap) => JSON.stringify(snap, (k, v) => (typeof v === 'string' && v.length > 2000 ? `#${v.length}:${v.slice(-48)}` : v));
 const NAMES = { valueCol: 'Grade column', valueCol2: 'Second grade', valueLabel: 'Grade label', bins: 'Colour limits', displayCutoff: 'Display cut-off', coCount: 'Callouts', coCut: 'Callout cut-off',
-  coIncl: '"incl." cut-off', coMin: 'Callout length', coOverrides: 'Callouts', coPlacement: 'Callout placement', secAz: 'Section line', secW: 'Section width', surf: 'Surface opacity', vex: 'Vertical exaggeration',
+  coIncl: '"incl." cut-off', coMin: 'Callout length', coOverrides: 'Callouts', coPlacement: 'Callout placement', secAz: 'Section line', secW: 'Section width', section: 'Section holes', surf: 'Surface opacity', vex: 'Vertical exaggeration',
   terrain: 'Terrain', terrainSource: 'Surface', blockStyle: 'Block sides', blockMargin: 'Block margin', blockExtent: 'Block extent', ids: 'Hole IDs', walls: 'Block sides', inset: 'Inset', ribbons: 'Intercept bars',
   traceWidth: 'Trace thickness', lockView: 'Lock view', labels: 'Text labels', wallLabels: 'Labels on the block', geology: 'Geology', geophys: 'Geophysics', tags: 'Hole tags', shell: 'Grade shell', eq: 'Metal equivalent',
   meshes: 'Model shapes', legend: 'Legend', imagery: 'Imagery', designOptIn: 'Design updates', format: 'Figure size', primary: 'Brand colour', accent: 'Accent colour', crs: 'Coordinate system', provisional: 'Provisional holes', view: 'View' };

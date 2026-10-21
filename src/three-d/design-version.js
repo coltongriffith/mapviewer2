@@ -3,7 +3,7 @@
 // (made before the October 2026 design rounds). A later round that changes a default or a drawing rule bumps
 // DESIGN_VERSION, puts the earlier values in a LEGACY_V<n> table and lists its new behaviours in FEATURES.
 
-export const DESIGN_VERSION = 3;
+export const DESIGN_VERSION = 4; // 4: only a drawing rule (cleanSection), so no LEGACY_V3 table
 
 // Version 1 settings: what a figure saved before version 2 had when a setting did not exist yet. Applied
 // only to settings the saved figure lacks (nested objects key by key), before today's defaults fill the rest.
@@ -36,6 +36,7 @@ export const FEATURES = {
   holeTags: 2, // collar pills for the holes with a status, pending tags grouped by distance and labelled by year
   sampledIntercepts: 2, // callout intervals never span an unsampled gap or count an overlap twice
   clearLeaders: 3, // arrows routed around cards; pills, brackets and boxes beside a hole keep off leaders and markers
+  cleanSection: 4, // section traces and intervals cut at the slab edges, hole IDs spread clear of each other, callouts level with their holes
 };
 export const uses = (S, f) => (S.designVersion || 1) >= FEATURES[f] || !!S.designOptIn?.includes(f);
 
