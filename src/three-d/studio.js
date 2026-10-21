@@ -5,7 +5,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { composite, collarGroups, autoCell, autoSearch } from './shell-core.js';
 import { METAL_DEFAULTS, defaultUnit, priceUnit, eqFactors, eqFormula, eqValue } from './metal-eq.js';
 import { isXYZ, parseXYZ, refineRole } from './roles.js';
-import { makeLayout, isClick, legendRows as binRows, wrapNotes, shouldMerge, leaderSpot, hits as boxHits } from './layout.js';
+import { makeLayout, isClick, legendRows as binRows, wrapNotes, shouldMerge, hits as boxHits } from './layout.js';
 import { DESIGN_VERSION, FEATURES, uses, withDefaults } from './design-version.js';
 import { intercept, calloutText, avgOver } from './intercepts.js';
 
@@ -908,12 +908,10 @@ const shellCut = () => (Number.isFinite(S.shell.cutoff) ? S.shell.cutoff : S.coC
 const shellCutText = (cuts = shellList().map((x) => x.cutoff)) => { const unit = (S.valueLabel.match(/(%|g\/t|ppm|ppb)$/) || [''])[0], el = S.valueLabel.replace(/\s*(%|g\/t|ppm|ppb)$/, ''), v = cuts.map((c) => +c.toPrecision(4)); return `${v.length > 1 ? `${v.slice(0, -1).join(', ')} and ${v[v.length - 1]}` : v[0]}${unit === '%' ? '%' : unit ? ` ${unit}` : ''} ${el}`.trim(); };
 // The shells drawn: the named cut-offs (S.shell.shells), else the one at cutoff. Without a colour of their
 // own, nested shells take tones of the brand accent: lighter for the lowest cut-off, deeper for the highest.
-// ramp "green": the reference fences' mint, green and dark-green core.
-const GREEN = ['#c6edc8', '#0dbb00', '#214e1c'];
 function shellList() {
   const L = S.shell.shells?.length ? S.shell.shells : [{ cutoff: shellCut(), color: S.shell.color }], n = L.length;
-  return L.map((x) => { const rank = L.filter((y) => y.cutoff < x.cutoff).length, t = n > 1 ? rank / (n - 1) : 0.5;
-    return { cutoff: x.cutoff, label: x.label || null, rank, color: x.color || (S.shell.ramp === 'green' ? GREEN[Math.round(t * 2)] : toHex(hexRgb(brandTone('shell')).map((v) => (t < 0.5 ? v + (255 - v) * (0.5 - t) : v * (1.3 - 0.6 * t))))) }; });
+  return L.map((x) => { const rank = L.filter((y) => y.cutoff < x.cutoff).length;
+    return { cutoff: x.cutoff, label: x.label || null, rank, color: x.color || (n > 1 && EXT.look ? EXT.look.tone(S.shell.ramp, brandTone('shell'), rank / (n - 1)) : brandTone('shell')) }; }); // EXT hook
 }
 const shellShown = () => S.shell.enabled && !!G?.shellMesh;
 function shellInput() {
@@ -976,9 +974,10 @@ function cancelShell() {
   if (!shell.busy) return getState();
   stopWorker(); shell.pending = null; S.shell.enabled = false; settleShell('cancelled', 'Cancelled.'); return getState();
 }
-const SHADINGS = ['solid+edges', 'solid', 'glass'];
 function setShell(o = {}) {
-  const sh = S.shell;
+  const sh = S.shell, { shading, ramp, shells, ...rest } = o;
+  // The shading, ramp and nested shells are checked by look.js (EXT hook), which draws them.
+  if ([shading, ramp, shells].some((v) => v !== undefined)) return extLoad('look').then((m) => { m.patchShell(sh, { shading, ramp, shells }); return setShell(rest); });
   if (o.enabled !== undefined) sh.enabled = !!o.enabled;
   [['cutoff', 0, 1e9], ['search', 5, 5000], ['cell', 2, 200]].forEach(([k, lo, hi]) => {
     if (o[k] === undefined) return; if (o[k] === null || o[k] === '' || o[k] === 'auto') { sh[k] = null; return; }
@@ -987,13 +986,6 @@ function setShell(o = {}) {
   if (o.opacity !== undefined) { const v = +o.opacity; if (!Number.isFinite(v)) throw new Error('opacity must be 0.05-0.9.'); sh.opacity = Math.max(0.05, Math.min(0.9, v > 1 ? v / 100 : v)); }
   if (o.color !== undefined) { if (o.color !== null && !/^#[0-9a-f]{6}$/i.test(String(o.color))) throw new Error('color must be a hex colour like #1f9e96, or null for the brand accent.'); sh.color = o.color && String(o.color).toLowerCase(); }
   if (o.throughTerrain !== undefined) sh.throughTerrain = !!o.throughTerrain;
-  if (o.shading !== undefined) { if (!SHADINGS.includes(o.shading)) throw new Error('shading must be "solid+edges", "solid" or "glass".'); sh.shading = o.shading; }
-  if (o.ramp !== undefined) { if (!['brand', 'green'].includes(o.ramp)) throw new Error('ramp must be "brand" (tones of the brand accent) or "green" (mint, green, dark green).'); sh.ramp = o.ramp; }
-  if (o.shells !== undefined) {
-    const L = o.shells || [];
-    if (!Array.isArray(L) || L.length > 3 || L.some((x) => !(+x?.cutoff > 0) || (x.color && !/^#[0-9a-f]{6}$/i.test(x.color)))) throw new Error('shells is a list of up to three {cutoff (above 0), color (hex, optional), label (optional)}, or [] for the one shell at cutoff.');
-    sh.shells = L.map((x) => ({ cutoff: +x.cutoff, color: x.color ? x.color.toLowerCase() : null, label: x.label ? String(x.label).slice(0, 60) : null }));
-  }
   const done = new Promise((res) => shell.waiters.push(res));
   if (sh.enabled && shell.status === 'cancelled') shell.status = 'off';
   syncShell(); renderShellUI(); schedulePublish();
@@ -1005,7 +997,7 @@ function renderShellUI() {
   $('shell-on').checked = sh.enabled; $('shell-color').value = shellColor(); $('shell-ghost').checked = !!sh.throughTerrain;
   if (document.activeElement?.id !== 'shell-cut') $('shell-cut').value = +shellCut().toPrecision(4); $('shell-cut').disabled = !!sh.shells?.length;
   $('shell-unit').textContent = S.valueLabel; $('shell-op').value = Math.round(sh.opacity * 100); $('shell-op-out').textContent = `${Math.round(sh.opacity * 100)}%`;
-  $('shell-search').value = sh.search ?? ''; $('shell-cell').value = sh.cell ?? ''; $('shell-shade').value = sh.shading || SHADINGS[0]; $('shell-ramp').value = sh.ramp || 'brand';
+  $('shell-search').value = sh.search ?? ''; $('shell-cell').value = sh.cell ?? ''; $('shell-shade').value = sh.shading || 'solid+edges'; $('shell-ramp').value = sh.ramp || 'brand';
   if (document.activeElement?.id !== 'shell-cuts') $('shell-cuts').value = (sh.shells || []).map((x) => x.cutoff).join(', ');
   $('shell-search').placeholder = `auto${st ? ` (${st.search} m)` : ''}`; $('shell-cell').placeholder = `auto${st ? ` (${+st.cell.toFixed(1)} m)` : ''}`;
   $('shell-prog').hidden = !busy; $('shell-prog').value = shell.progress; $('shell-cancel').hidden = !busy;
@@ -1507,7 +1499,7 @@ function drawLabels(ctx, K, forExport, obst = [], area = [0, 0, W, H]) {
     // An arrow's leader runs straight or bends once around the cards, their text and the markers (layout.js);
     // where it cannot, the label moves near its tip, off the block, unless it was dragged there (pinned).
     const x0 = L.x * W, y0 = L.y * H, others = obst.filter((b) => Math.abs(b[0] - (x0 - bw / 2)) > 0.5 || Math.abs(b[1] - (y0 - bh / 2)) > 0.5);
-    const { at: [cx, cy], pts } = L.arrow ? leaderSpot([x0, y0], [tx, ty], [bw, bh], others, { frame: area, soft: [blockBox()], pad: 5 * u, unit: u, pinned: L.pinned || S.autoLabels === false }) : { at: [x0, y0] };
+    const { at: [cx, cy], pts } = !L.arrow ? { at: [x0, y0] } : !uses(S, 'clearLeaders') || !EXT.look ? { at: [x0, y0], pts: [[x0, y0], [tx, ty]] } : EXT.look.leaderSpot([x0, y0], [tx, ty], [bw, bh], others, { frame: area, soft: [blockBox()], pad: 5 * u, unit: u, pinned: L.pinned || S.autoLabels === false });
     const box = [cx - bw / 2, cy - bh / 2, cx + bw / 2, cy + bh / 2];
     if (L.arrow) {
       while (pts.length > 2 && Math.hypot(tx - pts[pts.length - 2][0], ty - pts[pts.length - 2][1]) < 30 * u) pts.splice(-2, 1); // no bend at the head
@@ -1578,9 +1570,10 @@ function drawOverlay(ctx, k, forExport) {
   const [A, Bp] = sectionEnds(), labBoxes = S.labels.map((L) => { const { bw, bh } = labelSize(ctx, K, L); setSpacing(ctx, 0); return [L.x * W - bw / 2, L.y * H - bh / 2, L.x * W + bw / 2, L.y * H + bh / 2]; });
   const marks = [[A, 'A'], [Bp, 'A′']].map(([p, t]) => {
     const [x0, y0] = proj(G.V(p.x, p.y, G.surf(p.x, p.y) + G.diag * 0.035)), at = ([dx, dy]) => [x0 + dx * u, y0 + dy * u];
-    const [x, y] = [[0, 0], [0, -34], [-40, -10], [40, -10], [0, -68]].map(at).find(([a, b]) => !labBoxes.some((l) => boxHits([a - 22 * u, b - 14 * u, a + 22 * u, b + 14 * u], l))) || [x0, y0];
-    occ.push([x - 22 * u, y - 14 * u, x + 22 * u, y + 14 * u]); return [t, x, y];
-  });
+    const [x, y] = (uses(S, 'clearLeaders') ? [[0, 0], [0, -34], [-40, -10], [40, -10], [0, -68]] : [[0, 0]]).map(at).find(([a, b]) => !labBoxes.some((l) => boxHits([a - 22 * u, b - 14 * u, a + 22 * u, b + 14 * u], l))) || [x0, y0];
+    occ.push([x - 22 * u, y - 14 * u, x + 22 * u, y + 14 * u]); if (uses(S, 'clearLeaders')) return [t, x, y];
+    tagLabel(ctx, K, t, x, y); return null; // figures before version 3: under the pills
+  }).filter(Boolean);
   // Frame furniture
   const logo = drawLogo(ctx, K, W, forExport);
   const headBottom = drawHeader(ctx, K, W, S.title, S.subtitle, logo.w);
@@ -1654,7 +1647,7 @@ function drawOverlay(ctx, k, forExport) {
   // Callouts beside or bracketed on their hole: placed clear of the column and of its leaders.
   if (free.length) {
     // ...and of the text labels' arrows, so a box set beside its hole never sits on one.
-    S.labels.filter((L) => L.arrow).forEach((L) => leaders.push([L.x * W, L.y * H, ...tipAt(L).slice(0, 2)]));
+    if (uses(S, 'clearLeaders')) S.labels.filter((L) => L.arrow).forEach((L) => leaders.push([L.x * W, L.y * H, ...tipAt(L).slice(0, 2)]));
     leaders.forEach(([x0, y0, x1, y1]) => { const n = Math.ceil(Math.hypot(x1 - x0, y1 - y0) / (12 * u)); for (let i = 0; i <= n; i++) { const x = x0 + (x1 - x0) * i / n, y = y0 + (y1 - y0) * i / n; occ.push([x - 2 * u, y - 2 * u, x + 2 * u, y + 2 * u]); } });
     EXT.tags.drawFree(ctx, K, free, { lay, W, H, hits });
   }
@@ -2174,7 +2167,7 @@ $('shell-color').addEventListener('input', (e) => setShell({ color: e.target.val
 $('shell-ghost').addEventListener('change', (e) => setShell({ throughTerrain: e.target.checked }));
 $('shell-shade').addEventListener('change', (e) => setShell({ shading: e.target.value }));
 $('shell-ramp').addEventListener('change', (e) => setShell({ ramp: e.target.value }));
-$('shell-cuts').addEventListener('change', (e) => { try { setShell({ shells: e.target.value.split(/[,;\s]+/).filter(Boolean).map((c) => ({ cutoff: +c })) }); } catch (err) { status(err.message); } });
+$('shell-cuts').addEventListener('change', (e) => setShell({ shells: e.target.value.split(/[,;\s]+/).filter(Boolean).map((c) => ({ cutoff: +c })) }).catch((err) => { status(err.message); renderShellUI(); }));
 $('shell-cancel').addEventListener('click', () => { cancelShell(); status('Grade shell cancelled.'); });
 // Metal equivalent
 const capMetal = (t) => String(t).charAt(0).toUpperCase() + String(t).slice(1).toLowerCase();
@@ -2215,8 +2208,8 @@ function setEquivalent(o) {
   status(`${name}: ${eqInfo().formula}.`);
   return getState();
 }
-// The builder's form (eq-form.js) loads when its panel is first opened, and redraws while it is open.
-function renderEq() { if ($('eq-box').open) import('./eq-form.js').then((m) => m.renderEq({ S, metalCols, unitOf, setEquivalent, status, esc })); }
+// The builder's form (panels.js) loads when its panel is first opened, and redraws while it is open.
+function renderEq() { if ($('eq-box').open) import('./panels.js').then((m) => m.renderEq({ S, metalCols, unitOf, setEquivalent, status, esc })); }
 $('eq-box').addEventListener('toggle', renderEq);
 function setProvisional(holeId, flag) {
   if (!project?.holes?.some((h) => h.id === holeId)) throw new Error(`No hole "${holeId}".`);
@@ -2228,16 +2221,8 @@ function getChecks() {
   const hs = project.holes || [];
   return { counts: { ...C.counts, intervalsShown: hs.reduce((t, h) => t + h.ints.filter(intervalShown).length, 0) }, problems: C.problems, provisionalHoles: hs.filter((h) => h.prov).map((h) => h.id) };
 }
-function renderChecks() {
-  const el = $('checks'), C = getChecks(), open = el.querySelector('details')?.open;
-  if (!C) { el.innerHTML = '<p class="muted">Add files to check them.</p>'; return; }
-  const c = C.counts;
-  el.innerHTML = `<div class="summary">${[[c.holes, 'holes'], [c.holesPlaced, 'placed'], [c.assaysLoaded, 'assays loaded'], [c.assaysPlaced, 'assays placed'], [c.intervalsShown, 'intervals shown']].map(([n, t]) => `<span class="pill">${n.toLocaleString()} ${t}</span>`).join('')}</div>`
-    + (C.problems.length ? `<ul class="checks">${C.problems.map((p) => `<li>${esc(p.message)}</li>`).join('')}</ul>` : '<p class="muted" style="margin-top:6px">No problems found.</p>')
-    + (project.holes?.length ? `<details${open ? ' open' : ''}><summary>Provisional positions (${C.provisionalHoles.length})</summary><p class="muted">Ticked holes draw dashed and fainter, with a legend row. Read from a collar status or flags column; change any here.</p>
-      <div class="prov-list">${project.holes.map((h) => `<label class="check"><input type="checkbox" data-prov="${esc(h.id)}" ${h.prov ? 'checked' : ''}>${esc(h.id)}</label>`).join('')}</div></details>` : '');
-  el.querySelectorAll('[data-prov]').forEach((cb) => cb.addEventListener('change', () => setProvisional(cb.dataset.prov, cb.checked)));
-}
+// The data checks list (panels.js, loaded with the first data).
+const renderChecks = () => import('./panels.js').then((m) => m.renderChecks({ getChecks, project, esc, setProvisional }));
 $('value-col').addEventListener('change', (e) => setStyle({ valueCol: e.target.value }));
 $('value-label').addEventListener('input', (e) => setStyle({ valueLabel: e.target.value }, false));
 $('auto-bins').addEventListener('click', () => { setStyle({ autoBins: true }); status('Colour limits and cut-offs suggested from the data.'); });
@@ -2315,12 +2300,12 @@ function addLabel(o = {}) {
   if (o.x === undefined && o.y === undefined && G) [L.x, L.y] = freeSpot(L);
   if (L.ax === null) L.ax = Math.min(0.97, L.x + 0.1); if (L.ay === null) L.ay = Math.min(0.97, L.y + 0.14);
   anchorTip(L);
-  S.labels.push(L); renderLabelList(); schedulePublish(); status(`Label "${L.text}" added. Drag it on the preview to place it.`);
+  S.labels.push(L); renderLabelList(); schedulePublish(); if (L.arrow) extScene(); // EXT hook: look.js routes the arrow status(`Label "${L.text}" added. Drag it on the preview to place it.`);
   return L.id;
 }
 function updateLabel(id, o = {}) {
   const L = S.labels.find((l) => l.id === id); if (!L) throw new Error(`No label "${id}". Labels: ${S.labels.map((l) => l.id).join(', ') || 'none'}.`);
-  labelPatch(L, o); if (o.ax !== undefined || o.ay !== undefined || o.arrow !== undefined) anchorTip(L); renderLabelList(); schedulePublish(); return getState();
+  labelPatch(L, o); if (o.ax !== undefined || o.ay !== undefined || o.arrow !== undefined) anchorTip(L); if (L.arrow) extScene(); renderLabelList(); schedulePublish(); return getState();
 }
 function removeLabel(id) {
   if (!S.labels.some((l) => l.id === id)) throw new Error(`No label "${id}".`);
@@ -2449,7 +2434,7 @@ const EXT = {}, extLoading = {}, EXT_IMPORT = { geology: () => import('./geology
 const hasRole = (r) => files.some((f) => f.role === r);
 function extWanted() {
   const gp = S.geophys.mode !== 'off' && hasRole('geophys'), t = S.tags;
-  return { look: S.shell.enabled || ortho() || S.scene.haze > 0, geology: (S.geology.enabled && hasRole('litho')) || Object.keys(S.geology.images || {}).length > 0 || gp, geophys: gp,
+  return { look: S.shell.enabled || ortho() || S.scene.haze > 0 || (uses(S, 'clearLeaders') && S.labels.some((l) => l.arrow)), geology: (S.geology.enabled && hasRole('litho')) || Object.keys(S.geology.images || {}).length > 0 || gp, geophys: gp,
     tags: t.at !== 'toe' || t.fadePrevious || t.idMode === 'key' || (t.idMode !== 'all' && (project?.holes?.length || 0) > 12) || Object.keys(t.showId).length > 0 || Object.keys(t.showTag || {}).length > 0 || t.emphasis === 'key' || Object.keys(t.highlight || {}).length > 0
       || S.coPlacement !== 'column' || Object.values(S.coOverrides).some((o) => o.placement || o.x !== undefined) || (S.pendingLabels && t.pending === 'collar' && !!project?.holes?.some(isPending)) || t.autoGroup || t.groups.length > 0 || Object.keys(t.status).length > 0 || S.histograms || S.insetStyle !== 'plan' || S.labels.some((l) => l.kind === 'stat') };
 }
@@ -2458,9 +2443,7 @@ const host = () => (extHost ||= {
   S, get G() { return G; }, get project() { return project; }, get root() { return root; }, get api() { return EXT_API; }, files: () => files, digest: (f) => fileDigest(f), geo: () => geo,
   get INK() { return INK; }, get MUTED() { return MUTED; }, get RULE() { return RULE; }, paper, pri, shell, shellList, dropShell, exportScale: () => FORMATS[S.format].w / W,
   frame: () => [W, H], aim, controls, getCam, setCamera, blockOverflow, scene,
-  // What painted unit names keep clear of: the holes and collars on screen, and the pills, cards and labels last drawn.
-  labelObstacles: () => ({ pts: project.holes.flatMap((h) => h.path.filter((p, i) => i % 2 === 0).map((p) => proj(G.V(p.x, p.y, p.z)))), boxes: overlayOcc.filter((b) => b[2] - b[0] < W - 1) }),
-  viewKey: () => { const c = getCam(); return `${Math.round(c.azimuth / 5)}|${Math.round(c.plunge / 5)}|${Math.round(c.zoom / 10)}|${overlayOcc.length}|${W}`; },
+  get occ() { return overlayOcc; }, // what the painted unit names keep clear of (geology.js)
   camera, renderer, proj, sectionEnds, faceGeom, textOn, roundRect, fitText, esc, BIN_COLORS, binIndex, traceR, calloutLines, shownCallouts, isPending, setSpacing, drawCallout, brandTone, figureCanvas, exportLayers, canvasBlob,
   mosaic, zoomFor, lon2t, lat2t, IMG_URL, IMAGERY_CREDIT, status, redraw: () => { extScene(); drawSectionView(); schedulePublish(); },
 });

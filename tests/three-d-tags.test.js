@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { shouldMerge, placePills } from '../src/three-d/layout.js';
+import { shouldMerge } from '../src/three-d/layout.js';
+import { placePills } from '../src/three-d/leaders.js';
 import { init, drawPills, legendRows, tagShown, idShown, pendingGroups, weight, fade, highlightOf, set as setTags } from '../src/three-d/tags.js';
 import { readLegendFiles, applyLegendFile } from '../src/three-d/geology.js';
 import { refineRole } from '../src/three-d/roles.js';

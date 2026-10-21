@@ -1,5 +1,5 @@
-// The metal-equivalent builder's form (step 3, "Metal equivalent"), loaded when the panel first opens. The
-// calculation and EM3D.setEquivalent stay in studio.js; this only draws the form and previews the formula.
+// Panel parts loaded when first shown: the metal-equivalent builder's form (step 3, "Metal equivalent"; the
+// calculation and EM3D.setEquivalent stay in studio.js) and the data checks list (step 1).
 import { METAL_DEFAULTS, priceUnit, eqFactors, eqFormula } from './metal-eq.js';
 
 const $ = (id) => document.getElementById(id);
@@ -34,4 +34,16 @@ export function renderEq(host, baseOverride) {
   $('eq-apply').addEventListener('click', () => { try { H.setEquivalent(eqForm()); } catch (err) { H.status(err.message); } });
   $('eq-remove')?.addEventListener('click', () => H.setEquivalent(null));
   eqPreview();
+}
+
+// The data checks: counts, problems and the provisional-position ticks (EM3D.setProvisional).
+export function renderChecks({ getChecks, project, esc, setProvisional }) {
+  const el = $('checks'), C = getChecks(), open = el.querySelector('details')?.open;
+  if (!C) { el.innerHTML = '<p class="muted">Add files to check them.</p>'; return; }
+  const c = C.counts;
+  el.innerHTML = `<div class="summary">${[[c.holes, 'holes'], [c.holesPlaced, 'placed'], [c.assaysLoaded, 'assays loaded'], [c.assaysPlaced, 'assays placed'], [c.intervalsShown, 'intervals shown']].map(([n, t]) => `<span class="pill">${n.toLocaleString()} ${t}</span>`).join('')}</div>`
+    + (C.problems.length ? `<ul class="checks">${C.problems.map((p) => `<li>${esc(p.message)}</li>`).join('')}</ul>` : '<p class="muted" style="margin-top:6px">No problems found.</p>')
+    + (project.holes?.length ? `<details${open ? ' open' : ''}><summary>Provisional positions (${C.provisionalHoles.length})</summary><p class="muted">Ticked holes draw dashed and fainter, with a legend row. Read from a collar status or flags column; change any here.</p>
+      <div class="prov-list">${project.holes.map((h) => `<label class="check"><input type="checkbox" data-prov="${esc(h.id)}" ${h.prov ? 'checked' : ''}>${esc(h.id)}</label>`).join('')}</div></details>` : '');
+  el.querySelectorAll('[data-prov]').forEach((cb) => cb.addEventListener('change', () => setProvisional(cb.dataset.prov, cb.checked)));
 }

@@ -1,9 +1,11 @@
-// The figure's look, loaded with the first grade shell or the orthographic projection (EXT hook in
-// studio.js). Shells: each cut-off a solid, shaded form with crisp outlines ("solid+edges", the default), a
+// The figure's look, loaded with the first grade shell, the orthographic projection, haze or a label arrow
+// (EXT hook in studio.js). Shells: each cut-off a solid, shaded form with crisp outlines ("solid+edges", the default), a
 // plain solid, or the translucent glass of before; studio.js estimates the surfaces (shell-worker.js) and
 // keeps the shell's state, this draws them. Orthographic: the framing of the drilling and the shell. Haze,
 // and the scene settings' checks.
 import * as THREE from 'three';
+
+export { leaderSpot } from './leaders.js'; // label arrows (drawLabels in studio.js)
 
 let H = null; // host (studio.js), set by init
 export function init(host) { H = host; }
@@ -22,9 +24,24 @@ export function windOutward(pos, idx) {
 }
 // A colour toward black (k < 1), for the outline in the shell's own hue.
 export const shade = (hex, k) => `#${[1, 3, 5].map((i) => Math.round(parseInt(hex.slice(i, i + 2), 16) * k).toString(16).padStart(2, '0')).join('')}`;
+// Default colours of nested shells, t from 0 (lowest cut-off) to 1: tones of the brand accent, lighter to deeper,
+// or (ramp "green") the reference fences' mint, green and dark-green core.
+export const tone = (ramp, accent, t) => (ramp === 'green' ? ['#c6edc8', '#0dbb00', '#214e1c'][Math.round(t * 2)]
+  : `#${[1, 3, 5].map((i) => { const v = parseInt(accent.slice(i, i + 2), 16); return Math.round(Math.min(255, t < 0.5 ? v + (255 - v) * (0.5 - t) : v * (1.3 - 0.6 * t))).toString(16).padStart(2, '0'); }).join('')}`);
 // Opacity of a solid shell: nested ones step from half the set opacity (outermost) to opaque (the core), so
 // the core reads through the outer shells, as on the reference fences (about 30%, 65%, 100%).
 export const shellOpacity = (base, rank, n, solid) => (solid && n > 1 ? base / 2 + (1 - base / 2) * rank / (n - 1) : base);
+
+// EM3D.setShell's shading, ramp and nested shells, checked into S.shell.
+export function patchShell(sh, { shading, ramp, shells }) {
+  if (shading !== undefined) { if (!['solid+edges', 'solid', 'glass'].includes(shading)) throw new Error('shading must be "solid+edges", "solid" or "glass".'); sh.shading = shading; }
+  if (ramp !== undefined) { if (!['brand', 'green'].includes(ramp)) throw new Error('ramp must be "brand" (tones of the brand accent) or "green" (mint, green, dark green).'); sh.ramp = ramp; }
+  if (shells !== undefined) {
+    const L = shells || [];
+    if (!Array.isArray(L) || L.length > 3 || L.some((x) => !(+x?.cutoff > 0) || (x.color && !/^#[0-9a-f]{6}$/i.test(x.color)))) throw new Error('shells is a list of up to three {cutoff (above 0), color (hex, optional), label (optional)}, or [] for the one shell at cutoff.');
+    sh.shells = L.map((x) => ({ cutoff: +x.cutoff, color: x.color ? x.color.toLowerCase() : null, label: x.label ? String(x.label).slice(0, 60) : null }));
+  }
+}
 
 // ---------- the matcap ----------
 // A grey sphere lit from the upper left that darkens toward its rim, so a shell reads as a solid from any

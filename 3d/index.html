@@ -746,7 +746,9 @@ JavaScript API (run in the page console or via your agent's evaluate tool):
   EM3D.terrainReady()             Promise; resolves with the state once tiles have loaded or failed
   EM3D.addLabel({text, x, y, size: "title" | "normal", arrow, ax, ay})   returns the new id.
                                   x, y (and the arrow tip ax, ay) are 0-1 across and down the frame,
-                                  so a label lands in the same place at every size. 3D figure only
+                                  so a label lands in the same place at every size. 3D figure only.
+                                  An arrow keeps off cards and markers; a label whose arrow would detour
+                                  moves near its tip unless pinned (pinned: true, set when it is dragged)
   EM3D.updateLabel(id, {...})     EM3D.removeLabel(id)
   EM3D.addWallLabel({text, face: "N" | "S" | "E" | "W" | "front", u, v, size: "title" | "normal",
                      scale, rotation, color})   returns the id. Text painted on a block face in

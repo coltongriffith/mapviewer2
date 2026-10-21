@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { segHits, routeLeader, placePills, leaderSpot } from '../src/three-d/layout.js';
+import { segHits, routeLeader, placePills, leaderSpot } from '../src/three-d/leaders.js';
 import { modeFilter, dropSpecks, refine, patches, labelSpots } from '../src/three-d/geology.js';
-import { windOutward, shellOpacity, shade, patchScene } from '../src/three-d/look.js';
+import { windOutward, shellOpacity, shade, patchScene, patchShell, tone } from '../src/three-d/look.js';
 import { buildShell } from '../src/three-d/shell-mesh.js';
 
 describe('leaders keep off cards', () => {
@@ -33,7 +33,7 @@ describe('leaders keep off cards', () => {
   });
   it('prefers a pill spot whose leader does not cross a section marker', () => {
     const marker = [90, 40, 110, 60]; // straight above the collar
-    const [p] = placePills([{ x: 100, y: 100, w: 30, h: 16 }], [marker, [70, 65, 130, 95]], { W: 400, H: 400, unit: 1 });
+    const [p] = placePills([{ x: 100, y: 100, w: 30, h: 16 }], [marker, [70, 65, 130, 95]], { W: 400, H: 400, unit: 1, leaders: 'far' });
     expect(segHits([100, 100], [p.cx, p.cy], marker)).toBe(false);
   });
 });
@@ -95,5 +95,17 @@ describe('scene settings', () => {
     expect(sc).toMatchObject({ sunAz: 315, sunAlt: 85, haze: 0.4, theme: 'dark' });
     expect(() => patchScene(sc, { theme: 'blue' })).toThrow(/light/);
     expect(() => patchScene(sc, { fog: 1 })).toThrow(/sunAz/);
+  });
+});
+
+describe('shell settings', () => {
+  it('checks the shading, ramp and nested shells', () => {
+    const sh = { shading: 'glass', shells: [], ramp: 'brand' };
+    patchShell(sh, { shading: 'solid', shells: [{ cutoff: '0.5', color: '#ABCDEF', label: 'Core' }] });
+    expect(sh).toMatchObject({ shading: 'solid', shells: [{ cutoff: 0.5, color: '#abcdef', label: 'Core' }] });
+    expect(() => patchShell(sh, { shells: [1, 2, 3, 4].map((c) => ({ cutoff: c })) })).toThrow(/three/);
+    expect(() => patchShell(sh, { shading: 'matte' })).toThrow(/glass/);
+    expect(tone('green', '#c65322', 1)).toBe('#214e1c');
+    expect(tone('brand', '#c65322', 0.5)).toBe('#c65322');
   });
 });

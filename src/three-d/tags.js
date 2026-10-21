@@ -2,7 +2,8 @@
 // intercept boxes, free-form stat boxes, grade histogram bars along holes, and a real-map location
 // inset. Loaded on first use by studio.js (EXT hook).
 import * as THREE from 'three';
-import { placePills, overlapArea } from './layout.js';
+import { overlapArea } from './layout.js';
+import { placePills } from './leaders.js';
 import { uses } from './design-version.js';
 
 export { placePills };
@@ -124,7 +125,7 @@ function drawIdPills(ctx, K, { placed, occ, W, H: Hh }) {
     return { hole: h, st, pri, x: s[0], y: s[1] - 4 * u, w: ctx.measureText(h.id).width + 14 * u, h: 20 * u };
   }).filter(Boolean).sort((a, b) => a.pri - b.pri || a.x - b.x);
   const collars = H.project.holes.map((h) => { const s = H.proj(H.G.V(h.c.x, h.c.y, h.c.z)); return [s[0] - 6 * u, s[1] - 6 * u, s[0] + 6 * u, s[1] + 6 * u]; });
-  const res = placePills(items, [...placed, ...occ.filter((b) => b[3] - b[1] < Hh * 0.5), ...collars, ...bracketBoxes(H.shownCallouts(), u)], { W, H: Hh, unit: u, pad: 3 * u, drop: true });
+  const res = placePills(items, [...placed, ...occ.filter((b) => b[3] - b[1] < Hh * 0.5), ...collars, ...(clear() ? bracketBoxes(H.shownCallouts(), u) : [])], { W, H: Hh, unit: u, pad: 3 * u, drop: true, leaders: clear() && 'far' });
   res.forEach((p) => drawn.add(p.st));
   // Leaders first, then every pill, so no leader crosses a pill.
   res.forEach((p) => {
@@ -157,7 +158,7 @@ function placePending(ctx, K, { placed, occ, W, H: Hh }) {
     const ys = new Set(g.map((p) => years.get(p.h.id))), t = `${v2 && ys.size === 1 && [...ys][0] ? `${[...ys][0]} · ` : ''}ASSAYS PENDING`;
     return { g, t, x: g.reduce((a, p) => a + p.s[0], 0) / g.length, y: Math.min(...g.map((p) => p.s[1])) + (v2 ? -6 : 14) * u, w: ctx.measureText(t).width + 14 * u, h: hh };
   });
-  const res = placePills(items, [...placed, ...occ.filter((b) => b[3] - b[1] < Hh * 0.5)], { W, H: Hh, unit: u, pad: 3 * u, leaders: true });
+  const res = placePills(items, [...placed, ...occ.filter((b) => b[3] - b[1] < Hh * 0.5)], { W, H: Hh, unit: u, pad: 3 * u, leaders: clear() && 'all' });
   res.forEach((p) => { placed.push(p.box); occ.push(p.box); });
   return () => res.forEach((p) => {
     font(700, 9.5); H.setSpacing(ctx, 1.1 * u);
@@ -236,24 +237,25 @@ export function drawGroup(ctx, K, x, y, g) {
 const placementOf = (it) => { const o = H.S.coOverrides[it.c?.h.id] || {}; return Number.isFinite(o.x) && Number.isFinite(o.y) ? 'free' : it.group ? 'column' : o.placement || H.S.coPlacement || 'column'; };
 export const splitCallouts = (items) => ({ col: items.filter((it) => placementOf(it) === 'column'), free: items.filter((it) => placementOf(it) !== 'column') });
 export function drawFree(ctx, K, items, { lay, W, H: Hh, hits }) {
-  const S = H.S, { u } = K;
-  // The brackets' lines first, so a box set beside its hole keeps off them.
-  bracketBoxes(items.map((it) => it.c), u).forEach((b) => lay.add(b));
-  // Brackets go first (they sit on their hole); the boxes beside a hole then keep clear of their text.
-  items.slice().sort((a, b) => (placementOf(b) === 'bracket') - (placementOf(a) === 'bracket')).forEach((it) => {
+  const S = H.S, { u } = K, cl = clear();
+  // The brackets' lines first, so a box set beside its hole keeps off them; then the brackets (they sit on
+  // their hole), so the boxes beside a hole keep clear of their text.
+  if (cl) bracketBoxes(items.map((it) => it.c), u).forEach((b) => lay.add(b));
+  (cl ? items.slice().sort((a, b) => (placementOf(b) === 'bracket') - (placementOf(a) === 'bracket')) : items).forEach((it) => {
     const o = S.coOverrides[it.c.h.id] || {}, free = placementOf(it) === 'free';
     if (placementOf(it) === 'bracket') { hits.push({ kind: 'callout', id: it.c.h.id, box: drawBracket(ctx, K, it, lay) }); return; }
     const { M, s } = it, tag = 18 * u, at = (x, y) => [x, y, x + M.bw, y + M.bh + tag];
     const cands = free ? [at(Math.min(o.x * W, W - M.bw), Math.min(o.y * Hh, Hh - M.bh - tag))]
-      : [[1, -0.5], [-1, -0.5], [1, -1.4], [-1, -1.4], [1, 0.4], [-1, 0.4], [1.8, -0.5], [-1.8, -0.5], [1, 1.4], [-1, 1.4], [1, -2.4], [-1, -2.4], [3, -0.5], [-3, -0.5], [3, 0.8], [-3, 0.8], [3, -1.8], [-3, -1.8]].map(([sx, sy]) => at(sx > 0 ? s[0] + 40 * u * sx : s[0] + 40 * u * sx - M.bw, s[1] + sy * M.bh));
+      : [[1, -0.5], [-1, -0.5], [1, -1.4], [-1, -1.4], [1, 0.4], [-1, 0.4], [1.8, -0.5], [-1.8, -0.5], ...(cl ? [[1, 1.4], [-1, 1.4], [1, -2.4], [-1, -2.4], [3, -0.5], [-3, -0.5], [3, 0.8], [-3, 0.8], [3, -1.8], [-3, -1.8]] : [])].map(([sx, sy]) => at(sx > 0 ? s[0] + 40 * u * sx : s[0] + 40 * u * sx - M.bw, s[1] + sy * M.bh));
     // With no clear spot, the one overlapping least (leaders, brackets and arrows included).
     const fit = cands.filter((b) => b[0] >= 0 && b[1] >= 0 && b[2] <= W && b[3] <= Hh), least = () => (fit.length ? fit : cands).reduce((a, b) => { const on = (x) => lay.boxes.reduce((t, o) => t + overlapArea(x, o), 0); return on(b) < on(a) ? b : a; });
-    const box = free ? lay.add(cands[0]) : lay.place(cands, Infinity) || lay.add(least());
+    const box = free ? lay.add(cands[0]) : lay.place(cands, Infinity) || lay.add(cl ? least() : cands[0]);
     H.drawCallout(ctx, K, box[0], box[1], it.c, M, s); hits.push({ kind: 'callout', id: it.c.h.id, box });
   });
 }
 // Small boxes along each bracket's line (callouts drawn as a bracket on their hole): the pills and the boxes
 // beside a hole keep off them.
+const clear = () => uses(H.S, 'clearLeaders'); // round 5's layout rules, for figures of version 3 on
 function bracketBoxes(cs, u) {
   return cs.filter((c) => placementOf({ c }) === 'bracket').flatMap((c) => Array.from({ length: 9 }, (_, k) => {
     const p = c.h.posAt(c.ic.broad.from + c.ic.broad.len * k / 8), q = H.proj(H.G.V(p.x, p.y, p.z)); return [q[0] - 12 * u, q[1] - 4 * u, q[0] + 12 * u, q[1] + 4 * u];
