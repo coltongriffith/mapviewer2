@@ -367,7 +367,7 @@ function labelCanvas(hit, cols, size, len, ht, mirror, scr) {
   const pts = H.project.holes.filter(H.prominent).flatMap((h) => h.path.filter((p, i) => i % 2 === 0).map((p) => H.proj(H.G.V(p.x, p.y, p.z)))), v = new THREE.Vector3();
   (H.G.shellMesh?.children || []).forEach((m) => { const a = m.geometry.attributes.position; for (let i = 0; i < a.count; i += 2) pts.push(H.proj(v.fromBufferAttribute(a, i))); });
   const boxes = H.occ.filter((b) => b[2] - b[0] < H.frame()[0] - 1), zt = H.G.zmax;
-  g.drawImage(hit.base, 0, 0); g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = `600 ${size * kx}px "Source Sans 3", "Segoe UI", sans-serif`;
+  g.drawImage(hit.base, 0, 0); g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = `600 ${size * kx}px ${H.fonts?.() || '"Source Sans 3", "Segoe UI", sans-serif'}`; // the figure's sans (typography.js)
   labelSpots(hit.cls, nx, ny, len / nx, ht / ny).forEach(({ c: cl, spots }) => {
     if (!names[cl] || !cols[cl]) return;
     // On one line, else on two (split at the space nearest the middle), so a name fits between the holes.

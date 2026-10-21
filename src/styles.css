@@ -1380,7 +1380,8 @@ body.is-dragging .template-zone .panel-delete-btn { opacity: 0 !important; }
 .bk-side-list { display: flex; flex-direction: column; gap: 8px; }
 .bk-side-card { display: flex; align-items: center; gap: 10px; padding: 6px; border: 1px solid var(--ui-border); border-radius: var(--r-md); background: #fff; }
 .bk-side-swatch { width: 66px; height: 40px; border-radius: var(--r-md); object-fit: cover; border: 1px solid var(--ui-border); flex-shrink: 0; }
-.bk-side-info { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.bk-side-info { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 8px; }
+.bk-side-actions { display: flex; gap: 4px; flex-shrink: 0; }
 .bk-side-name { font-size: 13px; font-weight: 600; color: var(--ui-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 6px; min-width: 0; }
 .bk-side-badge { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ui-warning); background: #f4ead5; border: 1px solid #e3d3a8; padding: 1px 5px; border-radius: var(--r-md); flex-shrink: 0; }
 .export-custom-size { margin-top: 4px; }
