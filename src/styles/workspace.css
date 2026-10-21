@@ -64,6 +64,9 @@
 .ws-tab[aria-selected="true"] { color: var(--ui-text); border-bottom-color: var(--ui-action); }
 .ws-tab:hover { color: var(--ui-text); }
 
+.ws-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(130px, 100%), 1fr)); gap: 12px 18px; margin: 0; }
+.ws-stats dt { color: var(--ui-text-muted); font-size: 12px; }
+.ws-stats dd { margin: 2px 0 0; font-size: 17px; font-weight: 600; overflow-wrap: anywhere; }
 .ws-dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 18px; margin: 0; font-size: 13.5px; }
 .ws-dl dt { color: var(--ui-text-muted); }
 .ws-dl dd { margin: 0; white-space: pre-wrap; }

@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { composite, collarGroups, autoCell, autoSearch } from './shell-core.js';
 import { METAL_DEFAULTS, defaultUnit, priceUnit, eqFactors, eqFormula, eqValue } from './metal-eq.js';
-import { isXYZ, parseXYZ, refineRole } from './roles.js';
+import { isXYZ, parseXYZ, refineRole, matchCols, roleOf } from './roles.js';
 import { makeLayout, isClick, legendRows as binRows, wrapNotes, shouldMerge, hits as boxHits } from './layout.js';
 import { DESIGN_VERSION, FEATURES, uses, withDefaults } from './design-version.js';
 import { intercept, calloutText, avgOver, ribbonPieces } from './intercepts.js';
@@ -31,27 +31,6 @@ function parseCSV(text) {
   return { header, rows };
 }
 const norm = (h) => h.toLowerCase().replace(/[\s\-.()/#]+/g, '_').replace(/^_+|_+$/g, '');
-const ALIASES = {
-  hole: ['holeid', 'hole_id', 'hole', 'bhid', 'dhid', 'hole_name', 'holename', 'drillhole', 'drill_hole', 'hole_number', 'ddh', 'id'],
-  east: ['easting', 'east', 'x', 'utm_e', 'utme', 'utm_east', 'xcollar', 'x_coord', 'e', 'easting_m', 'utm_easting'],
-  north: ['northing', 'north', 'y', 'utm_n', 'utmn', 'utm_north', 'ycollar', 'y_coord', 'n', 'northing_m', 'utm_northing'],
-  elev: ['elevation', 'elev', 'rl', 'z', 'zcollar', 'collar_rl', 'collar_elev', 'elevation_m', 'alt', 'altitude', 'collar_z'],
-  lat: ['lat', 'latitude'], lon: ['lon', 'long', 'longitude', 'lng'],
-  depth: ['depth', 'length', 'td', 'eoh', 'max_depth', 'total_depth', 'final_depth', 'depth_m', 'length_m', 'end_depth', 'hole_length', 'at', 'distance', 'survey_depth'],
-  az: ['azimuth', 'azi', 'az', 'bearing', 'azim', 'azimuth_deg'],
-  dip: ['dip', 'inclination', 'incl', 'inc', 'dip_deg'],
-  from: ['from', 'depth_from', 'from_m', 'mfrom', 'start', 'from_depth', 'sample_from'],
-  to: ['to', 'depth_to', 'to_m', 'mto', 'end', 'to_depth', 'sample_to'],
-};
-function matchCols(header) {
-  const n = header.map(norm), out = {};
-  for (const [key, list] of Object.entries(ALIASES)) {
-    let idx = n.findIndex((h) => list.includes(h));
-    if (idx < 0 && key !== 'hole') idx = n.findIndex((h) => list.some((a) => a.length > 2 && h.startsWith(a)));
-    if (idx >= 0) out[key] = idx;
-  }
-  return out;
-}
 const GRADE_HINT = /(cueq|aueq|agEq|cu|au|ag|zn|pb|ni|co|mo|li2o|li|u3o8|pt|pd|fe|sn|w|grade|ppm|ppb|pct|gpt)/i;
 function gradeCols(header, cols, rows) {
   const used = new Set(Object.values(cols));
@@ -59,15 +38,6 @@ function gradeCols(header, cols, rows) {
     let num = 0, tot = 0; for (const r of rows.slice(0, 200)) { const v = (r[i] || '').trim(); if (!v) continue; tot++; if (Number.isFinite(parseFloat(v.replace(/^</, '')))) num++; }
     return tot > 0 && num / tot > 0.8;
   }).sort((a, b) => (GRADE_HINT.test(b.h) ? 1 : 0) - (GRADE_HINT.test(a.h) ? 1 : 0)).map(({ h, i }) => ({ name: h, i }));
-}
-function roleOf(cols, name) {
-  if (/\.obj$/i.test(name)) return 'mesh';
-  const has = (...k) => k.every((x) => cols[x] !== undefined);
-  if (has('hole', 'from', 'to')) return 'assay';
-  if (has('hole') && (has('east', 'north') || has('lat', 'lon'))) return 'collar';
-  if (has('hole', 'depth') && (has('az') || has('dip'))) return 'survey';
-  if (has('east', 'north', 'elev')) return 'topo';
-  return 'unknown';
 }
 const ROLE_LABEL = { collar: 'Collars', survey: 'Surveys', assay: 'Assays', topo: 'Topography', mesh: 'Model shape', unknown: 'Not recognised' };
 const ROLE_FIELDS = { collar: ['hole', 'east', 'north', 'elev', 'depth', 'az', 'dip'], survey: ['hole', 'depth', 'az', 'dip'], assay: ['hole', 'from', 'to'], topo: ['east', 'north', 'elev'] };

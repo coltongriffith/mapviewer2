@@ -9,6 +9,39 @@ const LINE_NAME = /^(line|line_id|lineid|line_no|line_number|line_name|survey_li
 const GEOPHYS_NAME = /(charg|resist|conduct|^rho|ohm|mv_?v|msec|^ip$|^ip_|^mt$|^mt_|susc|^mag|density|^value$|^val$|^model|inv|^res$|^cond$|^sigma)/;
 const GEOPHYS_FILE = /(^|[^a-z])(ip|mt|geophys\w*|inversion|charg\w*|resist\w*|conduct\w*|amt|csamt|dcip)([^a-z]|$)/i;
 
+// The core column matcher: which header is the hole ID, easting, from, ... (exact names first, then a
+// prefix for all but the hole ID), and the file role those columns make. Shared with the property drill
+// database importer (src/utils/drillDb.js), so a file is read the same way in both places.
+export const ALIASES = {
+  hole: ['holeid', 'hole_id', 'hole', 'bhid', 'dhid', 'hole_name', 'holename', 'drillhole', 'drill_hole', 'hole_number', 'ddh', 'id'],
+  east: ['easting', 'east', 'x', 'utm_e', 'utme', 'utm_east', 'xcollar', 'x_coord', 'e', 'easting_m', 'utm_easting'],
+  north: ['northing', 'north', 'y', 'utm_n', 'utmn', 'utm_north', 'ycollar', 'y_coord', 'n', 'northing_m', 'utm_northing'],
+  elev: ['elevation', 'elev', 'rl', 'z', 'zcollar', 'collar_rl', 'collar_elev', 'elevation_m', 'alt', 'altitude', 'collar_z'],
+  lat: ['lat', 'latitude'], lon: ['lon', 'long', 'longitude', 'lng'],
+  depth: ['depth', 'length', 'td', 'eoh', 'max_depth', 'total_depth', 'final_depth', 'depth_m', 'length_m', 'end_depth', 'hole_length', 'at', 'distance', 'survey_depth'],
+  az: ['azimuth', 'azi', 'az', 'bearing', 'azim', 'azimuth_deg'],
+  dip: ['dip', 'inclination', 'incl', 'inc', 'dip_deg'],
+  from: ['from', 'depth_from', 'from_m', 'mfrom', 'start', 'from_depth', 'sample_from'],
+  to: ['to', 'depth_to', 'to_m', 'mto', 'end', 'to_depth', 'sample_to'],
+};
+export function matchCols(header) {
+  const n = header.map(norm), out = {};
+  for (const [key, list] of Object.entries(ALIASES)) {
+    let idx = n.findIndex((h) => list.includes(h));
+    if (idx < 0 && key !== 'hole') idx = n.findIndex((h) => list.some((a) => a.length > 2 && h.startsWith(a)));
+    if (idx >= 0) out[key] = idx;
+  }
+  return out;
+}
+export function roleOf(cols, name) {
+  if (/\.obj$/i.test(name)) return 'mesh';
+  const has = (...k) => k.every((x) => cols[x] !== undefined);
+  if (has('hole', 'from', 'to')) return 'assay';
+  if (has('hole') && (has('east', 'north') || has('lat', 'lon'))) return 'collar';
+  if (has('hole', 'depth') && (has('az') || has('dip'))) return 'survey';
+  if (has('east', 'north', 'elev')) return 'topo';
+  return 'unknown';
+}
 const isNum = (v) => { const t = String(v ?? '').trim().replace(/^</, ''); return t !== '' && Number.isFinite(parseFloat(t)) && /^[-+]?[\d.]/.test(t); };
 const share = (rows, i, test) => { let n = 0, tot = 0; for (const r of rows.slice(0, 300)) { const v = (r[i] ?? '').trim(); if (!v) continue; tot++; if (test(v)) n++; } return tot ? n / tot : 0; };
 
