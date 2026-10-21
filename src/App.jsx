@@ -41,6 +41,7 @@ const ClassificationPanel = React.lazy(() => import('./components/Classification
 const AddClaimsModal = React.lazy(() => import('./components/AddClaimsModal'));
 const UpgradeModal = React.lazy(() => import('./components/UpgradeModal'));
 const FullResOfferModal = React.lazy(() => import('./components/FullResOfferModal'));
+const PublicationCheck = React.lazy(() => import('./components/PublicationCheck'));
 import { loadGeoJSON, loadCSV, loadShapefileSet, MAX_FEATURES } from './utils/importers';
 import {
   CALLOUT_TYPES,
@@ -729,6 +730,9 @@ export default function App({ initialAction = null }) {
   // allowedPx, returning } for the one free full-resolution export.
   const [fullResOffer, setFullResOffer] = useState(null);
   const [fullResLink, setFullResLink] = useState(null);
+  // Opt-in publication check (export/preflight.js): off unless ticked, per session.
+  const [pubCheck, setPubCheck] = useState(false);
+  const [preflight, setPreflight] = useState(null);
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showAddClaimsModal, setShowAddClaimsModal] = useState(false);
@@ -4526,7 +4530,7 @@ export default function App({ initialAction = null }) {
     }
     setExporting(true);
     try {
-      const [{ buildScene }, { exportPNG }, { exportSVG }, { getExportWarnings }] = await Promise.all([
+      const [{ buildScene }, { exportPNG }, { exportSVG }, { createExportContext }] = await Promise.all([
         import('./export/buildScene'),
         import('./export/exportPNG'),
         import('./export/exportSVG'),
@@ -4571,8 +4575,10 @@ export default function App({ initialAction = null }) {
       // Pro-only resolution by editing state, replaying a request, or
       // restoring a project saved while on Pro.
       const baseSettings = project.layout?.exportSettings || {};
-      const { fullResCredit, ...exportOptions } = extraOptions;
-      const opts = { ...baseSettings, ...exportOptions, paidTier: entitlements.clean_export };
+      const { fullResCredit, preflightOk, ...exportOptions } = extraOptions;
+      // This export's own warnings: a thumbnail render started meanwhile has its own.
+      const exportContext = createExportContext();
+      const opts = { ...baseSettings, ...exportOptions, paidTier: entitlements.clean_export, exportContext };
       // The account's one free full-resolution export lifts the pixel cap for
       // this PNG only; the corner credit stays.
       const spendingCredit = Boolean(fullResCredit) && format === 'png' && Boolean(user)
@@ -4601,6 +4607,15 @@ export default function App({ initialAction = null }) {
           }, user?.id);
         }
       }
+      // Publication check: findings are shown before anything downloads;
+      // "Export anyway" comes back here with preflightOk.
+      let checked = false;
+      if (pubCheck && !preflightOk) {
+        const { runPreflight, needsReview } = await import('./export/preflight');
+        const diagnostics = await runPreflight(scene, { ...opts, format });
+        if (needsReview(diagnostics)) { setPreflight({ format, extraOptions, diagnostics }); return; }
+        checked = true;
+      }
       if (format === 'png') {
         await exportPNG(scene, opts);
       } else if (format === 'svg' || format === 'svg_ai') {
@@ -4609,7 +4624,7 @@ export default function App({ initialAction = null }) {
         const { exportPDF } = await import('./export/exportPDF');
         await exportPDF(scene, opts);
       }
-      const warnings = getExportWarnings();
+      const warnings = exportContext.warnings;
       // Free and not yet spent: offer the full-resolution export in place of
       // the plain upgrade prompt. An anonymous exporter pays with an email.
       const offerFullRes = resolutionClamped && !entitlements.clean_export && !spendingCredit
@@ -4637,6 +4652,8 @@ export default function App({ initialAction = null }) {
         });
       } else if (warnings.length > 0) {
         setUploadStatus({ type: 'info', message: `Export complete — note: ${warnings.join('; ')}.` });
+      } else if (checked) {
+        setUploadStatus({ type: 'success', message: 'Publication check passed.' });
       }
       // Describe what the file ACTUALLY is. `noWatermark` only means "the big
       // watermark was suppressed" — free exports still carry the small
@@ -7349,6 +7366,10 @@ export default function App({ initialAction = null }) {
                 <button className={`btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('svg_ai'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title="SVG bundled with separate basemap PNG — opens correctly in Adobe Illustrator">{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'SVG (Illustrator)'}</button>
                 <button className={`btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('pdf'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export PDF'}</button>
               </div>
+              <label className="toggle-row">
+                <input type="checkbox" checked={pubCheck} onChange={(e) => setPubCheck(e.target.checked)} />
+                <span>Publication check before download</span>
+              </label>
               {exportError && <div className="export-error-msg">{exportError}</div>}
             </div>
           </section>
@@ -8075,6 +8096,13 @@ export default function App({ initialAction = null }) {
               if (fullResOffer.returning) clearFullResExport();
               setFullResOffer(null);
             }}
+          />
+        )}
+        {preflight && (
+          <PublicationCheck
+            diagnostics={preflight.diagnostics}
+            onClose={() => setPreflight(null)}
+            onExport={() => { setPreflight(null); handleExport(preflight.format, { ...preflight.extraOptions, preflightOk: true }); }}
           />
         )}
         {showExportModal ? (
