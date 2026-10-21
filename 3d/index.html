@@ -905,7 +905,7 @@ Whole projects (to keep or move a figure):
   EM3D.setStyle({insetStyle: "plan" | "satellite" | "topo"})   a map inset around the property (needs the
                                   coordinate system)
   EM3D.addOverlay({name, data | file, kind: "fill" | "line" | "points", color, dash: "solid" | "dashed" |
-                   "dotted" (or true / false), width, opacity (0-1), label, labelField, crs})   a map overlay
+                   "dotted" (or true / false), width, opacity (0-1; an area's fill), label, labelField, crs})   a map overlay
                                   draped on the terrain: claims, targets, faults, soil points. data: GeoJSON
                                   (an object or its text), KML text, or a zipped shapefile (base64, a data URL
                                   or an ArrayBuffer); file: the name of a file added in step 1. Without kind, a

@@ -251,6 +251,10 @@ test('map overlays and shapes: draped, listed, saved and reopened unchanged, and
   await open3d(page);
   const r = await page.evaluate(async (fc) => {
     const E = window.EM3D, plain = E.exportPNG({ view: '3d' });
+    // A line at opacity 0, left out of the legend, leaves the export as it was.
+    const ghost = await E.addOverlay({ name: 'Ghost', data: JSON.parse(fc), kind: 'line', opacity: 0, label: '' });
+    const ghostPng = E.exportPNG({ view: '3d' }); await E.updateOverlay(ghost, { opacity: 1 });
+    const shownPng = E.exportPNG({ view: '3d' }); await E.removeOverlay(ghost);
     // A GeoJSON file with claims, a fault and soil points: one overlay of each, the sample kept.
     let s = E.addFiles([{ name: 'example-ridge-overlays.geojson', text: fc }]);
     s = await E.layersReady();
@@ -266,10 +270,11 @@ test('map overlays and shapes: draped, listed, saved and reopened unchanged, and
     let bad = null; try { await E.addOverlay({ name: 'x', data: { type: 'FeatureCollection', features: [] } }); } catch (e) { bad = e.message; }
     await E.removeOverlay(tenure);
     const removed = await E.removeOverlay(after.overlays[0].id);
-    return { fromFile, ids, before, after, plain: plain.length, withAll: withAll.length, again: again.length, same: again === withAll, section: section.length, bad,
+    return { ghostSame: ghostPng === plain, shownSame: shownPng === plain, fromFile, ids, before, after, plain: plain.length, withAll: withAll.length, again: again.length, same: again === withAll, section: section.length, bad,
       saved: { overlays: project.settings.overlays.map((o) => [o.id, o.file || null, !!o.data]), shapes: project.settings.shapes.map((x) => x.type) },
       left: removed.overlays.map((o) => o.name), files: removed.files.map((f) => f.name) };
   }, readFileSync('tests/fixtures/three-d/example-ridge-overlays.geojson', 'utf8'));
+  expect([r.ghostSame, r.shownSame]).toEqual([true, false]); // overlay opacity reaches the export
   expect(r.fromFile).toEqual({ usingSample: true, role: 'overlay', overlays: [['Example Ridge claims', 'fill', 1, true], ['Ridge Fault', 'line', 1, true], ['example ridge overlays (points)', 'points', 20, true]] });
   expect(r.ids).toEqual(['S1', 'S2', 'S3']);
   expect(r.before.overlays[1]).toMatchObject({ dash: 'dashed', width: 3, color: '#142126' }); // brand colours unless set

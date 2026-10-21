@@ -187,3 +187,54 @@ describe('zipped shapefiles', () => {
     expect(feats.map((f) => f.g)).toEqual(['A', 'P']);
   });
 });
+
+// A page stand-in for the drawing and editing modules: a flat 100 m block seen from straight above.
+function fakeHost(S) {
+  const G = { B: { x0: 0, x1: 100, y0: 0, y1: 100 }, surf: () => 0, zmax: 10, terr: { lo: 0, hi: 10 }, V: (x, y, z) => ({ x, y, z }), cx: 50, cy: 50, zref: 0, bw: 100, bh: 100 };
+  const camera = { matrixWorld: { elements: [1] }, projectionMatrix: { elements: [1] }, position: { x: 0, y: 1e4, z: 0, clone: () => ({}) }, getWorldDirection: (v) => Object.assign(v, { x: 0, y: -1, z: 0 }) };
+  return { S, G, camera, project: { holes: [] }, files: () => [], geo: () => null, proj: (v) => [v.x, v.y, 0], frame: () => [100, 100], paper: () => '#fff', INK: '#000',
+    restyle() {}, schedulePublish() {}, status() {}, redraw() {}, renderFiles() {} };
+}
+// A 2D context that records the alpha of every stroke and fill.
+function recorder() {
+  const ops = [], ctx = { globalAlpha: 1, measureText: () => ({ width: 10 }) };
+  ['save', 'restore', 'beginPath', 'moveTo', 'lineTo', 'arc', 'rect', 'fillRect', 'setLineDash', 'strokeText', 'fillText'].forEach((k) => { ctx[k] = () => {}; });
+  ctx.stroke = () => ops.push(['stroke', ctx.strokeStyle, ctx.globalAlpha]); ctx.fill = () => ops.push(['fill', ctx.fillStyle, ctx.globalAlpha]);
+  return { ctx, ops };
+}
+describe('overlay opacity', () => {
+  it('fades lines and points by their opacity on the figure and in the legend (an area keeps a solid outline)', async () => {
+    const ov = await import('../src/three-d/overlays.js'), S = { overlays: [], vex: 1, projection: 'perspective', accent: '#c65322', primary: '#142126' };
+    ov.init(fakeHost(S));
+    const fc = { type: 'FeatureCollection', features: [
+      { type: 'Feature', geometry: { type: 'LineString', coordinates: [[10, 10], [90, 90]] } },
+      { type: 'Feature', geometry: { type: 'Point', coordinates: [50, 20] } },
+      { type: 'Feature', geometry: { type: 'Polygon', coordinates: [[[20, 20], [80, 20], [80, 80], [20, 20]]] } }] };
+    await ov.add({ name: 'Fault', data: fc, kind: 'line', color: '#111111', opacity: 0.4 });
+    await ov.add({ name: 'Soil', data: fc, kind: 'points', color: '#222222', opacity: 50 });
+    await ov.add({ name: 'Claims', data: fc, kind: 'fill', color: '#333333', opacity: 0.25 });
+    const { ctx, ops } = recorder(); ov.draw(ctx, { u: 1, font() {} }, []);
+    const alpha = (list, c) => [...new Set(list.filter((o) => o[1] === c).map((o) => o[2]))];
+    expect(alpha(ops, '#111111')).toEqual([0.4]);
+    expect(alpha(ops, '#222222')).toEqual([0.5]);
+    expect(alpha(ops, '#333333')).toEqual([1]); // the outline; the fill's opacity is painted into the terrain
+    expect(ctx.globalAlpha).toBe(1);
+    const sw = recorder(); ov.legendSecs()[0].rows.forEach((r) => r.draw(sw.ctx, 0, 0, 1));
+    expect(alpha(sw.ops, '#111111')).toEqual([0.4]);
+    expect(alpha(sw.ops, '#222222')).toEqual([0.5]);
+  });
+});
+describe('editing a shape\'s text', () => {
+  it('clears the text with null or "", so a dimension goes back to its length, and prefers text over label', async () => {
+    const sh = await import('../src/three-d/shapes.js'), S = { shapes: [] };
+    sh.init(fakeHost(S));
+    const id = sh.add({ type: 'dimension', from: [0, 0], to: [300, 400], text: '~ 500 m gap' }), text = () => S.shapes.find((s) => s.id === id).text;
+    expect(text()).toBe('~ 500 m gap');
+    sh.update(id, { text: null }); expect(text()).toBeNull();
+    sh.update(id, { label: 'Gap' }); expect(text()).toBe('Gap');
+    sh.update(id, { text: '' }); expect(text()).toBeNull();
+    sh.update(id, { text: 'A', label: 'B' }); expect(text()).toBe('A');
+    sh.update(id, { text: null, label: 'B' }); expect(text()).toBeNull();
+    sh.update(id, { width: 2 }); expect(text()).toBeNull(); // other edits leave it alone
+  });
+});

@@ -278,7 +278,7 @@ export function draw(ctx, K, occ) {
   const { u, font } = K, L = screen(), order = { fill: 0, line: 1, points: 2 };
   ctx.save(); ctx.lineJoin = 'round';
   L.slice().sort((a, b) => order[a.o.kind] - order[b.o.kind]).forEach(({ o, runs, pts }) => {
-    const w = o.width * u;
+    const w = o.width * u; ctx.globalAlpha = o.kind === 'fill' ? 1 : o.opacity; // an area's opacity is its fill's (paint)
     if (o.kind === 'points') {
       pts.forEach(([x, y]) => { ctx.beginPath(); ctx.arc(x, y, w / 2, 0, 2 * Math.PI); ctx.fillStyle = o.color; ctx.fill(); ctx.lineWidth = Math.max(0.8 * u, w / 9); ctx.strokeStyle = 'rgba(20,33,38,0.7)'; ctx.stroke(); });
       return;
@@ -288,7 +288,7 @@ export function draw(ctx, K, occ) {
     ctx.setLineDash([]); ctx.lineCap = 'round'; ctx.strokeStyle = H.paper(0.55); ctx.lineWidth = w + 2.4 * u; ctx.stroke();
     dashOf(ctx, o.dash, w, u); ctx.strokeStyle = o.color; ctx.lineWidth = w; ctx.stroke(); ctx.setLineDash([]);
   });
-  font(600, 11.5); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineCap = 'round';
+  ctx.globalAlpha = 1; font(600, 11.5); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineCap = 'round';
   L.forEach(({ o, labels }) => labels.forEach(({ t, at, side }) => {
     const tw = ctx.measureText(t).width, x = side ? at[0] + o.width * u / 2 + 5 * u + tw / 2 : at[0], y = at[1], box = [x - tw / 2 - 3 * u, y - 8 * u, x + tw / 2 + 3 * u, y + 8 * u];
     if (occ.some((b) => hits(box, b))) return; occ.push(box);
@@ -298,7 +298,7 @@ export function draw(ctx, K, occ) {
 }
 // Legend rows, each with a swatch the shape of its mark (a filled box, a line, a dot).
 const swatch = (o) => (ctx, x, cy, u) => {
-  const w = Math.min(o.width, o.kind === 'points' ? 10 : 4) * u; ctx.save(); ctx.lineJoin = 'round';
+  const w = Math.min(o.width, o.kind === 'points' ? 10 : 4) * u; ctx.save(); ctx.lineJoin = 'round'; if (o.kind !== 'fill') ctx.globalAlpha = Math.max(0.3, o.opacity);
   if (o.kind === 'points') { ctx.beginPath(); ctx.arc(x + 11 * u, cy, w / 2, 0, 2 * Math.PI); ctx.fillStyle = o.color; ctx.fill(); ctx.lineWidth = 0.8 * u; ctx.strokeStyle = 'rgba(20,33,38,0.7)'; ctx.stroke(); }
   else {
     if (o.kind === 'fill') { ctx.globalAlpha = Math.max(0.3, o.opacity); ctx.fillStyle = o.color; ctx.fillRect(x, cy - 6 * u, 22 * u, 12 * u); ctx.globalAlpha = 1; }
@@ -329,7 +329,7 @@ export function renderUI(el) {
         <label class="field" style="grid-column:1/-1"><span>Name</span><input type="text" data-ov="${i}" data-k="name" value="${esc(o.name)}" maxlength="80"></label>
         <label class="field" style="grid-column:1/-1"><span>Legend text (empty: not in the legend)</span><input type="text" data-ov="${i}" data-k="label" value="${esc(o.label ?? o.name)}" maxlength="80"></label>
         <label class="field"><span>${o.kind === 'points' ? 'Dot size' : 'Width'}</span><input type="number" data-ov="${i}" data-k="width" min="0.5" max="16" step="0.5" value="${o.width}"></label>
-        ${o.kind === 'fill' ? `<label class="field"><span>Fill opacity %</span><input type="number" data-ov="${i}" data-k="opacity" min="0" max="100" step="5" value="${Math.round(o.opacity * 100)}"></label>` : ''}
+        <label class="field"><span>${o.kind === 'fill' ? 'Fill opacity' : 'Opacity'} %</span><input type="number" data-ov="${i}" data-k="opacity" min="0" max="100" step="5" value="${Math.round(o.opacity * 100)}"></label>
         <label class="field" style="grid-column:1/-1"><span>Label each with</span><select data-ov="${i}" data-k="labelField"><option value="">No labels</option>${fields.map((f) => `<option ${f === o.labelField ? 'selected' : ''}>${esc(f)}</option>`).join('')}</select></label>
       </div></details>
       <span class="${n.problem ? 'warn' : 'muted'}">${n.features.toLocaleString()} ${n.features === 1 ? 'feature' : 'features'}${o.file ? ` from ${esc(o.file)}` : ''}${n.problem ? `. ${esc(n.problem)}` : ''}</span></div>`;

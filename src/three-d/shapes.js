@@ -65,7 +65,8 @@ function patch(s, x) {
   ['rx', 'ry'].forEach((k, j) => { const v = x[k] ?? (Array.isArray(x.radii) ? x.radii[j] : undefined); if (v !== undefined) s[k] = num(v, k, 1, 1e5); });
   if (x.rotation !== undefined) s.rotation = ((num(x.rotation, 'rotation', -1e4, 1e4) % 360) + 360) % 360;
   if (x.vertical !== undefined) s.vertical = !!x.vertical;
-  const t = x.text ?? x.label; if (t !== undefined) s.text = t === null ? null : String(t).slice(0, 80);
+  // An explicit text wins over label; null or "" clears it (a dimension then shows its length).
+  const t = 'text' in x ? x.text : x.label; if (t !== undefined) s.text = t === null || t === '' ? null : String(t).slice(0, 80);
   if (x.color !== undefined) { if (x.color !== null && !HEX.test(String(x.color))) throw new Error('color must be a hex colour like #142126, or null for the brand colour.'); s.color = x.color && String(x.color).toLowerCase(); }
   if (x.width !== undefined) s.width = num(x.width, 'width', 0.5, 12);
   if (x.size !== undefined) s.size = num(x.size, 'size', 0.4, 3);
