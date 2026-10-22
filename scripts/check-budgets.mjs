@@ -435,7 +435,13 @@ const BUDGETS = {
   // src/utils/logoBackground.js (~1.5 kB, fetched with the first logo added in the Brand step or a removal asked for),
   // geology.js +1.4 (the fit by known points, the A–A′ plane, getState().layout.imageFits, a fit whose hole has left the
   // data shown stretched), block.js +0.6 (the side title) and tags.js +0.1 (several "incl." results joined with " & ").
-  threeDLazyJsGzipKb: 154.9,
+  // 154.9 → 159.2 (Oct 2026, 3D round 5H merged over the 2D figure import (ca93dfcf), measured 158.7, configured 158.9,
+  // 154.4 and 154.6 on main, + 0.3): block.js +3.7 (the block section's opt-in release look: a colour per hole on its
+  // trace, a common pad's pill, the release legend card, elevation ticks on the block's edge, A and A′ at the section's
+  // ends, the flat scale bar with its note, getState().layout.block, their checks and Layout controls) and tags.js +0.6
+  // (thick bars in the release palette, the pad pill and hole colours on the collar IDs and callout chips, incl. lines
+  // without "from"). The /3d page gains only the hooks (+0.05 kB, within its limit).
+  threeDLazyJsGzipKb: 159.2,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.

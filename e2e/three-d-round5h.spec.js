@@ -121,6 +121,7 @@ test('thick bars and hole colours change the figure, and it is the same again wi
 });
 
 test('the round 5H controls in the Layout step, clicked at the desktop size', async ({ page }) => {
+  test.setTimeout(600_000); // each change redraws the block under SwiftShader (several seconds each)
   const errors = []; page.on('pageerror', (e) => errors.push(e.message));
   await open3d(page);
   await tower(page, false);

@@ -125,7 +125,7 @@ export function drawPills(ctx, K, opts) {
 function drawIdPills(ctx, K, { placed, occ, W, H: Hh }) {
   const { u, font } = K; drawn = new Set();
   // A block section's common pads (block.js, round 5H): one pill over the pad, first, in place of its holes' IDs.
-  const BK = H.ext('block'), pads = (BK?.pads() || []).filter((p) => p.holes.some(tagShown)), onPad = new Set(pads.flatMap((p) => p.holes));
+  const BK = H.ext?.('block'), pads = (BK?.pads() || []).filter((p) => p.holes.some(tagShown)), onPad = new Set(pads.flatMap((p) => p.holes));
   font(800, 13);
   const padItems = pads.map((pad) => {
     const ss = pad.holes.map((h) => H.proj(H.G.V(h.c.x, h.c.y, h.c.z))); if (ss.some((s) => s[2] > 1)) return null;
@@ -391,7 +391,7 @@ function calloutBracket(ctx, K, it, lay, side = -1) {
   // The text, right-aligned on the left side, left-aligned on the right; the chip on the side of the bracket.
   const R = side < 0, xa = R ? box[2] - 3 * u : box[0] + 3 * u, halo = (t, x, y) => { ctx.lineJoin = 'round'; ctx.lineWidth = 4 * u; ctx.strokeStyle = H.paper(0.92); ctx.strokeText(t, x, y); ctx.fillText(t, x, y); };
   ctx.textBaseline = 'middle'; let y = box[1] + rh / 2;
-  const cx = R ? xa - chip : xa, cc = H.ext('block')?.colorOf(c.h) || H.pri(); ctx.fillStyle = cc; H.roundRect(ctx, cx, y - 7.5 * u, chip, 15 * u, 2.5 * u); ctx.fill(); // the hole's own colour (block.js), else the brand's
+  const cx = R ? xa - chip : xa, cc = H.ext?.('block')?.colorOf(c.h) || H.pri(); ctx.fillStyle = cc; H.roundRect(ctx, cx, y - 7.5 * u, chip, 15 * u, 2.5 * u); ctx.fill(); // the hole's own colour (block.js), else the brand's
   font(700, 11); ctx.textAlign = 'center'; ctx.fillStyle = H.textOn(cc); ctx.fillText(c.h.id, cx + chip / 2, y + 0.5 * u);
   if (head) { font(800, 10.5); track(0.9 * u); ctx.textAlign = R ? 'right' : 'left'; ctx.fillStyle = H.brandTone('head'); halo(head, R ? cx - 7 * u : cx + chip + 7 * u, y); track(0); }
   ctx.textAlign = R ? 'right' : 'left'; y += rh / 2 + mh / 2; font(800, 18); ctx.fillStyle = H.INK; halo(L.l1, xa, y);
