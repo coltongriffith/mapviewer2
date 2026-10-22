@@ -190,17 +190,19 @@ export function sync() {
 // top covers it (behind it in depth, inside its stencil), at the transparency asked: so the holes show through and the
 // imagery keeps its colours. "mix", and blocks saved before the setting, keep the plain transparent top.
 const ghost = { on: false, busy: false, mat: null };
+// three.js constants (stencil, blending) as their numbers, so the shared three.js chunk the page loads exports no more names.
+const GL = { always: 519, replace: 7681, equal: 514, normal: 1, custom: 5, zero: 200, oneMinusSrcAlpha: 205 };
 function vivid() {
   const G = H.G, m = G.top.material, on = S.block?.surface === 'vivid' && S.surf < 0.99;
   ghost.on = on; m.stencilWrite = on;
-  if (on) { m.opacity = 1; m.depthWrite = true; m.stencilRef = 1; m.stencilFunc = THREE.AlwaysStencilFunc; m.stencilZPass = THREE.ReplaceStencilOp; }
+  if (on) { m.opacity = 1; m.depthWrite = true; m.stencilRef = 1; m.stencilFunc = GL.always; m.stencilZPass = GL.replace; }
   H.scene.onAfterRender = ghostPass; H.scene.onBeforeRender = curtainSides;
 }
 function ghostPass(renderer, scene, camera) {
   const G = H.G; if (!ghost.on || ghost.busy || !G || !S.block) return;
   const objs = [...H.root.children.filter((o) => o.isInstancedMesh && o.instanceColor && o.visible), ...(G.shellMesh?.visible ? G.shellMesh.children : []), ...(G.meshes || []).map((x) => x.m).filter((m) => m.visible)];
   if (!objs.length) return;
-  ghost.mat ||= new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, depthFunc: THREE.GreaterDepth, side: THREE.DoubleSide, stencilWrite: true, stencilRef: 1, stencilFunc: THREE.EqualStencilFunc });
+  ghost.mat ||= new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, depthFunc: THREE.GreaterDepth, side: THREE.DoubleSide, stencilWrite: true, stencilRef: 1, stencilFunc: GL.equal });
   ghost.mat.opacity = 1 - S.surf;
   const bg = scene.background, ac = renderer.autoClear, mask = camera.layers.mask;
   objs.forEach((o) => o.layers.enable(5)); ghost.busy = true;
@@ -238,7 +240,7 @@ function curtainSides(renderer, scene, camera) {
   const G = H.G; if (!fade.meshes.length || !G) return;
   const bg = scene.background, M = fade.mat, ht = G.zmax - G.B.z0;
   fade.meshes.forEach((m) => { const g = H.faceGeom(m.userData.face), c = at(g, 0.5); m.visible = g.n.dot(camera.position.clone().sub(G.V(c[0], c[1], G.B.z0 + ht / 2))) > 0; });
-  if (bg?.isColor) { M.color.copy(bg); M.blending = THREE.NormalBlending; } else { M.color.set('#ffffff'); M.blending = THREE.CustomBlending; M.blendSrc = M.blendSrcAlpha = THREE.ZeroFactor; M.blendDst = M.blendDstAlpha = THREE.OneMinusSrcAlphaFactor; }
+  if (bg?.isColor) { M.color.copy(bg); M.blending = GL.normal; } else { M.color.set('#ffffff'); M.blending = GL.custom; M.blendSrc = M.blendSrcAlpha = GL.zero; M.blendDst = M.blendDstAlpha = GL.oneMinusSrcAlpha; }
 }
 
 // ---------- wall labels by unit (S.block.units "auto") ----------
