@@ -2803,36 +2803,116 @@ async function searchQc(term, type, res, { numberList = null } = {}) {
 // Quebec nearby-radius (bbox) query. The store has no live ArcGIS service, so
 // the spatial lookup runs in Postgres via the qc_claims_in_bbox PostGIS RPC
 // (see supabase-qc-claims-setup.sql) and returns the same row shape as search.
+//
+// PostgREST caps every response at max-rows (1000 on this project), RPC
+// results included, and says so only in Content-Range (0-999/*): a box of
+// 1,240 claims came back as exactly 1,000 with no meta at all. So the read
+// pages, as the US mirror's does. The first page asks for the exact total,
+// which is counted over the function's own result and so stops at its
+// `limit 2000`. Later offsets step by the rows the first page actually held,
+// so a lower cap still reads every row. If a later page fails, the rows that
+// arrived are kept and the response says truncated.
+//
+// The function returns no id and tag_number is not unique (co-owners get a
+// row each), so the page order is every column it returns. Rows tied on all
+// of them are identical, so which page they land on changes nothing.
+const QC_BBOX_MAX = 2000;          // the function's own `limit`
+const QC_BBOX_PAGE_ROWS = 1000;    // never above max-rows
+const QC_BBOX_CONCURRENCY = 4;
+const QC_BBOX_ORDER = 'tag_number,owner_name,status,good_to_date,area_hectares,title_type,geometry';
+
+function postgrestTotal(r) {
+  const m = /\/(\d+)\s*$/.exec(String(r.headers?.get?.('content-range') || ''));
+  return m ? Number(m[1]) : null;
+}
+
 async function searchQcBbox(minLng, minLat, maxLng, maxLat, res) {
   const creds = qcSupabaseCreds();
   if (!creds) {
     return res.status(503).json({ error: 'Quebec claims data is not available right now.' });
   }
   const { base, key } = creds;
-  const r = await fetch(`${base}/rest/v1/rpc/qc_claims_in_bbox`, {
-    method: 'POST',
-    headers: {
-      apikey: key,
-      Authorization: `Bearer ${key}`,
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    },
-    body: JSON.stringify({ min_lng: minLng, min_lat: minLat, max_lng: maxLng, max_lat: maxLat }),
-    signal: AbortSignal.timeout(20000),
-  });
-  if (!r.ok) {
-    const body = await r.text().catch(() => '');
-    // PGRST202 = the RPC hasn't been created yet (setup SQL not run)
-    if (r.status === 404 || /PGRST202/.test(body)) {
+  const body = JSON.stringify({ min_lng: minLng, min_lat: minLat, max_lng: maxLng, max_lat: maxLat });
+  const page = async (offset, { count = false } = {}) => {
+    const r = await fetch(`${base}/rest/v1/rpc/qc_claims_in_bbox?order=${QC_BBOX_ORDER}&offset=${offset}&limit=${QC_BBOX_PAGE_ROWS}`, {
+      method: 'POST',
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...(count ? { Prefer: 'count=exact' } : {}),
+      },
+      body,
+      signal: AbortSignal.timeout(20000),
+    });
+    if (!r.ok) {
+      const text = await r.text().catch(() => '');
+      const err = new Error(`Quebec claims store ${r.status}: ${text.slice(0, 300)}`);
+      // PGRST202 = the RPC hasn't been created yet (setup SQL not run)
+      err.notSetUp = r.status === 404 || /PGRST202/.test(text);
+      throw err;
+    }
+    const rows = await r.json();
+    return { rows: Array.isArray(rows) ? rows : [], total: count ? postgrestTotal(r) : null };
+  };
+
+  let first;
+  try {
+    first = await page(0, { count: true });
+  } catch (e) {
+    if (e.notSetUp) {
       return res.status(503).json({
         error: 'Quebec nearby-claims search is not set up yet. Run the qc_claims spatial setup SQL.',
       });
     }
-    throw new Error(`Quebec claims store ${r.status}: ${body.slice(0, 300)}`);
+    throw e;
   }
-  const rows = await r.json();
-  const features = rows.map(qcRowToFeature);
-  return res.status(200).json({ type: 'FeatureCollection', features });
+  const step = first.rows.length;
+  const total = first.total;
+  const pages = [first.rows];
+  let failed = false;
+  if (step > 0 && total != null) {
+    const offsets = [];
+    for (let o = step; o < Math.min(total, QC_BBOX_MAX); o += step) offsets.push(o);
+    for (let i = 0; i < offsets.length && !failed; i += QC_BBOX_CONCURRENCY) {
+      const settled = await Promise.allSettled(offsets.slice(i, i + QC_BBOX_CONCURRENCY).map((o) => page(o)));
+      for (const s of settled) {
+        if (s.status === 'fulfilled') pages.push(s.value.rows);
+        else failed = true;
+      }
+    }
+  } else if (step > 0) {
+    // No total disclosed: walk until a page comes back short or empty.
+    for (let o = step; o < QC_BBOX_MAX; o += step) {
+      let next;
+      try {
+        next = await page(o);
+      } catch {
+        failed = true;
+        break;
+      }
+      pages.push(next.rows);
+      if (next.rows.length < step) break;
+    }
+  }
+
+  const rows = pages.flat().slice(0, QC_BBOX_MAX);
+  // The function stops at QC_BBOX_MAX, so a total that reaches it means "at
+  // least this many": the box holds more than one response carries.
+  const capped = (total ?? rows.length) >= QC_BBOX_MAX;
+  const truncated = failed || capped || (total != null && rows.length < total);
+  return res.status(200).json({
+    type: 'FeatureCollection',
+    features: rows.map(qcRowToFeature),
+    meta: {
+      totalKnown: !truncated ? rows.length : (total != null && !capped ? total : null),
+      returned: rows.length,
+      truncated,
+      pagesFetched: pages.length,
+      provider: 'qc-store',
+    },
+  });
 }
 
 /**
