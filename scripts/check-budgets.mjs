@@ -59,7 +59,11 @@ const BUDGETS = {
   // 148.9 → 149.1 (review fix, measured 148.82): no UTM ticks on a frame wider than a zone (a world view produced
   // ~140 000 crossings in ~1.6 s), the interval picked from each edge's projected range, and at most 50 crossings per
   // edge (~+0.19 kB; the live overlay needs it, so not lazy).
-  maxJsChunkGzipKb: 149.1,
+  // 149.1 → 149.3 (Oct 2026, 3D figures in the account and maps from property data, measured 148.98 configured,
+  // +0.16 kB): the editor takes a file handed over by a property page ("Start a map from a file", "Use in map")
+  // and imports it once the new property map is open. It has to run in App, where the import lives; the
+  // property page and the dashboard's 3D section are lazy chunks.
+  maxJsChunkGzipKb: 149.3,
   initialJsGzipKb: 75,
   initialAuthJsGzipKb: 135,
   // The former configured check omitted VITE_ADMIN_EMAIL, which pruned the
@@ -120,7 +124,13 @@ const BUDGETS = {
   // lazy NameDialog chunk (0.65 kB: Save As and the legend's new heading, in place of window.prompt), and the
   // dashboard's Duplicate naming and opening the copy and the legend editor's dialog hook (~0.07 kB each).
   // 918.3 → 918.5 (measured 918.2): the tick bounds in maxJsChunkGzipKb above.
-  totalAuthJsGzipKb: 918.5,
+  // 918.5 → 924.0 (Oct 2026, 3D figures in the account, measured 923.70, +5.5 kB): all of it lazy. The dashboard's
+  // 3D figures section (FiguresSection.jsx, 2.8 kB: tiles, search and sort, rename dialog, duplicate, move to a
+  // property, delete) and its client (utils/figures.js, 1.7 kB: list, rename, soft delete, duplicate with the
+  // files copied, the editable properties) load with the dashboard, never with the editor; the account page's 3D
+  // count (+0.2 kB), the property page's "Start a map from a file" and "Use in map" (+0.2 kB), /3d's dashboard link
+  // and ?property= first save (+0.1 kB in the lazy account client) and the editor hand-off in App (+0.16 kB).
+  totalAuthJsGzipKb: 924.0,
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
@@ -141,7 +151,8 @@ const BUDGETS = {
   // 848.5 → 850.0 (measured 849.70): the export options, as totalAuthJsGzipKb above.
   // 850.0 → 851.1 (measured 850.8): 2D bugs B1–B4, as totalAuthJsGzipKb above.
   // 851.1 → 851.4 (measured 851.1): the tick bounds, as maxJsChunkGzipKb above.
-  totalJsGzipKb: 851.4,
+  // 851.4 → 856.8 (measured 856.45): 3D figures in the account, as totalAuthJsGzipKb above.
+  totalJsGzipKb: 856.8,
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the
   // totals above. /3d carries three.js (~109 kB gzip) and its editor.
@@ -310,7 +321,8 @@ const BUDGETS = {
   // 335.3 → 335.6 (Oct 2026, export options, measured 335.30): the same App code as maxJsChunkGzipKb above.
   // 335.6 → 335.9 (Oct 2026, 2D bugs B1–B4, measured 335.6): the same App code as maxJsChunkGzipKb above.
   // 335.9 → 336.1 (measured 335.8): the tick bounds, as maxJsChunkGzipKb above.
-  editorAuthJsGzipKb: 336.1,
+  // 336.1 → 336.3 (measured 335.98): the property file hand-off in App, as maxJsChunkGzipKb above.
+  editorAuthJsGzipKb: 336.3,
   editorJsGzipKb: 270,
   claimsAuthJsGzipKb: 355,
   claimsJsGzipKb: 290,
