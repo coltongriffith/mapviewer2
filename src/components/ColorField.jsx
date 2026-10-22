@@ -97,7 +97,7 @@ export default function ColorField({
         <div className="color-swatch-wrap">
           <input id={id} type="color" className={className} value={value} onChange={onChange} title={title} />
           {onReset && (
-            <button className="swatch-reset" type="button" onClick={onReset} title="Reset">✕</button>
+            <button className="swatch-reset" type="button" onClick={onReset} title="Reset" aria-label="Reset color">✕</button>
           )}
         </div>
       </div>
@@ -121,7 +121,7 @@ export default function ColorField({
           aria-expanded={open}
         />
         {onReset && (
-          <button className="swatch-reset" type="button" onClick={onReset} title="Reset">✕</button>
+          <button className="swatch-reset" type="button" onClick={onReset} title="Reset" aria-label="Reset color">✕</button>
         )}
         {open && (
           <div

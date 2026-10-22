@@ -532,8 +532,8 @@ function RecentProjectsModal({ entries, currentProjectId, onOpen, onRename, onDe
                   </>
                 ) : (
                   <>
-                    <button className="proj-action-btn" type="button" title="Rename" onClick={() => { setEditingId(entry.id); setConfirmDeleteId(null); }}>✎</button>
-                    <button className="proj-action-btn danger" type="button" title="Delete" onClick={() => { setConfirmDeleteId(entry.id); setEditingId(null); }}>✕</button>
+                    <button className="proj-action-btn" type="button" aria-label="Rename" title="Rename" onClick={() => { setEditingId(entry.id); setConfirmDeleteId(null); }}>✎</button>
+                    <button className="proj-action-btn danger" type="button" aria-label="Delete" title="Delete" onClick={() => { setConfirmDeleteId(entry.id); setEditingId(null); }}>✕</button>
                   </>
                 )}
               </div>
@@ -5483,14 +5483,14 @@ export default function App({ initialAction = null }) {
             onDismiss={() => setShowMobileBanner(false)} />
         </React.Suspense>
       )}
-      <header className="ed-toolbar">
+      <header className="ed-toolbar" data-em="toolbar">
         <div className="ed-toolbar-left">
           <button className="ed-brand" type="button" onClick={goToLanding} title="Back to Exploration Maps" aria-label="Exploration Maps — back to the home page">
             <BrandMarkInline />
             <span className="ed-wide-label em-wordmark">Exploration&nbsp;<b>Maps</b></span>
           </button>
           <span className="ed-toolbar-sep ed-desktop-only" />
-          <Menu label="Project" align="left" title="Project file actions">
+          <Menu dataEm="project-menu" label="Project" align="left" title="Project file actions">
             <MenuItem onClick={startNewProject}>New map</MenuItem>
             <MenuItem onClick={() => setShowRecentProjects(true)}>Open…</MenuItem>
             <MenuSeparator />
@@ -5534,7 +5534,7 @@ export default function App({ initialAction = null }) {
           <button className="ui-btn ui-btn--ghost ui-btn--icon ed-desktop-only" type="button" aria-label="Redo" title="Redo (Ctrl+Y)" onClick={() => stepHistory(true)}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 14l5-5-5-5" /><path d="M20 9H10a6 6 0 0 0 0 12h3" /></svg>
           </button>
-          <button className="ui-btn ui-btn--ghost ed-desktop-only" type="button" title="Zoom the map to fit your data" onClick={autoFrameAll} disabled={!mapReady}>
+          <button className="ui-btn ui-btn--ghost ed-desktop-only" type="button" aria-label="Fit to data" title="Zoom the map to fit your data" onClick={autoFrameAll} disabled={!mapReady}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>
             <span className="ed-wide-label">Fit to data</span>
           </button>
@@ -5565,6 +5565,7 @@ export default function App({ initialAction = null }) {
             <span className="ed-wide-label">Share</span>
           </button>
           <Menu
+            dataEm="export-menu"
             label={exporting ? 'Exporting…' : 'Export'}
             align="right"
             triggerClassName="ui-btn"
@@ -5661,8 +5662,8 @@ export default function App({ initialAction = null }) {
               <div id="section-areaClaims" className="control-grid">
                 <p className="small-note">Load mineral tenure claims within a radius of your project area. Each claim owner is shown in a distinct colour.</p>
                 <div className="control-row">
-                  <label>{US_CLAIMS_ENABLED ? 'Jurisdiction' : 'Province'}</label>
-                  <select value={areaClaimsProvince} onChange={(e) => setAreaClaimsProvince(e.target.value)}>
+                  <label htmlFor="nearby-claims-jurisdiction">{US_CLAIMS_ENABLED ? 'Jurisdiction' : 'Province'}</label>
+                  <select id="nearby-claims-jurisdiction" data-em="nearby-claims-jurisdiction" value={areaClaimsProvince} onChange={(e) => setAreaClaimsProvince(e.target.value)}>
                     <optgroup label="Canada">
                       <option value="bc">British Columbia</option>
                       <option value="on">Ontario</option>
@@ -5706,8 +5707,8 @@ export default function App({ initialAction = null }) {
                   </div>
                 </div>
                 <div className="control-row">
-                  <label>Search Location</label>
-                  <div className="acl-pick-row">
+                  <span className="control-label">Search Location</span>
+                  <div role="group" aria-label="Search Location" className="acl-pick-row">
                     <button
                       className={`secondary-btn compact${areaClaimsPicking ? ' active-toggle' : ''}`}
                       type="button"
@@ -5719,7 +5720,7 @@ export default function App({ initialAction = null }) {
                     {areaClaimsPickCenter && (
                       <>
                         <span className="acl-pick-coords">{areaClaimsPickCenter.lat.toFixed(4)}, {areaClaimsPickCenter.lng.toFixed(4)}</span>
-                        <button className="acl-hide-btn" type="button" title="Clear pin — use claims layer instead" onClick={() => setAreaClaimsPickCenter(null)}>×</button>
+                        <button className="acl-hide-btn" type="button" aria-label="Clear pin — use claims layer instead" title="Clear pin — use claims layer instead" onClick={() => setAreaClaimsPickCenter(null)}>×</button>
                       </>
                     )}
                   </div>
@@ -5881,12 +5882,12 @@ export default function App({ initialAction = null }) {
                     <ColorField value={h.color || '#ef4444'} title="Color" onChange={(e) => updateLayout({ regionHighlights: project.layout.regionHighlights.map((x, j) => j === i ? { ...x, color: e.target.value } : x) })} brandColors={brandColors} />
                     <input type="range" min="0.1" max="1" step="0.05" value={h.opacity ?? 0.45} title="Opacity" onChange={(e) => updateLayout({ regionHighlights: project.layout.regionHighlights.map((x, j) => j === i ? { ...x, opacity: Number(e.target.value) } : x) })} />
                     <span className="range-label">{Math.round((h.opacity ?? 0.45) * 100)}%</span>
-                    <button className="icon-btn remove-btn" type="button" title="Remove" onClick={() => updateLayout({ regionHighlights: project.layout.regionHighlights.filter((_, j) => j !== i) })}>×</button>
+                    <button className="icon-btn remove-btn" type="button" aria-label="Remove" title="Remove" onClick={() => updateLayout({ regionHighlights: project.layout.regionHighlights.filter((_, j) => j !== i) })}>×</button>
                   </div>
                 );
               })}
               <div className="region-highlight-add-row">
-                <select value="" onChange={(e) => { const id = e.target.value; if (!id || (project.layout.regionHighlights || []).some((h) => h.regionId === id)) return; updateLayout({ regionHighlights: [...(project.layout.regionHighlights || []), { regionId: id, color: '#ef4444', opacity: 0.45 }] }); }}>
+                <select aria-label="Add region highlight" value="" onChange={(e) => { const id = e.target.value; if (!id || (project.layout.regionHighlights || []).some((h) => h.regionId === id)) return; updateLayout({ regionHighlights: [...(project.layout.regionHighlights || []), { regionId: id, color: '#ef4444', opacity: 0.45 }] }); }}>
                   <option value="">+ Add Region…</option>
                   {regionsNA.map((r) => <option key={r.id} value={r.id}>{r.name} ({r.abbrev})</option>)}
                 </select>
@@ -5924,7 +5925,7 @@ export default function App({ initialAction = null }) {
                   type="button"
                   className={`basemap-thumb${(project.layout.basemap || 'light') === key ? ' active' : ''}`}
                   onClick={() => updateLayout({ basemap: key })}
-                  title={label}
+                  aria-label={label} title={label}
                 >
                   <div className="basemap-thumb-swatch">
                     {thumb
@@ -6233,7 +6234,7 @@ export default function App({ initialAction = null }) {
               </div>
               {(project.layout.titleBgColor || project.layout.titleFgColor || project.layout.panelBgColor || project.layout.panelFgColor || project.layout.accentColor) && (
                 <div className="color-override-cell">
-                  <label>&nbsp;</label>
+                  <span className="control-label" aria-hidden="true">&nbsp;</span>
                   <button className="swatch-reset-all" type="button" onClick={() => updateLayout({ titleBgColor: null, titleFgColor: null, panelBgColor: null, panelFgColor: null, accentColor: null })}>Reset all</button>
                 </div>
               )}
@@ -6249,7 +6250,7 @@ export default function App({ initialAction = null }) {
                 <span>{project.layout.cornerRadius ?? themeTokens.panelRadius ?? 10}px</span>
                 {project.layout.cornerRadius != null && (
                   <button type="button" style={{ fontSize: 10, padding: '1px 5px', background: 'none', border: '1px solid #cbd5e1', borderRadius: 4, cursor: 'pointer', color: '#64748b' }}
-                    onClick={() => updateLayout({ cornerRadius: null })} title="Reset to theme default">↺</button>
+                    onClick={() => updateLayout({ cornerRadius: null })} aria-label="Reset to theme default" title="Reset to theme default">↺</button>
                 )}
               </div>
             </div>
@@ -6298,13 +6299,13 @@ export default function App({ initialAction = null }) {
             </div>
             {project.layout.showNorthArrow !== false && (
               <div className="control-row" style={{ marginTop: 10 }}>
-                <label>Compass Style</label>
-                <div className="north-arrow-style-picker">
+                <span className="control-label">Compass Style</span>
+                <div role="group" aria-label="Compass Style" className="north-arrow-style-picker">
                   {NORTH_ARROW_STYLES.map(({ key, label }) => (
                     <button key={key} type="button"
                       className={`north-arrow-style-btn${(project.layout.northArrowStyle || 'classic') === key ? ' active' : ''}`}
                       onClick={() => updateLayout({ northArrowStyle: key })}
-                      title={label}>
+                      aria-label={label} title={label}>
                       <NorthArrow scale={52} style={key} />
                       <span>{label}</span>
                     </button>
@@ -6490,12 +6491,12 @@ export default function App({ initialAction = null }) {
                 ) : null}
                 <div className="control-row inline-2">
                   <div>
-                    <label>{isPointStyledLayer(selectedLayer) ? 'Point Border' : 'Outline Color'}</label>
-                    <ColorField value={selectedLayer.style?.stroke || selectedLayer.style?.markerColor || '#2563eb'} onChange={(e) => { const id = selectedLayer.id, val = e.target.value; clearTimeout(layerStyleDebounceRef.current); layerStyleDebounceRef.current = setTimeout(() => updateLayer(id, { style: { stroke: val, markerColor: val } }), 50); }} brandColors={brandColors} />
+                    <label htmlFor="layer-outline-color">{isPointStyledLayer(selectedLayer) ? 'Point Border' : 'Outline Color'}</label>
+                    <ColorField id="layer-outline-color" value={selectedLayer.style?.stroke || selectedLayer.style?.markerColor || '#2563eb'} onChange={(e) => { const id = selectedLayer.id, val = e.target.value; clearTimeout(layerStyleDebounceRef.current); layerStyleDebounceRef.current = setTimeout(() => updateLayer(id, { style: { stroke: val, markerColor: val } }), 50); }} brandColors={brandColors} />
                   </div>
                   <div>
-                    <label>{isPointStyledLayer(selectedLayer) ? 'Point Fill' : 'Fill Color'}</label>
-                    <ColorField value={selectedLayer.style?.fill || selectedLayer.style?.markerFill || '#93c5fd'} onChange={(e) => { const id = selectedLayer.id, val = e.target.value; clearTimeout(layerStyleDebounceRef.current); layerStyleDebounceRef.current = setTimeout(() => updateLayer(id, { style: { fill: val, markerFill: val } }), 50); }} brandColors={brandColors} />
+                    <label htmlFor="layer-fill-color">{isPointStyledLayer(selectedLayer) ? 'Point Fill' : 'Fill Color'}</label>
+                    <ColorField id="layer-fill-color" value={selectedLayer.style?.fill || selectedLayer.style?.markerFill || '#93c5fd'} onChange={(e) => { const id = selectedLayer.id, val = e.target.value; clearTimeout(layerStyleDebounceRef.current); layerStyleDebounceRef.current = setTimeout(() => updateLayer(id, { style: { fill: val, markerFill: val } }), 50); }} brandColors={brandColors} />
                   </div>
                 </div>
                 <div className="control-row inline-2">
@@ -6548,8 +6549,8 @@ export default function App({ initialAction = null }) {
                       );
                     })()}
                     <div className="control-row">
-                      <label>Marker Shape</label>
-                      <div className="marker-shape-picker-visual">
+                      <span className="control-label">Marker Shape</span>
+                      <div role="group" aria-label="Marker Shape" className="marker-shape-picker-visual">
                         {[
                           ['circle', 'Circle'], ['square', 'Square'], ['triangle', 'Tri ▲'], ['triangle_down', 'Tri ▼'],
                           ['diamond', 'Diamond'], ['cross', 'Cross'], ['star', 'Star'], ['hexagon', 'Hexagon'],
@@ -6559,7 +6560,7 @@ export default function App({ initialAction = null }) {
                           const isActive = (selectedLayer.style?.markerShape || 'circle') === val;
                           return (
                             <button key={val} type="button" className={`shape-visual-btn${isActive ? ' active' : ''}`}
-                              onClick={() => updateLayer(selectedLayer.id, { style: { markerShape: val } })} title={label}>
+                              onClick={() => updateLayer(selectedLayer.id, { style: { markerShape: val } })} aria-label={label} title={label}>
                               <img src={markerSvgUrl(val, isActive ? '#ffffff' : color, 18)} alt={label} width="18" height="18" />
                             </button>
                           );
@@ -6567,8 +6568,8 @@ export default function App({ initialAction = null }) {
                       </div>
                     </div>
                     <div className="control-row">
-                      <label>Custom Icon</label>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span className="control-label">Custom Icon</span>
+                      <div role="group" aria-label="Custom Icon" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         {selectedLayer.style?.customMarkerDataUri && (
                           <img src={selectedLayer.style.customMarkerDataUri} alt="custom icon" style={{ width: 24, height: 24, objectFit: 'contain', border: '1px solid #d4deea', borderRadius: 4 }} />
                         )}
@@ -6587,7 +6588,7 @@ export default function App({ initialAction = null }) {
                           {selectedLayer.style?.customMarkerDataUri ? 'Change Icon' : 'Upload Icon'}
                         </button>
                         {selectedLayer.style?.customMarkerDataUri && (
-                          <button type="button" className="secondary-btn" style={{ flexShrink: 0 }}
+                          <button type="button" className="secondary-btn" aria-label="Remove custom icon" style={{ flexShrink: 0 }}
                             onClick={() => updateLayer(selectedLayer.id, { style: { customMarkerDataUri: null } })}>✕</button>
                         )}
                       </div>
@@ -6628,9 +6629,9 @@ export default function App({ initialAction = null }) {
                       return (
                         <div className="trim-panel">
                           <div className="control-row">
-                            <label>Remove individual shapes</label>
+                            <span className="control-label">Remove individual shapes</span>
                           </div>
-                          <div className="trim-actions">
+                          <div className="trim-actions" role="group" aria-label="Remove individual shapes">
                             <button
                               type="button"
                               className={`secondary-btn trim-toggle${trimming ? ' active' : ''}`}
@@ -6696,9 +6697,9 @@ export default function App({ initialAction = null }) {
                       return (
                         <div className="trim-panel">
                           <div className="control-row">
-                            <label>Style individual shapes</label>
+                            <span className="control-label">Style individual shapes</span>
                           </div>
-                          <div className="trim-actions">
+                          <div className="trim-actions" role="group" aria-label="Style individual shapes">
                             <button
                               type="button"
                               className={`secondary-btn trim-toggle${styling ? ' active' : ''}`}
@@ -6724,12 +6725,12 @@ export default function App({ initialAction = null }) {
                               <div className="small-note">{featureLabel(feature).title}</div>
                               <div className="control-row inline-2">
                                 <div>
-                                  <label>Outline</label>
-                                  <ColorField value={override.stroke ?? base.stroke ?? '#2563eb'} onChange={(e) => set({ stroke: e.target.value })} brandColors={brandColors} />
+                                  <label htmlFor="shape-stroke">Outline</label>
+                                  <ColorField id="shape-stroke" value={override.stroke ?? base.stroke ?? '#2563eb'} onChange={(e) => set({ stroke: e.target.value })} brandColors={brandColors} />
                                 </div>
                                 <div>
-                                  <label>Fill</label>
-                                  <ColorField value={override.fill ?? base.fill ?? '#93c5fd'} onChange={(e) => set({ fill: e.target.value })} brandColors={brandColors} />
+                                  <label htmlFor="shape-fill">Fill</label>
+                                  <ColorField id="shape-fill" value={override.fill ?? base.fill ?? '#93c5fd'} onChange={(e) => set({ fill: e.target.value })} brandColors={brandColors} />
                                 </div>
                               </div>
                               <div className="control-row inline-2">
@@ -6760,8 +6761,8 @@ export default function App({ initialAction = null }) {
                       );
                     })()}
                     <div className="control-row">
-                      <label>Fill Pattern</label>
-                      <div className="fill-pattern-picker">
+                      <span className="control-label">Fill Pattern</span>
+                      <div role="group" aria-label="Fill Pattern" className="fill-pattern-picker">
                         {[['none', 'Solid'], ['hatch', 'Hatch'], ['cross', 'Cross'], ['dots', 'Dots']].map(([val, title]) => (
                           <button
                             key={val}
@@ -7069,8 +7070,8 @@ export default function App({ initialAction = null }) {
                               </div>
                             </div>
                             <div className="control-row">
-                              <label>Style preset</label>
-                              <div className="button-row two">
+                              <span className="control-label">Style preset</span>
+                              <div role="group" aria-label="Style preset" className="button-row two">
                                 <button type="button" className="secondary-btn" onClick={() => updateCallout(callout.id, { style: { ...(callout.style || {}), background: '#ffffff', border: '#102640', textColor: '#0f172a', subtextColor: '#475569', textAlign: 'left' } })}>Card</button>
                                 <button type="button" className="secondary-btn" onClick={() => updateCallout(callout.id, { style: { ...(callout.style || {}), background: '#111827', border: '#111827', textColor: '#ffffff', subtextColor: '#e5e7eb', textAlign: 'center', fontSize: Math.max(callout.style?.fontSize || 12, 13) } })}>Banner</button>
                               </div>
@@ -7100,11 +7101,11 @@ export default function App({ initialAction = null }) {
                         <div className="control-label">Nudge</div>
                         <div className="nudge-grid">
                           <span />
-                          <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, 0, -8)}>↑</button>
+                          <button className="secondary-btn" type="button" aria-label="Move callout up" onClick={() => nudgeCallout(callout.id, 0, -8)}>↑</button>
                           <span />
-                          <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, -8, 0)}>←</button>
-                          <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, 0, 8)}>↓</button>
-                          <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, 8, 0)}>→</button>
+                          <button className="secondary-btn" type="button" aria-label="Move callout left" onClick={() => nudgeCallout(callout.id, -8, 0)}>←</button>
+                          <button className="secondary-btn" type="button" aria-label="Move callout down" onClick={() => nudgeCallout(callout.id, 0, 8)}>↓</button>
+                          <button className="secondary-btn" type="button" aria-label="Move callout right" onClick={() => nudgeCallout(callout.id, 8, 0)}>→</button>
                         </div>
                       </div>
                     )}
@@ -7247,8 +7248,8 @@ export default function App({ initialAction = null }) {
                       </div>
                     </div>
                     <div className="control-row">
-                      <label>Units</label>
-                      <div className="unit-toggle-row">
+                      <span className="control-label">Units</span>
+                      <div role="group" aria-label="Units" className="unit-toggle-row">
                         <button type="button" className={`unit-toggle-btn${!selectedEllipse.units || selectedEllipse.units === 'km' ? ' active' : ''}`} onClick={() => updateEllipse(selectedEllipse.id, { units: 'km' })}>km</button>
                         <button type="button" className={`unit-toggle-btn${selectedEllipse.units === 'mi' ? ' active' : ''}`} onClick={() => updateEllipse(selectedEllipse.id, { units: 'mi' })}>mi</button>
                       </div>
@@ -7417,8 +7418,8 @@ export default function App({ initialAction = null }) {
                       onChange={(e) => updateDistanceLine(dl.id, { color: e.target.value })} brandColors={brandColors} />
                   </div>
                   <div className="control-row">
-                    <label>Style</label>
-                    <div className="unit-toggle-row">
+                    <span className="control-label">Style</span>
+                    <div role="group" aria-label="Style" className="unit-toggle-row">
                       {[['measure', 'Measure'], ['bracket', 'Bracket']].map(([v, l]) => (
                         <button key={v} className={`unit-toggle-btn${(dl.style || 'measure') === v ? ' active' : ''}`}
                           title={v === 'bracket' ? 'Solid line with end ticks: a strike length' : 'Dashed line with the distance in the middle'}
@@ -7427,8 +7428,8 @@ export default function App({ initialAction = null }) {
                     </div>
                   </div>
                   <div className="control-row">
-                    <label>Units</label>
-                    <div className="unit-toggle-row">
+                    <span className="control-label">Units</span>
+                    <div role="group" aria-label="Units" className="unit-toggle-row">
                       {['km', 'mi'].map(u => (
                         <button key={u} className={`unit-toggle-btn${(dl.units || 'km') === u ? ' active' : ''}`}
                           onClick={() => updateDistanceLine(dl.id, { units: u })}>{u}</button>
@@ -7562,7 +7563,7 @@ export default function App({ initialAction = null }) {
           <div className="storage-warning-banner">
             Local storage is getting full.{' '}
             <strong>Sign in</strong> to save projects to the cloud.
-            <button className="storage-warning-dismiss" onClick={() => setStorageWarningDismissed(true)}>✕</button>
+            <button className="storage-warning-dismiss" aria-label="Dismiss storage warning" onClick={() => setStorageWarningDismissed(true)}>✕</button>
           </div>
         )}
         {/* Claim-set qualifications, over the map itself. These maps are placed
@@ -7730,7 +7731,7 @@ export default function App({ initialAction = null }) {
         )}
 
         {project.layout.templateId !== 'ni_43101_technical' && project.layout.showTitle !== false && <div className="template-zone" style={{ ...zoneStyle(resolvedZones.title), zIndex: 410, opacity: dragging?.id === 'title' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('title', project.layout.titleWidthPx ?? 520, project.layout.titleHeightPx ?? 92)}>
-          <button className="panel-delete-btn" title="Hide title" onClick={() => updateLayout({ showTitle: false })}>×</button>
+          <button className="panel-delete-btn" aria-label="Hide title" title="Hide title" onClick={() => updateLayout({ showTitle: false })}>×</button>
           {studio ? sc('title') : <div className={`template-card title-card${project.layout.titleTransparent ? ' panel--transparent' : ''}`}>
             {editingTitleField === 'title' ? (
               <input
@@ -7768,7 +7769,7 @@ export default function App({ initialAction = null }) {
 
         {allLegendItems.length && project.layout.showLegend !== false ? (
           <div className="template-zone" style={{ ...zoneStyle(resolvedZones.legend), opacity: dragging?.id === 'legend' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('legend', resolvedZones.legend?.width ?? project.layout.legendWidthPx ?? 300, project.layout.legendHeightPx ?? resolvedZones.legend?.height ?? 168)}>
-            <button className="panel-delete-btn" title="Hide legend" onClick={() => updateLayout({ showLegend: false })}>×</button>
+            <button className="panel-delete-btn" aria-label="Hide legend" title="Hide legend" onClick={() => updateLayout({ showLegend: false })}>×</button>
             <div className={`template-card legend-card${project.layout.legendTransparent ? ' panel--transparent' : ''}`} data-compact={project.layout.legendCompact || undefined}>
               <div className="legend-header"><h3 style={{ fontSize: Math.round(15 * (project.layout.legendFontScale ?? 1)) + 'px' }}>{project.layout.legendTitle || 'Legend'}</h3></div>
               <div className="legend-list" style={{ fontSize: Math.round(13 * (project.layout.legendFontScale ?? 1)) + 'px' }}>
@@ -7813,7 +7814,7 @@ export default function App({ initialAction = null }) {
 
         {project.layout.showNorthArrow !== false && resolvedZones.northArrow?.width > 0 && (
           <div className={`template-zone${project.layout.northArrowTransparent ? ' panel--transparent' : ''}`} style={{ ...zoneStyle(resolvedZones.northArrow), opacity: dragging?.id === 'northArrow' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('northArrow', resolvedZones.northArrow?.width ?? 80, project.layout.northArrowHeightPx ?? 100)}>
-            <button className="panel-delete-btn" title="Hide compass rose" onClick={() => updateLayout({ showNorthArrow: false })}>×</button>
+            <button className="panel-delete-btn" aria-label="Hide compass rose" title="Hide compass rose" onClick={() => updateLayout({ showNorthArrow: false })}>×</button>
             {studio ? sc('north') : <NorthArrow scale={project.layout.northArrowHeightPx ?? 100} style={project.layout.northArrowStyle || 'classic'} />}
             {makeResizeHandles(project.layout.northArrowCorner || 'br', {
               elemId: 'northArrow', startW: resolvedZones.northArrow?.width ?? 80, startH: project.layout.northArrowHeightPx ?? 100,
@@ -7824,7 +7825,7 @@ export default function App({ initialAction = null }) {
         )}
         {project.layout.insetEnabled !== false && resolvedZones.inset?.width ? (
           <div className="template-zone" style={{ ...zoneStyle(resolvedZones.inset), opacity: dragging?.id === 'inset' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('inset', project.layout.insetWidthPx ?? 244, project.layout.insetHeightPx ?? 190)}>
-            <button className="panel-delete-btn" title="Hide inset map" onClick={() => updateLayout({ insetEnabled: false })}>×</button>
+            <button className="panel-delete-btn" aria-label="Hide inset map" title="Hide inset map" onClick={() => updateLayout({ insetEnabled: false })}>×</button>
             {studio ? sc('inset') : <LocatorInset layers={project.layers} insetMode={project.layout.insetMode} insetBasemap={project.layout.insetBasemap} insetImage={project.layout.insetImage} autoInsetRegion={project.layout.autoInsetRegion} insetTitle={project.layout.insetTitle} insetLabel={project.layout.insetLabel} mode={project.layout.mode} zone={{ width: '100%', height: '100%' }} regionFill={project.layout.insetRegionFill} regionStroke={project.layout.insetRegionStroke} bgFill={project.layout.insetBgFill} markerColor={project.layout.insetMarkerColor} />}
             {makeResizeHandles(project.layout.insetCorner || 'tr', {
               elemId: 'inset', startW: project.layout.insetWidthPx ?? 244, startH: project.layout.insetHeightPx ?? 190,
@@ -7836,7 +7837,7 @@ export default function App({ initialAction = null }) {
         {project.layout.showScaleBar !== false && resolvedZones.scaleBar?.height > 0 && (
           <div className={`template-zone${project.layout.scaleBarTransparent ? ' panel--transparent' : ''}`} style={{ ...zoneStyle(resolvedZones.scaleBar), width: project.layout.scaleBarWidthPx || resolvedZones.scaleBar?.width, opacity: dragging?.id === 'scaleBar' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('scaleBar', project.layout.scaleBarWidthPx || resolvedZones.scaleBar?.width || 160, scaleBarHeight(project.layout))}>
             {studio ? sc('scale') : <ScaleBar map={leafletMapRef.current} projection={!!project.layout.showProjectionLabel} projectionName={project.layout.projectionName} />}
-            <button className="panel-delete-btn" title="Hide scale bar" onClick={() => updateLayout({ showScaleBar: false })}>×</button>
+            <button className="panel-delete-btn" aria-label="Hide scale bar" title="Hide scale bar" onClick={() => updateLayout({ showScaleBar: false })}>×</button>
             {makeResizeHandles(project.layout.scaleBarCorner || 'bl', {
               elemId: 'scaleBar', startW: project.layout.scaleBarWidthPx || resolvedZones.scaleBar?.width || 160, startH: scaleBarHeight(project.layout),
               minW: 80, maxW: 400, minH: 30, maxH: 100,
@@ -7847,7 +7848,7 @@ export default function App({ initialAction = null }) {
         {project.layout.templateId !== 'ni_43101_technical' && project.layout.footerText && project.layout.footerEnabled !== false && !noteInLegend(project.layout, allLegendItems) ? (
           <div className="template-zone" style={{ ...zoneStyle(resolvedZones.footer), zIndex: 408, height: project.layout.footerHeightPx || resolvedZones.footer?.height, opacity: dragging?.id === 'footer' ? 0.3 : 1 }} onMouseDown={makeDragHandler('footer', resolvedZones.footer?.width ?? 260, project.layout.footerHeightPx || resolvedZones.footer?.height || 28)}>
             <div className="template-card footer-card">{project.layout.footerText}</div>
-            <button className="panel-delete-btn" title="Hide disclaimer" onClick={() => updateLayout({ footerEnabled: false })}>×</button>
+            <button className="panel-delete-btn" aria-label="Hide disclaimer" title="Hide disclaimer" onClick={() => updateLayout({ footerEnabled: false })}>×</button>
             {makeResizeHandles('bl', {
               elemId: 'footer', startW: resolvedZones.footer?.width ?? 260, startH: project.layout.footerHeightPx || resolvedZones.footer?.height || 28,
               minW: 80, maxW: 600, minH: 22, maxH: 200,
@@ -7858,7 +7859,7 @@ export default function App({ initialAction = null }) {
         {project.layout.logo ? (
           <div className="template-zone" style={{ ...zoneStyle(resolvedZones.logo), opacity: dragging?.id === 'logo' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('logo', project.layout.logoWidthPx ?? 168, project.layout.logoHeightPx ?? 74)}>
             <div className={`template-card logo-card${project.layout.logoTransparent ? ' panel--transparent' : ''}`}><img src={project.layout.logo} alt="Logo" style={{ opacity: project.layout.logoOpacity ?? 1 }} /></div>
-            <button className="panel-delete-btn" title="Remove logo" onClick={() => updateLayout({ logo: null })}>×</button>
+            <button className="panel-delete-btn" aria-label="Remove logo" title="Remove logo" onClick={() => updateLayout({ logo: null })}>×</button>
             {makeResizeHandles(project.layout.logoCorner || 'tl', {
               elemId: 'logo', startW: project.layout.logoWidthPx ?? 168, startH: project.layout.logoHeightPx ?? 74,
               minW: 40, maxW: 400, minH: 20, maxH: 300,
@@ -7870,7 +7871,7 @@ export default function App({ initialAction = null }) {
           <div className="drillhole-inline-editor" style={{ left: featureEditorPoint.left, top: featureEditorPoint.top }}>
             <div className="drillhole-inline-header" onPointerDown={startFeatureEditorDrag} title="Drag to move">
               <div className="drillhole-inline-title">{selectedFeature.layerName}</div>
-              <button className="drillhole-inline-close" type="button" onClick={() => setSelectedFeature(null)}>×</button>
+              <button className="drillhole-inline-close" aria-label="Close drillhole editor" type="button" onClick={() => setSelectedFeature(null)}>×</button>
             </div>
             <div className="control-row">
               <label htmlFor="f-title-5807">Title</label>
@@ -8257,7 +8258,7 @@ export default function App({ initialAction = null }) {
       {showShareModal && (
         <div className="modal-backdrop" onClick={() => setShowShareModal(false)}>
           <div className="share-modal" onClick={e => e.stopPropagation()}>
-            <button className="export-hd-close" onClick={() => setShowShareModal(false)}>✕</button>
+            <button className="export-hd-close" aria-label="Close sharing dialog" onClick={() => setShowShareModal(false)}>✕</button>
             <div className="share-modal-icon-wrap">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>

@@ -190,25 +190,28 @@ Example:
   EMAP.removeDrillPlan()`,
 
   export: `Export (Promises; the file comes back, nothing downloads unless download: true)
-  EMAP.exportPNG({as: "dataUrl" | "blob", band, bandClient, pixelRatio (1-4), width, height,
+  EMAP.exportPNG({as: "dataUrl" | "blob", band, draft, bandClient, pixelRatio (1-4), width, height,
                   background: "white" | "transparent", filename, download})
-  EMAP.exportSVG({as: "text" | "dataUrl" | "blob", band, bandClient, download})   live text
-  EMAP.exportPDF({as: "dataUrl" | "blob", pdfSize, band, bandClient, download})   pdfSize:
+  EMAP.exportSVG({as: "text" | "dataUrl" | "blob", band, draft, bandClient, download})   live text
+  EMAP.exportPDF({as: "dataUrl" | "blob", pdfSize, band, draft, bandClient, download})   pdfSize:
                                   "ppt_169" | "letter_landscape" | "letter_portrait" | "a4_landscape" |
                                   "a4_portrait" | "news_release" (default letter_landscape)
-  EMAP.exportLayers({as: "dataUrl" | "blob", svg, band, download})   the designer ZIP: figure.png,
+  EMAP.exportLayers({as: "dataUrl" | "blob", svg, band, draft, download})   the designer ZIP: figure.png,
                                   map.png (basemap and data only), annotations.png (transparent; stacks
                                   over map.png), annotations.svg (svg: true, where SVG is allowed) and
                                   layers.json
+  draft: the separate tiled draft mark across the figure; true/false overrides this export only.
+  Unset uses the saved setting, or defaults on for free/sample maps. In the layers ZIP it is on
+  figure.png only; map.png and annotations stay clean.
   Each resolves with {data, clamped, warnings}: data is the file; clamped is true when the plan's pixel
   cap cut a PNG down. band: the Exploration Maps watermark band under the figure ("DRAFT FOR REVIEW · NOT
   FOR PUBLICATION", "Prepared for <bandClient | company>", ©); unset: the map's own setting (on for the
   free plan and sample maps). Exported as a click on the Export step exports it: the plan decides the
   formats (getState().plan.formats) and the corner credit, and signed out with no email given the
   figure carries the large watermark, as "Download with watermark" does.
-  EMAP.setExport({band, bandClient, pixelRatio, filename, layersSvg})   the map's saved export settings
+  EMAP.setExport({band, draft, bandClient, pixelRatio, filename, layersSvg})   the map's saved export settings
 Example:
-  const { data } = await EMAP.exportPNG({as: 'dataUrl', band: false})`,
+  const { data } = await EMAP.exportPNG({as: 'dataUrl', band: false, draft: false})`,
 
   project: `Project (no dialogs)
   EMAP.save()                     Promise. Saves the open map (to the account when signed in, else this browser)

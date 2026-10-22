@@ -164,8 +164,11 @@ describe('setters write the editor\'s project through its actions', () => {
     expect(b.project.layout.wash).toEqual({ amount: 0.2, vignette: 0, color: '#ffffff' });
     await api.setWash({ amount: 0 });
     expect(b.project.layout.wash).toBe(null);
-    await api.setExport({ band: false, bandClient: 'Sample Corp' });
-    expect(b.project.layout.exportSettings).toMatchObject({ band: false, bandClient: 'Sample Corp', pixelRatio: 2 });
+    expect(api.getState().export.draft).toBe(true);
+    await api.setExport({ band: false, draft: false, bandClient: 'Sample Corp' });
+    expect(api.getState().export.draft).toBe(false);
+    await expect(api.setExport({ draft: 'false' })).rejects.toThrow('draft must be true or false');
+    expect(b.project.layout.exportSettings).toMatchObject({ band: false, draft: false, bandClient: 'Sample Corp', pixelRatio: 2 });
     await expect(api.setBasemap('osm')).rejects.toThrow('basemap must be one of "light"');
   });
   it('the drill plan setters need a plan, and check result ids', async () => {
@@ -202,6 +205,17 @@ describe('setters write the editor\'s project through its actions', () => {
     const out = await api.exportPNG({ band: false, pixelRatio: 2 });
     expect(b.exportFile).toHaveBeenCalledWith('png', { band: false, pixelRatio: 2, as: 'dataUrl' });
     expect(out).toEqual({ data: 'data:image/png;base64,AAAA', clamped: false, warnings: [] });
+  });
+  it.each(['png', 'svg', 'pdf', 'layers'])('passes an explicit draft override to %s without changing saved settings', async (format) => {
+    const map = { getCenter: () => ({ lat: 50.6, lng: -120.7 }), getZoom: () => 12, getBounds: () => ({ getSouth: () => 50, getWest: () => -121, getNorth: () => 51, getEast: () => -120 }) };
+    const b = bridge({ mapReady: true, map, entitlements: { allowed_export_formats: ['png', 'svg', 'pdf'] } });
+    const api = createApi(() => b, null);
+    await api.setExport({ draft: true });
+    const method = { png: 'exportPNG', svg: 'exportSVG', pdf: 'exportPDF', layers: 'exportLayers' }[format];
+    await api[method]({ draft: false });
+    expect(b.exportFile).toHaveBeenCalledWith(format, expect.objectContaining({ draft: false }));
+    expect(api.getState().export.draft).toBe(true);
+    await expect(api[method]({ draft: 1 })).rejects.toThrow('draft must be true or false');
   });
   it('only on the editor screen', async () => {
     const api = createApi(() => bridge({ screen: 'dashboard' }), null);

@@ -352,7 +352,7 @@ export function createApi(getBridge, win = typeof window !== 'undefined' ? windo
 
   // ── Export ──
   const FORMAT = { png: 'png', svg: 'svg', pdf: 'pdf', layers: 'png' };
-  const EXPORT_KEYS = { png: ['as', 'band', 'bandClient', 'pixelRatio', 'width', 'height', 'background', 'filename', 'download'], svg: ['as', 'band', 'bandClient', 'filename', 'download'], pdf: ['as', 'pdfSize', 'band', 'bandClient', 'filename', 'download'], layers: ['as', 'svg', 'band', 'bandClient', 'pixelRatio', 'filename', 'download'] };
+  const EXPORT_KEYS = { png: ['as', 'band', 'draft', 'bandClient', 'pixelRatio', 'width', 'height', 'background', 'filename', 'download'], svg: ['as', 'band', 'draft', 'bandClient', 'filename', 'download'], pdf: ['as', 'pdfSize', 'band', 'draft', 'bandClient', 'filename', 'download'], layers: ['as', 'svg', 'band', 'draft', 'bandClient', 'pixelRatio', 'filename', 'download'] };
   async function exportAs(format, o, fn) {
     const b = ed();
     opts(o, fn, EXPORT_KEYS[format]);
@@ -362,6 +362,7 @@ export function createApi(getBridge, win = typeof window !== 'undefined' ? windo
     mapOf();
     const x = {};
     if (has(o, 'band')) x.band = bool(o.band, 'band');
+    if (has(o, 'draft')) x.draft = bool(o.draft, 'draft');
     if (has(o, 'bandClient')) x.bandClient = text(o.bandClient, 'bandClient', 120);
     if (has(o, 'pixelRatio')) x.pixelRatio = num(o.pixelRatio, 'pixelRatio', 1, 4);
     if (has(o, 'width') !== has(o, 'height')) fail('Give width and height together (px), or neither.');
@@ -432,7 +433,7 @@ export function createApi(getBridge, win = typeof window !== 'undefined' ? windo
         elements: (dp.assays?.elements || []).map((e) => e.name), element: dp.element ?? null, crs: dp.crs, show: clone(dp.show || {}),
         release: clone(dp.release || {}), headings: clone(dp.headings || {}), highlight: clone(dp.highlight) ?? null, section: clone(dp.section) ?? null,
       } : null,
-      export: { band: es.band ?? Boolean(b.bandDefault), bandClient: es.bandClient || '', pixelRatio: es.pixelRatio ?? 2, filename: es.filename || '', layersSvg: Boolean(es.layersSvg) },
+      export: { band: es.band ?? Boolean(b.bandDefault), draft: es.draft ?? Boolean(b.bandDefault), bandClient: es.bandClient || '', pixelRatio: es.pixelRatio ?? 2, filename: es.filename || '', layersSvg: Boolean(es.layersSvg) },
       projects: projects().length,
     };
   }
@@ -800,8 +801,9 @@ export function createApi(getBridge, win = typeof window !== 'undefined' ? windo
     exportPDF: (o = {}) => exportAs('pdf', o, 'exportPDF'),
     exportLayers: (o = {}) => exportAs('layers', o, 'exportLayers'),
     setExport(o) {
-      const q = opts(o, 'setExport', ['band', 'bandClient', 'pixelRatio', 'filename', 'layersSvg']), es = {};
+      const q = opts(o, 'setExport', ['band', 'draft', 'bandClient', 'pixelRatio', 'filename', 'layersSvg']), es = {};
       if (has(q, 'band')) es.band = bool(q.band, 'band');
+      if (has(q, 'draft')) es.draft = bool(q.draft, 'draft');
       if (has(q, 'bandClient')) es.bandClient = text(q.bandClient, 'bandClient', 120);
       if (has(q, 'pixelRatio')) es.pixelRatio = num(q.pixelRatio, 'pixelRatio', 1, 4);
       if (has(q, 'filename')) es.filename = text(q.filename, 'filename', 120).replace(/[\\/:*?"<>|]+/g, '-');

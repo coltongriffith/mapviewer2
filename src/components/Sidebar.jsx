@@ -39,7 +39,7 @@ export default function Sidebar({ children, footer, tab, onTabChange, done = {},
           onClick={onClose}
         />
       )}
-      <aside className="inspector" data-open={open ? 'true' : 'false'} aria-label="Map inspector">
+      <aside data-em="inspector" className="inspector" data-open={open ? 'true' : 'false'} aria-label="Map inspector">
         <div className="ins-sheet-head">
           <span className="ins-sheet-grip" aria-hidden="true" />
           <button type="button" className="ui-btn ui-btn--ghost" onClick={onClose}>Done</button>
@@ -53,6 +53,7 @@ export default function Sidebar({ children, footer, tab, onTabChange, done = {},
                 type="button"
                 role="tab"
                 id={`ins-tab-${t.id}`}
+                data-em={`step-${t.id}`}
                 className={`ins-tab ins-step${isDone ? ' is-done' : ''}`}
                 aria-selected={tab === t.id}
                 aria-controls={`ins-panel-${t.id}`}

@@ -209,14 +209,21 @@ test('EMAP builds a Tower Fig 1-like figure, exports PNG and SVG as data, duplic
   const glyphs = texts.join('');
   for (const t of ['DURAND STOCK', 'THUNDER TREND', 'BLUEBIRD THRUST', 'NICOLA GROUP']) expect(glyphs.replace(/\s/g, ''), t).toContain(t.replace(/\s/g, ''));
 
-  const svg = await page.evaluate(async () => (await EMAP.exportSVG({ as: 'text', band: true, bandClient: 'Sample Resources Ltd.' })).data);
+  const svg = await page.evaluate(async () => (await EMAP.exportSVG({ as: 'text', band: true, draft: true, bandClient: 'Sample Resources Ltd.' })).data);
   expect(svg.startsWith('<svg') || svg.startsWith('<?xml')).toBe(true);
   for (const id of ['em-studio-title', 'em-studio-scale', 'em-studio-inset', 'em-legend', 'em-fx-layers', 'em-fx-wash']) expect(svg, id).toContain(`id="${id}"`);
   expect(svg).toMatch(/<text class="em-fx-area-label"[^>]*>DURAND STOCK<\/text>/);
   expect(svg).toMatch(/<text class="em-fx-line-label"[^>]*>THUNDER TREND<\/text>/);
   for (const t of ['>Rabbit North Project<', '>TSXV: SMP<', '>NEW<', '>Blue Sky · Holes 077 &amp; 078<', 'DRAFT FOR REVIEW · NOT FOR PUBLICATION', 'Prepared for Sample Resources Ltd.']) expect(svg, t).toContain(t);
+  expect(svg).toContain('id="em-draft-overlay"');
+  const cleanSvg = await page.evaluate(async () => {
+    await EMAP.setExport({ draft: true });
+    return (await EMAP.exportSVG({ draft: false, band: false })).data;
+  });
+  expect(cleanSvg).not.toContain('id="em-draft-overlay"');
+  expect(await page.evaluate(() => EMAP.getState().export.draft)).toBe(true);
   expect(downloads).toBe(0);
-  keep('emap-tower-fig1.png', Buffer.from((await page.evaluate(async () => (await EMAP.exportPNG({ as: 'dataUrl', band: false })).data)).split(',')[1], 'base64'));
+  keep('emap-tower-fig1.png', Buffer.from((await page.evaluate(async () => (await EMAP.exportPNG({ as: 'dataUrl', band: false, draft: false })).data)).split(',')[1], 'base64'));
   keep('emap-tower-fig1.svg', svg);
 
   // Duplicate, then save under a new name: no dialog, the editor works on the copy.

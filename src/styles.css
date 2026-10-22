@@ -636,7 +636,7 @@ button, input, select, textarea { font: inherit; }
   flex-direction: column;
   gap: 4px;
 }
-.color-override-cell label {
+.color-override-cell label, .color-override-cell .control-label {
   font-size: 10px;
   font-weight: 600;
   color: var(--ui-text-muted);
