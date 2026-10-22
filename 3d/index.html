@@ -428,6 +428,13 @@ html.em3d-version .share-bar .btn { padding: 6px 11px; }
     <div class="pane" id="pane-layout" role="tabpanel" aria-labelledby="step-layout" hidden>
       <div class="pane-head"><div class="kicker">Step 3 of 4</div><h2>Set up the figure</h2>
         <p>Choose what colours the holes, which intercepts to call out, and the camera.</p></div>
+      <!-- Looks: one click sets up a figure from settings below, each changeable after (block.js, loaded on first use). -->
+      <section id="ext-block">
+        <h3>Look</h3>
+        <p class="muted">Block section: a cut-away block of a few holes under the satellite terrain, geology painted on its faces, grade bars and bracketed intercepts, the legend and scale on its side.</p>
+        <div class="row" style="margin-top:8px;gap:6px"><button class="btn" type="button" data-block="blockSection">Block section</button><button class="btn" type="button" data-block="holes">Choose the holes shown</button></div>
+        <div id="block-ui" style="margin-top:8px"></div>
+      </section>
       <section>
         <h3>Colour holes by</h3>
         <div class="chips metric" id="metric-chips" role="group" aria-label="Grade column"></div>
@@ -533,7 +540,7 @@ html.em3d-version .share-bar .btn { padding: 6px 11px; }
         <div class="grid2">
           <label class="field" style="grid-column:1/-1"><span>Text</span><input type="text" id="wall-text" placeholder="e.g. INTRUSIVES" maxlength="120"></label>
           <label class="field"><span>Face</span><select id="wall-face"><option value="front">Facing the camera</option><option value="N">North</option><option value="S">South</option><option value="E">East</option><option value="W">West</option></select></label>
-          <label class="field"><span>Style</span><select id="wall-size"><option value="title">Title (large, bold)</option><option value="normal">Normal</option></select></label>
+          <label class="field"><span>Style</span><select id="wall-size"><option value="title">Title (large, bold)</option><option value="normal">Normal</option><option value="heading">Heading (title | subtitle lines)</option></select></label>
         </div>
         <button class="btn" type="button" id="wall-add" style="margin-top:8px">Add label on the block</button>
         <p class="muted" style="margin-top:6px">Painted on the face in perspective. Drag it on the preview to move it along the face.</p>
@@ -1002,8 +1009,9 @@ Whole projects (to keep or move a figure):
                                   upright, ry up and down, in the plane at the rotation azimuth
   EM3D.addShape({type: "dimension", from: [e, n, z?], to: [e, n, z?], text})   a dimension line, its length
                                   in metres unless text is given
-  EM3D.addShape({type: "arrow", from, to, text: "OPEN", style: "outline" | "solid", size, color})   a big arrow
-                                  with its text along it. Any shape given only a type is placed for you (round
+  EM3D.addShape({type: "arrow", from, to, text: "OPEN", style: "outline" | "solid" | "line", size, color})   a big
+                                  arrow with its text along it; "line": a thin arrow with the text above it, as an
+                                  annotation on a block face ("Grade increasing": ends at depth on the face). Any shape given only a type is placed for you (round
                                   the top intercept, along the section). Returns the id
   Any shape takes views: "both" (default) | "3d" | "section", where it is drawn.
   EM3D.updateShape(id, {...}) / removeShape(id)   getState().shapes
@@ -1015,6 +1023,26 @@ Whole projects (to keep or move a figure):
                                   loaded. Recorded in the figure (getProject().settings.brandStyle: the kit,
                                   its revision and the style); null returns to Source Sans 3.
                                   Grade, geology and geophysics colours never change
+  EM3D.applyPreset("blockSection", {holes: [holeIds], face: "S" | "E" | "N" | "W", block: {...}})   a cut-away
+                                  block section of a few holes (default: the section's chosen holes, else four
+                                  callout holes near the line): the block fitted round them, solid, satellite
+                                  terrain (with a coordinate system), geology opaque on the faces with unit names
+                                  in capitals, bold IDs at the collars, grade bars on the front face, plain
+                                  bracket callouts (published results when loaded), a heading on the front face
+                                  from the title and subtitle, the legend, logo, depth ticks and scale bar on the
+                                  side face, the camera 38° round from the front. Only sets settings; change any after
+  EM3D.setHolesShown([holeIds] | null)   only these holes drawn (trace, ID, bars, callouts); they all still
+                                  shape the geology and the shell. getState().holesShown
+  EM3D.setBlock({furniture, traces: "overlay" | "tubes", brackets: "plain" | "card", page: "bare" (the block
+                 alone, credits only) | "clean" | "full", hist: {side: "face" | "screen", scale: "linear" | "log",
+                 halo, length, palette: "orange" | "bins", style: "spikes" | "bars"}, holes} | null)
+                                  the block look (getState().block); furniture falls back to the page where the
+                                  side face is too foreshortened
+  EM3D.setGeology({faces: "near", blend (0-3: soft contacts), dash (dashed contact lines), fade (0-1),
+                   fadeDir: "down" | "up" | "left" | "right", labelStyle: "caps"})   the block section's faces
+  EM3D.setTags({style: "plain"})   bold hole IDs with no pill
+  EM3D.addWallLabel({size: "heading", text: "TARGET ZONE\nEARLY BIOTITE"})   a bold title over smaller
+                                  subtitle lines (or "TARGET ZONE | EARLY BIOTITE"), right-aligned
   getState().geology / .geophys / .tags
 </script>
 <!-- API notes for the account (src/three-d/account.js; shown with EM3D.help()). -->

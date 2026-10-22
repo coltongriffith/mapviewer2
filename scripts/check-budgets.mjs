@@ -231,8 +231,16 @@ const BUDGETS = {
   // 171.6 → 171.7 (Oct 2026, claim map inset merged over export options, measured 171.40, configured 171.42, + ~0.3):
   // the hooks for Find claims (the lazy import, EM3D.findClaims and the panel button), insetStyle "claims" and the
   // claims' registry credit in the footer (+0.12 kB); the rest is lazy (claims.js, tags.js).
-  // 171.7 → 172.4 (Oct 2026, production errors, measured 172.0, configured 172.1, 171.4 on main at 9b9ebdb0): uncaught errors and rejections reported to error_events like the 2D app's, and stale chunks recovered from a bare import() too (studio.js plus its copy of shared/chunkErrors.js).
-  threeDJsGzipKb: 172.4,
+  // 171.7 → 172.2 (Oct 2026, round 5E block section merged over the claim map inset, measured 171.92, configured 171.94, + ~0.3; +0.52 kB over the inset's 171.40): the block section's
+  // hooks (+0.48 kB on its own branch): the holes shown (holeOn on the traces, tubes, collars, callouts, pending tags and
+  // section), the block.js entry in drawOverlay (its traces; the logo, title block, legend cards, scale bar, elevation
+  // ticks, compass and footer it takes over on a bare block section), no section letters or line on a block section, the
+  // "heading" wall label handed to block.js, the bar palette's legend rows, the settings and the three EM3D methods. A
+  // standalone map on a block section keeps its details in a card of their own when the legend is on the side face.
+  // 172.2 → 172.9 (Oct 2026, production errors merged over round 5E, measured 172.5, configured 172.6, 171.92 on main): uncaught errors and rejections reported
+  // to error_events like the 2D app's, and stale chunks recovered from a bare import() too (studio.js plus its copy of
+  // shared/chunkErrors.js).
+  threeDJsGzipKb: 172.9,
   // /3d's own modules fetched on first use (the geology, geophysics and tag layers, the account
   // client). They never load with the page or the app, so they sit outside the page and app totals.
   // 32 → 34 (Oct 2026, round 4): per-hole tags, grouped pending tags, callouts beside or bracketed on their
@@ -314,7 +322,13 @@ const BUDGETS = {
   // map fitted to the block and the project's claims, tenure labels where they fit, the north arrow and scale bar
   // shared with the location inset) and overlays.js +0.15 (role, group and credit; the footer credit). The page
   // gains only the hooks (+0.12 kB, inside its budget).
-  threeDLazyJsGzipKb: 121.7,
+  // 121.7 → 133.7 (Oct 2026, round 5E block section merged over the claim map inset, measured 133.22, configured 133.44, + ~0.3;
+  // +12.1 kB over the inset's 121.13, as on its own branch): block.js (~7.6 kB: the preset, holes shown, the furniture drawn in the side face's perspective, the
+  // heading, the bare page and the hole picker), softer geology faces and names in capitals on the front face
+  // (geology.js +1.6), grade spikes or bars in the face's plane with the orange palette and plain brackets and IDs
+  // (tags.js +1.6), the thin arrow with text (shapes.js +0.35), and the plan view's sync keeping the tubes hidden. Fetched
+  // only for a figure with holes hidden, a block look or a heading on the block, or on "Block section".
+  threeDLazyJsGzipKb: 133.7,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.
