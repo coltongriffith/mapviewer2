@@ -737,7 +737,8 @@ export default function App({ initialAction = null }) {
   const [fullResLink, setFullResLink] = useState(null);
   // Opt-in publication check (export/preflight.js): off unless ticked, per session.
   const [pubCheck, setPubCheck] = useState(false);
-  // The watermark band (item 38) is on unless switched off for the free plan and sample maps, off otherwise.
+  // The watermark band (item 38) and the draft mark over the map are on unless switched off for the free plan and
+  // sample maps, off otherwise.
   const bandDefault = !entitlements.clean_export || project.layers.some((l) => l.dataSource === 'demo');
   const [preflight, setPreflight] = useState(null);
   const [showHelpModal, setShowHelpModal] = useState(false);
@@ -4601,6 +4602,7 @@ export default function App({ initialAction = null }) {
       const exportContext = createExportContext();
       const opts = { ...baseSettings, ...exportOptions, paidTier: entitlements.clean_export, exportContext };
       if (opts.band ?? bandDefault) opts.watermarkBand = { client: opts.bandClient || project.layout.companyName };
+      if (opts.draft ?? bandDefault) opts.draftOverlay = true;
       if (format === 'layers') opts.svg = opts.layersSvg && canExportFormat(entitlements, 'svg');
       // The account's one free full-resolution export lifts the pixel cap for
       // this PNG only; the corner credit stays.

@@ -1810,10 +1810,11 @@ function exportSize(o) {
   if (Math.max(w, h) > max) nope(`${w} × ${h} px is over this browser's graphics limit (${max} px a side): choose a smaller size.`);
   return { w, h };
 }
-// watermark: true or { client, year, status }: the Exploration Maps band under the figure (src/export/watermarkBand.js,
-// loaded with the first export that asks for it, so that export returns a Promise of the data URL). Prepared for S.company.
+// watermark: true or { client, year, status, overlay }: the Exploration Maps band under the figure and the faint draft
+// mark across it (overlay: false leaves the mark off) (src/export/watermarkBand.js, loaded with the first export that
+// asks for it, so that export returns a Promise of the data URL). Prepared for S.company.
 let WM = null;
-const wmOpts = (w) => { if (w !== true && (typeof w !== 'object' || w === null)) nope('watermark must be true or { client, year, status }.'); return { client: S.company, ...(w === true ? {} : w) }; };
+const wmOpts = (w) => { if (w !== true && (typeof w !== 'object' || w === null)) nope('watermark must be true or { client, year, status, overlay }.'); return { client: S.company, overlay: true, ...(w === true ? {} : w) }; };
 function exportPNG(opts = {}) {
   if (!G) throw new Error('Nothing to export yet: add a collar file and an assay file.');
   if (opts.watermark && !WM) return import('../export/watermarkBand.js').then((m) => { WM = m; return exportPNG(opts); });

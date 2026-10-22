@@ -2,18 +2,24 @@
 //
 // The band (export/watermarkBand.js, shared with /3d) goes under the PNG, SVG and PDF: the Exploration Maps mark,
 // "DRAFT FOR REVIEW · NOT FOR PUBLICATION", who it was prepared for and the year. It is on by default for the
-// free plan and for sample maps, off otherwise; ticking or unticking it is kept with the map's export settings.
+// free plan and for sample maps, off otherwise; ticking or unticking it is kept with the map's export settings. The
+// draft mark across the figure (it cannot simply be cropped off as the band can) has its own toggle and the same
+// default.
 // The layers ZIP (export/exportLayers.js) holds the figure, the map alone, the annotations alone on transparency
 // and, on plans with SVG export, the annotations as SVG with live text.
 export default function ExportExtras({ layout, updateLayout, bandDefault, svgAllowed, disabled, onLayers }) {
   const es = layout.exportSettings || {};
-  const band = es.band ?? bandDefault;
+  const band = es.band ?? bandDefault, draft = es.draft ?? bandDefault;
   const set = (o) => updateLayout({ exportSettings: o });
   return (
     <>
       <label className="toggle-row">
         <input type="checkbox" checked={band} onChange={(e) => set({ band: e.target.checked })} />
         <span>Watermark band under the export (draft for review)</span>
+      </label>
+      <label className="toggle-row">
+        <input type="checkbox" checked={draft} onChange={(e) => set({ draft: e.target.checked })} />
+        <span>Draft watermark over the map</span>
       </label>
       {band && (
         <div className="control-row">

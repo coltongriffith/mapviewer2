@@ -129,6 +129,7 @@ test('Pro: two maps and a 3D figure become one PDF and three named PNGs, the map
   // Pro, real data: the band is off unless asked for. Asked for here.
   const band = dialog.getByLabel(/Watermark band under each map/);
   await expect(band).not.toBeChecked();
+  await expect(dialog.getByLabel(/Draft watermark over each map/)).not.toBeChecked(); // left off
   await band.check();
   const download = page.waitForEvent('download', { timeout: 150_000 });
   await dialog.getByRole('button', { name: 'Download package (3 figures)' }).click();
@@ -154,6 +155,7 @@ test('Pro: two maps and a 3D figure become one PDF and three named PNGs, the map
   const texts = await page.evaluate(() => window.__texts);
   expect(texts).toContain('Rival Metals Corp.');
   expect(texts).not.toContain('Hidden Co');
+  expect(texts).not.toContain('DRAFT · EXPLORATIONMAPS.COM');
   expect(Buffer.from(Object.values(files)[2]).equals(png(320, 200))).toBe(true); // the 3D figure as it came, alpha and all
   const pdfBytes = Buffer.from(files['Star-Copper-Corp_Rails_2026-10-15_Package_v2.pdf']), pdf = pdfBytes.toString('latin1');
   expect(pdf.startsWith('%PDF')).toBe(true);
@@ -174,6 +176,7 @@ test('free plan: the band is on by default and the ZIP holds the PNGs (the PDF i
   await expect(dialog.getByText('The package PDF is a Pro feature')).toBeVisible();
   await dialog.getByRole('checkbox', { name: /Rails claims/ }).check();
   await expect(dialog.getByLabel(/Watermark band under each map/)).toBeChecked();
+  await expect(dialog.getByLabel(/Draft watermark over each map/)).toBeChecked();
   await dialog.getByLabel('Client').fill('Star Copper');
   await dialog.getByLabel('Date').fill('2026-10-22');
   const download = page.waitForEvent('download', { timeout: 150_000 });
@@ -181,4 +184,5 @@ test('free plan: the band is on by default and the ZIP holds the PNGs (the PDF i
   const files = unzipSync(readFileSync(await (await download).path()));
   expect(Object.keys(files)).toEqual(['Star-Copper_2026-10-22_Fig1_Rails-claims_v1.png']);
   expect((await inspect(page, Object.values(files)[0])).corner).toEqual([252, 251, 247]);
+  expect((await page.evaluate(() => window.__texts)).filter((t) => t === 'DRAFT · EXPLORATIONMAPS.COM').length).toBeGreaterThan(4);
 });

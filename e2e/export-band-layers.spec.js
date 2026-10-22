@@ -3,14 +3,15 @@ import { readFileSync, mkdirSync, copyFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { unzipSync } from 'fflate';
 
-// Tower v3 items 38 and 42 in the 2D editor, driven by clicks: the watermark band under the export (on by default
-// for a sample map on the free plan, off when unticked) and the designer layers ZIP (figure, map alone,
-// annotations alone on transparency).
+// Tower v3 items 38 and 42 in the 2D editor, driven by clicks: the watermark band under the export and the faint
+// draft mark across it (each on by default for a sample map on the free plan, off when unticked) and the designer
+// layers ZIP (figure, map alone, annotations alone on transparency).
 test.skip(({ isMobile }) => isMobile, 'Exports are a desktop flow');
 test.use({ viewport: { width: 1600, height: 1000 } });
 test.describe.configure({ timeout: 180_000 });
 
 const STATUS = 'DRAFT FOR REVIEW · NOT FOR PUBLICATION';
+const DRAFT = 'DRAFT · EXPLORATIONMAPS.COM';
 const bandHeight = (w) => Math.max(24, Math.round(w * 55 / 880));
 const keep = (name, path) => { const d = process.env.E2E_RENDER_DIR; if (!d) return; mkdirSync(d, { recursive: true }); copyFileSync(path, join(d, name)); };
 
@@ -45,10 +46,31 @@ async function inspect(page, bytes, points = []) {
     return { w: img.width, h: img.height, px: pts.map(at), clearFrac: clear / (img.width * img.height) };
   }, [`data:image/png;base64,${Buffer.from(bytes).toString('base64')}`, points]);
 }
+// How two PNGs of the same size differ: the share of pixels changed (by more than 2 of 255 in a channel), and the
+// change 99 % of those stay within.
+async function compare(page, a, b) {
+  return page.evaluate(async (urls) => {
+    const data = await Promise.all(urls.map(async (u) => {
+      const img = new Image(); img.src = u; await img.decode();
+      const c = document.createElement('canvas'); c.width = img.width; c.height = img.height; const g = c.getContext('2d'); g.drawImage(img, 0, 0);
+      return g.getImageData(0, 0, img.width, img.height).data;
+    }));
+    const hist = new Uint32Array(256); let changed = 0;
+    for (let i = 0; i < data[0].length; i += 4) {
+      const d = Math.max(...[0, 1, 2].map((k) => Math.abs(data[0][i + k] - data[1][i + k])));
+      hist[d]++; if (d > 2) changed++;
+    }
+    // The change that 99 % of the changed pixels stay within.
+    let p99 = 0; for (let n = 0, d = 255; d > 2; d--) { n += hist[d]; if (n > changed * 0.01) { p99 = d; break; } }
+    return { changed: changed / (data[0].length / 4), p99 };
+  }, [a, b].map((x) => `data:image/png;base64,${Buffer.from(x).toString('base64')}`));
+}
 
-test('the watermark band: on by default for a sample map, with the client, and off when unticked', async ({ page }) => {
+test('the watermark band and the draft mark: on by default for a sample map, and off when unticked', async ({ page }) => {
   const toggle = page.getByLabel('Watermark band under the export (draft for review)');
+  const draft = page.getByLabel('Draft watermark over the map');
   await expect(toggle).toBeChecked();
+  await expect(draft).toBeChecked();
   await page.getByLabel('Prepared for').fill('Buckhorn Creek Mining Corp.');
   await page.evaluate(() => { window.__texts = []; });
   const on = await download(page, 'Export PNG');
@@ -58,21 +80,32 @@ test('the watermark band: on by default for a sample map, with the client, and o
   expect(texts).toContain('Exploration');
   expect(texts).toContain('Maps');
   expect(texts.some((t) => t.startsWith('Prepared for Buckhorn Creek Mining Corp. by Exploration Maps.') && t.includes(`© ${new Date().getFullYear()} Exploration Maps`))).toBe(true);
+  expect(texts.filter((t) => t === DRAFT).length).toBeGreaterThan(8); // the draft mark, repeated across the figure
   const a = await inspect(page, readFileSync(on.path), [[-4, -3]]);
-  expect(a.px[0].slice(0, 3)).toEqual([252, 251, 247]); // the band's cream, at the bottom right
+  expect(a.px[0].slice(0, 3)).toEqual([252, 251, 247]); // the band's cream, at the bottom right: no mark over the band
 
   await toggle.uncheck();
   await expect(page.getByLabel('Prepared for')).toHaveCount(0);
   await page.evaluate(() => { window.__texts = []; });
-  const off = await download(page, 'Export PNG');
+  const markOnly = await download(page, 'Export PNG');
   expect(await page.evaluate(() => window.__texts)).not.toContain(STATUS);
-  const b = await inspect(page, readFileSync(off.path));
+  const b = await inspect(page, readFileSync(markOnly.path));
   expect(b.w).toBe(a.w);
   expect(a.h - b.h).toBe(bandHeight(a.w)); // the band adds exactly its height under the figure
+
+  await draft.uncheck();
+  await page.evaluate(() => { window.__texts = []; });
+  const off = await download(page, 'Export PNG');
+  expect(await page.evaluate(() => window.__texts)).not.toContain(DRAFT);
+  // The mark's pixels: spread across the figure and faint (8-14 % of the ink or cream over the map).
+  const d = await compare(page, readFileSync(markOnly.path), readFileSync(off.path));
+  expect(d.changed).toBeGreaterThan(0.02);
+  expect(d.p99).toBeLessThan(45);
 });
 
 test('the layers ZIP: the figure, the map alone and the annotations alone, which stack', async ({ page }, testInfo) => {
   await page.getByLabel('Watermark band under the export (draft for review)').uncheck();
+  await page.getByLabel('Draft watermark over the map').uncheck();
   // SVG export is a Pro feature: the free plan's layers carry the PNGs.
   await expect(page.getByLabel(/Layers include annotations\.svg/)).toBeDisabled();
   await page.evaluate(() => { window.__texts = []; });
@@ -94,10 +127,13 @@ test('the layers ZIP: the figure, the map alone and the annotations alone, which
   const texts = await page.evaluate(() => window.__texts);
   expect(texts.filter((t) => t === 'Buckhorn Creek Property')).toHaveLength(2);
 
-  // With the band on, it goes under figure.png only, so the layers still stack.
+  // With the band and the draft mark on, they go on figure.png only, so the layers still stack.
   await page.getByLabel('Watermark band under the export (draft for review)').check();
+  await page.getByLabel('Draft watermark over the map').check();
   const withBand = unzipSync(readFileSync((await download(page, 'Download layers (ZIP)')).path));
   const [fig2, map2] = await Promise.all([inspect(page, withBand['figure.png']), inspect(page, withBand['map.png'])]);
   expect(fig2.h - map2.h).toBe(bandHeight(fig2.w));
   expect(map2.h).toBe(map.h);
+  expect(Buffer.from(withBand['map.png']).equals(Buffer.from(files['map.png']))).toBe(true); // no mark on the layers
+  expect(Buffer.from(withBand['annotations.png']).equals(Buffer.from(files['annotations.png']))).toBe(true);
 });

@@ -15,8 +15,9 @@ const ReadOnlyMapStage = lazyGuarded(() => import('./ReadOnlyMapStage'));
 // Client_Project_Date_FigN_Name_vX.png. A lazy chunk, loaded when "Export a package…" is pressed.
 //
 // Each map is drawn by the read-only stage (the share page's), off screen, under the same plan rules as a
-// download there: the plan's pixel cap and corner credit. The watermark band follows the editor's default (on for
-// the free plan and sample maps) until it is ticked or unticked here. The PDF needs a plan with PDF export; on
+// download there: the plan's pixel cap and corner credit. The watermark band and the draft mark over the map follow
+// the editor's default (on for the free plan and sample maps) until ticked or unticked here; an added PNG goes in
+// as it came. The PDF needs a plan with PDF export; on
 // other plans the ZIP holds the PNGs.
 
 const isSample = (payload) => (payload?.layers || []).some((l) => l.dataSource === 'demo');
@@ -34,6 +35,7 @@ export default function PackageExport({ projects, onClose }) {
   const [files, setFiles] = useState([]); // extra PNG figures (from /3d)
   const [meta, setMeta] = useState({ client: '', project: '', date: todayStamp(), version: '1' });
   const [band, setBand] = useState(null); // null: each map's default
+  const [draft, setDraft] = useState(null); // the draft mark across each map; null: each map's default
   const [stage, setStage] = useState(null); // the map being drawn off screen
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
@@ -67,8 +69,8 @@ export default function PackageExport({ projects, onClose }) {
       for (const [i, p] of maps.entries()) {
         setStatus(`Drawing ${i + 1} of ${maps.length + files.length}: ${nameOf(p)}…`);
         const { payload } = await loadCloudProject(p.id);
-        const on = band ?? (free || isSample(payload));
-        const canvas = await draw(payload, on ? { watermarkBand: { client: meta.client || payload.layout?.companyName } } : {});
+        const dflt = free || isSample(payload), on = band ?? dflt;
+        const canvas = await draw(payload, { ...(on && { watermarkBand: { client: meta.client || payload.layout?.companyName } }), ...((draft ?? dflt) && { draftOverlay: true }) });
         figs.push({ name: nameOf(p), canvas, bytes: await canvasBytes(canvas) });
       }
       for (const f of files) figs.push({ name: f.name.replace(/\.png$/i, ''), canvas: await fileCanvas(f), bytes: new Uint8Array(await f.arrayBuffer()) });
@@ -132,6 +134,10 @@ export default function PackageExport({ projects, onClose }) {
           <label className="toggle-row">
             <input type="checkbox" checked={band ?? free} disabled={busy} onChange={(e) => setBand(e.target.checked)} />
             <span>Watermark band under each map (draft for review){band === null && !free ? '; on for sample maps' : ''}</span>
+          </label>
+          <label className="toggle-row">
+            <input type="checkbox" checked={draft ?? free} disabled={busy} onChange={(e) => setDraft(e.target.checked)} />
+            <span>Draft watermark over each map{draft === null && !free ? '; on for sample maps' : ''}</span>
           </label>
           {!pdfOk && <p className="dash-muted" style={{ margin: 0 }}>The package PDF is a Pro feature: on your plan the ZIP holds the PNGs.</p>}
           {status && <p className="dash-muted" role="status" style={{ margin: 0 }}>{status}</p>}

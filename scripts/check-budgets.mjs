@@ -218,14 +218,15 @@ const BUDGETS = {
   // advisories GHSA-p98j-92pf-mc4p and related; the fixed release is ~0.3 kB larger.
   // 993.2 → 1009.4 (measured 1009.1): 2D labels and geology styling (above, measured 1008.4) merged over the dompurify
   // update.
-  // 1009.4 → 1016.7 (Oct 2026, 2D export package, measured 1016.4, 1009.2 on main): all lazy. PackageExport (3.3 kB:
+  // 1009.4 → 1018.1 (Oct 2026, 2D export package, measured 1017.8, 1009.2 on main): all lazy. PackageExport (3.3 kB:
   // the dashboard's package dialog, drawing each saved map off screen, the PDF and the ZIP), exportLayers (1.2 kB: the
-  // designer layers ZIP), the band as SVG and its font wait in the shared watermarkBand chunk (+1.2 kB), ExportExtras
-  // (0.6 kB: the band toggle, "Prepared for" and the layers button), utils/svg split into its own 0.26 kB chunk (now
+  // designer layers ZIP), the band as SVG, its font wait and the draft mark across the figure (canvas, sampled ink or
+  // cream, and the SVG pattern) in the shared watermarkBand chunk (+2.3 kB), ExportExtras (0.65 kB: the band and draft
+  // mark toggles, "Prepared for" and the layers button), utils/svg split into its own 0.26 kB chunk (now
   // shared by three lazy exporters), renderScene's map / annotations layers (+0.1 kB), exportPNG/SVG/PDF's band hooks
   // and the PDF page helper and white backing (+0.42 kB), ReadOnlyMapStage's renderCanvas and nearby claims
   // (+0.17 kB) and the dashboard's button (+0.11 kB). App is unchanged (see maxJsChunkGzipKb above).
-  totalAuthJsGzipKb: 1016.7,
+  totalAuthJsGzipKb: 1018.1,
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
@@ -262,8 +263,8 @@ const BUDGETS = {
   // 924.4 → 924.9 (measured 924.6): dompurify 3.4.17 security update, as totalAuthJsGzipKb above.
   // 924.9 → 940.9 (measured 940.6): 2D labels and geology styling (above, measured 940.0) merged over the dompurify
   // update.
-  // 940.9 → 948.3 (measured 948.0, 940.8 on main): 2D export package, as totalAuthJsGzipKb above.
-  totalJsGzipKb: 948.3,
+  // 940.9 → 949.7 (measured 949.4, 940.8 on main): 2D export package, as totalAuthJsGzipKb above.
+  totalJsGzipKb: 949.7,
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the
   // totals above. /3d carries three.js (~109 kB gzip) and its editor.
