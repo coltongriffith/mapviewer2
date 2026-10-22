@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { init, setBlock, BLOCK, bandSpot, fadeAlpha } from '../src/three-d/block.js';
+import * as THREE from 'three';
+import { init, setBlock, BLOCK, bandSpot, fadeAlpha, ghostMaterial } from '../src/three-d/block.js';
 import { init as initTags, bracketSides, groupItems, set as setTags } from '../src/three-d/tags.js';
 
 // Exploration Maps 3D round 5F: bracket callouts, wall labels by unit, a see-through terrain that keeps its colours,
@@ -36,6 +37,23 @@ describe('the fade at the bottom', () => {
     const a = [0, 0.25, 0.5, 0.75, 1].map(fadeAlpha);
     a.slice(1).forEach((v, i) => expect(v).toBeLessThan(a[i]));
     expect(fadeAlpha(0.5)).toBeLessThan(0.5); // eases out: most of the fade is low down
+  });
+});
+
+describe('the see-through terrain\'s ghosts (ghostMaterial)', () => {
+  it('keeps each object\'s own colour and opacity, at the share the terrain lets through', () => {
+    const model = new THREE.MeshLambertMaterial({ color: '#3366cc', transparent: true, opacity: 0.5 }), g = ghostMaterial(model, 0.6);
+    expect(g.color.getHexString()).toBe('3366cc'); expect(g.opacity).toBeCloseTo(0.3, 9);
+    const shell = new THREE.MeshLambertMaterial({ color: '#c65322' }), gs = ghostMaterial(shell, 0.6);
+    expect(gs.color.getHexString()).toBe('c65322'); expect(gs.opacity).toBeCloseTo(0.6, 9); expect(gs).not.toBe(g);
+    expect(ghostMaterial(model, 0.6)).toBe(g); // one ghost per material, kept up to date
+    model.color.set('#00ff00'); expect(ghostMaterial(model, 0.6).color.getHexString()).toBe('00ff00');
+  });
+  it('draws nothing for an object at opacity 0, hidden, or with the terrain opaque', () => {
+    expect(ghostMaterial(new THREE.MeshLambertMaterial({ transparent: true, opacity: 0 }), 0.6)).toBe(null);
+    expect(ghostMaterial(new THREE.MeshLambertMaterial({ visible: false }), 0.6)).toBe(null);
+    expect(ghostMaterial(new THREE.MeshLambertMaterial(), 0)).toBe(null);
+    expect(ghostMaterial([new THREE.MeshLambertMaterial()], 0.6)).toBe(null);
   });
 });
 

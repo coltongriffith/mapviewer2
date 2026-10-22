@@ -189,7 +189,7 @@ export function sync() {
 // under it (the holes' tubes, the grade bars, shells and model shapes) is drawn again after the scene, only where the
 // top covers it (behind it in depth, inside its stencil), at the transparency asked: so the holes show through and the
 // imagery keeps its colours. "mix", and blocks saved before the setting, keep the plain transparent top.
-const ghost = { on: false, busy: false, mat: null };
+const ghost = { on: false, busy: false };
 // three.js constants (stencil, blending) as their numbers, so the shared three.js chunk the page loads exports no more names.
 const GL = { always: 519, replace: 7681, equal: 514, normal: 1, custom: 5, zero: 200, oneMinusSrcAlpha: 205 };
 function vivid() {
@@ -198,16 +198,27 @@ function vivid() {
   if (on) { m.opacity = 1; m.depthWrite = true; m.stencilRef = 1; m.stencilFunc = GL.always; m.stencilZPass = GL.replace; }
   H.scene.onAfterRender = ghostPass; H.scene.onBeforeRender = curtainSides;
 }
+// The ghost of one object's material: its own colour (instance colours still apply) and opacity, at the share the
+// terrain lets through, drawn only behind the top and inside its stencil; null for a material not drawn at all.
+const ghosts = new WeakMap();
+export function ghostMaterial(m, through) {
+  if (!m || Array.isArray(m) || m.visible === false || !(m.opacity > 0) || !(through > 0)) return null;
+  let g = ghosts.get(m);
+  if (!g) { g = new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, depthFunc: THREE.GreaterDepth, side: THREE.DoubleSide, stencilWrite: true, stencilRef: 1, stencilFunc: GL.equal }); ghosts.set(m, g); }
+  if (m.color) g.color.copy(m.color); else g.color.set('#ffffff');
+  if (g.vertexColors !== !!m.vertexColors) { g.vertexColors = !!m.vertexColors; g.needsUpdate = true; }
+  g.opacity = through * (m.transparent ? m.opacity : 1);
+  return g;
+}
 function ghostPass(renderer, scene, camera) {
   const G = H.G; if (!ghost.on || ghost.busy || !G || !S.block) return;
-  const objs = [...H.root.children.filter((o) => o.isInstancedMesh && o.instanceColor && o.visible), ...(G.shellMesh?.visible ? G.shellMesh.children : []), ...(G.meshes || []).map((x) => x.m).filter((m) => m.visible)];
+  const objs = [...H.root.children.filter((o) => o.isInstancedMesh && o.instanceColor && o.visible), ...(G.shellMesh?.visible ? G.shellMesh.children.filter((o) => o.visible) : []), ...(G.meshes || []).map((x) => x.m).filter((m) => m.visible)]
+    .map((o) => [o, o.material, ghostMaterial(o.material, 1 - S.surf)]).filter(([, , g]) => g); // each in its own colour and opacity; none at opacity 0
   if (!objs.length) return;
-  ghost.mat ||= new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, depthFunc: THREE.GreaterDepth, side: THREE.DoubleSide, stencilWrite: true, stencilRef: 1, stencilFunc: GL.equal });
-  ghost.mat.opacity = 1 - S.surf;
   const bg = scene.background, ac = renderer.autoClear, mask = camera.layers.mask;
-  objs.forEach((o) => o.layers.enable(5)); ghost.busy = true;
-  try { scene.background = null; renderer.autoClear = false; camera.layers.set(5); scene.overrideMaterial = ghost.mat; renderer.render(scene, camera); } finally {
-    ghost.busy = false; scene.background = bg; renderer.autoClear = ac; camera.layers.mask = mask; scene.overrideMaterial = null; objs.forEach((o) => o.layers.disable(5));
+  objs.forEach(([o, , g]) => { o.layers.enable(5); o.material = g; }); ghost.busy = true;
+  try { scene.background = null; renderer.autoClear = false; camera.layers.set(5); renderer.render(scene, camera); } finally {
+    ghost.busy = false; scene.background = bg; renderer.autoClear = ac; camera.layers.mask = mask; objs.forEach(([o, m]) => { o.layers.disable(5); o.material = m; });
   }
 }
 
@@ -291,7 +302,7 @@ export function unitSpot(mesh) {
   const e = mesh.matrix.elements, w = Math.hypot(e[0], e[1], e[2]), h = Math.hypot(e[4], e[5], e[6]), c = H.getCam();
   // The side face's legend and logo (plan, as last laid out), in the face's own units: x across, z up from the base.
   const fur = side.f === L.face ? side.rects.map(([u0, u1, za, zb]) => [u0 * len, u1 * len, (za - z0) / (G.zmax - z0) * ht, (zb - z0) / (G.zmax - z0) * ht]) : [];
-  const key = [grid.k, L.unit, w.toPrecision(3), h.toPrecision(3), Math.round(c.azimuth / 5), Math.round(c.plunge / 5), Math.round(c.zoom / 10), S.holesShown, S.wallLabels.length, fur.flat().map(Math.round)].join('|');
+  const key = [grid.k, grid.id, L.unit, w.toPrecision(3), h.toPrecision(3), Math.round(c.azimuth / 5), Math.round(c.plunge / 5), Math.round(c.zoom / 10), S.holesShown, S.wallLabels.length, fur.flat().map(Math.round)].join('|');
   let sp = spots.get(L.id);
   if (!sp || sp.key !== key) {
     H.camera.updateMatrixWorld();

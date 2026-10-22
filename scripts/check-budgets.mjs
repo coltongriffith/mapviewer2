@@ -375,13 +375,13 @@ const BUDGETS = {
   // over main): track.js (the 3D events' allowlist, the stored token, once per tab, nothing but views and copies on a
   // shared figure) with the app's shared /api/track sender (utils/trackCore.js and utils/session.js), fetched a moment
   // after the editor opens, and the calls in account-core.js, share.js and versions.js (Google tag calls kept).
-  // 144.8 → 149.8 (Oct 2026, round 5F merged over main bebbd02b, measured 149.5, +5.3 kB over main's 144.2, + 0.3): block.js
+  // 144.8 → 149.9 (Oct 2026, round 5F merged over main bebbd02b, measured 149.6 with the review fixes, +5.4 kB over main's 144.2, + 0.3): block.js
   // +3.7 kB (wall labels by unit: the band search and its placement; the see-through terrain that keeps its colours,
   // a stencil and a second pass for what lies under it; the fade at the bottom; the standalone framing; the Layout
   // controls), tags.js +1.5 kB (the bracket callout with its heading, chip, leader and alternate sides; brackets kept
   // out of group cards; bracket text kept inside the frame), geology.js +0.15 kB (a face's class grid for block.js;
   // no painted name where the unit has its own wall label), mapuse.js +0.04 kB. All fetched only for a block section.
-  threeDLazyJsGzipKb: 149.8,
+  threeDLazyJsGzipKb: 149.9,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.

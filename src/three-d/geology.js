@@ -372,6 +372,8 @@ function samplesNow() {
   return cache.samples;
 }
 // The code index of every cell on a plane, cached by plane and method settings.
+// id: a new one each time the grid is classified again (other logs, legend or settings), for block.js's placements.
+let gridSerial = 0;
 export function planeClasses(key, a, b, sizeOverride) {
   const P = samplesNow(), g = cfg(), [nx, ny] = sizeOverride || gridSize(a, b), k = `${key}|${a}|${b}|${nx}x${ny}|${g.anisotropy}|${searchNow()}|${g.smooth}|${g.clean}`;
   let hit = cache.grids[key]; if (hit && hit.k === k) return hit;
@@ -380,7 +382,7 @@ export function planeClasses(key, a, b, sizeOverride) {
   // surroundings), and the grid refined to about 1000 px across with smooth contacts for the face texture.
   const nc = cache.fold.classes.length, sm = smoothClasses(grid, g.smooth ?? 2), clean = g.clean !== false;
   const cls = clean ? dropSpecks(modeFilter(sm, nx, ny, nc, 1), nx, ny, Math.max(4, nx * ny * 0.003)) : sm, f = clean ? Math.max(1, Math.round(1000 / nx)) : 1;
-  hit = { k, nx, ny, cls, f, fine: f > 1 ? refine(cls, nx, ny, nc, f) : cls, canvas: null, ck: null, covered: grid.cover.reduce((s, v) => s + v, 0) / (nx * ny) };
+  hit = { k, id: ++gridSerial, nx, ny, cls, f, fine: f > 1 ? refine(cls, nx, ny, nc, f) : cls, canvas: null, ck: null, covered: grid.cover.reduce((s, v) => s + v, 0) / (nx * ny) };
   cache.grids[key] = hit; return hit;
 }
 // Face colours: the legend colour at the wall colour strength, the same as the legend swatches.

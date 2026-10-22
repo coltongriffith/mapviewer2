@@ -177,6 +177,23 @@ test('item 34: a unit\'s wall label sits inside its band on that face, says why 
   expect(r.fixed.at).toBeUndefined(); expect(r.fixed.u).toBe(r.L.u); // where it was put
 });
 
+test('item 34: new logs with the same block and settings place a unit\'s wall label again', async ({ page }) => {
+  await open3d(page);
+  await withLogs(page);
+  const r = await page.evaluate(async (holes) => {
+    const E = window.EM3D; E.setFigureSize('release'); await E.applyPreset('blockSection', { holes });
+    const front = E.getState().wallLabels.find((l) => l.size === 'heading').face, id = await E.addWallLabel({ unit: 'BIO', face: front, size: 'title' });
+    await E.layersReady(); E.exportPNG({ view: '3d' }); const before = E.getState().wallLabels.find((l) => l.id === id).at;
+    // The biotite starts far deeper in the new logs: the same bounds, units and settings, other data.
+    const ids = E.getState().project.holeIds, lith = ['HoleID,From,To,Lith,Description', ...ids.flatMap((h) => [`${h},0,60,COV,Cover`, `${h},60,330,PHY,Phyllic alteration`, `${h},330,700,BIO,Early biotite`])].join('\n');
+    E.addFiles([...E.getProject().files.filter((f) => f.name !== 'lithology.csv').map(({ name, text }) => ({ name, text })), { name: 'lithology.csv', text: lith }]);
+    await E.layersReady(); E.exportPNG({ view: '3d' });
+    return { before, after: E.getState().wallLabels.find((l) => l.id === id).at };
+  }, HOLES);
+  expect(r.before).toBeTruthy(); expect(r.after).toBeTruthy();
+  expect(r.after.v).toBeLessThan(r.before.v - 0.05); // lower down, in the biotite as it now lies
+});
+
 test('item 36: a see-through terrain keeps its colours (only the holes show through); a block saved before keeps the plain blend', async ({ page }) => {
   await open3d(page);
   await withLogs(page);
