@@ -141,7 +141,13 @@ const BUDGETS = {
   // files copied, the editable properties) load with the dashboard, never with the editor; the account page's 3D
   // count (+0.2 kB), the property page's "Start a map from a file" and "Use in map" (+0.2 kB), /3d's dashboard link
   // and ?property= first save (+0.1 kB in the lazy account client) and the editor hand-off in App (+0.16 kB).
-  totalAuthJsGzipKb: 938.8,
+  // 938.8 → 943.8 (Oct 2026, admin 3D usage merged over the account's 3D figures and the drill crew, measured 943.46,
+  // +4.98 kB over main's 938.48): the admin "3D & sharing" tab (a lazy ThreeDTab chunk, ~3.1 kB), its metric help
+  // and helpers in admin/metrics.js (~0.9 kB, read by the Overview too), the 3D block in the Users drawer, and /3d's
+  // usage events (track.js, ~0.5 kB, lazy). The app's /api/track sender moved to utils/trackCore.js so /3d shares it
+  // without supabase-js; as its own chunk it costs ~0.3 kB of chunk overhead in the homepage and editor routes (see
+  // editorAuthJsGzipKb).
+  totalAuthJsGzipKb: 943.8,
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
@@ -164,7 +170,8 @@ const BUDGETS = {
   // 851.1 → 851.4 (measured 851.1): the tick bounds, as maxJsChunkGzipKb above.
   // 851.4 → 866.3 (measured 865.9): the 2D Studio style, as totalAuthJsGzipKb above.
   // 866.3 → 871.5 (measured 871.22): 3D figures in the account, as totalAuthJsGzipKb above.
-  totalJsGzipKb: 871.5,
+  // 871.5 → 876.5 (measured 876.14, +4.92 kB over main's 871.22): the admin 3D usage tab, as totalAuthJsGzipKb above.
+  totalJsGzipKb: 876.5,
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the
   // totals above. /3d carries three.js (~109 kB gzip) and its editor.
@@ -245,7 +252,11 @@ const BUDGETS = {
   // ticks, compass and footer it takes over on a bare block section), no section letters or line on a block section, the
   // "heading" wall label handed to block.js, the bar palette's legend rows, the settings and the three EM3D methods. A
   // standalone map on a block section keeps its details in a card of their own when the legend is on the side face.
-  threeDJsGzipKb: 172.2,
+  // 172.2 → 172.8 (Oct 2026, admin 3D usage merged over round 5E and the drill crew, measured 172.44, configured 172.45, +0.33 kB over
+  // main): the usage hooks (the lazy import of track.js, three_d_opened a moment after start, data added per kind in
+  // addUserFiles and real terrain, exports counted in exportPNG and exportLayers). The sender itself is lazy
+  // (track.js, below); the page view comes from /acquisition.js in public/, outside these budgets.
+  threeDJsGzipKb: 172.8,
   // /3d's own modules fetched on first use (the geology, geophysics and tag layers, the account
   // client). They never load with the page or the app, so they sit outside the page and app totals.
   // 32 → 34 (Oct 2026, round 4): per-hole tags, grouped pending tags, callouts beside or bracketed on their
@@ -344,7 +355,11 @@ const BUDGETS = {
   // as page elements over the figure, the line pools and noticing a viewer who points or taps), loaded by crew.js only
   // when the crew is on with life or chatter; crew.js +0.5 kB (putting every part back before an export, chatter and
   // life settings, each one's place for the bubbles). The page and the totals are unchanged.
-  threeDLazyJsGzipKb: 143.8,
+  // 143.8 → 144.8 (Oct 2026, admin 3D usage merged over drill crew life, measured 144.21, configured 144.42, + 0.3; +0.84 kB
+  // over main): track.js (the 3D events' allowlist, the stored token, once per tab, nothing but views and copies on a
+  // shared figure) with the app's shared /api/track sender (utils/trackCore.js and utils/session.js), fetched a moment
+  // after the editor opens, and the calls in account-core.js, share.js and versions.js (Google tag calls kept).
+  threeDLazyJsGzipKb: 144.8,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.
@@ -358,7 +373,10 @@ const BUDGETS = {
   // 335.9 → 336.1 (measured 335.8): the tick bounds, as maxJsChunkGzipKb above.
   // 336.1 → 337.6 (Oct 2026, 2D Studio style merged over B1–B4, measured 337.3): the same App code as maxJsChunkGzipKb above.
   // 337.6 → 337.7 (measured 337.39): the property file hand-off in App, as maxJsChunkGzipKb above.
-  editorAuthJsGzipKb: 337.7,
+  // 337.7 → 338.1 (Oct 2026, admin 3D usage, measured 337.75, +0.36 kB over main's 337.39): the app's /api/track sender
+  // and tab session id (utils/trackCore.js, utils/session.js) are now one chunk shared with /3d's lazy track.js; the
+  // code is unchanged, the extra chunk's overhead is what is new.
+  editorAuthJsGzipKb: 338.1,
   editorJsGzipKb: 270,
   claimsAuthJsGzipKb: 355,
   claimsJsGzipKb: 290,

@@ -19,6 +19,7 @@
 // carries org_id and property_id, its files live under org/<org>/<id>/, and
 // the database lets every member read it and editors and up save it.
 import { authRedirectUrl } from '../utils/authRedirect.js';
+import { track } from './track.js';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -306,6 +307,8 @@ export async function saveProject(name, existingId, dest = null, { force = false
       if (stale.length) await sb.storage.from(BUCKET).remove(stale);
     } catch { /* leftovers are harmless */ }
   }
+  // Once per figure per tab, like the editor's project_saved: "worked on this session", not a count of Ctrl+S.
+  track('three_d_project_saved', { project: current.id, created: !existingId, workspace: !!home }, current.id);
   return { ...current };
 }
 

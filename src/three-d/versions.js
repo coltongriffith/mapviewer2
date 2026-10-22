@@ -13,6 +13,8 @@
 // to the section, download the PNG. Later edits to the figure never reach it.
 // "Start a new figure from this version" copies it into an unsaved figure;
 // "Back to the current figure" reopens the latest save.
+import { track } from './track.js';
+
 const $ = (id) => document.getElementById(id);
 const html = document.documentElement;
 const em = () => window.EM3D;
@@ -97,6 +99,7 @@ export async function publish({ label, releaseDate = today() } = {}) {
     p_kind: 'figure', p_figure_id: cur.id, p_label: String(label).trim(), p_release_date: releaseDate || null, p_expected_updated_at: cur.savedAt,
   }, 'publish this version'));
   try { window.gtag?.('event', 'three_d_version_published'); } catch { /* analytics never breaks publishing */ }
+  track('three_d_version_published', { version: v.version });
   return { ...v, link: versionLink(cur.id, v.version) };
 }
 

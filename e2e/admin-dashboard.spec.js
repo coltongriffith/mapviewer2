@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { summaryReport } from '../tests/fixtures/summary-report';
+import { threeDReport } from '../tests/fixtures/three-d-report';
 
 // Dedicated configured build; all auth/data responses are local fixtures.
 // This exercises real client routing and RPC handling, not production auth.
@@ -21,6 +22,7 @@ async function setup(page, { forbidden = false, failSummary = false } = {}) {
       if (failSummary && summaryAttempts++ === 0) return reply({ code: '503', message: 'Temporary report outage' },503);
       return reply(summaryReport);
     }
+    if (fn === 'admin_get_three_d_usage') return reply(threeDReport);
     if (fn === 'admin_get_billing_metrics') return reply({ mrr_cents: 5800, paying_subscribers: 2, subscribers: [], invoices: [], upsell_candidates: [], refunds_by_currency: [] });
     if (fn === 'admin_get_session_timeline') return reply({ code: '503', message: 'Timeline temporarily unavailable' },503);
     if (fn === 'user_plans') return reply({ plan: 'pro', source: 'admin', status: 'active' });
@@ -55,6 +57,28 @@ test('opens the overview without loading the editor; mobile-safe, lazy reports',
   await page.getByRole('button', { name: 'Revenue', exact: true }).click();
   await expect(page.getByText('Estimated ARR · USD')).toBeVisible();
   expect(calls.some(c => c.fn === 'admin_get_billing_metrics')).toBe(true);
+  expect(errors).toEqual([]);
+});
+
+test('the 3D & sharing tab loads on demand for the chosen window', async ({ page }, info) => {
+  const { calls, errors } = await setup(page);
+  await page.goto('/admin');
+  await expect(page.getByRole('heading', { name: 'Where they came from' })).toBeVisible();
+  expect(calls.some(c => c.fn === 'admin_get_three_d_usage')).toBe(false);
+  await page.getByRole('button', { name: '3D & sharing', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Top 3D projects' })).toBeVisible();
+  const params = calls.find(c => c.fn === 'admin_get_three_d_usage').params;
+  expect(params).toEqual(calls.find(c => c.fn === 'admin_get_summary').params);
+  await expect(page.getByRole('img', { name: '3D opens per day', exact: true })).toBeVisible();
+  await expect(page.getByRole('img', { name: 'Shared maps made and viewed per day', exact: true })).toBeVisible();
+  await expect(page.getByText('Designer layers (ZIP)')).toBeVisible();
+  await expect(page.getByRole('link', { name: `/3d/share/${'a'.repeat(32)}` })).toBeVisible();
+  // The window switch applies here too.
+  await page.getByRole('button', { name: '7d', exact: true }).click();
+  await expect.poll(() => calls.filter(c => c.fn === 'admin_get_three_d_usage').length).toBe(2);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: info.outputPath('three-d.png'), fullPage: true });
+  if (process.env.E2E_SHOT_DIR) await page.screenshot({ path: `${process.env.E2E_SHOT_DIR}/admin-3d-${info.project.name}.png`, fullPage: true });
   expect(errors).toEqual([]);
 });
 

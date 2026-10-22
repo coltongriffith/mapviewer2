@@ -79,6 +79,16 @@ const EVENT_ALLOWLIST = new Set([
   // Sent once per tab by a browser the owner marked as internal. The
   // admin_session_ids() reporting helper excludes the whole tab.
   'internal_session',
+  // Exploration Maps 3D (/3d, src/three-d/track.js keeps the same list).
+  // Reported by admin_get_three_d_usage (migration 20261030100000).
+  'three_d_opened',
+  'three_d_data_added',
+  'three_d_export_completed',
+  'three_d_share_created',
+  'three_d_share_viewed',
+  'three_d_share_forked',
+  'three_d_project_saved',
+  'three_d_version_published',
 ]);
 
 const MAX_BODY_BYTES = 8 * 1024;
