@@ -195,7 +195,9 @@ const BUDGETS = {
   // 990.8 → 992.6 (Oct 2026, claim-search intent, measured 992.3, 990.6 on main): App as maxJsChunkGzipKb above, and
   // in the lazy registry chunk the Claim # box read as people use it (shared/claimNumbers.js: "#", pasted lists,
   // company names typed into the wrong tab), the found/missing summary for a list and the GESTIM/MLAS/MTO links.
-  totalAuthJsGzipKb: 992.6,
+  // 992.6 → 993.2 (Oct 2026, measured 992.9): dompurify 3.4.14 → 3.4.17 (jspdf's dependency) for the critical
+  // advisories GHSA-p98j-92pf-mc4p and related; the fixed release is ~0.3 kB larger.
+  totalAuthJsGzipKb: 993.2,
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
@@ -227,7 +229,8 @@ const BUDGETS = {
   // totalAuthJsGzipKb above.
   // 904.8 → 922.6 (measured 922.3, 904.5 on main): import a company figure, as totalAuthJsGzipKb above.
   // 922.6 → 924.4 (measured 924.1, 922.3 on main): claim-search intent, as totalAuthJsGzipKb above.
-  totalJsGzipKb: 924.4,
+  // 924.4 → 924.9 (measured 924.6): dompurify 3.4.17 security update, as totalAuthJsGzipKb above.
+  totalJsGzipKb: 924.9,
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the
   // totals above. /3d carries three.js (~109 kB gzip) and its editor.

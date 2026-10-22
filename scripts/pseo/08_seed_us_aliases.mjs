@@ -5,7 +5,7 @@
 //   node scripts/pseo/08_seed_us_aliases.mjs --states NV,AZ --limit 20000
 //
 // Inputs : issuers.csv (ticker,exchange,company)
-//          live BLM MLRS "Mining Claims Not Closed" FeatureServer
+//          live BLM MLRS "Active Mining Claims" MapServer layer
 // Output : data/pseo/us_alias_review_queue.csv
 //
 // WHAT THIS DOES
@@ -37,8 +37,8 @@ import { PATHS } from './config.mjs';
 import { readCsv, writeCsv, normalizeName, nameScore, NAME_MATCH } from './lib.mjs';
 
 const BLM_SERVICE = process.env.BLM_MLRS_SERVICE_URL
-  || 'https://gis.blm.gov/nlsdb/rest/services/HUB/BLM_Natl_MLRS_Mining_Claims_Not_Closed/FeatureServer';
-const LAYER = `${BLM_SERVICE}/0`;
+  || 'https://nlsdbpubgis.blm.gov/arcgis/rest/services/Mining_Claims/MiningClaims/MapServer';
+const LAYER = `${BLM_SERVICE}/${process.env.BLM_MLRS_LAYER_ID || 1}`;
 
 // Mirrors api/claims.js US_JURISDICTIONS.ownerFields — keep in sync.
 const CLAIMANT_FIELDS = ['CLAIMANT_NAME', 'CLAIMANT', 'CLMNT_NAME', 'CLAIMANT_TXT', 'CUST_NAME', 'CUSTOMER_NAME'];

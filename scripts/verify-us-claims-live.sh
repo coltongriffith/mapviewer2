@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Live verification for the US/BLM claim path. Run from a network that can reach
-# gis.blm.gov and data-ndom.opendata.arcgis.com.
+# nlsdbpubgis.blm.gov and data-ndom.opendata.arcgis.com.
 #
 #   bash scripts/verify-us-claims-live.sh
 #
@@ -19,8 +19,8 @@ set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CANARY="$HERE/live-schema-canary.mjs"
 
-BLM="${BLM_MLRS_SERVICE_URL:-https://gis.blm.gov/nlsdb/rest/services/HUB/BLM_Natl_MLRS_Mining_Claims_Not_Closed/FeatureServer}"
-LAYER="$BLM/0"
+BLM="${BLM_MLRS_SERVICE_URL:-https://nlsdbpubgis.blm.gov/arcgis/rest/services/Mining_Claims/MiningClaims/MapServer}"
+LAYER="$BLM/${BLM_MLRS_LAYER_ID:-1}"
 UA='ExplorationMaps-verify/1.0'
 pass=0; fail=0; inconc=0
 hr() { printf '\n%s\n' '────────────────────────────────────────────────────────────'; }

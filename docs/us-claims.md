@@ -31,13 +31,34 @@ Montana, Wyoming, Colorado, New Mexico, California, Oregon, Washington.**
 
 ## Data source
 
-- Primary: BLM MLRS **"Mining Claims Not Closed"** HUB FeatureServer, layer 0
-  `https://gis.blm.gov/nlsdb/rest/services/HUB/BLM_Natl_MLRS_Mining_Claims_Not_Closed/FeatureServer/0`
-  Chosen because it is pre-filtered upstream to not-closed cases, so closed
-  claims can never surface as active through this integration.
-- Override with the server env var `BLM_MLRS_SERVICE_URL` (Vercel) if BLM
-  moves the service. The alternative documented source is
-  `https://gis.blm.gov/nlsdb/rest/services/Mining_Claims/MiningClaims/MapServer/1`.
+- Primary (since 2026-10-22): BLM NLSDB public **"Active Mining Claims"**,
+  `https://nlsdbpubgis.blm.gov/arcgis/rest/services/Mining_Claims/MiningClaims/MapServer/1`
+  (ArcGIS 11.5, maxRecordCount 2000; layer 0 is `Case`, layer 2 `Closed Mining
+  Claims`). Active cases only, so closed claims can never surface as active.
+- **The old HUB service moved.** `gis.blm.gov/nlsdb/rest/services/HUB/BLM_Natl_MLRS_Mining_Claims_Not_Closed/FeatureServer`
+  now answers every request with a 301 to the bare REST root of
+  `nlsdbpubgis.blm.gov` (path dropped) and the HUB folder says "Token Required".
+  That silently broke every US search in October 2026. The HTTP layer now
+  refuses a redirect that changes the path (`RegistryMovedError`, HTTP 502
+  `code: registry_moved`), and the schema canary exits 1 ("SERVICE MOVED")
+  instead of 2 ("unreachable").
+- Override with the server env vars `BLM_MLRS_SERVICE_URL` and
+  `BLM_MLRS_LAYER_ID` (Vercel) the next time BLM moves the service — no deploy
+  needed.
+- **State fields exist but are mostly empty** (Oct 2026: GEO_STATE filled on
+  12.3% of rows, ADMIN_STATE 36.3%). Scoping is therefore per row: GEO_STATE
+  when filled, else the state leading each PLSS legal description in
+  `CSE_META` (filled on 98.2%), else — except Oregon/Washington — the serial
+  prefix (declared degraded). SQL only narrows attribute searches by serial
+  prefix (`CSE_NR LIKE 'NV%'`); a bbox is not narrowed. Oregon and Washington
+  share the `OR` prefix and are separated by location, so both work again.
+- **Performance.** Offset paging on this layer is pathologically slow (~35 s
+  per 500 rows of a small bbox). Queries run ids-first (`returnIdsOnly`, 1-5 s)
+  then fetch rows in parallel `objectIds` batches of 250 (~1 s each), with a
+  trimmed field list and `geometryPrecision=6`. `UPPER()` is never wrapped
+  around a BLM column (the database compares case-insensitively), so serial
+  lookups use the index (~0.5 s). Results are cached per process for 5 min.
+  Live timings: `node scripts/smoke-us-claims-live.mjs`.
 - Active/pending distinction: the case **disposition** text is surfaced as
   `STATUS` on every feature (shown in result rows + popups) rather than
   filtered — the service itself excludes closed cases.

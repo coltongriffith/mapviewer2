@@ -2,35 +2,49 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // End-to-end tests of the US federal (BLM MLRS) jurisdiction path through the
 // real /api/claims handler, against a fully mocked BLM ArcGIS service.
-// Fixture field names mirror the LIVE layer schema (verified July 2026 against
-// BLM_Natl_MLRS_Mining_Claims_Not_Closed/FeatureServer/0): CSE_NR / CSE_NAME /
-// GEO_STATE / ADMIN_STATE / BLM_PROD / CSE_DISP / RCRD_ACRS. The engine
-// resolves them at runtime exactly as it does against the live layer. The live
-// layer publishes no legacy-serial field; a variant test below covers the
-// optional legacy OR-clause in case BLM adds one.
+//
+// The mock mirrors the LIVE service as of October 2026:
+//   nlsdbpubgis.blm.gov/arcgis/rest/services/Mining_Claims/MiningClaims/MapServer/1
+//   "Active Mining Claims" — fields below, GEO_STATE and ADMIN_STATE present on
+//   the schema but NULL on most rows, the state carried instead by the PLSS
+//   legal description in CSE_META ("NV 21 0330N 0510E 033 A SE|…").
+// It answers the ids-first protocol the engine uses on this layer:
+// returnIdsOnly → objectIds batches. Variant tests drop fields to exercise the
+// older schemas the engine still has to survive.
 
 const BLM_FIELDS = [
   { name: 'OBJECTID', type: 'esriFieldTypeOID' },
-  { name: 'CSE_NR', type: 'esriFieldTypeString' },
-  { name: 'CSE_NAME', type: 'esriFieldTypeString' },
-  { name: 'GEO_STATE', type: 'esriFieldTypeString' },
   { name: 'ADMIN_STATE', type: 'esriFieldTypeString' },
+  { name: 'GEO_STATE', type: 'esriFieldTypeString' },
   { name: 'BLM_PROD', type: 'esriFieldTypeString' },
   { name: 'CSE_DISP', type: 'esriFieldTypeString' },
+  { name: 'CSE_TYPE_NR', type: 'esriFieldTypeString' },
+  { name: 'CSE_NR', type: 'esriFieldTypeString' },
+  { name: 'LEG_CSE_NR', type: 'esriFieldTypeString' },
+  { name: 'CSE_NAME', type: 'esriFieldTypeString' },
+  { name: 'LOC_DT', type: 'esriFieldTypeDate' },
+  { name: 'QLTY', type: 'esriFieldTypeString' },
+  { name: 'CSE_META', type: 'esriFieldTypeString' },
   { name: 'RCRD_ACRS', type: 'esriFieldTypeDouble' },
 ];
+// The layer the engine was first written against had no legacy serial and no
+// legal description; several resilience tests still need that shape.
+const withoutFields = (re) => BLM_FIELDS.filter((f) => !re.test(f.name));
 
-const claim = (i, over = {}) => ({
+const claim = (i, over = {}, st = 'NV') => ({
   type: 'Feature',
   geometry: { type: 'Polygon', coordinates: [[[-116, 40], [-116, 40.01], [-115.99, 40.01], [-115.99, 40], [-116, 40]]] },
   properties: {
     OBJECTID: i,
-    CSE_NR: `NV10${5000000 + i}`,
+    // As published: both state fields empty on the great majority of rows.
+    ADMIN_STATE: null,
+    GEO_STATE: null,
+    BLM_PROD: 'Lode Claim',
+    CSE_DISP: 'Active',
+    CSE_NR: `${st}10${5000000 + i}`,
+    LEG_CSE_NR: '',
     CSE_NAME: `GOLDIE #${i}`,
-    GEO_STATE: 'NV',
-    ADMIN_STATE: 'NV',
-    BLM_PROD: 'LODE CLAIM',
-    CSE_DISP: 'ACTIVE',
+    CSE_META: `${st} 21 0330N 0510E 033 A SE|${st} 21 0320N 0510E 004 A NE`,
     RCRD_ACRS: 20.66,
     ...over,
   },
@@ -46,49 +60,74 @@ function mockRes() {
   };
 }
 let ipN = 0;
-const req = (query, method = 'GET') => ({
+const req = (query, method = 'GET', headers = {}) => ({
   method, query, url: `/api/claims?${new URLSearchParams(query)}`,
-  headers: { 'x-forwarded-for': `172.16.${Math.floor(ipN / 250)}.${(ipN++ % 250) + 1}` },
+  headers: { 'x-forwarded-for': `172.16.${Math.floor(ipN / 250)}.${(ipN++ % 250) + 1}`, ...headers },
 });
+const jsonResponse = (body) => ({ ok: true, status: 200, headers: new Map([['content-type', 'application/json']]), json: async () => body, text: async () => JSON.stringify(body) });
 
-// Captures every query URL the handler sends upstream, so tests can assert
-// on the WHERE clause the engine actually built.
+// Every FILTER query the handler sends upstream (ids / count / plain queries),
+// decoded, so tests can assert on the WHERE clause the engine built. The
+// objectIds row fetches that follow go to rowFetchUrls.
 let queryUrls;
+let rowFetchUrls;
+let metaUrls;
 let totalClaims;
 let blmFields;
 // Optional per-test row source. Given a decoded WHERE clause it returns the rows
 // that clause should match, so tiered searches (the company alias ladder) can be
 // tested for real instead of always seeing the same canned rows.
 let rowsForWhere;
+// Optional fixed rows for every filter query.
+let fixtureRows;
 function installBlmMock(fields = BLM_FIELDS) {
   queryUrls = [];
+  rowFetchUrls = [];
+  metaUrls = [];
   totalClaims = 3;
   blmFields = fields;
   rowsForWhere = null;
+  fixtureRows = null;
+  const store = new Map();
   vi.stubGlobal('fetch', vi.fn(async (url) => {
     const u = String(url);
-    const json = (body) => ({ ok: true, headers: new Map([['content-type', 'application/json']]), json: async () => body, text: async () => JSON.stringify(body) });
-    if (/FeatureServer\/0\?f=json/.test(u)) {
-      return json({
-        name: 'Mining Claims- Not Closed',
+    if (/MapServer\/\d+\?f=json/.test(u)) {
+      metaUrls.push(u);
+      return jsonResponse({
+        name: 'Active Mining Claims',
         maxRecordCount: 2000,
-        objectIdField: 'OBJECTID',
+        // Offset paging IS advertised; the engine must not use it on BLM.
         advancedQueryCapabilities: { supportsPagination: true },
         fields: blmFields,
       });
     }
-    if (/FeatureServer\/0\/query/.test(u)) {
+    if (/MapServer\/\d+\/query/.test(u)) {
       // URLSearchParams encodes spaces as '+', which decodeURIComponent leaves alone
       const decoded = decodeURIComponent(u.replace(/\+/g, ' '));
-      queryUrls.push(decoded);
-      if (rowsForWhere) {
-        return json({ type: 'FeatureCollection', features: rowsForWhere(decoded) });
+      const params = new URL(u).searchParams;
+      if (params.get('objectIds')) {
+        rowFetchUrls.push(decoded);
+        const ids = params.get('objectIds').split(',').map(Number);
+        // Honour the projection like the live server: a column left out of
+        // outFields does not come back.
+        const out = params.get('outFields');
+        const project = (f) => (!out || out === '*' ? f : {
+          ...f,
+          properties: Object.fromEntries(out.split(',').filter((k) => k in f.properties).map((k) => [k, f.properties[k]])),
+        });
+        return jsonResponse({ type: 'FeatureCollection', features: ids.map((id) => store.get(id)).filter(Boolean).map(project) });
       }
-      const offset = Number(u.match(/resultOffset=(\d+)/)?.[1]) || 0;
-      const count = Number(u.match(/resultRecordCount=(\d+)/)?.[1]) || 2000;
-      const features = [];
-      for (let i = offset; i < Math.min(offset + count, totalClaims); i++) features.push(claim(i + 1));
-      return json({ type: 'FeatureCollection', features });
+      queryUrls.push(decoded);
+      if (params.get('returnCountOnly')) return jsonResponse({ count: 42 });
+      const st = decoded.match(/CSE_NR\)? LIKE '([A-Z]{2})%'/)?.[1] || 'NV';
+      const rows = rowsForWhere ? rowsForWhere(decoded)
+        : fixtureRows || Array.from({ length: totalClaims }, (_, i) => claim(i + 1, {}, st));
+      rows.forEach((r) => store.set(r.properties.OBJECTID, r));
+      if (params.get('returnIdsOnly')) {
+        // Live ArcGIS answers "no matches" with objectIds: null, not [].
+        return jsonResponse({ objectIdFieldName: 'OBJECTID', objectIds: rows.length ? rows.map((r) => r.properties.OBJECTID) : null });
+      }
+      return jsonResponse({ type: 'FeatureCollection', features: rows });
     }
     throw new Error(`unexpected url ${u}`);
   }));
@@ -102,77 +141,373 @@ beforeEach(async () => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
+describe('US service location (October 2026 move)', () => {
+  it('queries the public MapServer, layer 1 "Active Mining Claims", by default', async () => {
+    const res = mockRes();
+    await handler(req({ q: 'goldie', type: 'name', province: 'us-nv' }), res);
+    expect(res.statusCode).toBe(200);
+    expect(metaUrls[0]).toMatch(/^https:\/\/nlsdbpubgis\.blm\.gov\/arcgis\/rest\/services\/Mining_Claims\/MiningClaims\/MapServer\/1\?f=json/);
+    expect(queryUrls[0]).toMatch(/MapServer\/1\/query/);
+  });
+
+  it('takes the layer id from BLM_MLRS_LAYER_ID', async () => {
+    process.env.BLM_MLRS_LAYER_ID = '7';
+    try {
+      vi.resetModules();
+      installBlmMock();
+      const { default: h } = await import('../api/claims.js');
+      const res = mockRes();
+      await h(req({ q: 'goldie', type: 'name', province: 'us-nv' }), res);
+      expect(res.statusCode).toBe(200);
+      expect(metaUrls[0]).toMatch(/MapServer\/7\?f=json/);
+    } finally {
+      delete process.env.BLM_MLRS_LAYER_ID;
+    }
+  });
+
+  it('reports a redirect that drops the path as a moved service, not a schema change', async () => {
+    // Exactly what gis.blm.gov did: 301 from the layer to the bare REST root.
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: false,
+      status: 301,
+      headers: new Map([['location', 'https://nlsdbpubgis.blm.gov/arcgis/rest?f=json']]),
+      json: async () => ({}),
+      text: async () => '',
+    })));
+    vi.resetModules();
+    const { default: h } = await import('../api/claims.js');
+    const res = mockRes();
+    await h(req({ q: 'goldie', type: 'name', province: 'us-nv' }), res);
+    expect(res.statusCode).toBe(502);
+    expect(res.body.code).toBe('registry_moved');
+    expect(res.body.error).toMatch(/moved/i);
+    expect(res.body.error).not.toMatch(/schema changed/i);
+  });
+
+  it('never follows a redirect: every request is sent with redirect "manual"', async () => {
+    const res = mockRes();
+    await handler(req({ q: 'goldie', type: 'name', province: 'us-nv' }), res);
+    const calls = global.fetch.mock.calls;
+    expect(calls.length).toBeGreaterThan(0);
+    for (const [, init] of calls) expect(init?.redirect).toBe('manual');
+  });
+
+  it('follows a redirect that keeps the path (scheme or host change)', async () => {
+    vi.resetModules();
+    installBlmMock();
+    const blm = global.fetch;
+    let redirected = 0;
+    vi.stubGlobal('fetch', vi.fn(async (url, init) => {
+      const u = String(url);
+      if (u.startsWith('https://nlsdbpubgis.blm.gov/')) {
+        redirected += 1;
+        const moved = u.replace('https://nlsdbpubgis.blm.gov/', 'https://mirror.blm.example/');
+        return { ok: false, status: 301, headers: new Map([['location', moved]]), json: async () => ({}), text: async () => '' };
+      }
+      return blm(url, init);
+    }));
+    const { default: h } = await import('../api/claims.js');
+    const res = mockRes();
+    await h(req({ q: 'goldie', type: 'name', province: 'us-nv' }), res);
+    expect(res.statusCode).toBe(200);
+    expect(redirected).toBeGreaterThan(0);
+    expect(res.body.features.length).toBe(3);
+  });
+
+  it('redirectTarget: same path follows, a changed path is an error', async () => {
+    const { redirectTarget } = await import('../api/claims.js');
+    const r = (status, location) => ({ status, headers: new Map(location ? [['location', location]] : []) });
+    const from = 'https://a.example/arcgis/rest/services/X/MapServer/1?f=json';
+    expect(redirectTarget(from, r(200))).toBeNull();
+    expect(redirectTarget(from, r(301, 'https://b.example/arcgis/rest/services/X/MapServer/1?f=json')).follow)
+      .toBe('https://b.example/arcgis/rest/services/X/MapServer/1?f=json');
+    // A target that kept the path but dropped the query gets ours back.
+    expect(redirectTarget(from, r(302, 'https://b.example/arcgis/rest/services/X/MapServer/1')).follow)
+      .toBe('https://b.example/arcgis/rest/services/X/MapServer/1?f=json');
+    const moved = redirectTarget(from, r(301, 'https://b.example/arcgis/rest?f=json'));
+    expect(moved.error.registryMoved).toBe(true);
+    expect(moved.error.message).toMatch(/has moved/);
+    expect(redirectTarget(from, r(308)).error.registryMoved).toBe(true);
+  });
+});
+
 describe('US claim-name search (us-nv)', () => {
   it('resolves the name field, scopes to the state, and normalizes results', async () => {
     const res = mockRes();
     await handler(req({ q: 'goldie', type: 'name', province: 'us-nv' }), res);
     expect(res.statusCode).toBe(200);
 
-    // WHERE contains both the name match and the state scope (GEO_STATE —
-    // the geographic state — wins over ADMIN_STATE)
+    // BLM stores names and serials in capitals, so the column is compared raw
+    // (index-friendly) against an upper-cased pattern; the state narrowing is
+    // the serial prefix. GEO_STATE is NOT in the WHERE: it is mostly NULL on
+    // the live layer, and filtering on it returned an empty Nevada.
     const where = queryUrls[0];
-    expect(where).toMatch(/UPPER\(CSE_NAME\) LIKE UPPER\('%goldie%'\)/i);
-    expect(where).toMatch(/UPPER\(GEO_STATE\) = 'NV'/);
-    // Deterministic paging: an explicit sort keeps offset pages stable on
-    // the large national layer.
-    expect(where).toMatch(/orderByFields=OBJECTID/);
+    expect(where).toMatch(/CSE_NAME LIKE '%GOLDIE%'/);
+    expect(where).not.toMatch(/UPPER\(CSE_NAME\)/);
+    expect(where).toMatch(/CSE_NR LIKE 'NV%'/);
+    expect(where).not.toMatch(/GEO_STATE|ADMIN_STATE/);
+    expect(where).toMatch(/returnIdsOnly=true/);
 
     const p = res.body.features[0].properties;
     expect(p.CLAIM_NAME).toBe('GOLDIE #1');
     expect(p.TAG_NUMBER).toMatch(/^NV10/);
     expect(p.CLAIM_TYPE).toBe('lode');
-    expect(p.TITLE_TYPE_DESCRIPTION).toBe('LODE CLAIM'); // from BLM_PROD
-    expect(p.STATUS).toBe('ACTIVE');                     // from CSE_DISP
+    expect(p.TITLE_TYPE_DESCRIPTION).toBe('Lode Claim'); // from BLM_PROD
+    expect(p.STATUS).toBe('Active');                     // from CSE_DISP
     expect(p.US_STATE).toBe('NV');
     expect(p.SOURCE_SYSTEM).toBe('BLM MLRS');
     expect(p.GEOM_GENERALIZED).toBe(true);
     // acres → hectares (20.66 ac ≈ 8.36 ha), original preserved
     expect(p.AREA_IN_HECTARES).toBeCloseTo(8.36, 1);
     expect(p.RCRD_ACRS).toBe(20.66);
-    // No fabricated expiry, and no legacy serial on the live schema
+    // No fabricated expiry, and an empty legacy serial is not reported
     expect(p.GOOD_TO_DATE).toBeUndefined();
     expect(p.LEGACY_NR).toBeUndefined();
     expect(res.body.meta.provider).toBe('blm-mlrs');
   });
 });
 
+describe('US query shape (performance on the national layer)', () => {
+  it('runs ids-first with parallel objectIds batches, never offset paging', async () => {
+    totalClaims = 1200;
+    const res = mockRes();
+    await handler(req({ q: 'goldie', type: 'name', province: 'us-nv' }), res);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.features).toHaveLength(1200);
+    for (const u of [...queryUrls, ...rowFetchUrls]) {
+      expect(u).not.toMatch(/resultOffset|orderByFields/);
+    }
+    expect(rowFetchUrls.length).toBe(5);   // 1,200 ids in batches of 250
+    for (const u of rowFetchUrls) {
+      expect(u.match(/objectIds=([^&]*)/)[1].split(',').length).toBeLessThanOrEqual(250);
+    }
+  });
+
+  it('asks only for the fields it uses, at a sane precision', async () => {
+    const res = mockRes();
+    await handler(req({ q: 'goldie', type: 'name', province: 'us-nv' }), res);
+    const fetchRows = rowFetchUrls[0];
+    expect(fetchRows).not.toMatch(/outFields=\*/);
+    expect(fetchRows).toMatch(/outFields=[^&]*CSE_META/);
+    expect(fetchRows).toMatch(/outFields=[^&]*CSE_NR/);
+    expect(fetchRows).not.toMatch(/QLTY/);
+    expect(fetchRows).toMatch(/geometryPrecision=6/);
+  });
+
+  it('answers a repeated search from the short-lived cache', async () => {
+    const a = mockRes();
+    await handler(req({ q: 'goldie', type: 'name', province: 'us-nv' }), a);
+    const sent = queryUrls.length;
+    const b = mockRes();
+    await handler(req({ q: 'goldie', type: 'name', province: 'us-nv' }), b);
+    expect(queryUrls.length).toBe(sent);
+    expect(b.body.features).toHaveLength(a.body.features.length);
+  });
+});
+
 describe('US serial-number search', () => {
-  it('tolerates spacing/dash formatting; no legacy OR when the field is absent', async () => {
+  it('tolerates spacing/dash formatting and asks for an indexed exact match first', async () => {
     const res = mockRes();
     await handler(req({ q: 'nv 105-000-001', type: 'number', province: 'us-nv' }), res);
     expect(res.statusCode).toBe(200);
     const where = queryUrls[0];
-    expect(where).toMatch(/UPPER\(CSE_NR\) LIKE UPPER\('%nv105000001%'\)/i);
-    // Live layer has no legacy-serial field → the OR clause must not appear
-    expect(where).not.toMatch(/LGCY/i);
-    expect(where).toMatch(/UPPER\(GEO_STATE\) = 'NV'/);
+    expect(where).toMatch(/CSE_NR = 'NV105000001'/);
+    expect(where).toMatch(/LEG_CSE_NR = 'NV105000001'/);
+    expect(where).not.toMatch(/UPPER\(CSE_NR\)/);
+    expect(where).not.toMatch(/LIKE '%/);
   });
 
-  it('ORs the legacy serial field when a layer publishes one', async () => {
+  it('leaves the legacy OR out when the layer has no legacy field', async () => {
     vi.resetModules();
-    installBlmMock([...BLM_FIELDS, { name: 'LGCY_CSE_NR', type: 'esriFieldTypeString' }]);
+    installBlmMock(withoutFields(/LEG_CSE_NR/));
+    const { default: h } = await import('../api/claims.js');
+    const res = mockRes();
+    await h(req({ q: 'NV105000001', type: 'number', province: 'us-nv' }), res);
+    expect(res.statusCode).toBe(200);
+    expect(queryUrls[0]).not.toMatch(/LEG|LGCY/i);
+  });
+
+  it('ORs the legacy serial field under its older LGCY_ spelling too', async () => {
+    vi.resetModules();
+    installBlmMock([...withoutFields(/LEG_CSE_NR/), { name: 'LGCY_CSE_NR', type: 'esriFieldTypeString' }]);
     const { default: h } = await import('../api/claims.js');
     const res = mockRes();
     await h(req({ q: 'nmc123456', type: 'number', province: 'us-nv' }), res);
     expect(res.statusCode).toBe(200);
-    expect(queryUrls[0]).toMatch(/OR UPPER\(LGCY_CSE_NR\) LIKE/i);
+    expect(queryUrls[0]).toMatch(/OR LGCY_CSE_NR = 'NMC123456'/);
+  });
+
+  it('reads bare digits as this state\'s serial, before any widening', async () => {
+    vi.resetModules();
+    installBlmMock();
+    rowsForWhere = (where) => (/CSE_NR = 'NV105222372'/.test(where) ? [claim(9, { CSE_NR: 'NV105222372' })] : []);
+    const { default: h } = await import('../api/claims.js');
+    const res = mockRes();
+    await h(req({ q: '105222372', type: 'number', province: 'us-nv' }), res);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.features.map((f) => f.properties.TAG_NUMBER)).toEqual(['NV105222372']);
+    // The typed form first, then the prefixed form — not a contains scan.
+    expect(queryUrls[0]).toMatch(/CSE_NR = '105222372'/);
+    expect(queryUrls[1]).toMatch(/CSE_NR = 'NV105222372'/);
+    expect(queryUrls).toHaveLength(2);
+    // Honest: the answer is labelled as the prefixed form, not what was typed.
+    expect(res.body.meta.relaxedTo).toBe('NV105222372');
+  });
+
+  it('answers a pasted list with one exact IN query on the raw columns', async () => {
+    const res = mockRes();
+    await handler(req({ q: 'NV105000001, NV105000002', type: 'number', province: 'us-nv' }), res);
+    expect(res.statusCode).toBe(200);
+    expect(queryUrls[0]).toMatch(/CSE_NR IN \('NV105000001','NV105000002'\)/);
+    expect(queryUrls[0]).not.toMatch(/UPPER\(/);
   });
 });
 
-describe('US state-scoping resilience', () => {
-  it('declares precise geographic scoping on the happy path', async () => {
+describe('US state scoping (per row)', () => {
+  it('scopes geographically from the legal description when GEO_STATE is empty', async () => {
     const res = mockRes();
     await handler(req({ q: 'goldie', type: 'name', province: 'us-nv' }), res);
     expect(res.statusCode).toBe(200);
-    expect(res.body.meta.scopingMethod).toBe('geo_state');
-    expect(res.body.meta.scopingField).toBe('GEO_STATE');
+    expect(res.body.features).toHaveLength(3);
+    expect(res.body.meta.scopingMethod).toBe('legal_description');
     expect(res.body.meta.scopingDegraded).toBe(false);
     expect(res.body.meta.scopingNote).toBeUndefined();
   });
 
+  it('declares geo_state when every claim carried a filled GEO_STATE', async () => {
+    vi.resetModules();
+    installBlmMock();
+    fixtureRows = [1, 2].map((i) => claim(i, { GEO_STATE: 'NV', CSE_META: null }));
+    const { default: h } = await import('../api/claims.js');
+    const res = mockRes();
+    await h(req({ q: 'goldie', type: 'name', province: 'us-nv' }), res);
+    expect(res.body.features).toHaveLength(2);
+    expect(res.body.meta.scopingMethod).toBe('geo_state');
+    expect(res.body.meta.scopingDegraded).toBe(false);
+  });
+
+  it('drops claims whose own location is in another state, whatever the serial says', async () => {
+    vi.resetModules();
+    installBlmMock();
+    fixtureRows = [
+      claim(1),                                                   // NV ground
+      claim(2, { CSE_META: 'CA 21 0100N 0170E 012 A NW' }),       // NV serial, California ground
+      claim(3, { GEO_STATE: 'AZ' }),                              // GEO_STATE wins when filled
+      claim(4, { CSE_META: 'CA 21 0100N 0170E 012 A NW|NV 21 0100N 0170E 007 A NE' }), // straddles the line
+    ];
+    const { default: h } = await import('../api/claims.js');
+    const res = mockRes();
+    await h(req({ q: 'goldie', type: 'name', province: 'us-nv' }), res);
+    expect(res.body.features.map((f) => f.properties.OBJECTID)).toEqual([1, 4]);
+    expect(res.body.meta.returned).toBe(2);
+    expect(res.body.meta.totalKnown).toBe(2);
+  });
+
+  it('places a claim with no location by serial prefix, and declares that as degraded', async () => {
+    vi.resetModules();
+    installBlmMock();
+    fixtureRows = [claim(1), claim(2, { CSE_META: '' }), claim(3, { CSE_META: null })];
+    const { default: h } = await import('../api/claims.js');
+    const res = mockRes();
+    await h(req({ q: 'goldie', type: 'name', province: 'us-nv' }), res);
+    expect(res.body.features).toHaveLength(3);
+    expect(res.body.meta.scopingMethod).toBe('serial_prefix');
+    expect(res.body.meta.scopingDegraded).toBe(true);
+    expect(res.body.meta.scopingNote).toMatch(/^2 of 3 claims/);
+  });
+
+  it('does not trust a GEO_STATE that exists but is empty (no legal description either)', async () => {
+    // The October 2026 failure mode, isolated: the field resolves, is NULL on
+    // every row, and must neither filter the query nor masquerade as geographic.
+    vi.resetModules();
+    installBlmMock(withoutFields(/CSE_META/));
+    const { default: h } = await import('../api/claims.js');
+    const res = mockRes();
+    await h(req({ q: 'goldie', type: 'name', province: 'us-nv' }), res);
+    expect(res.statusCode).toBe(200);
+    expect(queryUrls[0]).not.toMatch(/GEO_STATE/);
+    expect(res.body.features).toHaveLength(3);
+    expect(res.body.meta.scopingMethod).toBe('serial_prefix');
+    expect(res.body.meta.scopingDegraded).toBe(true);
+  });
+
+  it('separates Oregon from Washington by location, under their shared OR serials', async () => {
+    const rows = [
+      claim(1, { CSE_NR: 'OR105000001', CSE_META: 'OR 33 0100S 0100E 012 A NW' }),
+      claim(2, { CSE_NR: 'OR105000002', CSE_META: 'WA 33 0300N 0400E 001 A NE' }),
+      claim(3, { CSE_NR: 'OR105000003', CSE_META: null }),     // nowhere on record
+    ];
+    for (const [province, want] of [['us-or', [1]], ['us-wa', [2]]]) {
+      vi.resetModules();
+      installBlmMock();
+      fixtureRows = rows;
+      const { default: h } = await import('../api/claims.js');
+      const res = mockRes();
+      await h(req({ q: 'goldie', type: 'name', province }), res);
+      expect(res.statusCode, province).toBe(200);
+      // One office, one prefix: both states narrow to OR… serials.
+      expect(queryUrls[0], province).toMatch(/CSE_NR LIKE 'OR%'/);
+      expect(res.body.features.map((f) => f.properties.OBJECTID), province).toEqual(want);
+      expect(res.body.features[0].properties.US_STATE).toBe(province.slice(3).toUpperCase());
+      // The unlocated claim is left out — never guessed — and that is declared.
+      expect(res.body.meta.scopingDegraded, province).toBe(true);
+      expect(res.body.meta.scopingNote, province).toMatch(/1 claims administered by the Oregon\/Washington/);
+    }
+  });
+
+  it('keeps Oregon/Washington precise (not degraded) when every claim is located', async () => {
+    vi.resetModules();
+    installBlmMock();
+    fixtureRows = [claim(1, { CSE_NR: 'OR105000001', CSE_META: 'WA 33 0300N 0400E 001 A NE' })];
+    const { default: h } = await import('../api/claims.js');
+    const res = mockRes();
+    await h(req({ q: 'goldie', type: 'name', province: 'us-wa' }), res);
+    expect(res.body.features).toHaveLength(1);
+    expect(res.body.meta.scopingMethod).toBe('legal_description');
+    expect(res.body.meta.scopingDegraded).toBe(false);
+  });
+
+  it('fetches the columns that candidate aliases resolved to (STATE_GEO, LGCY_CSE_NR, CLAIM_NAME)', async () => {
+    // A layer that publishes the alias spellings and no CSE_META. If the
+    // projection held only the fixed allowlist, STATE_GEO would never come back
+    // and this Washington claim would be dropped as unlocated.
+    vi.resetModules();
+    installBlmMock([
+      ...withoutFields(/GEO_STATE|CSE_META|LEG_CSE_NR|CSE_NAME/),
+      { name: 'STATE_GEO', type: 'esriFieldTypeString' },
+      { name: 'LGCY_CSE_NR', type: 'esriFieldTypeString' },
+      { name: 'CLAIM_NAME', type: 'esriFieldTypeString' },
+    ]);
+    fixtureRows = [claim(1, { CSE_NR: 'OR105000001', STATE_GEO: 'WA', LGCY_CSE_NR: 'ORMC123', CLAIM_NAME: 'GOLDIE #1' })];
+    const { default: h } = await import('../api/claims.js');
+    const res = mockRes();
+    await h(req({ q: 'goldie', type: 'name', province: 'us-wa' }), res);
+    expect(res.statusCode).toBe(200);
+    expect(rowFetchUrls[0]).toMatch(/outFields=[^&]*STATE_GEO/);
+    expect(rowFetchUrls[0]).toMatch(/outFields=[^&]*LGCY_CSE_NR/);
+    expect(rowFetchUrls[0]).toMatch(/outFields=[^&]*CLAIM_NAME/);
+    expect(res.body.features).toHaveLength(1);
+    const p = res.body.features[0].properties;
+    expect(p.US_STATE).toBe('WA');
+    expect(p.LEGACY_NR).toBe('ORMC123');
+    expect(p.CLAIM_NAME).toBe('GOLDIE #1');
+    expect(res.body.meta.scopingMethod).toBe('geo_state');
+  });
+
+  it('legalDescriptionStates reads every aliquot, and ignores junk', async () => {
+    const { legalDescriptionStates } = await import('../api/claims.js');
+    expect(legalDescriptionStates('NV 21 0330N 0510E 033 A SE|NV 21 0320N 0510E 004 A NE')).toEqual(['NV']);
+    expect(legalDescriptionStates('CA 21 0100N 0170E 012 A NW|NV 21 0100N 0170E 007 A NE')).toEqual(['CA', 'NV']);
+    expect(legalDescriptionStates('')).toEqual([]);
+    expect(legalDescriptionStates(null)).toEqual([]);
+    expect(legalDescriptionStates('1: MIDPOINT')).toEqual([]);
+  });
+});
+
+describe('US state scoping on older layer schemas (whole-set SQL modes)', () => {
   it('degrades to ADMIN_STATE and declares it as administrative, not geographic', async () => {
     vi.resetModules();
-    installBlmMock(BLM_FIELDS.filter((f) => f.name !== 'GEO_STATE'));
+    installBlmMock(withoutFields(/GEO_STATE|CSE_META/));
     const { default: h } = await import('../api/claims.js');
     const res = mockRes();
     await h(req({ q: 'goldie', type: 'name', province: 'us-nv' }), res);
@@ -188,14 +523,14 @@ describe('US state-scoping resilience', () => {
 
   it('falls back to serial-prefix scoping when no state field resolves, and declares it', async () => {
     vi.resetModules();
-    installBlmMock(BLM_FIELDS.filter((f) => !/STATE/.test(f.name)));
+    installBlmMock(withoutFields(/STATE|CSE_META|LEG_CSE_NR/));
     const { default: h } = await import('../api/claims.js');
     const res = mockRes();
     await h(req({ q: 'goldie', type: 'name', province: 'us-nv' }), res);
     expect(res.statusCode).toBe(200);
-    // MLRS serials carry the two-letter state code (NV105331298), so scoping
-    // degrades to CSE_NR LIKE 'NV%'. The NMC-style office code belongs to the
-    // LEGACY serial field and must not be applied to CSE_NR.
+    // MLRS serials carry the two-letter state code (NV105331298). The NMC-style
+    // office code belongs to the LEGACY serial field and must not be applied
+    // to CSE_NR.
     expect(queryUrls[0]).toMatch(/UPPER\(CSE_NR\) LIKE 'NV%'/);
     expect(queryUrls[0]).not.toMatch(/CSE_NR\) LIKE 'NMC%'/);
     expect(res.body.meta.scopingMethod).toBe('serial_prefix');
@@ -203,49 +538,27 @@ describe('US state-scoping resilience', () => {
     expect(res.body.meta.scopingNote).toMatch(/serial/i);
   });
 
-  it('adds the legacy office prefix on the legacy field only', async () => {
-    vi.resetModules();
-    installBlmMock([
-      ...BLM_FIELDS.filter((f) => !/STATE/.test(f.name)),
-      { name: 'LGCY_CSE_NR', type: 'esriFieldTypeString' },
-    ]);
-    const { default: h } = await import('../api/claims.js');
-    const res = mockRes();
-    await h(req({ q: 'goldie', type: 'name', province: 'us-nv' }), res);
-    expect(res.statusCode).toBe(200);
-    expect(queryUrls[0]).toMatch(/UPPER\(CSE_NR\) LIKE 'NV%'/);
-    expect(queryUrls[0]).toMatch(/UPPER\(LGCY_CSE_NR\) LIKE 'NMC%'/);
-    expect(res.body.meta.scopingMethod).toBe('serial_prefix');
+  it('adds the legacy office prefix on the legacy field only (LEG_ and LGCY_ spellings)', async () => {
+    for (const legacy of ['LEG_CSE_NR', 'LGCY_CSE_NR']) {
+      vi.resetModules();
+      installBlmMock([...withoutFields(/STATE|CSE_META|LEG_CSE_NR/), { name: legacy, type: 'esriFieldTypeString' }]);
+      const { default: h } = await import('../api/claims.js');
+      const res = mockRes();
+      await h(req({ q: 'goldie', type: 'name', province: 'us-nv' }), res);
+      expect(res.statusCode).toBe(200);
+      expect(queryUrls[0]).toMatch(/UPPER\(CSE_NR\) LIKE 'NV%'/);
+      expect(queryUrls[0]).toMatch(new RegExp(`UPPER\\(${legacy}\\) LIKE 'NMC%'`));
+      expect(res.body.meta.scopingMethod).toBe('serial_prefix');
+    }
   });
 
-  it('resolves the legacy serial under its August 2026 name, LEG_CSE_NR', async () => {
-    // BLM renamed LGCY_CSE_NR to LEG_CSE_NR; the live-schema canary caught it.
-    // This matters more than a rename normally would: with GEO_STATE and
-    // ADMIN_STATE both gone from the layer, serial_prefix is the ONLY scoping
-    // mode left, and the legacy field carries half of it. A claim whose MLRS
-    // serial does not start with the state code is found only through this
-    // clause.
-    vi.resetModules();
-    installBlmMock([
-      ...BLM_FIELDS.filter((f) => !/STATE/.test(f.name)),
-      { name: 'LEG_CSE_NR', type: 'esriFieldTypeString' },
-    ]);
-    const { default: h } = await import('../api/claims.js');
-    const res = mockRes();
-    await h(req({ q: 'goldie', type: 'name', province: 'us-nv' }), res);
-    expect(res.statusCode).toBe(200);
-    expect(queryUrls[0]).toMatch(/UPPER\(CSE_NR\) LIKE 'NV%'/);
-    expect(queryUrls[0]).toMatch(/UPPER\(LEG_CSE_NR\) LIKE 'NMC%'/);
-    expect(res.body.meta.scopingMethod).toBe('serial_prefix');
-  });
-
-  it('refuses serial-prefix scoping for Oregon and Washington (one shared BLM office)', async () => {
+  it('refuses Oregon and Washington when nothing on the layer locates a claim', async () => {
     // The Oregon/Washington state office administers both states, so no serial
     // prefix distinguishes them. Returning Oregon claims labelled Washington
     // would be a plausible-looking wrong answer — a hard error is correct.
     for (const province of ['us-or', 'us-wa']) {
       vi.resetModules();
-      installBlmMock(BLM_FIELDS.filter((f) => !/STATE/.test(f.name)));
+      installBlmMock(withoutFields(/STATE|CSE_META/));
       const { default: h } = await import('../api/claims.js');
       const res = mockRes();
       await h(req({ q: 'goldie', type: 'name', province }), res);
@@ -256,19 +569,21 @@ describe('US state-scoping resilience', () => {
 
   it('surfaces the schema error only when neither state nor serial resolves', async () => {
     vi.resetModules();
-    installBlmMock(BLM_FIELDS.filter((f) => !/STATE|CSE_NR/.test(f.name)));
+    installBlmMock(withoutFields(/STATE|CSE_NR|CSE_META/));
     const { default: h } = await import('../api/claims.js');
     const res = mockRes();
     await h(req({ q: 'goldie', type: 'name', province: 'us-nv' }), res);
     expect(res.statusCode).toBe(502);
     expect(res.body.error).toMatch(/state filtering is unavailable/i);
   });
+});
 
-  it('declares the scoping method on every US path, including bbox and company', async () => {
+describe('US scoping is declared on every path', () => {
+  it('bbox, number and company all carry the declaration', async () => {
     // Acceptance: no code path returns claims under degraded scoping without
     // the response declaring it.
     vi.resetModules();
-    installBlmMock(BLM_FIELDS.filter((f) => f.name !== 'GEO_STATE'));
+    installBlmMock(withoutFields(/GEO_STATE|CSE_META/));
     const { default: h } = await import('../api/claims.js');
 
     const bbox = mockRes();
@@ -288,11 +603,19 @@ describe('US state-scoping resilience', () => {
     expect(company.body.meta.scopingDegraded).toBe(true);
   });
 
-  it('leaves Canadian responses free of US scoping fields', async () => {
-    const res = mockRes();
-    await handler(req({ q: 'goldie', type: 'name', province: 'us-nv' }), res);
-    expect(res.body.meta.scopingMethod).toBeDefined();   // US declares
-    // (the Canadian case is covered in "Canadian paths untouched" below)
+  it('and on the live schema they all declare the per-row method', async () => {
+    for (const query of [
+      { bbox: '-116.5,39.5,-115.5,40.5', province: 'us-nv' },
+      { q: 'NV105000001', type: 'number', province: 'us-nv' },
+      { q: 'goldie', type: 'company', province: 'us-nv' },
+      { q: 'goldie', type: 'name', province: 'us-nv' },
+    ]) {
+      const res = mockRes();
+      await handler(req(query), res);
+      expect(res.statusCode, JSON.stringify(query)).toBe(200);
+      expect(res.body.meta.scopingMethod, JSON.stringify(query)).toBe('legal_description');
+      expect(res.body.meta.usScope, 'internal counts never leak').toBeUndefined();
+    }
   });
 });
 
@@ -306,13 +629,11 @@ describe('US company resolution via the subsidiary alias ladder', () => {
     rowsForWhere = (where) => {
       // Crude LIKE evaluator: pull each '%term%' out of the WHERE and match it
       // against the row's claim name, the way the live service would.
-      const terms = [...where.matchAll(/LIKE UPPER\('%([^%]*)%'\)/g)].map((m) => m[1].toUpperCase());
-      const equals = [...where.matchAll(/UPPER\(CSE_NAME\) = UPPER\('([^']*)'\)/g)].map((m) => m[1].toUpperCase());
-      return rows
-        .filter((r) => {
-          const n = String(r.properties.CSE_NAME).toUpperCase();
-          return terms.some((t) => t && n.includes(t)) || equals.some((e) => n === e);
-        });
+      const terms = [...where.matchAll(/LIKE (?:UPPER\()?'%([^%']*)%'/g)].map((m) => m[1].toUpperCase());
+      return rows.filter((r) => {
+        const n = String(r.properties.CSE_NAME).toUpperCase();
+        return terms.some((t) => t && n.includes(t));
+      });
     };
   }
 
@@ -382,7 +703,7 @@ describe('US company resolution via the subsidiary alias ladder', () => {
 
   it('reports no_claimant_field when the layer publishes neither claimant nor name', async () => {
     vi.resetModules();
-    installBlmMock(BLM_FIELDS.filter((f) => f.name !== 'CSE_NAME'));
+    installBlmMock(withoutFields(/CSE_NAME/));
     const { default: h } = await import('../api/claims.js');
     const res = mockRes();
     await h(req({ q: 'Awesome Gold Corp.', type: 'company', province: 'us-nv' }), res);
@@ -399,7 +720,7 @@ describe('US company resolution via the subsidiary alias ladder', () => {
     const res = mockRes();
     await h(req({ q: 'Awesome Gold Corp.', type: 'company', province: 'us-nv' }), res);
     expect(res.statusCode).toBe(200);
-    expect(queryUrls[0]).toMatch(/UPPER\(CLAIMANT_NAME\) LIKE/i);
+    expect(queryUrls[0]).toMatch(/CLAIMANT_NAME LIKE '%/);
     expect(res.body.resolution.resolvedAgainst).toBe('claimant');
   });
 
@@ -409,7 +730,7 @@ describe('US company resolution via the subsidiary alias ladder', () => {
     const res = mockRes();
     await h(req({ q: 'Awesome Gold Corp.', type: 'company', province: 'us-az' }), res);
     expect(queryUrls.length).toBeGreaterThanOrEqual(3);
-    for (const u of queryUrls) expect(u).toMatch(/UPPER\(GEO_STATE\) = 'AZ'/);
+    for (const u of queryUrls) expect(u).toMatch(/CSE_NR LIKE 'AZ%'/);
   });
 });
 
@@ -421,12 +742,11 @@ describe('US upstream resilience', () => {
     installBlmMock();
     let queryCalls = 0;
     const prevFetch = global.fetch;
-    vi.stubGlobal('fetch', vi.fn(async (url) => {
-      if (/FeatureServer\/0\/query/.test(String(url)) && ++queryCalls === 1) {
-        const body = { error: { code: 500, message: 'Error performing query operation' } };
-        return { ok: true, headers: new Map([['content-type', 'application/json']]), json: async () => body, text: async () => JSON.stringify(body) };
+    vi.stubGlobal('fetch', vi.fn(async (url, init) => {
+      if (/MapServer\/1\/query/.test(String(url)) && ++queryCalls === 1) {
+        return jsonResponse({ error: { code: 500, message: 'Error performing query operation' } });
       }
-      return prevFetch(url);
+      return prevFetch(url, init);
     }));
     const { default: h } = await import('../api/claims.js');
     const res = mockRes();
@@ -440,13 +760,13 @@ describe('US upstream resilience', () => {
     vi.resetModules();
     installBlmMock();
     const prevFetch = global.fetch;
-    vi.stubGlobal('fetch', vi.fn(async (url) => {
-      if (/FeatureServer\/0\/query/.test(String(url))) {
+    vi.stubGlobal('fetch', vi.fn(async (url, init) => {
+      if (/MapServer\/1\/query/.test(String(url))) {
         const e = new Error('The operation was aborted due to timeout');
         e.name = 'TimeoutError';
         throw e;
       }
-      return prevFetch(url);
+      return prevFetch(url, init);
     }));
     const { default: h } = await import('../api/claims.js');
     const res = mockRes();
@@ -455,19 +775,38 @@ describe('US upstream resilience', () => {
     expect(res.body.error).toMatch(/responding slowly/i);
     expect(res.body.error).toMatch(/more specific search/i);
   });
+
+  it('keeps the rows it has when one batch fails, and says the set is incomplete', async () => {
+    vi.resetModules();
+    installBlmMock();
+    totalClaims = 600;
+    const prevFetch = global.fetch;
+    let batches = 0;
+    vi.stubGlobal('fetch', vi.fn(async (url, init) => {
+      if (/objectIds=/.test(String(url)) && ++batches === 2) throw new Error('socket hang up');
+      return prevFetch(url, init);
+    }));
+    const { default: h } = await import('../api/claims.js');
+    const res = mockRes();
+    await h(req({ q: 'goldie', type: 'name', province: 'us-nv' }), res);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.features.length).toBe(350);
+    expect(res.body.meta.truncated).toBe(true);
+  });
 });
 
 describe('US pagination', () => {
-  it('walks multiple pages beyond maxRecordCount with honest meta', async () => {
+  it('fetches every row beyond maxRecordCount with honest meta', async () => {
     totalClaims = 4500; // > 2 pages at maxRecordCount 2000
     const res = mockRes();
     await handler(req({ q: 'goldie', type: 'name', province: 'us-az' }), res);
     expect(res.statusCode).toBe(200);
     expect(res.body.features).toHaveLength(4500);
     expect(res.body.meta.truncated).toBe(false);
+    expect(res.body.meta.totalKnown).toBe(4500);
     expect(res.body.meta.pagesFetched).toBeGreaterThanOrEqual(3);
     // az jurisdiction scopes to AZ
-    expect(queryUrls[0]).toMatch(/UPPER\(GEO_STATE\) = 'AZ'/);
+    expect(queryUrls[0]).toMatch(/CSE_NR LIKE 'AZ%'/);
   });
 });
 
@@ -504,15 +843,41 @@ describe('US jurisdiction validation', () => {
 });
 
 describe('US bbox (nearby claims) search', () => {
-  it('applies the state scope to spatial queries', async () => {
+  it('is geographic: no serial narrowing in SQL, rows placed by their own location', async () => {
+    vi.resetModules();
+    installBlmMock();
+    fixtureRows = [claim(1), claim(2, { CSE_NR: 'CA105000002', CSE_META: 'CA 21 0100N 0170E 012 A NW' })];
+    const { default: h } = await import('../api/claims.js');
     const res = mockRes();
-    await handler(req({ bbox: '-116.5,39.5,-115.5,40.5', province: 'us-nv' }), res);
+    await h(req({ bbox: '-116.5,39.5,-115.5,40.5', province: 'us-nv' }), res);
     expect(res.statusCode).toBe(200);
-    expect(res.body.features.length).toBeGreaterThan(0);
     const spatial = queryUrls.find((u) => u.includes('esriGeometryEnvelope'));
     expect(spatial).toBeTruthy();
-    expect(spatial).toMatch(/UPPER\(GEO_STATE\) = 'NV'/);
+    expect(spatial).toMatch(/where=1=1/);
+    expect(spatial).not.toMatch(/CSE_NR LIKE/);
+    expect(res.body.features.map((f) => f.properties.OBJECTID)).toEqual([1]);
     expect(res.body.features[0].properties.SOURCE_SYSTEM).toBe('BLM MLRS');
+    expect(res.body.meta.scopingMethod).toBe('legal_description');
+  });
+});
+
+describe('US diagnostics (?schema=1)', () => {
+  it('reports the resolved service, layer and field fill rates', async () => {
+    const res = mockRes();
+    await handler(req({ schema: '1', province: 'us-nv' }), res);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.service).toMatch(/nlsdbpubgis\.blm\.gov\/.*MiningClaims\/MapServer$/);
+    expect(res.body.layerId).toBe(1);
+    expect(res.body.layerUrl).toMatch(/MapServer\/1$/);
+    expect(res.body.legalDescriptionField).toBe('CSE_META');
+    expect(res.body.scoping.method).toBe('legal_description');
+    expect(res.body.scoping.perRow).toBe(true);
+    expect(res.body.fillRates.counts.total).toBe(42);
+    expect(res.body.fillRates.counts.geoStateFilled).toBe(42);
+    expect(res.body.fillRates.percentOfLayer.geoStateFilled).toBe(100);
+    const counted = queryUrls.filter((u) => /returnCountOnly=true/.test(u));
+    expect(counted.some((u) => /GEO_STATE IS NOT NULL/.test(u))).toBe(true);
+    expect(counted.some((u) => /CSE_META LIKE 'NV %'/.test(u))).toBe(true);
   });
 });
 
@@ -535,7 +900,7 @@ describe('US claim-type normalization', () => {
         const r = await prevFetch(url);
         if (/\/query/.test(String(url))) {
           const body = await r.json();
-          body.features = body.features.map((f) => ({ ...f, properties: { ...f.properties, BLM_PROD: text } }));
+          if (body.features) body.features = body.features.map((f) => ({ ...f, properties: { ...f.properties, BLM_PROD: text } }));
           return { ok: true, headers: new Map([['content-type', 'application/json']]), json: async () => body, text: async () => JSON.stringify(body) };
         }
         return r;
@@ -883,9 +1248,9 @@ describe('US claimant store join', () => {
     expect(res.body.resolution.claimantRoles).toEqual(['owner of record']);
     // Geometry came from BLM, joined on the serial.
     const joined = queryUrls.find((u) => /IN \(/.test(u));
-    expect(joined).toMatch(/UPPER\(CSE_NR\) IN \('NV105000001','NV105000002'\)/);
+    expect(joined).toMatch(/CSE_NR IN \('NV105000001','NV105000002'\)/);
     // State scoping still applies to the geometry fetch.
-    expect(joined).toMatch(/UPPER\(GEO_STATE\) = 'NV'/);
+    expect(joined).toMatch(/CSE_NR LIKE 'NV%'/);
   });
 
   it('carries the extract snapshot date, so ownership cannot read as live', async () => {
@@ -946,7 +1311,7 @@ describe('claimant-resolved export credit', () => {
       { provider: 'blm-mlrs' },
       { resolvedAgainst: 'claimant', claimantSources: ['mlrs_report_120'] },
     );
-    expect(dataSource).toMatch(/BLM MLRS — Mining Claims Not Closed/);
+    expect(dataSource).toMatch(/BLM MLRS — Active Mining Claims/);
     expect(dataSource).toMatch(/report 120/);
 
     const [line] = exportCreditLines([{
@@ -956,5 +1321,28 @@ describe('claimant-resolved export credit', () => {
     expect(line).toMatch(/snapshot 2026-07-01/);
     expect(line).not.toMatch(/retrieved/);
     expect(line).toMatch(/company link: claimant record/);
+  });
+});
+
+describe('legal_description scoping in the UI text contract', () => {
+  it('credits per-row geographic scoping as geographic, and warns only when claims were left out', async () => {
+    const { exportCreditLines } = await import('../src/utils/claimProvenance.js');
+    const { scopingWarning } = await import('../src/utils/scopingNotice.js');
+    const [line] = exportCreditLines([{ id: 'l1', provenance: { dataSource: 'BLM MLRS', retrievedAt: '2026-10-22', scopingMethod: 'legal_description' } }]);
+    expect(line).toMatch(/state scope: geographic \(PLSS legal description\)/);
+    expect(scopingWarning({ scopingMethod: 'legal_description', scopingDegraded: false })).toBeNull();
+    const warn = scopingWarning({ scopingMethod: 'legal_description', scopingDegraded: true, scopingNote: '3 claims administered by the Oregon/Washington BLM office …' });
+    expect(warn.detail).toMatch(/^3 claims/);
+  });
+
+  it('a search that matches nothing on the live layer answers an empty set, not an error', async () => {
+    vi.resetModules();
+    installBlmMock();
+    rowsForWhere = () => [];
+    const { default: h } = await import('../api/claims.js');
+    const res = mockRes();
+    await h(req({ q: 'nothing here', type: 'name', province: 'us-nv' }), res);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.features).toEqual([]);
   });
 });

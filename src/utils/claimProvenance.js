@@ -53,7 +53,7 @@ const CLAIMANT_SOURCE_LABELS = {
 
 export function sourceCredit(jurisdictionCfg, meta = null, resolution = null) {
   if (meta?.provider === 'blm-mlrs' || jurisdictionCfg?.country === 'us') {
-    const base = 'BLM MLRS — Mining Claims Not Closed (federal)';
+    const base = 'BLM MLRS — Active Mining Claims (federal)';
     if (resolution?.resolvedAgainst === 'claimant') {
       const sources = (resolution.claimantSources || [])
         .map((s) => CLAIMANT_SOURCE_LABELS[s] || s)
@@ -71,6 +71,7 @@ export function sourceCredit(jurisdictionCfg, meta = null, resolution = null) {
 // Scoping wording for the export credit — terse, factual, no warning styling.
 const SCOPING_CREDIT = {
   geo_state: 'state scope: geographic (GEO_STATE)',
+  legal_description: 'state scope: geographic (PLSS legal description)',
   admin_state: 'state scope: administering BLM office (approximate)',
   serial_prefix: 'state scope: case-serial prefix (approximate)',
 };
