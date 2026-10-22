@@ -405,8 +405,10 @@ function geologyCanvas(key, a, b) {
   // In capitals (a block section's names) about 24 u in the export, the cap height 1.6 times the bracket text's.
   const fm = H.format?.(), want = cfg().labelStyle === 'caps' && fm ? 24 * Math.sqrt(fm.w * fm.h) / 900 : 22;
   const size = Math.min(ht * (want > 22 ? 0.1 : 0.06), Math.max(ht * 0.015, want / (pv * k || 1))), bucket = Math.round(Math.log(size) / Math.log(1.2));
-  const mirror = faceWanted('far', key), font = labelFont(), lk = `${ck}|${bucket}|${mirror}|${cfg().legend.map((e) => e.name).join()}|${viewKey()}|${font}${cfg().labelStyle === 'caps' ? '|caps' : ''}${H.S.block ? `|b${H.S.holesShown}|${H.format?.().w}` : ''}`;
-  if (hit.lk !== lk) { hit.canvas = labelCanvas(hit, cols, 1.2 ** bucket, len, ht, mirror, { at, ph, pv }, font); hit.lk = lk; }
+  // A unit with its own wall label on this face (block.js, units "auto") is named by that label, not painted here too.
+  const wall = H.S.block?.units === 'auto' ? H.S.wallLabels.filter((l) => l.unit && l.face === key).map((l) => l.unit) : [];
+  const mirror = faceWanted('far', key), font = labelFont(), lk = `${ck}|${bucket}|${mirror}|${cfg().legend.map((e) => e.name).join()}|${viewKey()}|${font}${cfg().labelStyle === 'caps' ? '|caps' : ''}${H.S.block ? `|b${H.S.holesShown}|${H.format?.().w}${wall.length ? `|w${wall}` : ''}` : ''}`;
+  if (hit.lk !== lk) { hit.canvas = labelCanvas(hit, cols, 1.2 ** bucket, len, ht, mirror, { at, ph, pv }, font, wall); hit.lk = lk; }
   return hit.canvas;
 }
 // Each name goes where it fits inside its unit's largest patch and lies farthest from the holes, collars,
@@ -422,10 +424,10 @@ const viewKey = () => { const c = H.getCam(); return `${Math.round(c.azimuth / 5
 // The figure's sans (typography.js sets a brand family once loaded). Part of the names' cache key, so a
 // font change repaints them rather than reusing names drawn in the earlier face.
 export const labelFont = () => H?.fonts?.() || '"Source Sans 3", "Segoe UI", sans-serif';
-function labelCanvas(hit, cols, size, len, ht, mirror, scr, font) {
+function labelCanvas(hit, cols, size, len, ht, mirror, scr, font, wall = []) {
   const c = document.createElement('canvas'), { nx, ny, f } = hit; c.width = hit.base.width; c.height = hit.base.height;
   // labelStyle "caps": the names in tracked bold capitals, as on a hand-drawn block section.
-  const caps = cfg().labelStyle === 'caps', g = c.getContext('2d'), kx = c.width / len, ky = c.height / ht, names = cache.fold.classes.map((code) => { const t = code === OTHER ? null : cfg().legend.find((e) => e.code === code)?.name || code; return t && caps ? t.toUpperCase() : t; });
+  const caps = cfg().labelStyle === 'caps', g = c.getContext('2d'), kx = c.width / len, ky = c.height / ht, names = cache.fold.classes.map((code) => { const t = code === OTHER || wall.includes(code) ? null : cfg().legend.find((e) => e.code === code)?.name || code; return t && caps ? t.toUpperCase() : t; });
   // What a name keeps clear of: the key, highlighted and new holes and the grade shell on screen, and the
   // collars, pills, cards and brackets as last drawn. Plain and faded traces may pass over a name, as on
   // hand-drawn sections.
@@ -462,6 +464,13 @@ function labelCanvas(hit, cols, size, len, ht, mirror, scr, font) {
     }
   });
   return c;
+}
+// A face's class grid and a unit's index in it, for block.js (wall labels inside their unit's band); null when the
+// face is not painted with geology or the unit is not on it as its own class.
+export function unitGrid(face, code) {
+  const m = layer.meshes[face]; if (!m?.visible || m.userData.owner !== 'geology') return null;
+  const [a, b] = faceEnds(face), hit = planeClasses(face, a, b), ci = cache.fold.classes.indexOf(code);
+  return ci < 0 ? null : { ...hit, ci };
 }
 export const hasLogs = () => H.files().some((f) => f.role === 'litho') && logsNow().codes.length > 0;
 // Face images: a geologist's drawn section stretched over a face from its base to its highest point.

@@ -754,7 +754,7 @@ function placeWallLabel(mesh) {
   camera.updateMatrixWorld(); const a2 = proj(pos), b2 = proj(pos.clone().addScaledVector(U, h)), k = FORMATS[S.format].w / W;
   const linePx = Math.hypot(b2[0] - a2[0], b2[1] - a2[1]) * k * 1.45 / (lines * 1.15 + 0.3), minPx = big ? 30 : 22;
   const hh = linePx > 0 && linePx < minPx ? h * minPx / linePx : h;
-  mesh.matrix.makeBasis(R.multiplyScalar(hh * aspect), U.multiplyScalar(hh), n).setPosition(pos); mesh.updateMatrixWorld(true);
+  mesh.matrix.makeBasis(R.multiplyScalar(hh * aspect), U.multiplyScalar(hh), n).setPosition(pos); EXT.block?.unitSpot(mesh); mesh.updateMatrixWorld(true); // EXT hook: inside its unit's band
 }
 // Screen boxes of the wall labels, so hole IDs can keep off them.
 function wallLabelBoxes() {
@@ -782,7 +782,7 @@ function wallPatch(L, o) {
 function addWallLabel(o = {}) {
   const n = S.wallLabels.reduce((mx, l) => Math.max(mx, +String(l.id).replace(/\D/g, '') || 0), 0) + 1;
   const L = { id: `W${n}`, text: '', face: 'S', u: 0.5, v: 0.55, size: 'title', scale: 1, rotation: 0, color: null };
-  wallPatch(L, { face: 'front', ...o, text: o.text ?? '' });
+  wallPatch(L, { face: 'front', ...o, text: o.text ?? S.geology.legend.find((e) => e.code === String(o.unit))?.name.toUpperCase() ?? '' });
   S.wallLabels.push(L); buildWallLabels(); renderWallLabelList(); schedulePublish(); status(`"${L.text}" painted on the ${{ N: 'north', S: 'south', E: 'east', W: 'west' }[L.face]} face. Drag it along the face to place it.`);
   return L.id;
 }
@@ -1405,7 +1405,7 @@ function drawElevTicks(ctx, K, top, bottom, lay, lines = []) {
 // Free-text labels, placed in 0-1 frame coordinates so they land in the same spot at every export size.
 // "title": large bold capitals in the primary colour; "normal": a rounded white pill. An arrow runs from
 // the label's edge to (ax, ay). In the preview the boxes are kept for dragging (labelHits).
-let labelHits = [], overlayOcc = [];
+let labelHits = [], overlayOcc = [], coHidden = [];
 function labelSize(ctx, K, L) {
   if (L.kind === 'stat' && EXT.tags) return EXT.tags.statSize(ctx, K, L); // EXT hook: stat boxes
   const { u, font } = K, title = L.size === 'title', lines = String(L.text).split('\n');
@@ -1576,14 +1576,16 @@ function drawOverlay(ctx, k, forExport) {
   // The column keeps above and below any legend card on the left.
   const gap = 30 * u, left = cardBoxes.filter((b) => b[0] < W * 0.3), tag = 18 * u, boxes = [];
   const maxY = Math.min(oy - 36 * u, ...left.filter((b) => b[1] > H / 2).map((b) => b[1] - 12 * u)), top = Math.max(headBottom + 18 * u, ...left.filter((b) => b[1] <= H / 2).map((b) => b[3] + 12 * u));
-  let items = shownCallouts().map((c, rank) => { const p = c.h.posAt(c.ic.broad.mid); return { c, rank, s: proj(G.V(p.x, p.y, p.z)), M: measureCallout(ctx, K, c) }; }).filter(({ s }) => s[2] < 1).sort((a, b) => a.s[1] - b.s[1]);
+  let items = shownCallouts().map((c, rank) => { const p = c.h.posAt(c.ic.broad.mid); return { c, rank, s: proj(G.V(p.x, p.y, p.z)), M: measureCallout(ctx, K, c) }; });
+  // Callouts left off this drawing, and why (getState().callouts.hidden; the layers ZIP's settings carry it).
+  coHidden = items.filter(({ s }) => s[2] >= 1).map(({ c }) => [c, 'its interval is behind the camera']); items = items.filter(({ s }) => s[2] < 1).sort((a, b) => a.s[1] - b.s[1]);
   items = extGroups(ctx, K, items); // EXT hook: grouped intercept boxes
   let free = []; if (EXT.tags) ({ col: items, free } = EXT.tags.splitCallouts(items)); // EXT hook: beside, bracket or dragged
   for (;;) {
     let y = top; items.forEach((it) => { it.y = Math.max(y, it.s[1] - it.M.bh / 2); y = it.y + it.M.bh + gap; });
     for (let i = items.length - 1; i >= 0; i--) items[i].y = Math.min(items[i].y, i === items.length - 1 ? maxY - tag - items[i].M.bh : items[i + 1].y - gap - items[i].M.bh);
     if (!items.length || items[0].y >= top - 1) break;
-    const worst = items.reduce((a, b) => (b.rank > a.rank ? b : a)); items = items.filter((it) => it !== worst);
+    const worst = items.reduce((a, b) => (b.rank > a.rank ? b : a)); items = items.filter((it) => it !== worst); (worst.members || [worst]).forEach((it) => coHidden.push([it.c, 'no room in the callout column']));
   }
   const leaders = [];
   items.forEach((it) => { const { c, s, M, y } = it; if (it.group) EXT.tags.drawGroup(ctx, K, m, y, it); else { drawCallout(ctx, K, m, y, c, M, s); hits.push({ kind: 'callout', id: c.key, box: [m, y, m + M.bw, y + M.bh] }); } boxes.push([m, y, m + M.bw, y + M.bh + tag]); leaders.push(...M.leader); });
@@ -2157,7 +2159,7 @@ function setCallout(holeId, o = {}) {
   const pub = S.calloutMode === 'published', res = pub && PR ? prRead().results : [];
   if (pub ? !res.some((r) => r.resultId === holeId) : !project?.holes?.some((h) => h.id === holeId)) throw new Error(`No ${pub ? 'published result' : 'hole'} "${holeId}".`);
   const M = coMap(), cur = M[holeId] || {};
-  ['show', 'line1', 'line2', 'incl'].forEach((k) => { if (o[k] === null) delete cur[k]; else if (o[k] !== undefined) cur[k] = k === 'show' || k === 'incl' ? !!o[k] : String(o[k]); });
+  ['show', 'line1', 'line2', 'incl', 'heading'].forEach((k) => { if (o[k] === null) delete cur[k]; else if (o[k] !== undefined) cur[k] = k === 'show' || k === 'incl' ? !!o[k] : String(o[k]); });
   // The depths the wording describes (published-results.js tie); a hand-picked hole keeps those it was ticked at.
   PR?.tie(cur, o, S.calloutMode, pub ? PR.atOf(res, holeId) : PR.icAt(calcCallouts.find((c) => c.key === holeId)?.ic));
   if (o.placement === null) delete cur.placement; else if (o.placement !== undefined) { if (!['column', 'beside', 'bracket'].includes(o.placement)) throw new Error('placement must be "column", "beside" or "bracket", or null for the figure\'s setting.'); cur.placement = o.placement; }
@@ -2414,9 +2416,9 @@ $('stat-add').addEventListener('click', () => {
 document.querySelectorAll('[data-secmode]').forEach((b) => b.addEventListener('click', () => EXT_API.setSection({ holes: b.dataset.secmode === 'chosen' ? S.section?.holes || 'auto' : null }).catch((e) => status(e.message))));
 const EXT_API = {
   async setSection(o = {}) { (await extLoad('section')).set(o); await extReady(); return getState(); },
-  async setGeology(o = {}) { (await extLoad('geology')).set(o); await extReady(); if (S.wallLabels.some((L) => L.unit)) buildWallLabels(); renderWallLabelList(); return getState(); },
-  async setFaceImage(face, src) { await (await extLoad('geology')).setImage(face, src ?? null); await extReady(); status(src ? `Image painted on the ${String(face).toUpperCase()} face.` : 'Face image removed.'); return getState(); },
-  async setGeophys(o = {}) { await extLoad('geology'); (await extLoad('geophys')).set(o); await extReady(); return getState(); },
+  async setGeology(o = {}) { (await extLoad('geology')).set(o); await extReady(); if (S.wallLabels.some((L) => L.unit)) buildWallLabels(); renderWallLabelList(); drawSectionView(); return getState(); },
+  async setFaceImage(face, src) { await (await extLoad('geology')).setImage(face, src ?? null); await extReady(); drawSectionView(); status(src ? `Image painted on the ${String(face).toUpperCase()} face.` : 'Face image removed.'); return getState(); },
+  async setGeophys(o = {}) { await extLoad('geology'); (await extLoad('geophys')).set(o); await extReady(); drawSectionView(); return getState(); },
   async setTags(o = {}) {
     (await extLoad('tags')).set(o);
     if (o.fadePrevious !== undefined || o.status !== undefined || o.emphasis !== undefined) rebuildScene(true); else restyle();
@@ -2430,7 +2432,7 @@ const EXT_API = {
     L.kind = 'stat'; L.rows = rows; if (o.x === undefined && o.y === undefined && G) [L.x, L.y] = freeSpot(L);
     renderLabelList(); schedulePublish(); status(`Stat box "${L.text}" added. Drag it on the preview to place it.`); return id;
   },
-  async setMapUse(o = {}) { (await extLoad('mapuse')).set(o); await extReady(); return getState(); },
+  async setMapUse(o = {}) { await (await extLoad('mapuse')).set(o); await extReady(); return getState(); },
   async setCrew(o = {}) { (await extLoad('crew')).set(o); await extReady(); return getState(); },
   layersReady: async () => { await extReady(); return getState(); },
   async setFigureStyle(style, meta) { await (await extLoad('type')).setFigureStyle(style, meta); return getState(); },
@@ -2466,7 +2468,7 @@ function getState() {
     grade: { column: S.valueCol, label: S.valueLabel, available: project?.cols || [], bins: S.bins, binColors: BIN_COLORS },
     design: { version: S.designVersion, current: DESIGN_VERSION, optIn: S.designOptIn },
     callouts: { mode: S.calloutMode, coCount: S.coCount, coMin: S.coMin, coCut: S.coCut, coIncl: S.coIncl, sampled: uses(S, 'sampledIntercepts'), warnings: gapCallouts().map(gapText),
-      shown: shownCallouts().map((c) => { const L = calloutLines(c); return { holeId: c.h.id, ...PR?.ids(c), line1: L.l1 + L.l1b, line2: L.l2 }; }),
+      shown: shownCallouts().map((c) => { const L = calloutLines(c); return { holeId: c.h.id, ...PR?.ids(c), line1: L.l1 + L.l1b, line2: L.l2 }; }), hidden: coHidden.map(([c, why]) => ({ key: c.key, holeId: c.h.id, why })),
       published: PR?.summary(files, project?.holes, S.pubOverrides) || null,
       candidates: calcCallouts.slice(0, 15).map((c) => ({ holeId: c.h.id, broad: icText(c.ic.broad, c.h), fromM: Math.round(c.ic.broad.from), incl: c.ic.incl ? icText(c.ic.incl, c.h) : null })), overrides: coMap(), valueCol2: S.valueCol2 },
     brand: { company: S.company, title: S.title, subtitle: S.subtitle, footnote: S.footnote, primary: S.primary, accent: S.accent, hasLogo: !!S.logo, credit: S.credit },
