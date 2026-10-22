@@ -110,6 +110,28 @@ test('a section image fitted by two known points, shown in the picker; stretched
   expect(fit.points).toHaveLength(2); expect(fit.metresPerPixel[0]).toBeCloseTo(0.5, 1);
 });
 
+test('a fit by a hole that leaves the data falls back to the stretched image and says so; the render goes on', async ({ page }) => {
+  const errors = []; page.on('pageerror', (e) => errors.push(e.message));
+  await open3d(page);
+  const r = await page.evaluate(async () => {
+    const E = window.EM3D, c = document.createElement('canvas'); c.width = 400; c.height = 300; const g = c.getContext('2d');
+    g.fillStyle = '#e8b7a2'; g.fillRect(0, 0, 400, 300); g.fillStyle = '#7fb069'; g.fillRect(0, 120, 400, 180);
+    const hole = E.getState().project.holeIds[0];
+    await E.setFaceImage('S', c.toDataURL('image/png'), { points: [{ px: [50, 20], hole }, { px: [400, 300], d: 400, z: 900 }] });
+    // The collars, surveys and assays again without that hole.
+    E.addFiles(E.getProject().files.map(({ name, text }) => ({ name, text: text.split('\n').filter((l) => !l.startsWith(`${hole},`)).join('\n') })));
+    await E.layersReady(); await new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok)));
+    const st = E.getState();
+    return { hole, still: st.project.holeIds.includes(hole), fit: st.geology.imageFits.S, painted: st.geology.facesPainted, png: E.exportPNG({ view: '3d' }).length > 1000 };
+  });
+  expect(r.still).toBe(false);
+  expect(r.fit.invalid).toContain(`hole "${r.hole}" is not in the data`);
+  expect(r.painted).toContain('S'); expect(r.png).toBe(true);
+  expect(errors).toEqual([]);
+  // A new fit by that hole is still refused when it is given.
+  expect(await page.evaluate((hole) => window.EM3D.fitFaceImage('S', [{ px: [0, 0], hole }, { px: [400, 300], d: 400, z: 900 }]).then(() => null, (e) => e.message), r.hole)).toMatch(/is not in the data/);
+});
+
 test('watermark band and pixel size: off by default, per export, and the same figure without them', async ({ page }) => {
   await open3d(page);
   const r = await page.evaluate(async () => {

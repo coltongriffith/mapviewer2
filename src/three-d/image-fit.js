@@ -44,7 +44,8 @@ function render(el, img) {
     row.querySelector('[data-fdel]').addEventListener('click', () => { pts.splice(+row.dataset.fp, 1); render(el, img); });
   });
   const msg = el.querySelector('[data-fm]'), info = H.ext('geology').fitInfo(face);
-  if (info) msg.textContent = `Fitted: ${info.metresPerPixel[0]} m a pixel across, ${info.metresPerPixel[1]} up; the image spans ${info.image ? `${info.image.along[0]} to ${info.image.along[1]} m along and ${info.image.z[0]} to ${info.image.z[1]} m` : 'the plane'}. Misfit ${info.rms} m over ${info.points.length} points. Dashed: the ${face === 'section' ? 'plane' : 'face'} on the image.`;
+  if (info?.invalid) msg.textContent = info.invalid;
+  else if (info) msg.textContent = `Fitted: ${info.metresPerPixel[0]} m a pixel across, ${info.metresPerPixel[1]} up; the image spans ${info.image ? `${info.image.along[0]} to ${info.image.along[1]} m along and ${info.image.z[0]} to ${info.image.z[1]} m` : 'the plane'}. Misfit ${info.rms} m over ${info.points.length} points. Dashed: the ${face === 'section' ? 'plane' : 'face'} on the image.`;
   el.querySelector('[data-fx]').addEventListener('click', () => { el.hidden = true; el.innerHTML = ''; });
   el.querySelector('[data-fa]').addEventListener('click', () => {
     const points = pts.map((p) => (p.hole ? { px: p.px, hole: p.hole, ...(Number.isFinite(p.depth) ? { depth: p.depth } : {}) } : { px: p.px, d: p.d, z: p.z }));
@@ -56,7 +57,7 @@ function render(el, img) {
 // The image, the points, and with a fit the plane's outline (base to block top, 0 to its length) in its fitted place.
 function draw(cv, img, k) {
   const g = cv.getContext('2d'), info = H.ext('geology').fitInfo(face); g.drawImage(img, 0, 0, cv.width, cv.height);
-  if (info) {
+  if (info?.fit) {
     const F = info.fit, P = (d, z) => [(d - F.ox) / F.sx * k, (z - F.oz) / F.sz * k], c = [P(0, info.plane.z[0]), P(info.plane.length, info.plane.z[0]), P(info.plane.length, info.plane.z[1]), P(0, info.plane.z[1])];
     g.setLineDash([6, 4]); g.strokeStyle = ACCENT; g.lineWidth = 2; g.beginPath(); c.forEach((q, i) => (i ? g.lineTo(...q) : g.moveTo(...q))); g.closePath(); g.stroke(); g.setLineDash([]);
   }

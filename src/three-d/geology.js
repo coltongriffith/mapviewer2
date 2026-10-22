@@ -485,7 +485,7 @@ function fitOn(face, fit) {
   return fitAxes((fit.points || []).map((p, i) => {
     if (!Array.isArray(p?.px) || p.px.length !== 2 || !p.px.every(Number.isFinite)) throw new Error(`Point ${i + 1} needs px: [x, y], its pixel on the image.`);
     if (p.hole === undefined) { if (!Number.isFinite(p.d) || !Number.isFinite(p.z)) throw new Error(`Point ${i + 1} needs d (metres along the face from its left end, as seen from outside) and z (elevation), or a hole.`); return p; }
-    const h = H.project.holes.find((x) => x.id === String(p.hole)); if (!h) throw new Error(`Point ${i + 1}: no hole "${p.hole}".`);
+    const h = H.project.holes.find((x) => x.id === String(p.hole)); if (!h) throw new Error(`Point ${i + 1}: hole "${p.hole}" is not in the data.`);
     const q = h.posAt(Math.max(0, +p.depth || 0)); return { px: p.px, d: ((q.x - a[0]) * (b[0] - a[0]) + (q.y - a[1]) * (b[1] - a[1])) / len, z: q.z };
   }));
 }
@@ -500,8 +500,10 @@ function imageCanvas(face) {
   const fit = cfg().fits?.[face], [a, b] = endsOf(face), key = `${fit ? JSON.stringify(fit) : ''}|${a}|${b}`;
   if (!e.canvas || e.G !== H.G || e.key !== key) {
     const G = H.G, c = document.createElement('canvas'); c.width = 1024; c.height = 1024; const g = c.getContext('2d');
-    if (fit) { // the canvas spans the plane's length and the block base to its top (planeMesh's uv)
-      const F = fitOn(face, fit), kx = c.width / (Math.hypot(b[0] - a[0], b[1] - a[1]) || 1), ky = c.height / (G.zmax - G.B.z0);
+    // A fit that no longer resolves (its hole gone from new data) leaves the image stretched; getState says why.
+    let F = null; if (fit) try { F = fitOn(face, fit); } catch { F = null; }
+    if (F) { // the canvas spans the plane's length and the block base to its top (planeMesh's uv)
+      const kx = c.width / (Math.hypot(b[0] - a[0], b[1] - a[1]) || 1), ky = c.height / (G.zmax - G.B.z0);
       g.setTransform(kx * F.sx, 0, 0, -ky * F.sz, kx * F.ox, ky * (G.zmax - F.oz)); g.drawImage(e.img, 0, 0);
     } else {
       let top = -Infinity; for (let i = 0; i <= 50; i++) top = Math.max(top, G.surf(a[0] + (b[0] - a[0]) * i / 50, a[1] + (b[1] - a[1]) * i / 50));
@@ -515,7 +517,8 @@ function imageCanvas(face) {
 // the image's corners in metres.
 export function fitInfo(face) {
   const fit = cfg().fits?.[face], e = images[face]; if (!fit || !H.G) return null;
-  const [a, b] = endsOf(face), F = fitOn(face, fit), iw = e?.img?.naturalWidth, ih = e?.img?.naturalHeight, r = (v) => Math.round(v * 10) / 10;
+  let F; try { F = fitOn(face, fit); } catch (err) { return { points: structuredClone(fit.points), invalid: `${err.message} The image is stretched over the face until the fit is set again.` }; }
+  const [a, b] = endsOf(face), iw = e?.img?.naturalWidth, ih = e?.img?.naturalHeight, r = (v) => Math.round(v * 10) / 10;
   return { points: structuredClone(fit.points), metresPerPixel: [+Math.abs(F.sx).toPrecision(3), +Math.abs(F.sz).toPrecision(3)], rms: r(F.rms), fit: F,
     plane: { length: r(Math.hypot(b[0] - a[0], b[1] - a[1])), z: [r(H.G.B.z0), r(H.G.zmax)] },
     image: iw ? { along: [r(F.ox), r(F.ox + F.sx * iw)], z: [r(F.oz + F.sz * ih), r(F.oz)] } : null };
@@ -552,7 +555,7 @@ export function state() {
   const g = cfg(), L = H.G ? logsNow() : { codes: [], byHole: new Map() };
   return { ...structuredClone({ ...g, images: undefined }), images: Object.fromEntries(Object.entries(g.images || {}).filter(([, v]) => v).map(([k]) => [k, true])),
     searchUsed: H.G ? searchNow() : null, logs: { holes: L.byHole.size, codes: L.codes.map((c) => ({ code: c.code, metres: Math.round(c.metres) })) },
-    imageFits: Object.fromEntries(Object.keys(g.fits || {}).map((k) => { try { return [k, fitInfo(k)]; } catch (err) { return [k, { error: err.message }]; } })),
+    imageFits: Object.fromEntries(Object.keys(g.fits || {}).map((k) => [k, fitInfo(k)])),
     shown: H.G ? geologyShown() : false, facesPainted: Object.keys(faceState()), coverage: Object.fromEntries(Object.entries(cache.grids).map(([k, v]) => [k, +v.covered.toFixed(2)])) };
 }
 
