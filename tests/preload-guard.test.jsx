@@ -100,6 +100,23 @@ describe('lazyGuarded', () => {
     expect(reported).toEqual([]);
   });
 
+  it('recovers a CSS preload failure at once instead of retrying into an unstyled part', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {}); // jsdom: navigation not implemented
+    try {
+      const load = vi.fn()
+        .mockRejectedValueOnce(new Error('Unable to preload CSS for /assets/vendor-leaflet-CIGW-MKW.css'))
+        .mockResolvedValueOnce({ default: () => <p>Unstyled map</p> });
+      renderEditorWith(lazyGuarded(load));
+      await vi.waitFor(() => expect(window.sessionStorage.getItem('em.reloadedAt')).not.toBeNull(), { timeout: 3000 });
+      expect(load).toHaveBeenCalledTimes(1);
+      expect(screen.queryByText('Unstyled map')).toBeNull();
+      expect(screen.getByText('Loading')).toBeInTheDocument();
+      expect(reported[0]).toMatchObject({ kind: 'stale_chunk', context: { outcome: 'reload' } });
+    } finally {
+      err.mockRestore();
+    }
+  });
+
   it('offers the update page in place of a lazy page when it may not reload', async () => {
     window.sessionStorage.setItem('em.reloadedAt', String(Date.now())); // reloaded a moment ago
     renderEditorWith(lazyGuarded(stale, { page: true }));

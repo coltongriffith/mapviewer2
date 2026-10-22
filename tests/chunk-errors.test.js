@@ -62,6 +62,13 @@ describe('retryImport', () => {
     expect(load).toHaveBeenCalledTimes(2);
   });
 
+  it('does not retry a CSS preload failure: Vite would skip the stylesheet and render the part unstyled', async () => {
+    const load = vi.fn().mockRejectedValueOnce(new Error('Unable to preload CSS for /assets/vendor-leaflet-CIGW-MKW.css'))
+      .mockResolvedValueOnce({ default: 'unstyled' });
+    await expect(retryImport(load, { delayMs: 1 })).rejects.toThrow(/Unable to preload CSS/);
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+
   it('does not retry an error in the module itself', async () => {
     const load = vi.fn(async () => { throw new ReferenceError('x is not defined'); });
     await expect(retryImport(load, { delayMs: 1 })).rejects.toThrow('x is not defined');

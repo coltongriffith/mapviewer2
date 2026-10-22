@@ -22,14 +22,19 @@ export function isChunkLoadError(error) {
   return typeof message === 'string' && CHUNK_ERROR.test(message);
 }
 
+// A stylesheet Vite failed to preload. Not retried: Vite's preload helper marks each dependency as seen
+// before loading it, so a second import() skips the stylesheet and "succeeds" with the part unstyled.
+const CSS_PRELOAD_ERROR = /Unable to preload CSS for/i;
+
 /**
- * Run a dynamic import, and run it once more after a short pause when it fails as a chunk load: a
- * dropped connection reads exactly like a stale chunk ("Failed to fetch …"), and the second try is
- * what tells them apart. Any other error, or a second failure, is the caller's.
+ * Run a dynamic import, and run it once more after a short pause when its JS fails to load: a dropped
+ * connection reads exactly like a stale chunk ("Failed to fetch …"), and the second try is what tells
+ * them apart. A CSS preload failure is never retried (see above). Any other error, or a second failure,
+ * is the caller's.
  */
 export function retryImport(load, { retries = 1, delayMs = 400 } = {}) {
   return load().catch((error) => {
-    if (retries < 1 || !isChunkLoadError(error)) throw error;
+    if (retries < 1 || !isChunkLoadError(error) || CSS_PRELOAD_ERROR.test(String(error?.message || ''))) throw error;
     return new Promise((resolve) => { setTimeout(resolve, delayMs); })
       .then(() => retryImport(load, { retries: retries - 1, delayMs }));
   });

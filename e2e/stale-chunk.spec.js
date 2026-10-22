@@ -82,6 +82,42 @@ test('with unsaved work a stale part does not reload: the work stays and the rel
   await expect.poll(() => seen.reports.find((r) => r.kind === 'stale_chunk')?.context).toEqual({ outcome: 'notice', unsaved: true });
 });
 
+// "Unable to preload CSS for /assets/vendor-leaflet-….css" in production. Vite marks a stylesheet as seen
+// before loading it, so a retried import would skip it and draw the map unstyled: recover instead.
+test('a stylesheet that fails to preload reloads for the new build, never an unstyled map', async ({ page }) => {
+  const seen = watch(page);
+  await stubTelemetry(page, seen);
+  let cssRequests = 0;
+  await page.route('**/assets/vendor-leaflet-*.css', (route) => {
+    cssRequests += 1;
+    return seen.documents.length < 2 ? route.fulfill({ status: 404, body: 'Not found' }) : route.continue();
+  });
+
+  await page.goto('/?demo=1');
+  await expect(page.locator('.leaflet-container').first()).toBeVisible({ timeout: 30_000 });
+  expect(seen.documents).toHaveLength(2);
+  // Styled after the reload: Leaflet's own stylesheet positions the map panes.
+  await expect(page.locator('.leaflet-pane').first()).toHaveCSS('position', 'absolute');
+  await expect(page.getByText('Something went wrong')).toHaveCount(0);
+  expect(cssRequests).toBeGreaterThanOrEqual(2);
+  await expect.poll(() => seen.reports.map((r) => r.kind)).toContain('stale_chunk');
+});
+
+test('with unsaved work a stylesheet that fails to preload offers the reload and draws nothing unstyled', async ({ page }) => {
+  const seen = watch(page);
+  await stubTelemetry(page, seen);
+  // Unsaved work from the start, as App.jsx's beforeunload guard marks it.
+  await page.addInitScript(() => addEventListener('beforeunload', (e) => { e.preventDefault(); e.returnValue = ''; }));
+  await page.route('**/assets/vendor-leaflet-*.css', (route) => route.fulfill({ status: 404, body: 'Not found' }));
+
+  await page.goto('/?demo=1');
+  await expect(page.locator('.update-notice, .update-page').first()).toBeVisible({ timeout: 30_000 });
+  await page.waitForTimeout(1500);
+  expect(seen.documents).toHaveLength(1); // no reload
+  await expect(page.locator('.leaflet-container')).toHaveCount(0); // no unstyled map
+  await expect(page.getByText('Something went wrong')).toHaveCount(0);
+});
+
 test('a healthy load does not reload or report', async ({ page }) => {
   const seen = watch(page);
   await stubTelemetry(page, seen);
