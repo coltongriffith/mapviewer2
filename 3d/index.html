@@ -605,6 +605,8 @@ html.em3d-version .share-bar .btn { padding: 6px 11px; }
           <label class="check" title="Eastings and northings when looking straight down"><input type="checkbox" data-ext="style.grid">Grid in plan view</label>
           <label class="check"><input type="checkbox" id="opt-pending" data-ext="style.pendingLabels" checked>"Assays pending" from collar status</label>
           <label class="check"><input type="checkbox" id="opt-pending-none" data-ext="style.pendingNoAssays">Label holes without assays</label>
+          <label class="check"><input type="checkbox" id="opt-crew" data-ext="crew.on" aria-label="Drill crew: a toy drill rig and its crew at the drill pad">Drill crew</label>
+          <span id="crew-ui" hidden><select id="crew-at" data-ext="crew.at" aria-label="Where the drill crew stands"><option value="auto">Auto (at the drill pad)</option></select> <select id="crew-size" data-ext="crew.scale" aria-label="Drill crew size"><option value="0.6">Small</option><option value="1">Medium</option><option value="1.6">Large</option></select></span>
         </div>
         <div class="grid2" style="margin-top:8px">
           <label class="field"><span>Terrain</span><select id="terrain" data-ext="style.terrain">
@@ -1020,6 +1022,13 @@ Whole projects (to keep or move a figure):
                                   the top intercept, along the section). Returns the id
   Any shape takes views: "both" (default) | "3d" | "section", where it is drawn.
   EM3D.updateShape(id, {...}) / removeShape(id)   getState().shapes
+  EM3D.setCrew({on, at: "auto" | holeId | [e, n], scale, heading})   a toy drill rig and its crew in hard hats on a
+                                  levelled pad (off by default). "auto": the one hole chosen for the section, else
+                                  the common pad, else the visible collar with the most room on screen (near side
+                                  first; kept as pick); at a hole the mast follows its dip and azimuth. Collar rings
+                                  under the pad give way. scale (0.25-4) times the usual size (Small 0.6, Large 1.6); heading: degrees from north the
+                                  rig faces (null: along the hole). In the figure and the layers' 3D render, not the
+                                  legend; it idles in the live view only. getState().crew: where, hole, shown, screen
   EM3D.layersReady()              Promise; resolves once the layers, face images and inset have loaded
   EM3D.setFigureStyle(style, {brandKitId, brandRevision})   a shared figure style (version 1: colours
                                   {primary, accent, ...}, type {title, subtitle, label, note: {family, weight,

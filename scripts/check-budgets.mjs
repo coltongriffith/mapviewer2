@@ -333,7 +333,13 @@ const BUDGETS = {
   // (geology.js +1.6), grade spikes or bars in the face's plane with the orange palette and plain brackets and IDs
   // (tags.js +1.6), the thin arrow with text (shapes.js +0.35), and the plan view's sync keeping the tubes hidden. Fetched
   // only for a figure with holes hidden, a block look or a heading on the block, or on "Block section".
-  threeDLazyJsGzipKb: 133.7,
+  // 133.7 → 139.7 (Oct 2026, drill crew merged over round 5E, measured 139.18, configured 139.39, + 0.3; +5.96 kB over
+  // 5E's 133.22): crew.js (~5.9 kB: a cartoon drill rig and crew of rounded boxes, capsules, balls and domes generated
+  // in the module, so three.js gains no classes; an ink outline and contact shadows; a cleared gravel pad ramping to
+  // the ground at the collar; "auto" choosing the collar with room on screen; collar rings under the pad giving way;
+  // the idle motion and EM3D.setCrew), fetched only for a figure that turns the crew on. The page gains the hooks
+  // (+0.18 kB, inside its budget); the totals are unchanged.
+  threeDLazyJsGzipKb: 139.7,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.
