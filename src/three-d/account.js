@@ -1,3 +1,4 @@
+import { figureSignature, watchUnsavedFigure } from './save-state.js';
 // Exploration Maps 3D: Save and My 3D maps, backed by the visitor's
 // Exploration Maps account. This module is what the page loads up front and
 // stays small: it wires the two buttons and Ctrl/Cmd+S, and exposes
@@ -56,7 +57,12 @@ if (window.EM3D && $('acct-save')) {
   const base = window.EM3D;
   window.EM3D = Object.freeze({ ...base, help: () => base.help() + ACCOUNT_HELP + SHARE_HELP, account, share });
   const help = $('ai-help'); if (help) help.textContent = window.EM3D.help();
-  window.addEventListener('em3d:change', (e) => { if (!baseline) baseline = { ...e.detail, $files: base.filesDigest() }; });
+  window.addEventListener('em3d:change', (e) => {
+    if (!baseline && e.detail.ready) {
+      baseline = { ...base.getProject(), $files: base.filesDigest() };
+      if (!viewing) watchUnsavedFigure({ initial: baseline, signature: (project = base.getProject()) => figureSignature(project, base.filesDigest()), note: $('acct-note') });
+    }
+  });
   if (viewing) shareCore().catch(failed);
   $('share-open')?.addEventListener('click', () => share.open().catch(failed));
 }

@@ -98,19 +98,19 @@ export default function HowToUseModal({ onClose }) {
             <ul>
               <li><strong>Project → New map</strong> starts a blank project</li>
               <li><strong>Project → Open…</strong> loads a recently saved project from the list</li>
-              <li>Projects auto-save to your browser — the state beside the project name in the toolbar reads <strong>Unsaved</strong> or <strong>Saved</strong></li>
+              <li>A draft is kept on this device. Sign in and use <strong>Save</strong> to keep a map in your account; later edits to an account map auto-save. Check the save state beside the project name.</li>
             </ul>
             <h3>The sample project</h3>
-            <p>If you have no data yet, click <strong>"Or load sample mining data →"</strong> on the landing page to open a pre-built example (Buckhorn Creek Mining Corp.) with drillholes, claims, roads, and callouts already configured. This is the fastest way to explore what the tool can do.</p>
+            <p>Open a sample from the homepage to explore a finished map, or choose <strong>Try sample data</strong> in the Data step of a new map. Samples use illustrative data that you can edit to learn the controls.</p>
             <h3>Project management</h3>
             <p>All of these live in the <strong>Project</strong> menu in the toolbar:</p>
             <ul>
-              <li><strong>Save</strong> — immediately writes to browser storage</li>
+              <li><strong>Save</strong> — saves to your account when signed in, or to this browser when signed out</li>
               <li><strong>Save As…</strong> — saves a copy under a new name</li>
               <li><strong>Duplicate</strong> — duplicates the current project</li>
               <li>From the Open panel: rename or delete any saved project</li>
             </ul>
-            <p>Projects are stored in your browser's local storage. They persist across sessions but are specific to this browser and device. To back up a project, export your map; project files cannot currently be downloaded directly.</p>
+            <p>Maps saved to your account can be reopened on another device after signing in. Local drafts belong to this browser and device. In a company workspace, open a property to find its maps, 3D figures and shared data. An exported image or PDF is a finished figure, not an editable project backup.</p>
           </section>
 
           {/* ── 3. Import Data ── */}
@@ -457,7 +457,7 @@ export default function HowToUseModal({ onClose }) {
             </ul>
 
             <h3>Watermark-free export</h3>
-            <p>Enter your work email in the export dialog to unlock clean exports without the <em>explorationmaps.com</em> watermark. Your email is remembered for future sessions. A <strong>"Download with watermark"</strong> option is always available without entering an email.</p>
+            <p>Enter your email in the export dialog to remove the large watermark and receive a sign-in link. Free exports retain a small <em>explorationmaps.com</em> credit and have a resolution limit; Pro removes the credit and increases the limit. You can also choose <strong>Download with watermark</strong> without entering an email.</p>
 
             <h3>Custom filename</h3>
             <p>Set a custom output filename in the <strong>Export</strong> step before clicking export. The filename is saved with the project.</p>
@@ -495,9 +495,9 @@ export default function HowToUseModal({ onClose }) {
             </ul>
             <h3>Saving and sharing</h3>
             <ul>
-              <li>The project auto-saves continuously — watch the state beside the project name in the toolbar</li>
-              <li>Projects live in your browser's local storage and are specific to this browser and device</li>
-              <li>To share your work, export the map and share the image or PDF file</li>
+              <li>Check the save state beside the project name. Save a new map to your account before relying on cloud storage.</li>
+              <li>Local drafts stay on this device; account maps can be reopened after signing in on another device.</li>
+              <li>Use <strong>Share</strong> to create a link to a read-only map snapshot, or export an image or PDF. Share links are separate from saving your editable project.</li>
               <li>Use <strong>Project → Save As…</strong> or <strong>Duplicate</strong> to create variations of a project (e.g. different themes or ratios) without overwriting the original</li>
             </ul>
           </section>

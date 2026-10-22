@@ -20,6 +20,7 @@
 // the database lets every member read it and editors and up save it.
 import { authRedirectUrl } from '../utils/authRedirect.js';
 import { track } from './track.js';
+import { figureSignature } from './save-state.js';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -121,6 +122,7 @@ export async function signInWithPassword(email, password) {
   return getUser();
 }
 export async function signOut() {
+  projectEpoch++;
   if (!clientPromise && !storedSession()) return;
   const sb = await client();
   await sb.auth.signOut();
@@ -129,6 +131,7 @@ export async function signOut() {
 }
 
 // ── Projects ────────────────────────────────────────────────────────────────
+let projectEpoch = 0; // invalidate pending saves when the figure or account changes
 let current = null; // { id, name, savedAt } of the figure open in the editor
 
 const safeName = (name) => (String(name).replace(/[^\w.-]+/g, '_').replace(/^\.+/, '').slice(-120) || 'file');
@@ -179,6 +182,7 @@ let verP = null;
 // A version on screen is a different figure: the live figure's newer-data notices and pending updates go
 // (drill database, data library), and none comes back while it is shown (see drillFigure).
 function setFrozen(v) {
+  projectEpoch++;
   frozen = v;
   if (v) { resetDrill(); const n = $('lib-notice'); if (n) n.hidden = true; }
   renderNote();
@@ -195,7 +199,7 @@ export const closeVersion = () => ver().then((m) => m.close());
 async function reopen(id) {
   try { const res = await openProject(id); setUrlProject(res.id); settle(); say(`Back to “${res.name}” as last saved.`); return res; } catch (err) { detach(); say(err.message); throw err; }
 }
-function detach() { current = null; dirty = true; setUrlProject(null); renderNote(); }
+function detach() { projectEpoch++; current = null; dirty = true; setUrlProject(null); renderNote(); }
 
 // ── Property drill database ─────────────────────────────────────────────────
 // Any member can take a figure's holes from a property's drill database; a
@@ -241,24 +245,27 @@ export async function saveProject(name, existingId, dest = null, { force = false
   if (frozen) throw Object.assign(plain('A published version is open read-only. Start a new figure from it to save.', null, 'READ_ONLY'), { plain: true });
   const title = String(name || '').trim().slice(0, 200);
   if (!title) throw Object.assign(plain('Give the 3D map a name first.'), { plain: true });
+  const epoch = ++projectEpoch;
+  const opened = current;
+  const em = studio();
+  const { files, ...settings } = structuredClone(em.getProject());
+  const snapshotSig = sig({ files, ...settings });
+  let thumbnail = null;
+  try { thumbnail = em.getThumbnail(320); } catch { /* a list without a picture is fine */ }
   const user = await requireUser('save this 3D map');
   const sb = await client();
-  const home = existingId ? (current?.id === existingId ? current.home : null) : dest;
+  const home = existingId ? (opened?.id === existingId ? opened.home : null) : dest;
   if (home && !canEdit(home.role)) {
     throw Object.assign(plain(`You have view-only access to ${home.propertyName || home.orgName}, so this figure cannot be saved there. Use Save as new to keep a personal copy.`), { plain: true, code: 'READ_ONLY' });
   }
-  const guarded = !!(existingId && !force && current?.id === existingId && current.savedAt);
-  const conflict = (savedAt) => Object.assign(plain(`“${current.name}” was saved somewhere else${savedAt ? ` at ${when(savedAt)}` : ''}, after this copy was opened. Overwrite it, save this as a new 3D map, or reload the saved version.`), { plain: true, code: 'CONFLICT', savedAt });
+  const guarded = !!(existingId && !force && opened?.id === existingId && opened.savedAt);
+  const conflict = (savedAt) => Object.assign(plain(`“${opened.name}” was saved somewhere else${savedAt ? ` at ${when(savedAt)}` : ''}, after this copy was opened. Overwrite it, save this as a new 3D map, or reload the saved version.`), { plain: true, code: 'CONFLICT', savedAt });
   if (guarded) {
     // Early check before uploading; the write below is conditional as well.
     const { data, error } = await sb.from(TABLE).select('updated_at').eq('id', existingId).is('deleted_at', null).maybeSingle();
     if (error) throw explain(error, 'save this 3D map');
-    if (isConflict(current.savedAt, data?.updated_at)) throw conflict(data.updated_at);
+    if (isConflict(opened.savedAt, data?.updated_at)) throw conflict(data.updated_at);
   }
-  const em = studio();
-  const { files, ...settings } = em.getProject();
-  let thumbnail = null;
-  try { thumbnail = em.getThumbnail(320); } catch { /* a list without a picture is fine */ }
   const id = existingId || crypto.randomUUID();
   const rev = `r${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   const root = home ? `org/${home.orgId}/${id}` : `${user.id}/${id}`, dir = `${root}/${rev}`;
@@ -269,50 +276,54 @@ export async function saveProject(name, existingId, dest = null, { force = false
     used.add(base);
     return { name: f.name, path: `${dir}/${base}`, size: f.text.length, role: f.role, cols: f.cols };
   });
+  let saved;
   try {
     // Files first, each save in a folder of its own: a row is never written
     // pointing at text that is not there, and a failed save never touches
     // the files the last saved row points at.
-    await Promise.all(files.map(async (f, i) => {
+    const uploads = await Promise.allSettled(files.map(async (f, i) => {
       const { error } = await sb.storage.from(BUCKET).upload(filePaths[i].path, f.text, { upsert: false, contentType: 'text/plain;charset=utf-8' });
       if (error) throw error;
     }));
+    const failed = uploads.find((result) => result.status === 'rejected');
+    if (failed) {
+      try { await sb.storage.from(BUCKET).remove(filePaths.map((p) => p.path)); } catch { /* unreferenced leftovers */ }
+      throw failed.reason;
+    }
     const row = { id, name: title, settings, file_paths: filePaths, thumbnail, updated_at: new Date().toISOString(), deleted_at: null };
     if (home) Object.assign(row, { org_id: home.orgId, property_id: home.propertyId });
     // Overwriting the version this tab opened: only if it is still that version, so two
     // tabs saving at once cannot silently overwrite each other.
     const { data, error } = guarded
-      ? await sb.from(TABLE).update(row).eq('id', id).eq('updated_at', current.savedAt).select('id, name, updated_at').maybeSingle()
+      ? await sb.from(TABLE).update(row).eq('id', id).eq('updated_at', opened.savedAt).select('id, name, updated_at').maybeSingle()
       : await sb.from(TABLE).upsert(row, { onConflict: 'id' }).select('id, name, updated_at').single();
     if (error) throw error;
-    if (!data) throw conflict(null);
-    current = { id: data.id, name: data.name, savedAt: data.updated_at, home };
+    if (!data) {
+      try { await sb.storage.from(BUCKET).remove(filePaths.map((p) => p.path)); } catch { /* unreferenced leftovers */ }
+      throw conflict(null);
+    }
+    saved = { id: data.id, name: data.name, savedAt: data.updated_at, home };
   } catch (err) {
-    // Best effort: this save's files are not referenced by any row.
-    try { await sb.storage.from(BUCKET).remove(filePaths.map((p) => p.path)); } catch { /* leftovers are harmless */ }
+    // A network error may arrive after the row committed. Keep its files unless
+    // we know the write did not happen (upload failure or rejected comparison).
     throw explain(err, 'save this 3D map');
   }
-  if (existingId) {
-    // Best effort, now the row points at this save's folder: drop earlier
-    // saves' files (older rows kept them directly under the project).
-    try {
-      const { data: objs } = await sb.storage.from(BUCKET).list(root, { limit: 1000 });
-      const stale = [];
-      for (const o of objs || []) {
-        if (o.name === rev) continue;
-        if (o.id) { stale.push(`${root}/${o.name}`); continue; }
-        const { data: inner } = await sb.storage.from(BUCKET).list(`${root}/${o.name}`, { limit: 1000 });
-        for (const x of inner || []) stale.push(`${root}/${o.name}/${x.name}`);
-      }
-      if (stale.length) await sb.storage.from(BUCKET).remove(stale);
-    } catch { /* leftovers are harmless */ }
+  // Never sweep other revision folders from a browser: another save may be
+  // uploading there, or a published version may still reference those files.
+  const active = epoch === projectEpoch;
+  if (active) {
+    current = saved;
+    savedSig = snapshotSig;
+    dirty = sig() !== savedSig;
+    renderNote();
   }
   // Once per figure per tab, like the editor's project_saved: "worked on this session", not a count of Ctrl+S.
-  track('three_d_project_saved', { project: current.id, created: !existingId, workspace: !!home }, current.id);
-  return { ...current };
+  track('three_d_project_saved', { project: saved.id, created: !existingId, workspace: !!home }, saved.id);
+  return { ...saved, active };
 }
 
 export async function openProject(id) {
+  projectEpoch++;
   await requireUser('open your saved 3D maps');
   resetDrill();
   const sb = await client();
@@ -340,7 +351,10 @@ export async function openProject(id) {
     try { await em.loadProject(backup); } catch { /* the editor keeps whatever it has */ }
     throw Object.assign(plain(`That 3D map could not be opened (${err.message}). The figure you had is back.`, err), { plain: true });
   }
-  current = { id: row.id, name: row.name, savedAt: row.updated_at, home: await homeOf(row) };
+  const home = await homeOf(row);
+  projectEpoch++;
+  current = { id: row.id, name: row.name, savedAt: row.updated_at, home };
+  settle();
   checkLibrary(); checkDrill();
   return { ...current, state: em.getState() };
 }
@@ -351,7 +365,7 @@ export async function deleteProject(id) {
   const { data, error } = await sb.from(TABLE).update({ deleted_at: new Date().toISOString() }).eq('id', id).is('deleted_at', null).select('id');
   if (error) throw explain(error, 'delete that 3D map');
   if (!data?.length) throw Object.assign(plain('That 3D map was not found. It may already be deleted.'), { plain: true });
-  if (current?.id === id) current = null;
+  if (current?.id === id) { projectEpoch++; current = null; renderNote(); }
   return true;
 }
 
@@ -411,14 +425,13 @@ let user = null;
 let busy = false;
 let dirty = false;
 // What the figure looked like when last saved or opened (or when the page
-// loaded), as a signature of its state and its files' raw text; any
-// difference is unsaved work. A state captured earlier carries its own
+// loaded), as a signature of its saved settings and its files' raw text; any
+// difference is unsaved work. A project captured earlier carries its own
 // $files; otherwise the files on screen now are the ones it describes.
-const sig = (st) => {
-  const { step, $files, layout, ...rest } = st || {}; // layout: what the last drawing placed, not the figure's work
-  let files = $files;
-  if (files === undefined) try { files = studio().filesDigest(); } catch { files = null; }
-  return JSON.stringify({ ...rest, $files: files });
+const sig = (project = studio().getProject()) => {
+  let files = null;
+  try { files = studio().filesDigest(); } catch { /* editor not ready */ }
+  return figureSignature(project, files);
 };
 let savedSig = null;
 let statusT = 0;
@@ -430,14 +443,20 @@ function say(msg) {
   el.textContent = msg; el.style.opacity = '1';
   clearTimeout(statusT); statusT = setTimeout(() => { el.style.opacity = '0'; }, 7000);
 }
-function settle() { dirty = false; try { savedSig = sig(studio().getState()); } catch { savedSig = null; } renderNote(); }
+function settle() { dirty = false; try { savedSig = sig(); } catch { savedSig = null; } renderNote(); }
 function renderNote() {
+  window.dispatchEvent(new CustomEvent('em3d:save-state', { detail: { dirty: !frozen && dirty, isDirty: () => !frozen && (busy || sig() !== savedSig) } }));
   // "From property library" only for a figure in a company property.
   const lb = $('lib-add');
   if (lb) { lb.hidden = !current?.home?.propertyId; if (lb.hidden) { $('lib-pick').hidden = true; $('lib-notice').hidden = true; } }
   const note = $('acct-note'); if (!note) return;
   if (busy) { note.textContent = 'Saving…'; note.hidden = false; return; }
-  if (!current) { note.hidden = true; return; }
+  if (!current) {
+    note.hidden = !dirty;
+    note.textContent = 'Unsaved changes';
+    note.title = 'Save this figure to your account before leaving.';
+    return;
+  }
   note.hidden = false;
   const where = current.home ? ` · ${current.home.propertyName || current.home.orgName}${canEdit(current.home.role) ? '' : ' (view only)'}` : '';
   note.textContent = (dirty ? 'Unsaved changes' : `Saved ${fmtWhen(current.savedAt, { timeStyle: 'short' })}`) + where;
@@ -528,10 +547,11 @@ async function doSave(name, id, dest = null, opts) {
   busy = true; renderNote(); renderButtons();
   try {
     const res = await saveProject(name, id, dest, opts);
-    if (pending) { pending = null; clearTimeout(pendingT); await clearStash(); }
+    if (!res.active) return true; // saved the old figure; leave the newly opened one alone
+    if (pending && !dirty) { pending = null; clearTimeout(pendingT); await clearStash(); }
+    if (current?.id !== res.id || current.savedAt !== res.savedAt) return true;
     setUrlProject(res.id);
-    settle();
-    say(`Saved “${res.name}” to ${res.home ? (res.home.propertyName || res.home.orgName) : 'your account'} at ${fmtWhen(res.savedAt, { timeStyle: 'short' })}.`);
+    say(`Saved “${res.name}” to ${res.home ? (res.home.propertyName || res.home.orgName) : 'your account'} at ${fmtWhen(res.savedAt, { timeStyle: 'short' })}.${dirty ? ' Newer changes still need saving.' : ''}`);
     if (!$('acct-menu').hidden) renderMenu();
     return true;
   } catch (err) {
@@ -665,9 +685,9 @@ function wire() {
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !$('acct-menu').hidden) { toggleMenu(false); $('acct-maps').focus(); }
   });
-  window.addEventListener('em3d:change', (e) => {
+  window.addEventListener('em3d:change', () => {
     if (frozen) return; // a published version on screen is not the figure's work
-    const now = sig(e.detail) !== savedSig;
+    const now = sig() !== savedSig;
     if (now !== dirty) { dirty = now; renderNote(); }
     // While a sign-in link is out, keep the stashed copy up to date.
     if (pending) { clearTimeout(pendingT); pendingT = setTimeout(() => stashWork(pending), 1500); }
@@ -767,12 +787,13 @@ let started = null;
 export function start({ baseline = null } = {}) {
   if (started) return started;
   try {
-    const now = sig(studio().getState());
+    const now = sig();
     savedSig = baseline ? sig(baseline) : now;
     dirty = now !== savedSig;
   } catch { /* compared from the next save */ }
   wire();
   renderButtons();
+  renderNote();
   started = boot().catch(() => { /* the editor works without an account */ });
   return started;
 }

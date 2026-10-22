@@ -13,7 +13,7 @@
       },
       {
         "h2": "Speed to a Polished Map",
-        "body": "In ArcGIS, producing a presentation-quality map requires setting up a project, importing data, managing coordinate systems, configuring the layout view with title blocks and legends, and often several rounds of style adjustments. A first map typically takes 2–4 hours for someone experienced with the software. In Exploration Maps, importing data, applying a theme, and exporting a polished PNG takes less timeutes on a first use — with no prior experience required."
+        "body": "In ArcGIS, producing a presentation-quality map requires setting up a project, importing data, managing coordinate systems, configuring the layout view with title blocks and legends, and often several rounds of style adjustments. A first map typically takes 2–4 hours for someone experienced with the software. In Exploration Maps, importing data, applying a theme, and exporting a polished PNG uses a guided workflow in the browser, with no GIS installation required."
       },
       {
         "h2": "Cost Comparison",
@@ -84,7 +84,7 @@
       },
       {
         "q": "Does Exploration Maps support the same file formats as ArcGIS?",
-        "a": "Exploration Maps accepts GeoJSON and CSV — the most widely used open formats. ArcGIS-native Shapefiles can be converted to GeoJSON in seconds using the free tool at mapshaper.org or directly from ArcGIS by exporting to GeoJSON format."
+        "a": "Exploration Maps imports zipped shapefiles, KML/KMZ, GeoJSON and CSV. You can import a shapefile ZIP directly, or export a layer from ArcGIS as GeoJSON. Check the coordinate system and field mapping when importing."
       },
       {
         "q": "Is Exploration Maps suitable for NI 43-101 technical reports?",
@@ -391,7 +391,7 @@
         ],
         [
           "TAB file support",
-          "No (GeoJSON/CSV)",
+          "No (imports shapefile ZIP, KML/KMZ, GeoJSON and CSV)",
           "Native format"
         ],
         [
@@ -414,7 +414,7 @@
     "faqs": [
       {
         "q": "Can I import MapInfo TAB files into Exploration Maps?",
-        "a": "Not directly — Exploration Maps imports GeoJSON and CSV. To use MapInfo TAB data in Exploration Maps, open the TAB file in QGIS (which reads TAB format natively), then export the layer as GeoJSON with CRS set to EPSG:4326. This takes about two minutes and preserves all attribute data from the TAB file."
+        "a": "Not directly — Exploration Maps imports shapefile ZIP, KML/KMZ, GeoJSON and CSV. To use MapInfo TAB data in Exploration Maps, open the TAB file in QGIS (which reads TAB format natively), then export the layer as GeoJSON with CRS set to EPSG:4326. This takes about two minutes and preserves all attribute data from the TAB file."
       },
       {
         "q": "Is MapInfo still widely used in the mining industry?",
@@ -480,15 +480,15 @@
         }
       },
       {
-        "h2": "What Exploration Maps 3D does not do",
+        "h2": "Capabilities and limits",
         "items": [
-          "No implicit or explicit geological modelling, and no block models",
+          "No implicit or explicit geological modelling or block-model estimation",
           "No resource estimation; its grade shell is an exploratory envelope, not an estimate",
           "No geophysical processing or inversion",
-          "No drillhole database management or QA/QC workflow; it reads exported CSV tables",
-          "No interactive 3D scene to send to reviewers; the output is an image and a layers ZIP"
+          "Company properties can store imported drill tables and check imports; source-data validation still needs geological review",
+          "Interactive sharing is available through read-only 3D links and embeds; it does not replace a geological modelling package"
         ],
-        "html": "Those are the jobs desktop geological software and its viewers exist for. If a figure needs a modelled solid, export it as an OBJ mesh from the software that built it, if that software supports OBJ export, and load it as a model shape; it is drawn as supplied. For what the assay-based shell does and does not mean, see <a href=\"/blog/grade-shells-from-drill-assays/\">grade shells from drill assays</a>."
+        "html": "Geological modelling, estimation and geophysical processing remain jobs for specialist software. If a figure needs a modelled solid, export it as an OBJ mesh from the software that built it, if that software supports OBJ export, and load it as a model shape; it is drawn as supplied. For what the assay-based shell does and does not mean, see <a href=\"/blog/grade-shells-from-drill-assays/\">grade shells from drill assays</a>."
       },
       {
         "h2": "Where a figure maker helps",
@@ -497,7 +497,7 @@
       },
       {
         "h2": "Choosing for your team",
-        "body": "A team with a modeller and a current geological model already has the 3D picture; what it often lacks is a quick, repeatable way to turn that picture into a public figure with the right callouts and notes. A team without modelling software, typically early in a drill program, may only need to show holes, grades and terrain clearly, and can do that from its CSV exports alone. Reviewers, partners and managers who need to rotate a model themselves are better served by a free desktop viewer than by a static image. And a figure that will be published should always be checked against the source the geology came from, whichever tool drew it."
+        "body": "A team with a modeller and a current geological model already has the 3D picture; what it often lacks is a quick, repeatable way to turn that picture into a public figure with the right callouts and notes. A team without modelling software, typically early in a drill program, may only need to show holes, grades and terrain clearly, and can do that from its CSV exports alone. Reviewers can rotate and zoom an Exploration Maps 3D figure through a shared link or embed. Use a desktop viewer when the review needs the native geological model and its specialist tools. And a figure that will be published should always be checked against the source the geology came from, whichever tool drew it."
       },
       {
         "h2": "Using them together",
@@ -545,7 +545,7 @@
           "Output",
           "Interactive 3D view",
           "Interactive 3D view",
-          "Branded PNG figures and section; designer layers ZIP"
+          "Branded PNG figures and section; designer layers ZIP; interactive share links and embeds"
         ],
         [
           "Cost",
