@@ -733,6 +733,7 @@ test.describe('account', () => {
     await expect(page.locator('#status')).toContainText('Your figure is still here in this browser.');
     expect(fake.upserts).toHaveLength(0); // no row points at files that were not stored
     expect((await state(page)).brand.title).toBe('KEEP ME');
-    await expect(page.locator('#acct-note')).toBeHidden();
+    await expect(page.locator('#acct-note')).toBeVisible();
+    await expect(page.locator('#acct-note')).toHaveText('Unsaved changes');
   });
 });
