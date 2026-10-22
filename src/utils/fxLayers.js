@@ -42,7 +42,8 @@ const FxCanvas = L.Canvas.extend({
     this._paint(ctx, b.getSize());
     ctx.restore();
   },
-  _draw() {},
+  // Leaflet's own redraws (a view reset, a non-animated zoom) clear the canvas and call this: paint again.
+  _draw() { this.repaint(); },
 });
 
 function paneFor(map, key) {

@@ -386,8 +386,8 @@ function areaGlyphs(c, spot, view) {
   const line2 = c.sub ? run(c.c2, c.a2, s2, 0.03 * size, top + (CAP + 0.36 + 0.62 * CAP) * size) : [];
   const hw = (Math.max(c.w1, c.w2) / 2 + c.pad * 0.5) * size, hh = (c.H / 2 + c.pad * 0.5) * size;
   const box = boxOfPts([at(-hw, -hh), at(hw, -hh), at(hw, hh), at(-hw, hh)]);
-  const halo = c.lab.halo ? { color: '#ffffff', width: Math.max(2, size * 0.22), opacity: 0.75 } : null;
-  const common = { family: view.family, fill: c.color, opacity: c.lab.opacity, halo };
+  const halo = c.lab.halo ? { color: '#ffffff', width: Math.max(2, size * 0.22), opacity: 0.75 * c.lo } : null;
+  const common = { family: view.family, fill: c.color, opacity: c.lab.opacity * c.lo, halo };
   const boxes = [...line1.map((g, i) => boxOfPts(glyphCorners(g, c.a1[i] * size, size))), ...line2.map((g, i) => boxOfPts(glyphCorners(g, c.a2[i] * s2, s2)))];
   return {
     box, boxes,
@@ -442,10 +442,10 @@ function lineGlyphs(c, start, view) {
   const s = ((reversed ? 100 - start : start) / 100) * Math.max(0, L - w);
   const glyphs = glyphsAlong(pts, cum, chars, adv, ls, s);
   const corners = glyphs.flatMap((g, i) => glyphCorners(g, adv[i], size));
-  const halo = lab.halo === false ? null : { color: '#ffffff', width: Math.max(2.5, size * 0.28), opacity: 0.85 };
+  const halo = lab.halo === false ? null : { color: '#ffffff', width: Math.max(2.5, size * 0.28), opacity: 0.85 * c.lo };
   return {
     box: boxOfPts(corners), boxes: glyphs.map((g, i) => boxOfPts(glyphCorners(g, adv[i], size))),
-    prims: [{ t: 'glyphs', glyphs, size, weight: lab.weight, family: view.family, fill: c.color, opacity: lab.opacity, halo, s: c.text, role: 'line-label' }],
+    prims: [{ t: 'glyphs', glyphs, size, weight: lab.weight, family: view.family, fill: c.color, opacity: lab.opacity * c.lo, halo, s: c.text, role: 'line-label' }],
   };
 }
 
@@ -486,9 +486,11 @@ export function fxScene(entries, view) {
     const fx = fxOf(entry.layer);
     if (!fx) continue;
     band.push(...layerPrims(entry, fx, view));
-    if (!fx.label) continue;
+    // A label fades with its layer (the layer opacity the geometry takes), and a hidden layer has none.
+    const lo = Math.max(0, Math.min(1, entry.layer.style?.layerOpacity ?? 1));
+    if (!fx.label || lo === 0) continue;
     const isLine = entry.features.some((f) => partsOf(f.geometry).lines.length);
-    cands.push(...(isLine ? lineCandidates(entry, fx, view) : areaCandidates(entry, fx, v)).map((c) => ({ ...c, layerName: entry.layer.legend?.label || entry.layer.displayName || entry.layer.name || 'Layer' })));
+    cands.push(...(isLine ? lineCandidates(entry, fx, view) : areaCandidates(entry, fx, v)).map((c) => ({ ...c, lo, layerName: entry.layer.legend?.label || entry.layer.displayName || entry.layer.name || 'Layer' })));
   }
   // The styled lines on the map: a unit's name is kept off them too (not reported: a line under a name is usual).
   const lines = [...new Set(band.filter((p) => p.t === 'stroke' && !p.closed).map((p) => p.lines))].flat();

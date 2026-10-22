@@ -1,6 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import L from 'leaflet';
 import { fxOf, fxScene, largestBox, shade, washPrims, swatchPrims, paintFxSvg, paintFxCanvas, boxesOverlap } from '../src/utils/geoStyle.js';
 import { buildLegendItems } from '../src/templates/technicalResultsTemplate.js';
+import { syncFx } from '../src/utils/fxLayers.js';
 
 // Geology and label styling (layer.fx): labels along lines and printed into units, feathered and plume fills,
 // glow and line types, the wash and the legend swatches. Opt-in: a layer without fx is not touched.
@@ -81,6 +83,18 @@ describe('labels along a line', () => {
     // With stepping off, it stays and the overlap is listed.
     const kept = fxScene([entry(lineLayer(coords, { start: 50, nudge: false }))], view({ obstacles: [panel] }));
     expect(kept.overlaps).toEqual([expect.objectContaining({ label: 'THUNDER TREND', with: ['legend'] })]);
+  });
+
+  it('fades with its layer, halo included, and goes with a layer faded out', () => {
+    const faded = (lo) => fxScene([entry({ ...lineLayer([[10, -40], [60, -40]], {}), style: { stroke: '#f5b82e', strokeWidth: 3, layerOpacity: lo } })], view());
+    const [g] = glyphsOf(faded(0.5), 'line-label');
+    expect(g.opacity).toBeCloseTo(0.45, 6);
+    expect(g.halo.opacity).toBeCloseTo(0.425, 6);
+    expect(faded(0).labels).toEqual([]);
+    const unit = { id: 'u', name: 'Unit', geojson: { features: fc({ type: 'Polygon', coordinates: [[[0, 0], [40, 0], [40, -20], [0, -20], [0, 0]]] }) }, style: { fill: '#e8a5c0', layerOpacity: 0.4 }, fx: { label: { on: true, halo: true } } };
+    const [a] = glyphsOf(fxScene([entry(unit)], view()), 'area-label');
+    expect(a.opacity).toBeCloseTo(0.36, 6);
+    expect(a.halo.opacity).toBeCloseTo(0.3, 6);
   });
 
   it('draws glow under a dashed trend, then the line', () => {
@@ -237,5 +251,30 @@ describe('wash and legend swatches', () => {
   it('boxes overlap only when they share area', () => {
     expect(boxesOverlap({ left: 0, top: 0, width: 10, height: 10 }, { left: 10, top: 0, width: 5, height: 5 })).toBe(false);
     expect(boxesOverlap({ left: 0, top: 0, width: 10, height: 10 }, { left: 9, top: 9, width: 5, height: 5 })).toBe(true);
+  });
+});
+
+describe('the editor’s canvases', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('paint again after Leaflet’s own redraw (a non-animated zoom resets the view and clears them)', async () => {
+    const calls = [];
+    const ctx = new Proxy({}, {
+      get: (t, k) => (k === 'canvas' ? { width: 400, height: 300 } : k === 'getTransform' ? () => ({ a: 1, b: 0 }) : () => { calls.push(k); return { addColorStop() {} }; }),
+      set: () => true,
+    });
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(ctx);
+    const el = document.createElement('div');
+    Object.defineProperty(el, 'clientWidth', { value: 400 }); Object.defineProperty(el, 'clientHeight', { value: 300 });
+    document.body.appendChild(el);
+    const map = L.map(el, { center: [50.6, -120.7], zoom: 12 });
+    const geojson = { type: 'FeatureCollection', features: fc({ type: 'Polygon', coordinates: [[[-120.72, 50.59], [-120.68, 50.59], [-120.68, 50.61], [-120.72, 50.59]]] }) };
+    const layer = { id: 'u', name: 'Unit', type: 'polygons', visible: true, geojson, style: { fill: '#e8a5c0', fillOpacity: 0.5 }, fx: { feather: 4 } };
+    syncFx(map, null, { project: { layers: [layer], layout: {} }, template: {}, geometry: (l) => l.geojson });
+    map.setZoom(5, { animate: false });
+    await new Promise((ok) => setTimeout(ok, 50));
+    // The last thing on the canvas is the unit's fill, not a clear.
+    expect(calls.lastIndexOf('fill')).toBeGreaterThan(calls.lastIndexOf('clearRect'));
+    map.remove();
   });
 });

@@ -143,6 +143,32 @@ test('geology styling: a feathered unit named in its fill, a glowing trend named
   await page.getByLabel('Edge vignette').fill('0.4');
   await expect(page.locator('.leaflet-emFxwash-pane canvas')).toHaveCount(1);
 
+  // A zoom that is not animated (asked so, or a jump of more than 4 levels) resets the view: Leaflet clears its
+  // canvases and redraws them, and the fx canvases must paint again. The editor's map, caught from its next event.
+  const painted = (pane) => page.evaluate((sel) => {
+    const c = document.querySelector(`.leaflet-${sel}-pane canvas`), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+    let n = 0;
+    for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n += 1;
+    return n;
+  }, pane);
+  await page.evaluate(() => {
+    const P = window.L.Map.prototype;
+    for (const k of ['fire', 'getZoom', 'getSize', 'latLngToContainerPoint']) {
+      const f = P[k];
+      P[k] = function (...a) { if (this._container?.classList.contains('leaflet-map-canvas')) window.__map = this; return f.apply(this, a); };
+    }
+  });
+  await page.locator('.leaflet-map-canvas').hover();
+  await page.mouse.wheel(0, -120);
+  await expect.poll(() => page.evaluate(() => !!window.__map)).toBe(true);
+  // Out 6 levels the unit and the trend are a few px and their names do not fit; the wash still covers the map.
+  const all = ['emFxwash', 'emFxband', 'emFxlabels'];
+  for (const [dz, animate, panes] of [[-1, false, all], [-6, true, ['emFxwash']], [7, true, all]]) {
+    await page.evaluate(([d, a]) => window.__map.setZoom(window.__map.getZoom() + d, { animate: a }), [dz, animate]);
+    await page.waitForTimeout(800);
+    for (const pane of panes) expect(await painted(pane), `${pane} after a zoom of ${dz}`).toBeGreaterThan(200);
+  }
+
   // PNG: the same glyphs, painted by the same painter.
   const png = await exportFile(page, 'Export PNG');
   expect(png.subarray(1, 4).toString()).toBe('PNG');
