@@ -28,7 +28,8 @@
 //     fadeBottom: 0 (off) to 1: the share of the block's height fading out toward its base }.
 // Settings missing from a block saved before them keep the earlier look (units "fixed", surface "mix", no fade).
 // Round 5H, each off unless set: colors { holeId: "#hex" } (the hole's trace, collar ID, callout chip and legend dot),
-// hist.style "thick" (wide bars centred on the trace) and hist.palette "release" (yellow, orange, red and magenta from
+// hist.style "thick" (one wide bar per run of assays in one colour, centred on the trace, hist.width × about 1.6% of the
+// figure's width) and hist.palette "release" (yellow, orange, red and magenta from
 // the four colour limits; nothing under the first), ticks "elevation" (on the block's left vertical edge) or "none"
 // (unset: depths on the side face), ends (A and A′ boxed where the section line crosses the block's top), pad (one
 // pill, "077 & 078", over holes sharing a pad; a string is its text), legend { assay, geology, holes, bracket } (one
@@ -84,7 +85,8 @@ function patch(b, o) {
   const opt = (k, v, on) => { if (on) b[k] = v; else delete b[k]; };
   if (o.colors !== undefined) {
     if (o.colors !== null && (typeof o.colors !== 'object' || Array.isArray(o.colors))) throw new Error('colors must be { holeId: "#rrggbb" }, or null for none.');
-    const c = { ...(o.colors && b.colors), ...o.colors };
+    // Colours set for holes no longer in the data (another dataset loaded) are dropped, not checked.
+    const known = new Set(H.project.holes.map((h) => h.id)), c = { ...Object.fromEntries(Object.entries((o.colors && b.colors) || {}).filter(([id]) => known.has(id))), ...o.colors };
     Object.entries(c).forEach(([id, v]) => { if (v === null) delete c[id]; else if (!/^#[0-9a-f]{6}$/i.test(v)) throw new Error(`colors["${id}"] must be a colour like "#3f9a3c", or null.`); });
     if (o.colors) holeIds(Object.keys(c).length ? Object.keys(c) : null);
     opt('colors', c, o.colors && Object.keys(c).length);
@@ -107,6 +109,7 @@ function patch(b, o) {
     if (h.style !== undefined) { if (!['spikes', 'bars', 'thick'].includes(h.style)) throw new Error('hist.style must be "spikes" (one thin spike per assay), "bars" (merged bars) or "thick" (wide bars along the hole).'); x.style = h.style; }
     if (h.palette !== undefined) { if (!['orange', 'bins', 'release'].includes(h.palette)) throw new Error('hist.palette must be "orange" (pale yellow to deep orange), "bins" (the figure\'s grade colours) or "release" (yellow, orange, red, magenta; none under the first colour limit).'); x.palette = h.palette; }
     if (h.length !== undefined) { const v = +h.length; if (!Number.isFinite(v)) throw new Error('hist.length must be a number, 0.3-3 (1: the usual length).'); x.length = Math.max(0.3, Math.min(3, v)); }
+    if (h.width !== undefined) { const v = +h.width; if (!Number.isFinite(v)) throw new Error('hist.width must be a number, 0.3-3 (thick bars; 1: about 1.6% of the figure\'s width).'); x.width = Math.max(0.3, Math.min(3, v)); }
     b.hist = x;
   }
 }
@@ -648,14 +651,15 @@ export function renderUI(el) {
       <label class="field"><span>Bar shape</span><select data-bh="style"><option value="spikes" ${hb.style === 'spikes' ? 'selected' : ''}>A spike per assay</option><option value="bars" ${hb.style !== 'spikes' && hb.style !== 'thick' ? 'selected' : ''}>Merged bars</option><option value="thick" ${hb.style === 'thick' ? 'selected' : ''}>Thick bars along the hole</option></select></label>
       <label class="field"><span>Bar colours</span><select data-bh="palette"><option value="orange" ${hb.palette === 'orange' ? 'selected' : ''}>Orange ramp</option><option value="bins" ${hb.palette !== 'orange' && hb.palette !== 'release' ? 'selected' : ''}>The grade colours</option><option value="release" ${hb.palette === 'release' ? 'selected' : ''}>Yellow to magenta (none below the first)</option></select></label></div>
     <div class="grid2" style="margin-top:6px"><label class="field"><span>Grade bars</span><select data-bh="side"><option value="face" ${hb.side === 'face' ? 'selected' : ''}>On the front face</option><option value="screen" ${hb.side !== 'face' ? 'selected' : ''}>Facing the camera</option></select></label>
-      <label class="field"><span>Bar length</span><select data-bh="scale"><option value="linear" ${hb.scale !== 'log' ? 'selected' : ''}>By grade</option><option value="log" ${hb.scale === 'log' ? 'selected' : ''}>By grade, log scale</option></select></label></div>
+      <label class="field"><span>Bar length</span><select data-bh="scale"><option value="linear" ${hb.scale !== 'log' ? 'selected' : ''}>By grade</option><option value="log" ${hb.scale === 'log' ? 'selected' : ''}>By grade, log scale</option></select></label>
+      ${hb.style === 'thick' ? `<label class="field"><span>Bar width <output class="mono">${hb.width || 1}×</output></span><input type="range" min="0.5" max="3" step="0.25" data-bw value="${hb.width || 1}" aria-label="Width of the thick bars"></label>` : ''}</div>
     <div class="grid2" style="margin-top:6px"><label class="field"><span>Ticks</span><select data-bs="ticks">${[['depth', 'Depths on the side face'], ['elevation', 'Elevations on the left edge'], ['none', 'None']].map(([v, t]) => `<option value="${v}" ${(b.ticks || 'depth') === v ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
       <label class="field"><span>Scale bar</span><select data-bs="scale"><option value="face" ${b.scale !== 'flat' ? 'selected' : ''}>In perspective on the face</option><option value="flat" ${b.scale === 'flat' ? 'selected' : ''}>Flat, under the figure</option></select></label>
       ${b.scale === 'flat' ? `<label class="field"><span>Scale note</span><input type="text" data-bn value="${esc(b.scaleNote ?? '')}" placeholder="Scale at block centre · looking …"></label>` : ''}</div>
     <div class="row" style="gap:14px;flex-wrap:wrap;margin-top:6px"><label class="check"><input type="checkbox" data-bc ${b.colors ? 'checked' : ''}>A colour per hole</label><label class="check"><input type="checkbox" data-bo="ends" ${b.ends ? 'checked' : ''}>A and A′ at the section's ends</label>
       <label class="check"><input type="checkbox" data-bo="pad" ${b.pad ? 'checked' : ''}>One label per drill pad</label><label class="check"><input type="checkbox" data-bo="legend" ${b.legend ? 'checked' : ''}>Release legend</label>
       <label class="check"><input type="checkbox" data-bo="inclFrom" ${b.inclFrom === false ? 'checked' : ''}>No "from" on incl. lines</label></div>
-    ${b.colors ? `<div class="row" style="gap:10px;flex-wrap:wrap;margin-top:6px">${Object.entries(b.colors).map(([id, c]) => `<label class="check"><input type="color" data-hc="${esc(id)}" value="${c}" aria-label="Colour of ${esc(id)}">${esc(id)}</label>`).join('')}</div>` : ''}
+    ${b.colors ? `<div class="row" style="gap:10px;flex-wrap:wrap;margin-top:6px">${Object.entries(b.colors).filter(([id]) => holes.some((h) => h.id === id)).map(([id, c]) => `<label class="check"><input type="color" data-hc="${esc(id)}" value="${c}" aria-label="Colour of ${esc(id)}">${esc(id)}</label>`).join('')}</div>` : ''}
     ${b.pad ? `<label class="field" style="margin-top:6px"><span>Pad label</span><input type="text" data-bp value="${esc(typeof b.pad === 'string' ? b.pad : '')}" placeholder="${esc(pads()[0]?.text || '077 & 078')}"></label>` : ''}
     ${b.legend ? `<div class="grid2" style="margin-top:6px">${[['assay', 'Assay heading', `ASSAY · ${S.valueLabel}`], ['geology', 'Geology heading', 'GEOLOGY'], ['holes', 'Holes row', 'Holes … (this release)'], ['bracket', 'Bracket row', 'Published interval (down-hole)']].map(([k, t, ph]) => `<label class="field"><span>${t}</span><input type="text" data-bl="${k}" value="${esc(b.legend[k] ?? '')}" placeholder="${esc(ph)}"></label>`).join('')}</div>` : ''}
     <button class="btn" type="button" data-bk-off style="margin-top:6px">Turn the block look off</button>` : ''}
@@ -675,6 +679,7 @@ export function renderUI(el) {
   el.querySelector('[data-bf]')?.addEventListener('change', (e) => run(() => H.api.setBlock({ fadeBottom: +e.target.value / 100 })));
   el.querySelectorAll('[data-bk]').forEach((cb) => cb.addEventListener('change', () => run(() => H.api.setBlock({ [cb.dataset.bk]: V[cb.dataset.bk] ? V[cb.dataset.bk][cb.checked ? 0 : 1] : cb.checked }))));
   el.querySelectorAll('[data-bh]').forEach((s) => s.addEventListener('change', () => run(() => H.api.setBlock({ hist: { [s.dataset.bh]: s.value } }))));
+  el.querySelector('[data-bw]')?.addEventListener('change', (e) => run(() => H.api.setBlock({ hist: { width: +e.target.value } })));
   // Round 5H: a colour per hole (the callout holes shown first, up to six), the switches and their texts.
   el.querySelector('[data-bc]')?.addEventListener('change', (e) => run(() => H.api.setBlock({ colors: e.target.checked ? Object.fromEntries(holes.filter((h) => on.has(h.id)).sort((p, q) => co.has(q.id) - co.has(p.id)).slice(0, 6).map((h, i) => [h.id, HOLE_COLORS[i]])) : null })));
   el.querySelectorAll('[data-bo]').forEach((cb) => cb.addEventListener('change', () => run(() => H.api.setBlock({ [cb.dataset.bo]: cb.dataset.bo === 'inclFrom' ? !cb.checked : cb.checked }))));

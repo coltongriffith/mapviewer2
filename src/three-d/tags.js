@@ -480,6 +480,17 @@ export function mergeInts(ints, col, w, max = false) {
   });
   return out.map((c) => ({ from: c.from, to: c.to, v: max ? c.m : c.s / (c.to - c.from) }));
 }
+// Runs of consecutive assays (no sampling gap) in one class (key(v): a class, or null for none drawn), each as one
+// interval with its highest grade (round 5H's thick bars): [{ from, to, v }].
+export function classRuns(ints, col, key) {
+  const out = []; let cur = null;
+  ints.forEach((it) => {
+    const v = it.vals[col], k = Number.isFinite(v) ? key(v) : null;
+    if (k === null || k === undefined) { cur = null; return; }
+    if (cur && cur.k === k && Math.abs(it.from - cur.to) < 1e-6) { cur.to = it.to; cur.v = Math.max(cur.v, v); } else { cur = { from: it.from, to: it.to, v, k }; out.push(cur); }
+  });
+  return out.map(({ from, to, v }) => ({ from, to, v }));
+}
 // A hole's bars on a face and its scale in export px per metre. Spikes: one per assay, merged (keeping the peak) only
 // where an interval would draw under about 1.5 px; bars: merged to a display interval as above.
 function displayInts(h, col, G, spikes) {
@@ -515,16 +526,20 @@ export function placeHistograms() {
   const cut = (v) => S.displayCutoff !== null && S.displayCutoff !== undefined && v < S.displayCutoff;
   let n = 0, hn = 0;
   const fl = face && frontLen(view);
-  H.project.holes.filter(holeOn).forEach((h) => { const D = face ? displayInts(h, S.valueCol, G, spikes) : { list: h.ints.map((it) => ({ from: it.from, to: it.to, v: it.vals[S.valueCol] })) }; D.list.forEach((it) => {
+  // Thick (round 5H): one bar per run of assays in one colour class, end to end, hist.width × about 1.6% of the figure's
+  // width across on screen (the hole's scale at its middle, across the view).
+  const classOf = (v) => (cut(v) ? null : pal ? orangeClass(v, S.bins) : rel ? (v >= S.bins[0] ? releaseClass(v, S.bins) : null) : H.binIndex(v) >= 1 ? H.binIndex(v) : null);
+  const thickWidth = (h) => { const p = h.posAt(h.len / 2), a = G.V(p.x, p.y, p.z), s0 = H.proj(a), s1 = H.proj(a.clone().addScaledVector(right, 10)), ppf = Math.hypot(s1[0] - s0[0], s1[1] - s0[1]) / 10; return ppf > 0 ? 0.016 * H.frame()[0] * (B.width || 1) / ppf : fl * 0.04; };
+  H.project.holes.filter(holeOn).forEach((h) => { const D = thick ? { list: classRuns(h.ints, S.valueCol, classOf), w: thickWidth(h) } : face ? displayInts(h, S.valueCol, G, spikes) : { list: h.ints.map((it) => ({ from: it.from, to: it.to, v: it.vals[S.valueCol] })) }; D.list.forEach((it) => {
     const v = it.v, bi = H.binIndex(v); if (pal ? !Number.isFinite(v) || cut(v) : rel ? !(v >= S.bins[0]) || cut(v) : !(bi >= 1) || cut(v)) return;
     const a = h.posAt(it.from), b = h.posAt(it.to), va = G.V(a.x, a.y, a.z), vb = G.V(b.x, b.y, b.z), dir = vb.clone().sub(va), len = dir.length(); if (len < 1e-6) return; dir.divideScalar(len);
     if (face && !thick) { side.copy(along).addScaledVector(dir, -along.dot(dir)); if (side.lengthSq() < 1e-6) side.copy(right); side.normalize(); if (side.dot(right) < 0) side.negate(); } // in the face's plane, screen-right
     else { side.crossVectors(dir, view); if (side.lengthSq() < 1e-8) side.copy(right); side.normalize(); if (side.dot(right) > 0) side.negate(); } // screen-left of the trace (thick: across it on screen, so never foreshortened)
     nrm.crossVectors(side, dir).normalize(); if (nrm.dot(view) > 0) nrm.negate();
     // Spikes: thin (about 1.9 px in the export, under 70% of the interval, so gaps show) and linear in grade.
-    // Thick (round 5H): one width, about 4% of the face's width, centred on the trace (which is drawn over it).
-    const t = face ? histLength(v, pal ? vlo / 2 : vlo, vmax, B.scale === 'log') : v / vmax, L = spikes ? fl * spikeLength(v, S.bins[3]) * (B.length || 1) : thick ? fl * 0.04 * (B.length || 1) : Math.max(pal ? 0.5 * r : r, Lmax * Math.min(1, t));
-    const c = va.add(vb).multiplyScalar(0.5).addScaledVector(side, (thick ? -L / 2 : off) + L / 2), th = spikes ? Math.min(len * 0.7, D.ppm > 0 ? 1.9 / D.ppm : len * 0.7) : len * (face && !thick ? 0.8 : 0.98);
+    // Thick: centred on the trace (which is drawn over it), the full length of its run, so a run reads as one bar.
+    const t = face ? histLength(v, pal ? vlo / 2 : vlo, vmax, B.scale === 'log') : v / vmax, L = spikes ? fl * spikeLength(v, S.bins[3]) * (B.length || 1) : thick ? D.w : Math.max(pal ? 0.5 * r : r, Lmax * Math.min(1, t));
+    const c = va.add(vb).multiplyScalar(0.5).addScaledVector(side, (thick ? -L / 2 : off) + L / 2), th = spikes ? Math.min(len * 0.7, D.ppm > 0 ? 1.9 / D.ppm : len * 0.7) : thick ? len : len * (face ? 0.8 : 0.98);
     mx.makeBasis(side.clone().multiplyScalar(L), dir.clone().multiplyScalar(th), nrm).setPosition(c);
     hist.mesh.setMatrixAt(n, mx); col.set(pal ? ORANGE[orangeClass(v, S.bins)] : rel ? RELEASE[releaseClass(v, S.bins)] : H.BIN_COLORS[bi]); if (fade(h)) col.lerp(white, 0.55); hist.mesh.setColorAt(n, col); n++;
     // No halo on the lowest grades (orange palette), which would read as a band along the hole.

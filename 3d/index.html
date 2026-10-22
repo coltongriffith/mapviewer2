@@ -1102,11 +1102,13 @@ Whole projects (to keep or move a figure):
   EM3D.setBlock({page: "side", info})   the side title: the company line, title, subtitle and an info line (info;
                                   default "3D cutaway · looking SW", "" for none) large at the top left, the logo
                                   and legend on the page at the right, no heading on the block (reframed to fit)
-  EM3D.setBlock({colors: {holeId: "#3f9a3c"} | null, hist: {style: "thick", palette: "release"}, ticks: "depth" |
+  EM3D.setBlock({colors: {holeId: "#3f9a3c"} | null, hist: {style: "thick", palette: "release", width}, ticks: "depth" |
                  "elevation" | "none", ends, pad: true | "077 & 078", legend: {assay, geology, holes, bracket} | true |
                  null, inclFrom: false, scale: "face" | "flat", scaleNote})   each off until set: a colour per hole (its
-                                  trace, collar ID, callout chip and legend dot); thick bars centred on the trace in
-                                  yellow, orange, red and magenta from the colour limits; elevations on the block's
+                                  trace, collar ID, callout chip and legend dot; colours for holes no longer in the
+                                  data are dropped); thick bars centred on the trace, one per run of assays in one
+                                  class, width × about 1.6% of the figure's width (0.3-3); the release palette: yellow,
+                                  orange, red and magenta from the colour limits; elevations on the block's
                                   left edge, or no ticks; A and A′ boxed at the section's ends on the block's top; one
                                   pill over holes sharing a pad; one legend card (assay classes, geology, the holes,
                                   the bracket) with its headings and row texts; incl. lines without "from N m"; a flat

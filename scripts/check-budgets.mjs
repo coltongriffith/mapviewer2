@@ -441,7 +441,10 @@ const BUDGETS = {
   // ends, the flat scale bar with its note, getState().layout.block, their checks and Layout controls) and tags.js +0.6
   // (thick bars in the release palette, the pad pill and hole colours on the collar IDs and callout chips, incl. lines
   // without "from"). The /3d page gains only the hooks (+0.05 kB, within its limit).
-  threeDLazyJsGzipKb: 159.2,
+  // 159.2 → 159.6 (review fixes, measured 159.1, configured 159.3): thick bars one per run of assays in one class
+  // (tags.js classRuns) at a width set in figure px (hist.width and its slider), and colours for holes no longer in the
+  // data dropped rather than refused (+0.4 kB).
+  threeDLazyJsGzipKb: 159.6,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.

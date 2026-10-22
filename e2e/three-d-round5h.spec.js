@@ -117,6 +117,13 @@ test('thick bars and hole colours change the figure, and it is the same again wi
     await E.setBlock({ hist: { style: 'spikes', palette: 'orange' }, colors: null }); return { thick: thick !== plain, coloured: coloured !== thick, back: E.exportPNG({ view: '3d' }) === plain };
   });
   expect(r).toEqual({ thick: true, coloured: true, back: true });
+  // Another dataset: the old holes' colours go with it, and colours for the new holes are taken (Codex review).
+  const st = await page.evaluate(async () => {
+    const E = window.EM3D; await E.setBlock({ colors: { 'BS-077': '#3f9a3c' } }); await E.loadSample(); await E.layersReady();
+    const was = E.getState().block?.colors, id = E.getState().project.holeIds[0];
+    await E.setBlock({ colors: { [id]: '#1fb0c6' } }); return { was, now: E.getState().block.colors, id };
+  });
+  expect(st.was).toBeUndefined(); expect(st.now).toEqual({ [st.id]: '#1fb0c6' });
   expect(errors).toEqual([]);
 });
 

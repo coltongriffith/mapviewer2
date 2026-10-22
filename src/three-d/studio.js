@@ -2014,7 +2014,7 @@ function loadSample() {
 function resetDerived() {
   histReset(); // the history belongs to the old data
   S.eq = null; eqApplied = false; S.displayCutoff = null; S.provisional = {}; S.shell.cutoff = null; S.libRefs = {}; S.drillSource = null; S.section = S.sections = null; S.pubOverrides = {}; S.calloutMode = 'calculated'; callouts = calcCallouts = [];
-  S.tags.status = {}; S.tags.groups = []; S.geology.legend = []; S.holesShown = null; // EXT hook: per-hole tags, codes and holes shown belong to the old data
+  S.tags.status = {}; S.tags.groups = []; S.geology.legend = []; S.holesShown = null; if (S.block) delete S.block.colors; // EXT hook: per-hole tags, codes, holes shown and colours belong to the old data
   // The shell belongs to the old data: switch it off and stop any build still running.
   S.shell.enabled = false; shell.pending = null; shell.mesh = null; shell.field = null; syncShell();
 }

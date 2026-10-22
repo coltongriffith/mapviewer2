@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { init, setBlock, BLOCK, shortIds, joinAnd, clipToBox, pads, releaseSecs, assayRows, colorOf } from '../src/three-d/block.js';
-import { init as initTags, noFrom, joinIncl, RELEASE, releaseClass } from '../src/three-d/tags.js';
+import { init as initTags, noFrom, joinIncl, RELEASE, releaseClass, classRuns } from '../src/three-d/tags.js';
 
 // Exploration Maps 3D round 5H: a colour per hole, thick bars in the release palette, elevation ticks, the section's ends,
 // a common pad's pill, the release legend, incl. lines without "from", the flat scale bar. All off until set.
@@ -30,6 +30,13 @@ describe('block settings of round 5H', () => {
     expect(() => setBlock({ colors: ['#000000'] })).toThrow(/colors must be/);
     expect(S.block.colors).toEqual({ 'BS-078': '#1fb0c6' }); // a refused patch changes nothing
   });
+  it('drops colours for holes no longer in the data instead of refusing the next change (Codex review)', () => {
+    const S = host(); setBlock({ colors: { 'BS-077': '#3f9a3c', 'BS-078': '#1fb0c6' } });
+    const S2 = host(S.block, { project: { holes: [{ id: 'NEW-1', c: { x: 0, y: 0 } }, { id: 'BS-078', c: { x: 3, y: 2 } }] } }); // another dataset, the same block
+    setBlock({ colors: { 'NEW-1': '#e07a1f' } }); expect(S2.block.colors).toEqual({ 'BS-078': '#1fb0c6', 'NEW-1': '#e07a1f' });
+    expect(() => setBlock({ colors: { 'BS-077': null } })).not.toThrow(); // removing a colour that is already gone
+    expect(() => setBlock({ colors: { 'BS-077': '#000000' } })).toThrow(/No hole "BS-077"/); // a new colour still needs the hole
+  });
   it('checks the ticks, the scale bar and the bars, and keeps the texts', () => {
     const S = host();
     setBlock({ ticks: 'none', scale: 'flat', scaleNote: 'Scale at block centre', pad: '  077 & 078 ', legend: { assay: 'ASSAY · Au g/t', geology: 'GEOLOGY (AFTER TOWER)' }, hist: { style: 'thick', palette: 'release' } });
@@ -39,6 +46,8 @@ describe('block settings of round 5H', () => {
     expect(() => setBlock({ ticks: 'left' })).toThrow(/ticks must be "depth"/);
     expect(() => setBlock({ scale: 'screen' })).toThrow(/scale must be "face"/);
     expect(() => setBlock({ hist: { style: 'fat' } })).toThrow(/"thick" \(wide bars/);
+    setBlock({ hist: { width: 9 } }); expect(S.block.hist.width).toBe(3); setBlock({ hist: { width: 0 } }); expect(S.block.hist.width).toBe(0.3);
+    expect(() => setBlock({ hist: { width: 'wide' } })).toThrow(/hist.width must be a number/);
     expect(() => setBlock({ hist: { palette: 'rainbow' } })).toThrow(/"release" \(yellow, orange, red, magenta/);
   });
 });
@@ -93,6 +102,15 @@ describe('the release palette and legend', () => {
     expect(secs.map((s) => [s.key, s.title])).toEqual([['assays', 'ASSAY · Au g/t'], ['lithology', 'GEOLOGY (AFTER TOWER)'], ['model', 'Model'], ['holes', undefined]]);
     expect(secs[0].rows).toHaveLength(2); expect(secs[0].rows[0].full).toBeTypeOf('function');
     expect(secs[3].rows.map((r) => r.label)).toEqual(['Holes 077 & 078 (this release)', 'Published interval (down-hole)']);
+  });
+});
+
+describe('thick bars: one per run of assays in one class (classRuns)', () => {
+  const ints = [[0, 2, 0.5], [2, 4, 0.7], [4, 6, 1.5], [6, 8, 0.1], [8, 10, 0.6], [12, 14, 0.8], [14, 16, 0.9]].map(([from, to, v]) => ({ from, to, vals: { au: v } }));
+  it('joins neighbours of one class end to end, keeps the peak, and breaks at a gap, a class change or nothing drawn', () => {
+    const key = (v) => (v >= 0.4 ? releaseClass(v, [0.4, 1, 3, 10]) : null);
+    expect(classRuns(ints, 'au', key)).toEqual([{ from: 0, to: 4, v: 0.7 }, { from: 4, to: 6, v: 1.5 }, { from: 8, to: 10, v: 0.6 }, { from: 12, to: 16, v: 0.9 }]);
+    expect(classRuns([{ from: 0, to: 2, vals: {} }], 'au', key)).toEqual([]);
   });
 });
 
