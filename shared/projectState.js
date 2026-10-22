@@ -85,6 +85,7 @@ export const TEMPLATE_THEMES = {
   technical_sharp: 'Technical',
   modern_dark: 'Dark',
   warm_terrain: 'Warm',
+  studio: 'Studio',
 };
 
 export const FONT_OPTIONS = {

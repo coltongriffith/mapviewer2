@@ -5,6 +5,7 @@ import { hasVisibleFeatures, layerGeometryKind } from '../utils/featureIdentity.
 import { isClassified, classLegendItems } from '../utils/classification.js';
 import { hasDrillTraces } from '../utils/drillTraces.js';
 import { getCornerLayout } from '../utils/cornerLayout';
+import { studioZoneSizes } from '../utils/studioLayout.js';
 
 const BASE_ZONES = {
   title: { top: 22, left: 22, width: 520, height: 92 },
@@ -174,7 +175,10 @@ export function resolveTemplateZones(template, layout, mapSize, legendItems) {
   const naH = layout?.northArrowHeightPx ?? BASE_ZONES.northArrow.height;
   const naW = Math.round(naH * 0.90);
 
+  // Studio's cards size themselves (utils/studioLayout.js); null for every other theme.
+  const studio = studioZoneSizes(layout, titleWidth);
   function sizeOf(id) {
+    if (studio?.[id]) return studio[id];
     switch (id) {
       case 'title':      return [titleWidth, titleHeight];
       case 'logo':       return [logoW, logoH];
