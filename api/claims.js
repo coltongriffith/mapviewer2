@@ -1394,14 +1394,25 @@ async function resolveClaimantSerials(cfg, company, tiers) {
     if (!terms.length) continue;
     // or=(claimant_name.ilike.*a*,claimant_name.ilike.*b*)
     const or = terms.map((t) => `claimant_name.ilike.*${encodeURIComponent(t)}*`).join(',');
-    const qs = `select=${select}&or=(${or})&state=eq.${encodeURIComponent(stateCode)}&limit=5000`;
-    let rows;
+    const qs = `select=${select}&or=(${or})&state=eq.${encodeURIComponent(stateCode)}&order=serial,claimant_name,claimant_role`;
+    // Up to 5,000 rows, a page at a time: PostgREST returns at most max-rows
+    // (1000) per request whatever limit is asked, so one limit=5000 call
+    // silently stopped at 1,000.
+    const CLAIMANT_MAX = 5000;
+    const rows = [];
+    let truncated = false;
     try {
-      rows = await get(qs);
+      for (let offset = 0; offset < CLAIMANT_MAX; offset += US_MIRROR_PAGE_ROWS) {
+        const page = await get(`${qs}&limit=${US_MIRROR_PAGE_ROWS}&offset=${offset}`);
+        if (page === null) return null;   // table absent
+        rows.push(...page);
+        if (page.length < US_MIRROR_PAGE_ROWS) break;
+        if (offset + US_MIRROR_PAGE_ROWS >= CLAIMANT_MAX) truncated = true;
+      }
     } catch {
-      return null;   // store unreachable — fall through to the claim-name path
+      if (!rows.length) return null;   // store unreachable — fall through to the claim-name path
+      truncated = true;                // a later page failed: keep what arrived, say so
     }
-    if (rows === null) return null;   // table absent
     const kept = tier.scored
       ? rows.filter((row) => matchesCompany(company, row.claimant_name, `us-${stateCode.toLowerCase()}`))
       : rows;
@@ -1418,9 +1429,10 @@ async function resolveClaimantSerials(cfg, company, tiers) {
       claimants: [...new Set(kept.map((r) => r.claimant_name).filter(Boolean))].slice(0, 25),
       roles: [...new Set(kept.map((r) => r.claimant_role).filter(Boolean))],
       matchedRows: kept.length,
+      truncated,
     };
   }
-  return { serials: [], method: null, snapshotDate: null, sources: [], claimants: [], roles: [], matchedRows: 0 };
+  return { serials: [], method: null, snapshotDate: null, sources: [], claimants: [], roles: [], matchedRows: 0, truncated: false };
 }
 
 // ── US company search ───────────────────────────────────────────────────────
@@ -1478,10 +1490,14 @@ async function searchUsCompany(cfg, company, res, { layerUrl, fields, scoping })
           }
           : { ...meta, returned: all.length };
       }
+      // Serials past the first 5,000, or claimant rows the store did not hand
+      // over, are claims this response does not carry.
+      const partial = claimantHit.serials.length > 5000 || Boolean(claimantHit.truncated);
+      const accMeta = partial ? { ...(metaAcc || {}), truncated: true, totalKnown: null } : (metaAcc || {});
       return res.status(200).json({
         type: 'FeatureCollection',
         features: all.map((f) => ({ ...f, properties: normalizeProps(f.properties || {}, cfg) })),
-        meta: withScopingMeta({ ...(metaAcc || {}), provider: cfg.provider, returned: all.length }, scoping),
+        meta: withScopingMeta({ ...accMeta, provider: cfg.provider, returned: all.length }, scoping),
         resolution: {
           status: 'resolved',
           company,
@@ -1593,6 +1609,9 @@ async function searchUsCompany(cfg, company, res, { layerUrl, fields, scoping })
 
 const US_MIRROR_MAX_AGE_DAYS = Number(process.env.US_CLAIMS_MAX_AGE_DAYS) > 0 ? Number(process.env.US_CLAIMS_MAX_AGE_DAYS) : 10;
 const US_MIRROR_SELECT = 'id,serial,legacy_serial,claim_name,states,state_source,claim_type,disposition,case_type_nr,acres,location_date,geometry';
+// Rows per request. Never above PostgREST's max-rows (1000 on this project):
+// a capped page looks like a short last page, and paging would stop early.
+const US_MIRROR_PAGE_ROWS = 1000;
 
 /**
  * The mirror's freshness, or null when it should not be used. Cached per
@@ -1680,7 +1699,7 @@ async function usMirrorRows(cfg, filter, { maxTotal } = {}) {
   const rows = [];
   const { meta } = await fetchAllPages({
     provider: 'us-mirror',
-    pageSize: Math.min(1000, maxTotal || 1000),
+    pageSize: Math.min(US_MIRROR_PAGE_ROWS, maxTotal || US_MIRROR_PAGE_ROWS),
     ...(maxTotal ? { maxTotal } : {}),
     idField: 'OBJECTID',
     fetchPage: async (offset, count) => {
@@ -1766,15 +1785,18 @@ async function searchUsMirror(cfg, term, type, res, { numberList = null } = {}) 
   const ladder = resolveUsCompanyTiers(term, province);
   const claimantHit = await resolveClaimantSerials(cfg, term, ladder).catch(() => null);
   if (claimantHit?.serials.length) {
-    const serials = claimantHit.serials.map(mirrorIdent).filter((s) => /^[A-Z0-9]+$/.test(s)).slice(0, 5000);
+    const valid = claimantHit.serials.map(mirrorIdent).filter((s) => /^[A-Z0-9]+$/.test(s));
+    const serials = valid.slice(0, 5000);
     const rows = [];
-    let truncated = false;
+    // Serials past the first 5,000, or claimant rows the store did not hand
+    // over, are claims this response does not carry: say so.
+    let truncated = valid.length > serials.length || Boolean(claimantHit.truncated);
     for (let i = 0; i < serials.length; i += 150) {
       const r = await usMirrorRows(cfg, serialIn(serials.slice(i, i + 150)));
       rows.push(...r.rows);
-      truncated = truncated || r.meta?.truncated;
+      truncated = truncated || Boolean(r.meta?.truncated);
     }
-    return usMirrorResponse(res, cfg, rows, { totalKnown: rows.length, truncated, pagesFetched: Math.ceil(serials.length / 150) }, {}, {
+    return usMirrorResponse(res, cfg, rows, { totalKnown: truncated ? null : rows.length, truncated, pagesFetched: Math.ceil(serials.length / 150) }, {}, {
       resolution: {
         status: 'resolved',
         company: term,
@@ -1797,7 +1819,8 @@ async function searchUsMirror(cfg, term, type, res, { numberList = null } = {}) 
     const { rows, meta } = await usMirrorRows(cfg, or);
     const kept = tier.scored ? rows.filter((r) => matchesCompany(term, r.claim_name, province)) : rows;
     if (!kept.length) continue;
-    return usMirrorResponse(res, cfg, kept, { ...meta, returned: kept.length }, {}, {
+    // totalKnown counts what is returned, after the score filter.
+    return usMirrorResponse(res, cfg, kept, { ...meta, totalKnown: meta.truncated ? null : kept.length, returned: kept.length }, {}, {
       resolution: { status: 'resolved', company: term, method: tier.method, resolvedAgainst: 'claim_name', field: 'CSE_NAME', tiersAttempted: attempted },
     });
   }
@@ -1808,18 +1831,103 @@ async function searchUsMirror(cfg, term, type, res, { numberList = null } = {}) 
   });
 }
 
-async function searchUsMirrorBbox(cfg, minLng, minLat, maxLng, maxLat, res) {
+// PostgREST caps every response at max-rows (1000 on this project, checked
+// against prod), RPC results included, and gives no sign that it did: a box
+// of 1,207 claims came back as exactly 1,000 with truncated:false. So the
+// bbox read pages. The first page asks for the exact total (Content-Range,
+// counted over the function's own result, which stops at MAX_TOTAL_FEATURES
+// like the live path). The other pages are fetched at offsets stepped by the
+// number of rows the first page actually held, so a lower cap still reads
+// every row. Each page is its own statement under the anon role's 3 s
+// timeout. If a later page fails, the rows that arrived are kept and the
+// response is marked truncated; if the first page fails, live BLM answers.
+//
+// Every page passes the same p_limit (the ceiling). A small p_limit looks
+// cheaper but is not: with LIMIT 1000 the planner walks the primary key and
+// filters (3.6 s, past the anon timeout, on a 29,584-claim NV box), while the
+// ceiling keeps the envelope-index plan.
+const US_MIRROR_BBOX_CONCURRENCY = 4;
+
+function contentRangeTotal(r) {
+  const m = /\/(\d+)\s*$/.exec(String(r.headers?.get?.('content-range') || ''));
+  return m ? Number(m[1]) : null;
+}
+
+async function usMirrorBboxRows(cfg, minLng, minLat, maxLng, maxLat) {
   const { base, key } = qcSupabaseCreds();
-  const r = await fetch(`${base}/rest/v1/rpc/us_claims_in_bbox`, {
-    method: 'POST',
-    headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ min_lng: minLng, min_lat: minLat, max_lng: maxLng, max_lat: maxLat, p_state: String(cfg.usState).toUpperCase(), p_limit: MAX_TOTAL_FEATURES }),
-    signal: AbortSignal.timeout(20000),
+  const body = JSON.stringify({
+    min_lng: minLng, min_lat: minLat, max_lng: maxLng, max_lat: maxLat,
+    p_state: String(cfg.usState).toUpperCase(), p_limit: MAX_TOTAL_FEATURES,
   });
-  if (!r.ok) throw new Error(`US claims mirror bbox ${r.status}: ${(await r.text().catch(() => '')).slice(0, 200)}`);
-  const rows = await r.json();
-  const truncated = rows.length >= MAX_TOTAL_FEATURES;
-  return usMirrorResponse(res, cfg, rows, { totalKnown: truncated ? null : rows.length, truncated, pagesFetched: 1 });
+  const page = async (offset, { count = false } = {}) => {
+    const r = await fetch(`${base}/rest/v1/rpc/us_claims_in_bbox?order=id&offset=${offset}&limit=${US_MIRROR_PAGE_ROWS}`, {
+      method: 'POST',
+      headers: {
+        apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', Accept: 'application/json',
+        ...(count ? { Prefer: 'count=exact' } : {}),
+      },
+      body,
+      signal: AbortSignal.timeout(20000),
+    });
+    if (!r.ok) throw new Error(`US claims mirror bbox ${r.status}: ${(await r.text().catch(() => '')).slice(0, 200)}`);
+    const rows = await r.json();
+    return { rows: Array.isArray(rows) ? rows : [], total: count ? contentRangeTotal(r) : null };
+  };
+
+  const first = await page(0, { count: true });   // throws: the caller asks live BLM
+  const step = first.rows.length;
+  const total = first.total;
+  const pages = [first.rows];
+  let failed = false;
+  if (step > 0 && total != null) {
+    const offsets = [];
+    for (let o = step; o < Math.min(total, MAX_TOTAL_FEATURES); o += step) offsets.push(o);
+    for (let i = 0; i < offsets.length && !failed; i += US_MIRROR_BBOX_CONCURRENCY) {
+      const settled = await Promise.allSettled(offsets.slice(i, i + US_MIRROR_BBOX_CONCURRENCY).map((o) => page(o)));
+      for (const s of settled) {
+        if (s.status === 'fulfilled') pages.push(s.value.rows);
+        else failed = true;
+      }
+    }
+  } else if (step > 0) {
+    // No total disclosed: walk until a page comes back short or empty.
+    for (let o = step; o < MAX_TOTAL_FEATURES; o += step) {
+      let next;
+      try {
+        next = await page(o);
+      } catch {
+        failed = true;
+        break;
+      }
+      pages.push(next.rows);
+      if (next.rows.length < step) break;
+    }
+  }
+
+  const seen = new Set();
+  const rows = [];
+  for (const row of pages.flat()) {
+    if (seen.has(row.id) || rows.length >= MAX_TOTAL_FEATURES) continue;
+    seen.add(row.id);
+    rows.push(row);
+  }
+  // The function stops at MAX_TOTAL_FEATURES, so a total that reaches it
+  // means "at least this many": the box holds more than one response carries.
+  const capped = (total ?? rows.length) >= MAX_TOTAL_FEATURES;
+  const truncated = failed || capped || (total != null && rows.length < total);
+  return {
+    rows,
+    meta: {
+      totalKnown: !truncated ? rows.length : (total != null && !capped ? total : null),
+      truncated,
+      pagesFetched: pages.length,
+    },
+  };
+}
+
+async function searchUsMirrorBbox(cfg, minLng, minLat, maxLng, maxLat, res) {
+  const { rows, meta } = await usMirrorBboxRows(cfg, minLng, minLat, maxLng, maxLat);
+  return usMirrorResponse(res, cfg, rows, meta);
 }
 
 async function searchArcgis(cfg, term, type, res, { numberList = null } = {}) {
@@ -2803,36 +2911,116 @@ async function searchQc(term, type, res, { numberList = null } = {}) {
 // Quebec nearby-radius (bbox) query. The store has no live ArcGIS service, so
 // the spatial lookup runs in Postgres via the qc_claims_in_bbox PostGIS RPC
 // (see supabase-qc-claims-setup.sql) and returns the same row shape as search.
+//
+// PostgREST caps every response at max-rows (1000 on this project), RPC
+// results included, and says so only in Content-Range (0-999/*): a box of
+// 1,240 claims came back as exactly 1,000 with no meta at all. So the read
+// pages, as the US mirror's does. The first page asks for the exact total,
+// which is counted over the function's own result and so stops at its
+// `limit 2000`. Later offsets step by the rows the first page actually held,
+// so a lower cap still reads every row. If a later page fails, the rows that
+// arrived are kept and the response says truncated.
+//
+// The function returns no id and tag_number is not unique (co-owners get a
+// row each), so the page order is every column it returns. Rows tied on all
+// of them are identical, so which page they land on changes nothing.
+const QC_BBOX_MAX = 2000;          // the function's own `limit`
+const QC_BBOX_PAGE_ROWS = 1000;    // never above max-rows
+const QC_BBOX_CONCURRENCY = 4;
+const QC_BBOX_ORDER = 'tag_number,owner_name,status,good_to_date,area_hectares,title_type,geometry';
+
+function postgrestTotal(r) {
+  const m = /\/(\d+)\s*$/.exec(String(r.headers?.get?.('content-range') || ''));
+  return m ? Number(m[1]) : null;
+}
+
 async function searchQcBbox(minLng, minLat, maxLng, maxLat, res) {
   const creds = qcSupabaseCreds();
   if (!creds) {
     return res.status(503).json({ error: 'Quebec claims data is not available right now.' });
   }
   const { base, key } = creds;
-  const r = await fetch(`${base}/rest/v1/rpc/qc_claims_in_bbox`, {
-    method: 'POST',
-    headers: {
-      apikey: key,
-      Authorization: `Bearer ${key}`,
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    },
-    body: JSON.stringify({ min_lng: minLng, min_lat: minLat, max_lng: maxLng, max_lat: maxLat }),
-    signal: AbortSignal.timeout(20000),
-  });
-  if (!r.ok) {
-    const body = await r.text().catch(() => '');
-    // PGRST202 = the RPC hasn't been created yet (setup SQL not run)
-    if (r.status === 404 || /PGRST202/.test(body)) {
+  const body = JSON.stringify({ min_lng: minLng, min_lat: minLat, max_lng: maxLng, max_lat: maxLat });
+  const page = async (offset, { count = false } = {}) => {
+    const r = await fetch(`${base}/rest/v1/rpc/qc_claims_in_bbox?order=${QC_BBOX_ORDER}&offset=${offset}&limit=${QC_BBOX_PAGE_ROWS}`, {
+      method: 'POST',
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...(count ? { Prefer: 'count=exact' } : {}),
+      },
+      body,
+      signal: AbortSignal.timeout(20000),
+    });
+    if (!r.ok) {
+      const text = await r.text().catch(() => '');
+      const err = new Error(`Quebec claims store ${r.status}: ${text.slice(0, 300)}`);
+      // PGRST202 = the RPC hasn't been created yet (setup SQL not run)
+      err.notSetUp = r.status === 404 || /PGRST202/.test(text);
+      throw err;
+    }
+    const rows = await r.json();
+    return { rows: Array.isArray(rows) ? rows : [], total: count ? postgrestTotal(r) : null };
+  };
+
+  let first;
+  try {
+    first = await page(0, { count: true });
+  } catch (e) {
+    if (e.notSetUp) {
       return res.status(503).json({
         error: 'Quebec nearby-claims search is not set up yet. Run the qc_claims spatial setup SQL.',
       });
     }
-    throw new Error(`Quebec claims store ${r.status}: ${body.slice(0, 300)}`);
+    throw e;
   }
-  const rows = await r.json();
-  const features = rows.map(qcRowToFeature);
-  return res.status(200).json({ type: 'FeatureCollection', features });
+  const step = first.rows.length;
+  const total = first.total;
+  const pages = [first.rows];
+  let failed = false;
+  if (step > 0 && total != null) {
+    const offsets = [];
+    for (let o = step; o < Math.min(total, QC_BBOX_MAX); o += step) offsets.push(o);
+    for (let i = 0; i < offsets.length && !failed; i += QC_BBOX_CONCURRENCY) {
+      const settled = await Promise.allSettled(offsets.slice(i, i + QC_BBOX_CONCURRENCY).map((o) => page(o)));
+      for (const s of settled) {
+        if (s.status === 'fulfilled') pages.push(s.value.rows);
+        else failed = true;
+      }
+    }
+  } else if (step > 0) {
+    // No total disclosed: walk until a page comes back short or empty.
+    for (let o = step; o < QC_BBOX_MAX; o += step) {
+      let next;
+      try {
+        next = await page(o);
+      } catch {
+        failed = true;
+        break;
+      }
+      pages.push(next.rows);
+      if (next.rows.length < step) break;
+    }
+  }
+
+  const rows = pages.flat().slice(0, QC_BBOX_MAX);
+  // The function stops at QC_BBOX_MAX, so a total that reaches it means "at
+  // least this many": the box holds more than one response carries.
+  const capped = (total ?? rows.length) >= QC_BBOX_MAX;
+  const truncated = failed || capped || (total != null && rows.length < total);
+  return res.status(200).json({
+    type: 'FeatureCollection',
+    features: rows.map(qcRowToFeature),
+    meta: {
+      totalKnown: !truncated ? rows.length : (total != null && !capped ? total : null),
+      returned: rows.length,
+      truncated,
+      pagesFetched: pages.length,
+      provider: 'qc-store',
+    },
+  });
 }
 
 /**
