@@ -1,12 +1,14 @@
-import React, { Suspense, lazy, useEffect, useRef, useState } from 'react';
+import React, { Suspense, useEffect, useRef, useState } from 'react';
 import { trackLandingClick } from '../utils/track';
 import { US_CLAIMS_ENABLED } from '../utils/jurisdictions';
 import { PRICING, FREE_FEATURES, PRO_FEATURES } from '../utils/pricing';
 import { useAuth } from '../hooks/useAuth.jsx';
 import AuthModal from './AuthModal';
 import BrandMark from './BrandMark';
+import { lazyGuarded } from '../utils/preloadGuard';
 
-const LandingNew = lazy(() => import('./LandingNew'));
+// Guarded like the app's other lazy parts: a chunk gone after a deploy is retried, then recovered, never thrown.
+const LandingNew = lazyGuarded(() => import('./LandingNew'));
 
 const SHOWCASE = [
   {

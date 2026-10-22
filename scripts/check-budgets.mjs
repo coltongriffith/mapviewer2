@@ -150,10 +150,10 @@ const BUDGETS = {
   // 943.8 → 945.0 (Oct 2026, production errors merged over admin 3D usage, measured 944.7, 943.5 on main): the stale-chunk
   // recovery (shared/chunkErrors.js, the retry, the update page and the unhandled-rejection path in the entry, +0.9 kB on
   // the homepage), the Leaflet renderer fixes (in vendor-leaflet) and /3d's error reporting (threeDJsGzipKb).
-  // 945.0 → 946.4 (Oct 2026, marketing refresh merged over the production-error fixes, measured 946.1, +1.4 kB over main's
+  // 945.0 → 946.4 (Oct 2026, marketing refresh merged over the production-error fixes, measured 946.0, +1.3 kB over main's
   // 944.7): the homepage's "New in Exploration Maps" section (3D figures, Studio, sharing, workspace) in its own lazy
   // LandingNew chunk (~1.2 kB with its alt texts and copy), so the homepage's initial JS and its budget are unchanged
-  // (+0.2 kB measured for the section heading and the lazy hand-off); the editor route is unchanged.
+  // (+0.1 kB measured for the section heading and the guarded lazy hand-off); the editor route is unchanged.
   totalAuthJsGzipKb: 946.4,
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
