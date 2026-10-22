@@ -2,8 +2,9 @@
 // outcomes that must never share a message.
 //
 // api/claims.js declares how it scoped every US claim set (meta.scopingMethod:
-// geo_state | admin_state | serial_prefix). Only geo_state is geographically
-// precise. The other two are administrative — a BLM state office can administer
+// geo_state | legal_description | admin_state | serial_prefix). geo_state and
+// legal_description (the PLSS state on each claim's own legal description) are
+// geographically precise. The other two are administrative — a BLM state office can administer
 // cases in another state — so a claim set produced under them may omit claims
 // inside the state and include claims outside it.
 //
@@ -13,6 +14,12 @@
 // results AND on the map itself, carried through the layer's provenance.
 
 export const SCOPING_WARNINGS = {
+  // Only degraded when Oregon/Washington claims with no location on record had
+  // to be left out; the server's note gives the count.
+  legal_description: {
+    short: 'Some claims could not be placed',
+    detail: 'A few claims administered by the Oregon/Washington BLM office have no location on record, so they could not be placed in either state and were left out. Verify against BLM records before using this in a filing.',
+  },
   admin_state: {
     short: 'Approximate state scoping',
     detail: 'These claims were selected by administering BLM office, not by claim location — the geographic state field is unavailable right now. Claims near the state line may be missing, and a few may sit outside the state. Verify against BLM records before using this in a filing.',

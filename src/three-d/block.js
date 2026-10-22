@@ -27,9 +27,17 @@
 //                   and shells under it showing through; "mix" (blocks made before) the plain transparent top,
 //     fadeBottom: 0 (off) to 1: the share of the block's height fading out toward its base }.
 // Settings missing from a block saved before them keep the earlier look (units "fixed", surface "mix", no fade).
+// Round 5H, each off unless set: colors { holeId: "#hex" } (the hole's trace, collar ID, callout chip and legend dot),
+// hist.style "thick" (one wide bar per run of assays in one colour, centred on the trace, hist.width × about 1.6% of the
+// figure's width) and hist.palette "release" (yellow, orange, red and magenta from
+// the four colour limits; nothing under the first), ticks "elevation" (on the block's left vertical edge) or "none"
+// (unset: depths on the side face), ends (A and A′ boxed where the section line crosses the block's top), pad (one
+// pill, "077 & 078", over holes sharing a pad; a string is its text), legend { assay, geology, holes, bracket } (one
+// card: assay classes in two columns, the geology, the holes' colour and the bracket; each its heading or row text),
+// inclFrom: false (no "from N m" on the incl. lines), scale "flat" (a flat bar under the figure) and scaleNote.
 import * as THREE from 'three';
 import { fitLine } from './section-geometry.js';
-import { ORANGE } from './tags.js';
+import { ORANGE, RELEASE, clusters } from './tags.js';
 
 let H, S;
 export function init(host) { H = host; S = host.S; }
@@ -73,14 +81,35 @@ function patch(b, o) {
   if (o.fadeBottom !== undefined) { const v = +o.fadeBottom; if (!Number.isFinite(v)) throw new Error('fadeBottom must be 0 (off) to 1 (the share of the block\'s height fading toward its base).'); b.fadeBottom = Math.max(0, Math.min(1, v)); }
   if (o.page !== undefined) { if (!['bare', 'clean', 'full', 'side'].includes(o.page)) throw new Error('page must be "bare" (the block alone, credits only), "clean" (no title block while the block has a heading), "full" or "side" (a large title block at the left, the logo and legend at the right).'); b.page = o.page; }
   if (o.info !== undefined) { if (o.info === null) delete b.info; else b.info = String(o.info).slice(0, 160); }
+  // Round 5H: kept only while on, so a block with them off is the same object as before.
+  const opt = (k, v, on) => { if (on) b[k] = v; else delete b[k]; };
+  if (o.colors !== undefined) {
+    if (o.colors !== null && (typeof o.colors !== 'object' || Array.isArray(o.colors))) throw new Error('colors must be { holeId: "#rrggbb" }, or null for none.');
+    // Colours set for holes no longer in the data (another dataset loaded) are dropped, not checked.
+    const known = new Set(H.project.holes.map((h) => h.id)), c = { ...Object.fromEntries(Object.entries((o.colors && b.colors) || {}).filter(([id]) => known.has(id))), ...o.colors };
+    Object.entries(c).forEach(([id, v]) => { if (v === null) delete c[id]; else if (!/^#[0-9a-f]{6}$/i.test(v)) throw new Error(`colors["${id}"] must be a colour like "#3f9a3c", or null.`); });
+    if (o.colors) holeIds(Object.keys(c).length ? Object.keys(c) : null);
+    opt('colors', c, o.colors && Object.keys(c).length);
+  }
+  if (o.ticks !== undefined) { if (!['depth', 'elevation', 'none'].includes(o.ticks)) throw new Error('ticks must be "depth" (depths down the side face), "elevation" (elevations up the block\'s left edge) or "none".'); opt('ticks', o.ticks, o.ticks !== 'depth'); }
+  if (o.ends !== undefined) opt('ends', true, !!o.ends);
+  if (o.pad !== undefined) opt('pad', typeof o.pad === 'string' && o.pad.trim() ? o.pad.trim().slice(0, 60) : true, !!o.pad);
+  if (o.legend !== undefined) {
+    if (o.legend && typeof o.legend === 'object') { const x = { ...b.legend }; ['assay', 'geology', 'holes', 'bracket'].forEach((k) => { if (o.legend[k] === null) delete x[k]; else if (o.legend[k] !== undefined) x[k] = String(o.legend[k]).slice(0, 80); }); b.legend = x; }
+    else opt('legend', { ...b.legend }, !!o.legend);
+  }
+  if (o.inclFrom !== undefined) opt('inclFrom', false, !o.inclFrom);
+  if (o.scale !== undefined) { if (!['face', 'flat'].includes(o.scale)) throw new Error('scale must be "face" (in perspective on the side face) or "flat" (a flat bar under the figure, true at the block\'s centre).'); opt('scale', 'flat', o.scale === 'flat'); }
+  if (o.scaleNote !== undefined) opt('scaleNote', String(o.scaleNote ?? '').slice(0, 160), o.scaleNote !== null);
   if (o.hist !== undefined) {
     const h = o.hist || {}, x = { ...(b.hist || BLOCK.hist) };
     if (h.side !== undefined) { if (!['face', 'screen'].includes(h.side)) throw new Error('hist.side must be "face" (in the face\'s plane) or "screen".'); x.side = h.side; }
     if (h.scale !== undefined) { if (!['linear', 'log'].includes(h.scale)) throw new Error('hist.scale must be "linear" or "log".'); x.scale = h.scale; }
     if (h.halo !== undefined) x.halo = !!h.halo;
-    if (h.style !== undefined) { if (!['spikes', 'bars'].includes(h.style)) throw new Error('hist.style must be "spikes" (one thin spike per assay) or "bars" (merged bars).'); x.style = h.style; }
-    if (h.palette !== undefined) { if (!['orange', 'bins'].includes(h.palette)) throw new Error('hist.palette must be "orange" (pale yellow to deep orange) or "bins" (the figure\'s grade colours).'); x.palette = h.palette; }
+    if (h.style !== undefined) { if (!['spikes', 'bars', 'thick'].includes(h.style)) throw new Error('hist.style must be "spikes" (one thin spike per assay), "bars" (merged bars) or "thick" (wide bars along the hole).'); x.style = h.style; }
+    if (h.palette !== undefined) { if (!['orange', 'bins', 'release'].includes(h.palette)) throw new Error('hist.palette must be "orange" (pale yellow to deep orange), "bins" (the figure\'s grade colours) or "release" (yellow, orange, red, magenta; none under the first colour limit).'); x.palette = h.palette; }
     if (h.length !== undefined) { const v = +h.length; if (!Number.isFinite(v)) throw new Error('hist.length must be a number, 0.3-3 (1: the usual length).'); x.length = Math.max(0.3, Math.min(3, v)); }
+    if (h.width !== undefined) { const v = +h.width; if (!Number.isFinite(v)) throw new Error('hist.width must be a number, 0.3-3 (thick bars; 1: about 1.6% of the figure\'s width).'); x.width = Math.max(0.3, Math.min(3, v)); }
     b.hist = x;
   }
 }
@@ -88,7 +117,7 @@ export function setBlock(o) {
   if (!H.G) throw new Error('Load data first.');
   if (o === null) S.block = null;
   else {
-    if (!o || typeof o !== 'object') throw new Error('setBlock takes { furniture, traces, brackets, page, info, hist, holes, units, surface, fadeBottom }, or null to turn the block look off.');
+    if (!o || typeof o !== 'object') throw new Error('setBlock takes { furniture, traces, brackets, page, info, hist, holes, units, surface, fadeBottom, colors, ticks, ends, pad, legend, inclFrom, scale, scaleNote }, or null to turn the block look off.');
     const b = structuredClone(S.block || BLOCK), was = S.block?.page; patch(b, o);
     if (o.holes !== undefined) S.holesShown = holeIds(o.holes);
     S.block = b;
@@ -360,7 +389,12 @@ export function begin(ctx, K) {
   if (B.traces === 'overlay') traces(ctx, K);
   const F = B.furniture !== false ? plan(ctx, K) : null;
   const bare = B.page === 'bare';
-  return { head: B.page !== 'full' && S.wallLabels.some((l) => l.size === 'heading' || l.size === 'title'), title: B.page === 'side' && (() => sideTitle(ctx, K)), bare, foot: bare && ((credits) => foot(ctx, K, credits)), logo: !!F?.logo, legend: !!F?.legend, ticks: !!F?.ticks, scale: !!F?.scale, draw: (lay) => F && furniture(ctx, K, lay, F) };
+  last = { ticks: [], ends: [], pads: [], scale: null };
+  // ticks: no elevation ticks from studio.js (the side face's depths, or round 5H's ticks set); secs: the release legend.
+  return { head: B.page !== 'full' && S.wallLabels.some((l) => l.size === 'heading' || l.size === 'title'), title: B.page === 'side' && (() => sideTitle(ctx, K)), bare, foot: bare && ((credits) => foot(ctx, K, credits)), logo: !!F?.logo, legend: !!F?.legend, ticks: !!F?.ticks || !!B.ticks, scale: !!F?.scale || B.scale === 'flat',
+    secs: B.legend && releaseSecs,
+    late: B.ticks === 'elevation' ? (lay) => elevTicks(ctx, K, lay) : null, // after the callouts, as studio.js's ticks
+    draw: (lay, footTop) => { if (F) furniture(ctx, K, lay, F); if (B.ends) ends(ctx, K, lay); if (B.scale === 'flat') flatScale(ctx, K, lay, footTop); } };
 }
 // The side title's last line: S.block.info, else the view ("3D cutaway · looking SW").
 export const compass8 = (az) => ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round((((az % 360) + 360) % 360) / 45) % 8];
@@ -388,8 +422,10 @@ function foot(ctx, K, credits) {
 }
 // The legend's assay rows in the bars' orange palette (studio.js legendSecs), highest first; null with the usual colours.
 export function assayRows() {
-  if (!S.histograms || S.block?.hist?.palette !== 'orange' || S.block.hist.side !== 'face') return null;
+  const p = S.block?.hist?.palette;
+  if (!S.histograms || (p !== 'orange' && p !== 'release') || S.block.hist.side !== 'face') return null;
   const b = S.bins;
+  if (p === 'release') return [[`≥ ${b[3]}`, RELEASE[3]], [`${b[2]} – ${b[3]}`, RELEASE[2]], [`${b[1]} – ${b[2]}`, RELEASE[1]], [`${b[0]} – ${b[1]}`, RELEASE[0]]];
   return [[`≥ ${b[3]}`, ORANGE[3]], [`${b[1]} – ${b[3]}`, ORANGE[2]], [`${b[0]} – ${b[1]}`, ORANGE[1]], [`< ${b[0]}`, ORANGE[0]]];
 }
 function traces(ctx, K) {
@@ -397,8 +433,101 @@ function traces(ctx, K) {
   H.project.holes.filter(H.holeOn).forEach((h) => {
     const pts = h.path.map((p) => H.proj(G.V(p.x, p.y, p.z))); if (pts.some((p) => p[2] > 1)) return;
     ctx.beginPath(); pts.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]))); ctx.lineJoin = 'round';
-    ctx.setLineDash(h.prov || h.planned ? [6 * u, 4 * u] : []); ctx.strokeStyle = h.planned ? H.pri() : H.INK; ctx.lineWidth = 0.85 * u; ctx.stroke(); ctx.setLineDash([]); // ~1.5 px at 2000 px wide
+    const hc = colorOf(h); if (hc) { ctx.strokeStyle = 'rgba(20,33,38,0.6)'; ctx.lineWidth = 3.8 * u; ctx.stroke(); } // a hole's own colour, wider, edged dark (over the bars)
+    ctx.setLineDash(h.prov || h.planned ? [6 * u, 4 * u] : []); ctx.strokeStyle = hc || (h.planned ? H.pri() : H.INK); ctx.lineWidth = (hc ? 2.4 : 0.85) * u; ctx.stroke(); ctx.setLineDash([]); // ~1.5 px at 2000 px wide
   });
+}
+
+// ---------- round 5H: hole colours, a common pad, the release legend, edge ticks, section ends, a flat scale ----------
+// What the last drawing placed (getState().layout.block): drawing results, neither saved nor undone.
+let last = { ticks: [], ends: [], pads: [], scale: null };
+export const layout = () => structuredClone(last);
+export const padDrawn = (p) => last.pads.push({ text: p.text, holes: p.holes.map((h) => h.id) });
+export const colorOf = (h) => S.block?.colors?.[h.id] || null;
+export const HOLE_COLORS = ['#3f9a3c', '#1fb0c6', '#e07a1f', '#7d4fc2', '#c23b5a', '#2f6fb3']; // 077 green, 078 cyan, then more
+// Hole IDs without the prefix they share up to a separator ("BS-077", "BS-078" → "077", "078"), and joined "a, b & c".
+export function shortIds(ids) {
+  if (ids.length < 2) return ids.slice();
+  let k = 0; while (k < ids[0].length && ids.every((s) => s[k] === ids[0][k])) k++;
+  const n = (/^.*[^A-Za-z0-9]/.exec(ids[0].slice(0, k)) || [''])[0].length;
+  return ids.map((s) => s.slice(n) || s);
+}
+export const joinAnd = (xs) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} & ${xs[xs.length - 1]}`);
+// Holes sharing a pad (S.block.pad): shown holes whose collars lie within 20 m in plan, two or more, as one pill
+// ("077 & 078", or the text set) in the first hole's colour; tags.js places it over their collars. [{ holes, text, color }]
+export function pads() {
+  if (!S.block?.pad || !H.G) return [];
+  const hs = H.project.holes.filter(H.holeOn);
+  return clusters(hs.map((h) => [h.c.x, h.c.y]), 20).filter((g) => g.length > 1).map((g) => {
+    const list = g.map((i) => hs[i]).sort((a, b) => a.id.localeCompare(b.id));
+    return { holes: list, text: typeof S.block.pad === 'string' ? S.block.pad : joinAnd(shortIds(list.map((h) => h.id))), color: colorOf(list[0]) || S.accent };
+  });
+}
+// The release legend (S.block.legend): one card, the assay classes two to a row under their heading, the geology under
+// its own, any other sections, then the holes in their colours and the bracket. main, ext: studio.js's sections.
+export function releaseSecs(main, ext) {
+  const L = S.block.legend, as = main.find((s) => s.key === 'assays'), ids = H.project.holes.filter((h) => H.holeOn(h) && colorOf(h)).map((h) => h.id);
+  const two = (a, b) => ({ h: 19, full: (ctx, K, x, y, w) => [a, b].forEach((r, i) => { if (!r) return; const cx = x + i * w / 2; r.draw(ctx, cx, y + 9.5 * K.u, K.u); K.font(400, 12, r.mono); ctx.fillStyle = H.INK; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(H.fitText(ctx, r.label, w / 2 - 34 * K.u), cx + 30 * K.u, y + 9.5 * K.u); }) });
+  const rows = (as?.rows || []).filter((r) => r.draw && !r.sep), pairs = []; for (let i = 0; i < rows.length; i += 2) pairs.push(two(rows[i], rows[i + 1]));
+  const dots = (ctx, x, cy, u) => ids.slice(0, 3).forEach((id, i) => { ctx.beginPath(); ctx.arc(x + (6 + i * 6) * u, cy, 4.5 * u, 0, Math.PI * 2); ctx.fillStyle = S.block.colors[id]; ctx.fill(); ctx.lineWidth = u; ctx.strokeStyle = H.paper(); ctx.stroke(); });
+  const bracket = (ctx, x, cy, u) => { ctx.beginPath(); ctx.moveTo(x + 7 * u, cy - 7 * u); ctx.lineTo(x + 12 * u, cy - 7 * u); ctx.lineTo(x + 12 * u, cy + 7 * u); ctx.lineTo(x + 7 * u, cy + 7 * u); ctx.strokeStyle = H.INK; ctx.lineWidth = 1.8 * u; ctx.lineJoin = 'miter'; ctx.stroke(); };
+  const holes = [...(ids.length ? [{ label: L.holes ?? `Hole${ids.length > 1 ? 's' : ''} ${joinAnd(shortIds(ids))} (this release)`, draw: dots }] : main.find((s) => s.key === 'holes')?.rows || []),
+    ...(H.shownCallouts().length ? [{ label: L.bracket ?? `${S.calloutMode === 'published' ? 'Published' : 'Reported'} interval (down-hole)`, draw: bracket }] : [])];
+  return [...(pairs.length ? [{ key: 'assays', title: L.assay ?? `ASSAY · ${S.valueLabel}`, minW: 236, rows: pairs }] : []), ...ext.map((s) => (s.key === 'lithology' ? { ...s, title: L.geology ?? 'GEOLOGY' } : s)),
+    ...main.filter((s) => s.key !== 'assays' && s.key !== 'holes'), ...(holes.length ? [{ key: 'holes', rows: holes }] : [])];
+}
+// Elevations up the block's left vertical edge (S.block.ticks "elevation"), flat on the page: a tick and "1500 m" at
+// each round step between the base and the terrain there.
+function elevTicks(ctx, K, lay) {
+  const G = H.G, { u, font } = K, B = G.B, z0 = B.z0;
+  const c = [[B.x0, B.y0], [B.x1, B.y0], [B.x1, B.y1], [B.x0, B.y1]].map(([x, y]) => ({ x, y, zt: G.surf(x, y), b: H.proj(G.V(x, y, z0)) })).filter((p) => p.b[2] < 1).sort((p, q) => p.b[0] - q.b[0])[0];
+  const step = c && roundBelow((c.zt - z0) / 3.5, [10, 20, 25, 50, 100, 200, 250, 500, 1000]); if (!step) return;
+  for (let z = Math.ceil((z0 + 0.05 * (c.zt - z0)) / step) * step; z < c.zt - 0.06 * (c.zt - z0); z += step) {
+    const [x, y] = H.proj(G.V(c.x, c.y, z)), t = `${Math.round(z)} m`; font(500, 11.5); const box = [x - 12 * u - ctx.measureText(t).width, y - 8 * u, x + u, y + 8 * u];
+    if (!lay.clear(box)) continue;
+    lay.add(box); last.ticks.push(Math.round(z));
+    ctx.strokeStyle = H.INK; ctx.lineWidth = 1.1 * u; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - 6 * u, y); ctx.stroke();
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round'; ctx.lineWidth = 3 * u; ctx.strokeStyle = H.paper(0.85); ctx.strokeText(t, x - 9 * u, y); ctx.fillStyle = H.INK; ctx.fillText(t, x - 9 * u, y);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  }
+}
+// The section line A→B (plan points) clipped to the block's extent b: [A, B] where it crosses it, or null.
+export function clipToBox(A, B, b) {
+  const dx = B.x - A.x, dy = B.y - A.y; let t0 = 0, t1 = 1;
+  for (const [p, q] of [[-dx, A.x - b.x0], [dx, b.x1 - A.x], [-dy, A.y - b.y0], [dy, b.y1 - A.y]]) {
+    if (!p) { if (q < 0) return null; continue; }
+    const r = q / p; if (p < 0) t0 = Math.max(t0, r); else t1 = Math.min(t1, r);
+  }
+  return t1 - t0 > 1e-6 ? [t0, t1].map((t) => ({ x: A.x + dx * t, y: A.y + dy * t })) : null;
+}
+// The section's ends (S.block.ends): its letters boxed (A, A′) over the terrain where the section line crosses the
+// block's edges, nudged off what is placed.
+function ends(ctx, K, lay) {
+  const G = H.G, { u } = K, [A, Bp] = H.sectionEnds(), seg = clipToBox(A, Bp, G.B), tags = H.ext('sections')?.tags() || ['A', 'A′'];
+  (seg || []).forEach((p, i) => {
+    const s = H.proj(G.V(p.x, p.y, G.surf(p.x, p.y))); if (s[2] > 1) return;
+    const spots = [[0, -30], [0, -56], [-38, -22], [38, -22], [0, -82], [-64, -40], [64, -40], [-64, 0], [64, 0], [0, -110]].map(([dx, dy]) => [s[0] + dx * u, s[1] + dy * u]), box = ([x, y]) => [x - 15 * u, y - 13 * u, x + 15 * u, y + 13 * u];
+    const at2 = spots.find((q) => lay.clear(box(q))) || spots[0];
+    lay.add(box(at2)); H.tagLabel(ctx, K, tags[i], ...at2); last.ends.push({ tag: tags[i], x: Math.round(p.x), y: Math.round(p.y) });
+  });
+}
+// A flat scale bar under the figure, at the left (S.block.scale "flat"): true at the block's centre, level across the
+// screen, with a note (the view and the coordinate system, or S.block.scaleNote; "" for none).
+function flatScale(ctx, K, lay, footTop) {
+  const G = H.G, { u, m, font } = K, B = G.B, cam = H.getCam(), cx = (B.x0 + B.x1) / 2, cy = (B.y0 + B.y1) / 2, cz = (B.z0 + G.surf(cx, cy)) / 2;
+  H.camera.updateMatrixWorld();
+  const r = new THREE.Vector3().setFromMatrixColumn(H.camera.matrixWorld, 0), d = Math.hypot(r.x, r.z) || 1, e = r.x / d, n = -r.z / d; // the screen's right, level, in metres east and north
+  const p0 = H.proj(G.V(cx, cy, cz)), p1 = H.proj(G.V(cx + e * 100, cy + n * 100, cz)), ppm = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) / 100, D = ppm > 0 && roundBelow(0.2 * H.frame()[0] / ppm);
+  if (!D) return;
+  const bw = D * ppm, geo = H.geo(), note = S.block.scaleNote ?? `Scale at block centre · looking ${H.pad3(cam.azimuth)}°, plunge ${cam.plunge}°${geo?.label ? ` · ${geo.label}` : ''}`;
+  font(400, 10); const nw = note ? ctx.measureText(note).width : 0, x = m + (S.block.page === 'bare' ? 0 : 175 * u), y = footTop - (note ? 30 : 14) * u; // right of the view's compass, where drawn
+  lay.add([x - 4 * u, y - 18 * u, x + Math.max(bw, nw) + 6 * u, y + (note ? 22 : 8) * u]);
+  for (let i = 0; i < 4; i++) { ctx.fillStyle = i % 2 ? H.paper() : H.INK; ctx.fillRect(x + bw * i / 4, y, bw / 4, 4.5 * u); }
+  ctx.strokeStyle = H.INK; ctx.lineWidth = 0.8 * u; ctx.strokeRect(x, y, bw, 4.5 * u);
+  font(600, 11); ctx.fillStyle = H.INK; ctx.textBaseline = 'alphabetic';
+  [[0, '0'], [0.5, String(D / 2)], [1, `${D} m`]].forEach(([f, t], i) => { ctx.textAlign = ['left', 'center', 'right'][i]; ctx.fillText(t, x + bw * f + (i === 2 ? ctx.measureText(' m').width / 2 : 0), y - 5 * u); });
+  if (note) { font(400, 10); ctx.textAlign = 'left'; ctx.fillStyle = H.MUTED; ctx.fillText(note, x, y + 18 * u); }
+  ctx.textAlign = 'left'; last.scale = { metres: D, px: +bw.toFixed(1), note };
 }
 // The screen frame at (uu, z) on face g: P, and the screen vectors per metre along the face (a, left to right as seen
 // from outside) and downward (b).
@@ -429,7 +558,7 @@ function plan(ctx, K) {
   const lowTop = (ua, ub) => Math.min(...[0, 0.25, 0.5, 0.75, 1].map((t) => top(ua + (ub - ua) * t)));
   // The legend: one card, the layers first (lithology), its right edge near the face's far edge, its foot near the
   // base; drawn smaller (to 58%) where it would not fit at full size. hf: the face's height under its lowest top.
-  const hf = lowTop(0.05, 0.98) - z0, ext = H.extSections(), secs = [...ext, ...H.legendSecs().filter((s) => s.key !== 'holes' || s.rows.length > 1)];
+  const hf = lowTop(0.05, 0.98) - z0, ext0 = H.extSections(), rel = S.block.legend && releaseSecs(H.legendSecs(), ext0), ext = rel ? [] : ext0, secs = rel || [...ext, ...H.legendSecs().filter((s) => s.key !== 'holes' || s.rows.length > 1)];
   // Two layouts: one card, or the layers' card (lithology) beside the rest, which is lower and wider.
   const rest = secs.filter((x) => !ext.includes(x)), gap = 10 * u;
   const layout = (groups) => { let x = 0; const cards = groups.filter((g) => g.length).map((g) => { const [w, h] = H.cardSize(ctx, K, g), c = { secs: g, x, w, h }; x += w + gap; return c; }); return { cards, w: x - gap, h: Math.max(...cards.map((c) => c.h)) }; };
@@ -456,10 +585,10 @@ function plan(ctx, K) {
   }
   // Depth ticks down the face's near corner (at u = 0), below the terrain there.
   const t0 = top(0.004), ticks = depthTicks(t0, z0, 0.1 * ht), kz = hyp(frameAt(F, 0.02, (t0 + z0) / 2).b);
-  if (ticks.length >= 2 && (ticks[1] - ticks[0]) * kz > 34 * u) F.ticks = { t0, ticks };
+  if (!S.block.ticks && ticks.length >= 2 && (ticks[1] - ticks[0]) * kz > 34 * u) F.ticks = { t0, ticks };
   // The scale bar along the base, left of the legend.
   const room = ((F.legend ? F.legend.uc - F.legend.span / 2 : 0.92) - 0.14) * F.len, D = roundBelow(Math.min(room, 0.45 * F.len));
-  if (D && D * hyp(frameAt(F, 0.3, z0).a) > 70 * u) F.scale = { D };
+  if (S.block.scale !== 'flat' && D && D * hyp(frameAt(F, 0.3, z0).a) > 70 * u) F.scale = { D };
   const R = (o, hg) => [o.uc - o.span / 2, o.uc + o.span / 2, o.zc - hg / o.k / 2, o.zc + hg / o.k / 2];
   side = { f: F.f, rects: [F.legend && R(F.legend, F.legend.h * F.legend.sc), F.logo && R(F.logo, F.logo.lh)].filter(Boolean) }; // for the wall labels by unit
   return F;
@@ -519,10 +648,20 @@ export function renderUI(el) {
       <label class="field"><span>Fade at the bottom <output class="mono">${Math.round((b.fadeBottom || 0) * 100)}%</output></span><input type="range" min="0" max="100" step="5" data-bf value="${Math.round((b.fadeBottom || 0) * 100)}" aria-label="Fade at the bottom of the block"></label></div>
     <div class="grid2" style="margin-top:6px"><label class="field"><span>Page</span><select data-bs="page">${[['bare', 'The block alone (credits only)'], ['clean', 'No title block'], ['full', 'Title block, compass and notes'], ['side', 'Side title: title left, logo and legend right']].map(([v, t]) => `<option value="${v}" ${b.page === v ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
       ${b.page === 'side' ? `<label class="field"><span>Info line under the title</span><input type="text" data-bi value="${esc(b.info ?? '')}" placeholder="3D cutaway · looking ${compass8(H.getCam().azimuth)}"></label>` : ''}
-      <label class="field"><span>Bar shape</span><select data-bh="style"><option value="spikes" ${hb.style === 'spikes' ? 'selected' : ''}>A spike per assay</option><option value="bars" ${hb.style !== 'spikes' ? 'selected' : ''}>Merged bars</option></select></label>
-      <label class="field"><span>Bar colours</span><select data-bh="palette"><option value="orange" ${hb.palette === 'orange' ? 'selected' : ''}>Orange ramp</option><option value="bins" ${hb.palette !== 'orange' ? 'selected' : ''}>The grade colours</option></select></label></div>
+      <label class="field"><span>Bar shape</span><select data-bh="style"><option value="spikes" ${hb.style === 'spikes' ? 'selected' : ''}>A spike per assay</option><option value="bars" ${hb.style !== 'spikes' && hb.style !== 'thick' ? 'selected' : ''}>Merged bars</option><option value="thick" ${hb.style === 'thick' ? 'selected' : ''}>Thick bars along the hole</option></select></label>
+      <label class="field"><span>Bar colours</span><select data-bh="palette"><option value="orange" ${hb.palette === 'orange' ? 'selected' : ''}>Orange ramp</option><option value="bins" ${hb.palette !== 'orange' && hb.palette !== 'release' ? 'selected' : ''}>The grade colours</option><option value="release" ${hb.palette === 'release' ? 'selected' : ''}>Yellow to magenta (none below the first)</option></select></label></div>
     <div class="grid2" style="margin-top:6px"><label class="field"><span>Grade bars</span><select data-bh="side"><option value="face" ${hb.side === 'face' ? 'selected' : ''}>On the front face</option><option value="screen" ${hb.side !== 'face' ? 'selected' : ''}>Facing the camera</option></select></label>
-      <label class="field"><span>Bar length</span><select data-bh="scale"><option value="linear" ${hb.scale !== 'log' ? 'selected' : ''}>By grade</option><option value="log" ${hb.scale === 'log' ? 'selected' : ''}>By grade, log scale</option></select></label></div>
+      <label class="field"><span>Bar length</span><select data-bh="scale"><option value="linear" ${hb.scale !== 'log' ? 'selected' : ''}>By grade</option><option value="log" ${hb.scale === 'log' ? 'selected' : ''}>By grade, log scale</option></select></label>
+      ${hb.style === 'thick' ? `<label class="field"><span>Bar width <output class="mono">${hb.width || 1}×</output></span><input type="range" min="0.5" max="3" step="0.25" data-bw value="${hb.width || 1}" aria-label="Width of the thick bars"></label>` : ''}</div>
+    <div class="grid2" style="margin-top:6px"><label class="field"><span>Ticks</span><select data-bs="ticks">${[['depth', 'Depths on the side face'], ['elevation', 'Elevations on the left edge'], ['none', 'None']].map(([v, t]) => `<option value="${v}" ${(b.ticks || 'depth') === v ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+      <label class="field"><span>Scale bar</span><select data-bs="scale"><option value="face" ${b.scale !== 'flat' ? 'selected' : ''}>In perspective on the face</option><option value="flat" ${b.scale === 'flat' ? 'selected' : ''}>Flat, under the figure</option></select></label>
+      ${b.scale === 'flat' ? `<label class="field"><span>Scale note</span><input type="text" data-bn value="${esc(b.scaleNote ?? '')}" placeholder="Scale at block centre · looking …"></label>` : ''}</div>
+    <div class="row" style="gap:14px;flex-wrap:wrap;margin-top:6px"><label class="check"><input type="checkbox" data-bc ${b.colors ? 'checked' : ''}>A colour per hole</label><label class="check"><input type="checkbox" data-bo="ends" ${b.ends ? 'checked' : ''}>A and A′ at the section's ends</label>
+      <label class="check"><input type="checkbox" data-bo="pad" ${b.pad ? 'checked' : ''}>One label per drill pad</label><label class="check"><input type="checkbox" data-bo="legend" ${b.legend ? 'checked' : ''}>Release legend</label>
+      <label class="check"><input type="checkbox" data-bo="inclFrom" ${b.inclFrom === false ? 'checked' : ''}>No "from" on incl. lines</label></div>
+    ${b.colors ? `<div class="row" style="gap:10px;flex-wrap:wrap;margin-top:6px">${Object.entries(b.colors).filter(([id]) => holes.some((h) => h.id === id)).map(([id, c]) => `<label class="check"><input type="color" data-hc="${esc(id)}" value="${c}" aria-label="Colour of ${esc(id)}">${esc(id)}</label>`).join('')}</div>` : ''}
+    ${b.pad ? `<label class="field" style="margin-top:6px"><span>Pad label</span><input type="text" data-bp value="${esc(typeof b.pad === 'string' ? b.pad : '')}" placeholder="${esc(pads()[0]?.text || '077 & 078')}"></label>` : ''}
+    ${b.legend ? `<div class="grid2" style="margin-top:6px">${[['assay', 'Assay heading', `ASSAY · ${S.valueLabel}`], ['geology', 'Geology heading', 'GEOLOGY'], ['holes', 'Holes row', 'Holes … (this release)'], ['bracket', 'Bracket row', 'Published interval (down-hole)']].map(([k, t, ph]) => `<label class="field"><span>${t}</span><input type="text" data-bl="${k}" value="${esc(b.legend[k] ?? '')}" placeholder="${esc(ph)}"></label>`).join('')}</div>` : ''}
     <button class="btn" type="button" data-bk-off style="margin-top:6px">Turn the block look off</button>` : ''}
     <div class="field" style="margin-top:8px"><span>Holes shown (${S.holesShown ? `${S.holesShown.length} of ${holes.length}` : 'all'})</span>
       ${holes.length > 12 ? '<input type="text" data-hq placeholder="Filter holes" aria-label="Filter holes shown" style="margin:4px 0">' : ''}
@@ -540,6 +679,14 @@ export function renderUI(el) {
   el.querySelector('[data-bf]')?.addEventListener('change', (e) => run(() => H.api.setBlock({ fadeBottom: +e.target.value / 100 })));
   el.querySelectorAll('[data-bk]').forEach((cb) => cb.addEventListener('change', () => run(() => H.api.setBlock({ [cb.dataset.bk]: V[cb.dataset.bk] ? V[cb.dataset.bk][cb.checked ? 0 : 1] : cb.checked }))));
   el.querySelectorAll('[data-bh]').forEach((s) => s.addEventListener('change', () => run(() => H.api.setBlock({ hist: { [s.dataset.bh]: s.value } }))));
+  el.querySelector('[data-bw]')?.addEventListener('change', (e) => run(() => H.api.setBlock({ hist: { width: +e.target.value } })));
+  // Round 5H: a colour per hole (the callout holes shown first, up to six), the switches and their texts.
+  el.querySelector('[data-bc]')?.addEventListener('change', (e) => run(() => H.api.setBlock({ colors: e.target.checked ? Object.fromEntries(holes.filter((h) => on.has(h.id)).sort((p, q) => co.has(q.id) - co.has(p.id)).slice(0, 6).map((h, i) => [h.id, HOLE_COLORS[i]])) : null })));
+  el.querySelectorAll('[data-bo]').forEach((cb) => cb.addEventListener('change', () => run(() => H.api.setBlock({ [cb.dataset.bo]: cb.dataset.bo === 'inclFrom' ? !cb.checked : cb.checked }))));
+  el.querySelectorAll('[data-hc]').forEach((x) => x.addEventListener('change', () => run(() => H.api.setBlock({ colors: { [x.dataset.hc]: x.value } }))));
+  el.querySelectorAll('[data-bl]').forEach((x) => x.addEventListener('change', () => run(() => H.api.setBlock({ legend: { [x.dataset.bl]: x.value.trim() || null } }))));
+  el.querySelector('[data-bp]')?.addEventListener('change', (e) => run(() => H.api.setBlock({ pad: e.target.value.trim() || true })));
+  el.querySelector('[data-bn]')?.addEventListener('change', (e) => run(() => H.api.setBlock({ scaleNote: e.target.value.trim() || null })));
   const q = el.querySelector('[data-hq]'), filter = () => el.querySelectorAll('.prov-list label').forEach((l) => { l.hidden = !!query && !l.textContent.toLowerCase().includes(query); });
   if (q) { q.value = query; q.addEventListener('input', () => { query = q.value.trim().toLowerCase(); filter(); }); filter(); }
 }

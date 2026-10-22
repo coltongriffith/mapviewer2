@@ -90,27 +90,40 @@ const ARCGIS_PROVINCES = {
 };
 
 // ── United States — federal mining claims (BLM MLRS) ────────────────────────
-// One national ArcGIS FeatureServer, scoped per state with a WHERE filter.
-// Source: BLM Mineral & Land Records System "Mining Claims Not Closed" HUB
-// service (pre-filtered upstream to not-closed cases, so closed claims can
-// never surface as active here). Endpoint overridable via env for schema
-// migrations on BLM's side.
+// One national ArcGIS map service, scoped per state (see resolveUsScoping).
+// Source: BLM National Lands Spatial Database public service
+// Mining_Claims/MiningClaims/MapServer, layer 1 "Active Mining Claims" — the
+// equivalent of the old "Mining Claims Not Closed" HUB layer, so closed claims
+// can never surface as active here (layer 2 is "Closed Mining Claims", layer 0
+// "Case"). Service and layer are both overridable via env, because BLM moves
+// this service without notice.
+//
+// MOVED 2026-10: the old HUB FeatureServer at
+//   gis.blm.gov/nlsdb/rest/services/HUB/BLM_Natl_MLRS_Mining_Claims_Not_Closed
+// started answering every request with a 301 to the bare REST root of
+// nlsdbpubgis.blm.gov (path dropped), and the HUB folder now says "Token
+// Required". fetch followed the redirect, got a catalogue page with no fields,
+// and every US search failed. The HTTP layer now refuses a redirect that
+// changes the path (see fetchJsonOnce), so the next move fails loudly.
 //
 // Field names are resolved at runtime against the live layer metadata from
 // the candidate lists below (the same self-configuring mechanism used for
 // ON/SK/MB/NL/YT — see resolveLayerAndFields). Verify post-deploy with the
-// gated diagnostics: /api/claims?schema=1&province=us-nv (x-admin-secret).
+// gated diagnostics: /api/claims?schema=1&province=us-nv (x-admin-secret),
+// which also reports the resolved service, layer and field fill rates.
 //
-// No claimant/owner search in v1: the BLM spatial service does not publish
-// claimant names (those live in separate MLRS reports keyed by serial
-// number — a future enrichment). ownerFields stays empty so a company
-// search degrades to the standard "not available here" message.
+// No claimant/owner field: the BLM spatial service does not publish claimant
+// names (those live in separate MLRS reports keyed by serial number — see the
+// us_claim_claimants store below).
 //
 // Alaska is deliberately not listed: Alaska has extensive STATE-managed
 // mining claims that this federal dataset does not cover, and listing it
 // would misrepresent coverage. Any other state is one line to add.
 const BLM_MLRS_SERVICE = process.env.BLM_MLRS_SERVICE_URL
-  || 'https://gis.blm.gov/nlsdb/rest/services/HUB/BLM_Natl_MLRS_Mining_Claims_Not_Closed/FeatureServer';
+  || 'https://nlsdbpubgis.blm.gov/arcgis/rest/services/Mining_Claims/MiningClaims/MapServer';
+const BLM_MLRS_LAYER_ID = /^\d+$/.test(String(process.env.BLM_MLRS_LAYER_ID ?? '').trim())
+  ? Number(process.env.BLM_MLRS_LAYER_ID)
+  : 1;
 
 const US_STATE_CODES = ['NV', 'AZ', 'UT', 'ID', 'MT', 'WY', 'CO', 'NM', 'CA', 'OR', 'WA'];
 
@@ -135,13 +148,16 @@ const US_STATE_CODES = ['NV', 'AZ', 'UT', 'ID', 'MT', 'WY', 'CO', 'NM', 'CA', 'O
 // carrying legacy values would also match Nevada's NMC…, so each prefix is
 // only ever applied to the field whose format it belongs to.
 //
-// OREGON AND WASHINGTON HAVE NO SERIAL FALLBACK, on purpose. A single BLM state
-// office (Oregon/Washington, in Portland — blm.gov/office/oregonwashington-state-office)
-// administers claims in both states, so an office-derived prefix cannot tell
-// Oregon ground from Washington ground: 'WA%' would return nothing and 'ORMC%'
-// would return Oregon claims labelled Washington. Those states get a hard error
-// instead. A wrong-but-plausible claim set is the worst outcome this product can
-// produce, so it is not on the menu.
+// OREGON AND WASHINGTON SHARE ONE PREFIX. A single BLM state office
+// (Oregon/Washington, in Portland) administers claims in both states, so every
+// Washington claim carries an Oregon serial: on the live layer (Oct 2026)
+// CSE_NR LIKE 'WA%' matches nothing, and all 2,636 claims whose legal
+// description is in Washington have OR… serials. The prefix therefore only
+// NARROWS the query to the shared office (sharedOffice: true); which of the two
+// states a claim is in is decided per row from its geographic state or its PLSS
+// legal description (see usRowState), and a claim with neither is left out
+// rather than guessed. A wrong-but-plausible claim set is the worst outcome
+// this product can produce, so it is not on the menu.
 const US_SERIAL_PREFIXES = {
   NV: { mlrs: 'NV', legacyOffice: 'NMC' },
   AZ: { mlrs: 'AZ', legacyOffice: 'AMC' },
@@ -152,21 +168,43 @@ const US_SERIAL_PREFIXES = {
   CO: { mlrs: 'CO', legacyOffice: 'CMC' },
   NM: { mlrs: 'NM', legacyOffice: 'NMMC' },
   CA: { mlrs: 'CA', legacyOffice: 'CAMC' },
-  OR: null,  // shared OR/WA state office — see comment above
-  WA: null,
+  OR: { mlrs: 'OR', legacyOffice: 'ORMC', sharedOffice: true },
+  WA: { mlrs: 'OR', legacyOffice: 'ORMC', sharedOffice: true },
 };
 
 const US_JURISDICTIONS = Object.fromEntries(US_STATE_CODES.map((code) => [
   `us-${code.toLowerCase()}`,
   {
     service: BLM_MLRS_SERVICE,
-    layerId: 0,
+    layerId: BLM_MLRS_LAYER_ID,
     provider: 'blm-mlrs',
     usState: code,
+    // BLM's database compares text case-insensitively (verified Oct 2026:
+    // CSE_NAME <> UPPER(CSE_NAME) matches no rows although names such as
+    // "Jericho" are stored mixed-case, and LIKE '%JERICHO%' finds them).
+    // Serials are stored in capitals. So the raw column is compared against an
+    // upper-cased term, which lets the server use its index: CSE_NR = 'X'
+    // answers in ~0.5 s where UPPER(CSE_NR) LIKE '%X%' took ~25 s.
+    valuesUpperCase: true,
+    // Offset paging (resultOffset + orderByFields) is pathologically slow on
+    // this layer: ~35 s for 500 rows of a small bbox, with or without geometry.
+    // returnIdsOnly answers the same bbox in ~3-5 s and objectIds batches of
+    // 250 in ~1 s each, so US queries always run ids-first, batches in parallel.
+    paging: { strategy: 'ids', chunk: 250, concurrency: 6, timeoutMs: 45000 },
+    // Only what the app renders or scopes on. CSE_META (the PLSS legal
+    // description) carries the geographic state; QLTY and the Salesforce id are
+    // large and unused, so '*' would only make every response slower.
+    outFields: ['OBJECTID', 'CSE_NR', 'LEG_CSE_NR', 'CSE_NAME', 'BLM_PROD', 'CSE_DISP',
+      'CSE_TYPE_NR', 'RCRD_ACRS', 'LOC_DT', 'GEO_STATE', 'ADMIN_STATE', 'CSE_META'],
+    // Legal land description, e.g. "NV 21 0330N 0510E 033 A SE|NV 21 …": one
+    // PLSS description per aliquot, each led by the state the land is in.
+    legalDescriptionFields: ['CSE_META'],
     // Candidate field names, resolved against live metadata at runtime.
-    // First names verified against the live layer's documented schema
-    // (July 2026): GEO_STATE / ADMIN_STATE / CSE_DISP / BLM_PROD / CSE_NR /
-    // CSE_NAME / RCRD_ACRS.
+    // First names verified against the live layer (Oct 2026, MapServer/1):
+    // GEO_STATE / ADMIN_STATE / CSE_DISP / BLM_PROD / CSE_NR / LEG_CSE_NR /
+    // CSE_NAME / RCRD_ACRS / LOC_DT / CSE_META. GEO_STATE and ADMIN_STATE exist
+    // but are mostly NULL (12% and 36% filled), so neither is trusted on its
+    // own — see resolveUsScoping.
     //
     // Geographic and administrative state candidates are kept in SEPARATE
     // lists because which one answered decides whether the result set is
@@ -221,6 +259,15 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // query itself is too broad — a narrower term usually succeeds) from an
 // unreachable one, instead of labeling both "failed to reach".
 function upstreamErrorResponse(res, e, fallback) {
+  if (e?.registryMoved) {
+    // Loud in the function logs (the full from → to is what an operator needs),
+    // short and honest for the user.
+    console.error('[claims] registry moved:', e.message);
+    return res.status(502).json({
+      error: 'The registry service has moved, so this search is temporarily unavailable. Try again later.',
+      code: 'registry_moved',
+    });
+  }
   if (e?.name === 'TimeoutError' || /timed?\s?out/i.test(String(e?.message || ''))) {
     return res.status(504).json({
       error: 'The registry is responding slowly right now — try a more specific search (full claim name or exact serial number), or try again shortly.',
@@ -264,7 +311,7 @@ function cacheSet(key, value, ttl = META_TTL_MS) {
   metaCache.set(key, { value, expires: Date.now() + ttl });
 }
 
-async function fetchJson(url) {
+async function fetchJson(url, opts = {}) {
   // Try the URL as given, then (only if it fails outright) upgraded to https.
   // Some provincial gov ArcGIS hosts answer on https even when http is the
   // documented endpoint — notably maps.gov.mb.ca. The reverse downgrade is
@@ -277,15 +324,72 @@ async function fetchJson(url) {
   let lastErr;
   for (const u of variants) {
     try {
-      return await fetchJsonOnce(u);
+      return await fetchJsonOnce(u, opts);
     } catch (e) {
       lastErr = e;
+      // A moved service is not fixed by trying the other scheme.
+      if (e?.registryMoved) break;
     }
   }
   throw lastErr;
 }
 
-async function fetchJsonOnce(url) {
+/**
+ * A redirect is only followed when it keeps the request's path.
+ *
+ * BLM moved its national claims service in October 2026 by answering every
+ * request with a 301 to the bare REST root of a new host — path and query
+ * dropped. fetch followed it, got a service catalogue instead of a layer, and
+ * the failure surfaced as "the schema changed", far from its cause. A redirect
+ * that keeps the path (http → https, a host rename) is harmless and followed;
+ * one that changes it means the thing we asked for is not there any more, and
+ * it is reported as exactly that.
+ */
+export class RegistryMovedError extends Error {
+  constructor(from, location, status) {
+    let to = location || '(no Location header)';
+    try { to = new URL(location, from).href; } catch { /* keep raw */ }
+    let fromShort = from;
+    try { const f = new URL(from); fromShort = `${f.origin}${f.pathname}`; } catch { /* keep raw */ }
+    super(`The registry service has moved (HTTP ${status} from ${fromShort} to ${to}). Try again later.`);
+    this.name = 'RegistryMovedError';
+    this.registryMoved = true;
+    this.from = from;
+    this.location = to;
+    this.status = status;
+  }
+}
+
+/** null = not a redirect; {follow} = same path elsewhere; {error} = moved. */
+export function redirectTarget(fromUrl, response) {
+  const status = Number(response?.status);
+  if (!(status >= 300 && status < 400)) return null;
+  const location = response.headers?.get?.('location') || null;
+  let target = null;
+  try { target = location ? new URL(location, fromUrl) : null; } catch { target = null; }
+  const from = new URL(fromUrl);
+  const trim = (p) => p.replace(/\/+$/, '');
+  if (target && trim(target.pathname) === trim(from.pathname)) {
+    // Same resource elsewhere: follow, keeping our query if the target dropped it.
+    if (!target.search) target.search = from.search;
+    return { follow: target.href };
+  }
+  return { error: new RegistryMovedError(fromUrl, location, status) };
+}
+
+async function fetchFollowingSafeRedirects(url, init) {
+  let current = url;
+  for (let hop = 0; hop < 3; hop++) {
+    const r = await fetch(current, { ...init, redirect: 'manual' });
+    const redirect = redirectTarget(current, r);
+    if (!redirect) return r;
+    if (redirect.error) throw redirect.error;
+    current = redirect.follow;
+  }
+  throw new RegistryMovedError(url, current, 310);
+}
+
+async function fetchJsonOnce(url, { timeoutMs = 20000 } = {}) {
   // Transient gateway errors (502/503/504) are common on older provincial
   // ArcGIS stacks — notably maps.gov.mb.ca, whose front-end reverse proxy
   // intermittently returns "502 invalid response while acting as a gateway"
@@ -294,7 +398,7 @@ async function fetchJsonOnce(url) {
   let r;
   for (let attempt = 0; attempt < 3; attempt++) {
     if (attempt > 0) await sleep(400 * attempt);
-    r = await fetch(url, { headers: FETCH_HEADERS, signal: AbortSignal.timeout(20000) });
+    r = await fetchFollowingSafeRedirects(url, { headers: FETCH_HEADERS, signal: AbortSignal.timeout(timeoutMs) });
     if (r.ok) return r.json();
 
     let body = await r.text().catch(() => '');
@@ -303,7 +407,8 @@ async function fetchJsonOnce(url) {
     // a generic browser identity before surfacing anything as unavailable.
     const looksBlocked = looksLikeHtml(body, r.headers.get('content-type')) || r.status === 403 || r.status === 406;
     if (looksBlocked) {
-      const retry = await fetch(url, { headers: FALLBACK_FETCH_HEADERS, signal: AbortSignal.timeout(20000) }).catch(() => null);
+      const retry = await fetchFollowingSafeRedirects(url, { headers: FALLBACK_FETCH_HEADERS, signal: AbortSignal.timeout(timeoutMs) })
+        .catch((e) => { if (e?.registryMoved) throw e; return null; });
       if (retry?.ok) return retry.json();
       if (retry) { r = retry; body = await retry.text().catch(() => ''); }
     }
@@ -352,7 +457,10 @@ async function resolveLayerMeta(layerUrl) {
 //  1. supportsPagination → resultOffset/resultRecordCount loop
 //  2. otherwise         → returnIdsOnly (authoritative total) + objectIds batches
 //  3. ids query failed  → single legacy capped query, marked truncated if full
-async function arcgisQueryAll(layerUrl, baseParams, maxTotal = undefined) {
+// A config may force strategy 2 (`paging: { strategy: 'ids' }`) where offset
+// paging is supported but unusably slow — see arcgisQueryByIds.
+async function arcgisQueryAll(layerUrl, baseParams, maxTotal = undefined, paging = null) {
+  if (paging?.strategy === 'ids') return arcgisQueryByIds(layerUrl, baseParams, maxTotal, paging);
   const layerMeta = await resolveLayerMeta(layerUrl);
   const pageSize = Math.min(Math.max(layerMeta.maxRecordCount, 1), 1000, maxTotal || Infinity);
   const idField = layerMeta.objectIdField;
@@ -435,6 +543,101 @@ async function arcgisQueryAll(layerUrl, baseParams, maxTotal = undefined) {
   }
 }
 
+// Short-lived, per-process cache of ids-first query results. A US search is
+// usually followed within a minute by the nearby-claims overlay or a re-run
+// with a filter, and every one of those costs BLM seconds. Five minutes keeps
+// the answer current enough for an active-claims layer that changes daily.
+const queryCache = new Map();
+const QUERY_TTL_MS = 5 * 60 * 1000;
+const QUERY_CACHE_MAX = 60;
+
+function queryCacheGet(key) {
+  const hit = queryCache.get(key);
+  if (!hit) return null;
+  if (Date.now() > hit.expires) { queryCache.delete(key); return null; }
+  return hit.value;
+}
+
+function queryCacheSet(key, value) {
+  if (queryCache.size >= QUERY_CACHE_MAX) queryCache.delete(queryCache.keys().next().value);
+  queryCache.set(key, { value, expires: Date.now() + QUERY_TTL_MS });
+}
+
+/**
+ * Ids first, then the rows in parallel objectIds batches.
+ *
+ * Measured against BLM's MapServer/1 (Oct 2026), for one 0.3° bbox of 3,013
+ * claims near Carlin NV:
+ *   resultOffset page of 500, with or without geometry   31-36 s
+ *   returnIdsOnly for the whole bbox                       3-5 s
+ *   2,000 rows as 8 objectIds batches of 250, in parallel  ~1.2 s
+ * so the same answer costs ~5 s instead of minutes. Batches are fetched
+ * `concurrency` at a time; a batch that fails after the first succeeded marks
+ * the result truncated rather than failing the search.
+ */
+async function arcgisQueryByIds(layerUrl, baseParams, maxTotal, paging) {
+  const cacheKey = `${layerUrl}|${JSON.stringify(baseParams)}|${maxTotal || ''}`;
+  const cached = queryCacheGet(cacheKey);
+  if (cached) return { features: cached.features, meta: { ...cached.meta, cached: true } };
+
+  const timeoutMs = paging.timeoutMs || 20000;
+  const { outFields = '*', returnGeometry = 'true', outSR = '4326', geometryPrecision, ...filter } = baseParams;
+  const idsUrl = `${layerUrl}/query?${new URLSearchParams({ ...filter, returnIdsOnly: 'true', f: 'json' })}`;
+  let idResp = await fetchJson(idsUrl, { timeoutMs });
+  if (idResp?.error) {
+    // Same intermittent in-body SDE error fetchQueryGeoJSON retries once.
+    await sleep(700);
+    idResp = await fetchJson(idsUrl, { timeoutMs });
+  }
+  if (idResp?.error) throw new Error(`ArcGIS error: ${JSON.stringify(idResp.error).slice(0, 480)}`);
+  // ArcGIS answers "no matches" with objectIds: null (not []), next to the
+  // objectIdFieldName that marks it as a real ids response.
+  const ids = Array.isArray(idResp?.objectIds) ? [...idResp.objectIds].sort((a, b) => a - b)
+    : (idResp && 'objectIdFieldName' in idResp && idResp.objectIds == null ? [] : null);
+  if (!ids) throw new Error('Unexpected response from the registry (no object ids).');
+  const ceiling = Math.min(MAX_TOTAL_FEATURES, maxTotal || MAX_TOTAL_FEATURES);
+  const capped = ids.slice(0, ceiling);
+
+  const chunkSize = paging.chunk || 250;
+  const chunks = [];
+  for (let i = 0; i < capped.length; i += chunkSize) chunks.push(capped.slice(i, i + chunkSize));
+  const results = new Array(chunks.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < chunks.length) {
+      const idx = next++;
+      const url = `${layerUrl}/query?${new URLSearchParams({
+        objectIds: chunks[idx].join(','),
+        outFields,
+        returnGeometry,
+        outSR,
+        ...(geometryPrecision ? { geometryPrecision } : {}),
+        f: 'geojson',
+      })}`;
+      try {
+        results[idx] = { features: (await fetchQueryGeoJSON(url, { timeoutMs })).features || [] };
+      } catch (error) {
+        results[idx] = { error };
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(paging.concurrency || 4, chunks.length) }, worker));
+
+  const ok = results.filter((r) => r && !r.error);
+  if (chunks.length && !ok.length) throw results.find((r) => r?.error)?.error || new Error('Registry query failed');
+  const features = ok.flatMap((r) => r.features);
+  const failed = results.length - ok.length;
+  const meta = {
+    totalKnown: ids.length,
+    returned: features.length,
+    truncated: failed > 0 || ids.length > capped.length || features.length < capped.length,
+    pagesFetched: ok.length + 1,
+    provider: 'arcgis',
+  };
+  if (!failed) queryCacheSet(cacheKey, { features, meta });
+  return { features, meta };
+}
+
 /**
  * The service's real layer catalogue, for diagnostics only.
  *
@@ -483,7 +686,11 @@ async function resolveLayerAndFields(cfg, type) {
     let fields;
     try {
       fields = await resolveFields(layerUrl);
-    } catch {
+    } catch (e) {
+      // A moved service is not a layer with unreadable metadata: carrying on
+      // with an empty field list is exactly how the October 2026 BLM move
+      // surfaced as "the schema changed" instead of "the service moved".
+      if (e?.registryMoved) throw e;
       // Keep the layer URL even if field metadata is unavailable — the bbox path
       // only needs a valid query endpoint, not field names.
       if (!urlOnlyFallback) urlOnlyFallback = { layerUrl, layerName: layer.name, fields: [] };
@@ -637,12 +844,25 @@ export function ownerSearchTokens(term) {
  * risk turning every working search into a 400 to fix a case that almost never
  * occurs. A term with no metacharacter produces byte-identical SQL to before.
  */
-function likeClause(fieldName, rawTerm, { prefix = false } = {}) {
+function likeClause(fieldName, rawTerm, { prefix = false, storedUpper = false } = {}) {
   const raw = String(rawTerm);
   const escaped = raw.replace(/[\\%_]/g, '\\$&');
   const body = escapeSql(escaped);
   const pattern = prefix ? `${body}%` : `%${body}%`;
-  return `UPPER(${fieldName}) LIKE UPPER('${pattern}')${escaped === raw ? '' : " ESCAPE '\\'"}`;
+  const esc = escaped === raw ? '' : " ESCAPE '\\'";
+  // A registry that stores identifiers in capitals and compares text
+  // case-insensitively (BLM — cfg.valuesUpperCase) gets the column compared
+  // raw against an upper-cased pattern: wrapping the column in UPPER()
+  // stops the server from using its index, which on BLM's national layer turns
+  // a one-second prefix lookup into a 25-second scan.
+  if (storedUpper) return `${fieldName} LIKE '${pattern.toUpperCase()}'${esc}`;
+  return `UPPER(${fieldName}) LIKE UPPER('${pattern}')${esc}`;
+}
+
+/** Exact match on an identifier, index-friendly where the column is stored upper-case. */
+function equalsClause(fieldName, rawTerm, { storedUpper = false } = {}) {
+  const v = escapeSql(String(rawTerm).toUpperCase());
+  return storedUpper ? `${fieldName} = '${v}'` : `UPPER(${fieldName}) = '${v}'`;
 }
 
 function isStringType(field) {
@@ -664,9 +884,9 @@ function esriToGeoJSON(esriResult) {
 
 // Fetch a query URL, trying f=geojson first and falling back to f=json + convert
 // if the server returns a non-2xx (older ArcGIS servers pre-10.3).
-async function fetchQueryGeoJSONOnce(queryUrl) {
+async function fetchQueryGeoJSONOnce(queryUrl, opts = {}) {
   try {
-    const data = await fetchJson(queryUrl);
+    const data = await fetchJson(queryUrl, opts);
     if (data.error) throw new Error(`ArcGIS error: ${JSON.stringify(data.error).slice(0, 480)}`);
     // Real GeoJSON has a `type` key; esri JSON has `objectIdFieldName` etc.
     if (data.type === 'FeatureCollection') return data;
@@ -678,7 +898,7 @@ async function fetchQueryGeoJSONOnce(queryUrl) {
     // Replace f=geojson with f=json in the URL and retry
     const fallbackUrl = queryUrl.replace(/([?&])f=geojson(&|$)/, '$1f=json$2');
     if (fallbackUrl === queryUrl) throw firstErr; // no replacement → rethrow
-    const data = await fetchJson(fallbackUrl);
+    const data = await fetchJson(fallbackUrl, opts);
     if (data.error) throw new Error(`ArcGIS error: ${JSON.stringify(data.error).slice(0, 480)}`);
     return esriToGeoJSON(data);
   }
@@ -688,13 +908,13 @@ async function fetchQueryGeoJSONOnce(queryUrl) {
 // return HTTP 200 with an in-body {error} on expensive scans; a single retry
 // after a short pause recovers most of them, so one flaky page doesn't fail
 // the whole search.
-async function fetchQueryGeoJSON(queryUrl) {
+async function fetchQueryGeoJSON(queryUrl, opts = {}) {
   try {
-    return await fetchQueryGeoJSONOnce(queryUrl);
+    return await fetchQueryGeoJSONOnce(queryUrl, opts);
   } catch (e) {
     if (!/^ArcGIS error/.test(e?.message || '')) throw e;
     await sleep(700);
-    return fetchQueryGeoJSONOnce(queryUrl);
+    return fetchQueryGeoJSONOnce(queryUrl, opts);
   }
 }
 
@@ -713,6 +933,12 @@ function normalizeUsClaimType(text) {
 }
 
 const ACRES_PER_HECTARE = 2.47105;
+
+// BLM render-field candidates (normalizeProps), also used to build the US
+// outFields projection so a renamed column is still fetched.
+const US_TYPE_FIELDS = ['BLM_PROD', 'CSE_TYPE_TXT', 'CASETYPE_TXT', 'CSE_TYPE', 'CASE_TYPE', 'CASE_TYPE_TXT'];
+const US_DISP_FIELDS = ['CSE_DISP', 'CSE_DISP_TXT', 'DISP_TXT', 'CASE_DISP', 'DISPOSITION'];
+const US_ACRES_FIELDS = ['RCRD_ACRS', 'ACRES', 'RECORD_ACRES', 'RCRD_ACRES'];
 
 function normalizeProps(props, cfg = null) {
   if (!props) return {};
@@ -739,9 +965,9 @@ function normalizeProps(props, cfg = null) {
     // BLM_PROD ("BLM Product", e.g. lode/placer claim wording) and CSE_DISP
     // ("Case Disposition") are the names on the live layer; the rest are
     // drift tolerance.
-    const typeText = pick(['BLM_PROD', 'CSE_TYPE_TXT', 'CASETYPE_TXT', 'CSE_TYPE', 'CASE_TYPE', 'CASE_TYPE_TXT']);
-    const disp = pick(['CSE_DISP', 'CSE_DISP_TXT', 'DISP_TXT', 'CASE_DISP', 'DISPOSITION']);
-    const acres = pick(['RCRD_ACRS', 'ACRES', 'RECORD_ACRES', 'RCRD_ACRES']);
+    const typeText = pick(US_TYPE_FIELDS);
+    const disp = pick(US_DISP_FIELDS);
+    const acres = pick(US_ACRES_FIELDS);
     const stateVal = pick([...(cfg.geoStateFields || []), ...(cfg.adminStateFields || [])]);
     const recordDate = pick(cfg.recordDateFields);
 
@@ -836,9 +1062,26 @@ function normalizeProps(props, cfg = null) {
 //   serial_prefix Prefix of the case serial. Same administrative caveat, plus
 //                 it depends on the serial format itself not having drifted.
 //
+//   legal_description  Per row, from the claim's own location: GEO_STATE where
+//                 BLM filled it in, otherwise the state that leads each PLSS
+//                 legal description in CSE_META ("NV 21 0330N 0510E 033 A SE").
+//                 Geographic, like geo_state. See usRowState.
+//
 // Both degraded modes are surfaced to the user rather than silently applied.
+//
+// A FIELD THAT EXISTS IS NOT A FIELD THAT IS FILLED. The October 2026 layer
+// publishes GEO_STATE and ADMIN_STATE, but GEO_STATE is NULL on 88% of rows and
+// ADMIN_STATE on 64% (GEO_STATE = 'NV' matched one claim out of ~280,000).
+// Filtering on either in SQL returned an almost empty, perfectly plausible
+// Nevada. So when the layer carries a geographic field or a legal description,
+// the state is decided per row instead (resolveUsRowScoping), where a NULL
+// simply falls through to the next source of truth, and SQL only narrows the
+// query by serial prefix. The whole-set SQL modes below remain for a layer
+// that carries neither.
 function resolveUsScoping(cfg, fields) {
   if (!cfg.usState) return null;
+  const perRow = resolveUsRowScoping(cfg, fields);
+  if (perRow) return perRow;
   const stateCode = escapeSql(cfg.usState).toUpperCase();
   const usable = (f) => f && /^[A-Za-z0-9_.]+$/.test(f.name);
 
@@ -862,7 +1105,8 @@ function resolveUsScoping(cfg, fields) {
   // state prefix on the case serial. Applied per field format — MLRS prefix on
   // the MLRS serial, office prefix on the legacy serial (see US_SERIAL_PREFIXES).
   const prefixes = US_SERIAL_PREFIXES[stateCode];
-  if (prefixes) {
+  // A shared-office prefix cannot tell Oregon from Washington on its own.
+  if (prefixes && !prefixes.sharedOffice) {
     const clauses = [];
     const serialField = pickField(cfg.numberFields, fields);
     if (usable(serialField) && isStringType(serialField) && prefixes.mlrs) {
@@ -882,15 +1126,250 @@ function resolveUsScoping(cfg, fields) {
       };
     }
   }
+  // No field list at all means the layer metadata could not be read — an
+  // outage, not a schema change, and the user should be told which.
+  if (!fields?.length) throw new Error('The BLM registry is temporarily unavailable. Try again shortly.');
   throw new Error('The BLM registry schema changed and state filtering is unavailable. Try again later.');
+}
+
+/**
+ * The states a PLSS legal description places a claim in.
+ * "NV 21 0330N 0510E 033 A SE|NV 21 0320N 0510E 004 A NE" → ['NV'].
+ * A claim straddling a state line lists both states and belongs to both.
+ */
+export function legalDescriptionStates(text) {
+  if (text == null) return [];
+  return [...new Set(String(text).split('|')
+    .map((part) => part.trim().slice(0, 3))
+    .filter((head) => /^[A-Za-z]{2}(\s|$)/.test(head))
+    .map((head) => head.slice(0, 2).toUpperCase()))];
+}
+
+/**
+ * Where one row is, as far as the layer can say, and how we know.
+ * Returns { in: boolean|null, via } — `in: null` means nothing on the row
+ * locates it (the caller then decides between a serial prefix and leaving it out).
+ */
+export function usRowState(props, scoping) {
+  const p = props || {};
+  if (scoping.geoField) {
+    const v = p[scoping.geoField];
+    if (v != null && String(v).trim()) {
+      return { in: String(v).trim().toUpperCase() === scoping.stateCode, via: 'geo_state' };
+    }
+  }
+  if (scoping.legalField) {
+    const states = legalDescriptionStates(p[scoping.legalField]);
+    if (states.length) return { in: states.includes(scoping.stateCode), via: 'legal_description' };
+  }
+  if (!scoping.prefixes || scoping.prefixes.sharedOffice) return { in: null, via: null };
+  const serial = scoping.serialField ? String(p[scoping.serialField] ?? '').toUpperCase() : '';
+  const legacy = scoping.legacyField ? String(p[scoping.legacyField] ?? '').toUpperCase() : '';
+  if (serial) return { in: serial.startsWith(scoping.prefixes.mlrs), via: 'serial_prefix' };
+  if (legacy) return { in: legacy.startsWith(scoping.prefixes.legacyOffice), via: 'serial_prefix' };
+  return { in: null, via: null };
+}
+
+function resolveUsRowScoping(cfg, fields) {
+  const ident = (f) => (f && /^[A-Za-z0-9_.]+$/.test(f.name) ? f : null);
+  const geo = ident(pickField(cfg.geoStateFields || [], fields));
+  const legal = ident(pickField(cfg.legalDescriptionFields || [], fields));
+  if (!geo && !legal) return null;
+  const stateCode = String(cfg.usState).toUpperCase();
+  const prefixes = US_SERIAL_PREFIXES[stateCode] || null;
+  const serial = ident(pickField(cfg.numberFields || [], fields));
+  const legacy = ident(pickField(cfg.legacyNumberFields || [], fields));
+  const storedUpper = Boolean(cfg.valuesUpperCase);
+
+  // SQL narrowing by administering office. Every MLRS case has an MLRS serial,
+  // so the serial column alone is enough; the legacy column is the fallback for
+  // a layer without one. Not a scope on its own — rows are still placed by
+  // usRowState — but it keeps a common claim name from paging back the nation.
+  let where = null;
+  if (prefixes && serial && isStringType(serial)) {
+    where = likeClause(serial.name, prefixes.mlrs, { prefix: true, storedUpper });
+  } else if (prefixes && legacy && isStringType(legacy)) {
+    where = likeClause(legacy.name, prefixes.legacyOffice, { prefix: true, storedUpper });
+  }
+
+  // The projection is the fixed allowlist PLUS whatever each candidate list
+  // actually resolved to, so a layer that publishes an alias (STATE_GEO,
+  // LGCY_CSE_NR, CLAIM_NAME …) still returns the column that scoping and
+  // normalizeProps read. Deduplicated, case-insensitively, against the layer.
+  const byUpper = new Map(fields.map((f) => [f.name.toUpperCase(), f.name]));
+  const resolvedNames = [
+    ...(cfg.outFields || []),
+    fields.find((f) => f.type === 'esriFieldTypeOID')?.name,
+    geo?.name, legal?.name, serial?.name, legacy?.name,
+    ...[cfg.nameFields, cfg.ownerFields, cfg.adminStateFields, cfg.recordDateFields,
+      US_TYPE_FIELDS, US_DISP_FIELDS, US_ACRES_FIELDS]
+      .map((list) => pickField(list || [], fields)?.name),
+  ];
+  const outFields = [...new Set(resolvedNames
+    .filter(Boolean)
+    .map((n) => byUpper.get(String(n).toUpperCase()))
+    .filter((n) => n && /^[A-Za-z0-9_.]+$/.test(n)))];
+
+  return {
+    perRow: true,
+    where,
+    stateCode,
+    prefixes,
+    geoField: geo?.name || null,
+    legalField: legal?.name || null,
+    serialField: serial?.name || null,
+    legacyField: legacy?.name || null,
+    outFields: outFields.length ? outFields.join(',') : '*',
+    // Declared before any row is seen; withScopingMeta refines it from the rows.
+    method: legal ? 'legal_description' : 'geo_state',
+    field: [geo?.name, legal?.name].filter(Boolean).join('+'),
+    degraded: false,
+  };
+}
+
+/**
+ * How full the US state fields actually are, for ?schema=1 and the canary.
+ *
+ * Count queries cost BLM 2-20 s each (a NULL test is a full scan), so this
+ * never runs on a search: it runs on the gated diagnostics only, in parallel,
+ * and is cached per process for six hours. Searches do not need it — they
+ * place each row individually (usRowState) and so cannot be fooled by a field
+ * that exists but is empty.
+ */
+async function usFieldFillRates(cfg, layerUrl, fields) {
+  const key = `fill:${layerUrl}:${cfg.usState}`;
+  const cached = cacheGet(key);
+  if (cached) return { ...cached, cached: true };
+  const scoping = resolveUsRowScoping(cfg, fields) || {};
+  const has = (n) => n && fields.some((f) => f.name.toUpperCase() === n.toUpperCase());
+  const geo = pickField(cfg.geoStateFields || [], fields)?.name;
+  const admin = pickField(cfg.adminStateFields || [], fields)?.name;
+  const legal = pickField(cfg.legalDescriptionFields || [], fields)?.name;
+  const st = String(cfg.usState).toUpperCase();
+  const queries = {
+    total: '1=1',
+    ...(has(geo) ? { geoStateFilled: `${geo} IS NOT NULL`, geoStateIsThisState: `${geo} = '${st}'` } : {}),
+    ...(has(admin) ? { adminStateFilled: `${admin} IS NOT NULL` } : {}),
+    ...(has(legal) ? { legalDescriptionFilled: `${legal} IS NOT NULL AND ${legal} <> ''`, legalDescriptionInThisState: `${legal} LIKE '${st} %'` } : {}),
+    ...(scoping.where ? { serialPrefixMatches: scoping.where } : {}),
+  };
+  const started = Date.now();
+  const entries = await Promise.all(Object.entries(queries).map(async ([name, where]) => {
+    try {
+      const r = await fetchJson(`${layerUrl}/query?${new URLSearchParams({ where, returnCountOnly: 'true', f: 'json' })}`, { timeoutMs: 40000 });
+      return [name, Number.isFinite(Number(r?.count)) ? Number(r.count) : { error: JSON.stringify(r?.error || r).slice(0, 200) }];
+    } catch (e) {
+      return [name, { error: String(e?.message || e).slice(0, 200) }];
+    }
+  }));
+  const counts = Object.fromEntries(entries);
+  const rate = (n) => (typeof counts[n] === 'number' && typeof counts.total === 'number' && counts.total > 0
+    ? Math.round((counts[n] / counts.total) * 1000) / 10 : null);
+  const out = {
+    counts,
+    percentOfLayer: {
+      geoStateFilled: rate('geoStateFilled'),
+      adminStateFilled: rate('adminStateFilled'),
+      legalDescriptionFilled: rate('legalDescriptionFilled'),
+    },
+    ms: Date.now() - started,
+  };
+  const complete = entries.every(([, v]) => typeof v === 'number');
+  cacheSet(key, out, complete ? 6 * 60 * 60 * 1000 : META_DEGRADED_TTL_MS);
+  return out;
+}
+
+function mergeUsScope(a, b) {
+  if (!a) return b;
+  if (!b) return a;
+  return Object.fromEntries(Object.keys({ ...a, ...b }).map((k) => [k, (a[k] || 0) + (b[k] || 0)]));
+}
+
+/** Keep the rows that are in the state; count how each was placed. */
+function applyUsRowScope(features, scoping) {
+  const counts = { geo_state: 0, legal_description: 0, serial_prefix: 0, unplaced: 0, otherState: 0 };
+  const kept = [];
+  for (const f of features) {
+    const r = usRowState(f.properties, scoping);
+    if (r.in === null) { counts.unplaced += 1; continue; }
+    if (!r.in) { counts.otherState += 1; continue; }
+    counts[r.via] += 1;
+    kept.push(f);
+  }
+  return { kept, counts };
+}
+
+/**
+ * One query against a claims layer, with the jurisdiction's scoping applied.
+ *
+ * Canadian layers: exactly arcgisQueryAll. US layers: the scoping's SQL
+ * narrowing is ANDed in (unless `narrow` is false — a bbox is already
+ * geographic), only the fields the app uses are requested, and rows are then
+ * placed in or out of the state one by one (applyUsRowScope). The per-row
+ * counts travel on meta.usScope for withScopingMeta to turn into a declaration.
+ */
+async function queryLayer(cfg, layerUrl, params, { maxTotal, scoping = null, narrow = true } = {}) {
+  let { where } = params;
+  if (scoping?.where && narrow) where = where ? `(${where}) AND ${scoping.where}` : scoping.where;
+  const p = { ...params, ...(where ? { where } : {}) };
+  if (scoping?.perRow) {
+    if (!p.outFields || p.outFields === '*') p.outFields = scoping.outFields;
+    p.geometryPrecision = p.geometryPrecision || '6';   // ~0.1 m; claims are 20-acre rectangles
+  }
+  const result = await arcgisQueryAll(layerUrl, p, maxTotal, cfg.paging || null);
+  if (!scoping?.perRow) return result;
+  const { kept, counts } = applyUsRowScope(result.features, scoping);
+  const dropped = result.features.length - kept.length;
+  return {
+    ...result,
+    features: kept,
+    meta: {
+      ...result.meta,
+      returned: kept.length,
+      // The upstream total counted rows we have now placed outside the state.
+      totalKnown: result.meta?.truncated ? result.meta.totalKnown : (result.meta?.totalKnown != null ? result.meta.totalKnown - dropped : kept.length),
+      usScope: counts,
+    },
+  };
 }
 
 // Attach the scoping declaration to a response's meta. Canadian provinces pass
 // scoping=null and their meta is left exactly as it was.
+//
+// Per-row scoping is declared from what the rows actually needed: geo_state
+// when every kept claim had GEO_STATE, legal_description when some needed the
+// PLSS description (both geographic), and serial_prefix — degraded, with the
+// count — when any claim could only be placed by its administering office. A
+// shared-office state (OR/WA) never falls back to a prefix; a claim there with
+// no location on record is left out and the set is declared degraded for it.
 function withScopingMeta(meta, scoping) {
   if (!scoping) return meta;
+  const { usScope, ...rest } = meta || {};
+  if (scoping.perRow && usScope) {
+    const kept = usScope.geo_state + usScope.legal_description + usScope.serial_prefix;
+    let method = scoping.method;
+    let degraded = false;
+    let note = null;
+    if (usScope.serial_prefix > 0) {
+      method = 'serial_prefix';
+      degraded = true;
+      note = `${usScope.serial_prefix} of ${kept} claims have no geographic state or legal description on record at BLM and were placed by case-serial prefix, which follows the administering BLM office rather than the claim location.`;
+    } else if (usScope.unplaced > 0 && scoping.prefixes?.sharedOffice) {
+      degraded = true;
+      note = `${usScope.unplaced} claims administered by the Oregon/Washington BLM office have no location on record and were left out, because the serial cannot tell Oregon ground from Washington ground.`;
+    } else if (kept > 0 && usScope.legal_description === 0 && scoping.geoField) {
+      method = 'geo_state';
+    }
+    return {
+      ...rest,
+      scopingMethod: method,
+      scopingField: scoping.field,
+      scopingDegraded: degraded,
+      ...(note ? { scopingNote: note } : {}),
+    };
+  }
   return {
-    ...meta,
+    ...rest,
     scopingMethod: scoping.method,
     scopingField: scoping.field,
     scopingDegraded: Boolean(scoping.degraded),
@@ -1000,14 +1479,25 @@ async function searchUsCompany(cfg, company, res, { layerUrl, fields, scoping })
       for (let i = 0; i < claimantHit.serials.length && i < 5000; i += CHUNK) {
         const chunk = claimantHit.serials.slice(i, i + CHUNK)
           .map((s) => `'${escapeSql(s)}'`).join(',');
-        let where = `UPPER(${serialField.name}) IN (${chunk})`;
-        if (scoping) where = `(${where}) AND ${scoping.where}`;
-        const { features, meta } = await arcgisQueryAll(layerUrl, {
+        // An extract may carry legacy LR2000 serials (NMC…) rather than MLRS
+        // ones; both columns are indexed, so match either.
+        const legacyField = pickField(cfg.legacyNumberFields || [], fields);
+        const cols = [serialField, legacyField && /^[A-Za-z0-9_.]+$/.test(legacyField.name) && isStringType(legacyField) ? legacyField : null]
+          .filter(Boolean)
+          .map((f) => (cfg.valuesUpperCase ? `${f.name} IN (${chunk})` : `UPPER(${f.name}) IN (${chunk})`));
+        const where = cols.length > 1 ? `(${cols.join(' OR ')})` : cols[0];
+        const { features, meta } = await queryLayer(cfg, layerUrl, {
           where, outFields: '*', returnGeometry: 'true', outSR: '4326',
-        });
+        }, { scoping });
         for (const f of features) all.push(f);
         metaAcc = metaAcc
-          ? { ...meta, returned: all.length, truncated: metaAcc.truncated || meta.truncated, pagesFetched: (metaAcc.pagesFetched || 0) + (meta.pagesFetched || 0) }
+          ? {
+            ...meta,
+            returned: all.length,
+            truncated: metaAcc.truncated || meta.truncated,
+            pagesFetched: (metaAcc.pagesFetched || 0) + (meta.pagesFetched || 0),
+            ...(meta.usScope ? { usScope: mergeUsScope(metaAcc.usScope, meta.usScope) } : {}),
+          }
           : { ...meta, returned: all.length };
       }
       return res.status(200).json({
@@ -1054,18 +1544,17 @@ async function searchUsCompany(cfg, company, res, { layerUrl, fields, scoping })
   const attempted = [];
 
   for (const tier of tiers) {
-    const clauses = tier.terms.map((t) => likeClause(field.name, t));
+    const clauses = tier.terms.map((t) => likeClause(field.name, t, { storedUpper: Boolean(cfg.valuesUpperCase) }));
     if (!clauses.length) continue;
-    let where = clauses.length > 1 ? `(${clauses.join(' OR ')})` : clauses[0];
-    if (scoping) where = `(${where}) AND ${scoping.where}`;
+    const where = clauses.length > 1 ? `(${clauses.join(' OR ')})` : clauses[0];
     attempted.push({ method: tier.method, terms: tier.terms.length });
 
-    const { features, meta } = await arcgisQueryAll(layerUrl, {
+    const { features, meta } = await queryLayer(cfg, layerUrl, {
       where,
       outFields: '*',
       returnGeometry: 'true',
       outSR: '4326',
-    });
+    }, { scoping });
 
     // The fuzzy tier queries broadly on a two-token stem, so its rows are
     // scored against the parent + every alias variant and anything below the
@@ -1170,6 +1659,7 @@ async function searchArcgis(cfg, term, type, res, { numberList = null } = {}) {
   const numberFields = type === 'number'
     ? pickFields(candidates, fields).filter((f) => /^[A-Za-z0-9_.]+$/.test(f.name))
     : [];
+  const storedUpper = Boolean(cfg.valuesUpperCase);
 
   function numberClauses(step) {
     // OR across every identifier column on the layer. A string column takes a
@@ -1182,7 +1672,14 @@ async function searchArcgis(cfg, term, type, res, { numberList = null } = {}) {
     // only", even when a perfectly good string column sat right beside it.
     const clauses = [];
     for (const f of numberFields) {
-      if (isStringType(f)) {
+      if (isStringType(f) && storedUpper) {
+        // BLM: an exact rung is a real equality and a prefix a bare LIKE, both
+        // answered from the serial index in about a second. (Elsewhere the first
+        // rung has always been a contains match, kept as it was.)
+        clauses.push(step.match === 'exact'
+          ? equalsClause(f.name, step.term, { storedUpper })
+          : likeClause(f.name, step.term, { prefix: step.match === 'prefix', storedUpper }));
+      } else if (isStringType(f)) {
         clauses.push(likeClause(f.name, step.term, { prefix: step.match === 'prefix' }));
       } else if (/^\d+$/.test(step.term) && !step.derived) {
         clauses.push(`${f.name} = ${step.term}`);
@@ -1213,7 +1710,8 @@ async function searchArcgis(cfg, term, type, res, { numberList = null } = {}) {
     const clauses = [];
     for (const f of numberFields) {
       if (isStringType(f)) {
-        clauses.push(`UPPER(${f.name}) IN (${tokens.map((t) => `'${escapeSql(t.toUpperCase())}'`).join(',')})`);
+        const list = tokens.map((t) => `'${escapeSql(t.toUpperCase())}'`).join(',');
+        clauses.push(storedUpper ? `${f.name} IN (${list})` : `UPPER(${f.name}) IN (${list})`);
       } else {
         const digits = tokens.filter((t) => /^\d+$/.test(t));
         if (digits.length) clauses.push(`${f.name} IN (${digits.join(',')})`);
@@ -1225,9 +1723,8 @@ async function searchArcgis(cfg, term, type, res, { numberList = null } = {}) {
           + `${numberFields.length > 1 ? 'are' : 'is'} numeric — enter digits only.`,
       });
     }
-    let where = orJoin(clauses);
-    if (scoping) where = `(${where}) AND ${scoping.where}`;
-    const { features, meta } = await arcgisQueryAll(layerUrl, { where, outFields: '*', returnGeometry: 'true', outSR: '4326' });
+    const where = orJoin(clauses);
+    const { features, meta } = await queryLayer(cfg, layerUrl, { where, outFields: '*', returnGeometry: 'true', outSR: '4326' }, { scoping });
     if (cfg.provider) meta.provider = cfg.provider;
     const shown = features.map((f) => ({ ...f, properties: normalizeProps(f.properties || {}, cfg) }));
     return res.status(200).json({
@@ -1255,7 +1752,17 @@ async function searchArcgis(cfg, term, type, res, { numberList = null } = {}) {
     // round trip on the exact searches that are already failing.
     const issued = new Set();
     steps = [];
-    for (const step of numberSearchLadder(effectiveTerm)) {
+    let ladder = numberSearchLadder(effectiveTerm);
+    // A bare BLM serial ("105222372") is the state's serial without its prefix.
+    // Try the state's own prefixed forms right after the term as typed — an
+    // indexed equality each — before any prefix/contains widening.
+    const pre = cfg.usState ? US_SERIAL_PREFIXES[String(cfg.usState).toUpperCase()] : null;
+    if (pre && /^\d{5,}$/.test(effectiveTerm)) {
+      const prefixed = [pre.mlrs, pre.legacyOffice].filter(Boolean)
+        .map((p) => ({ term: `${p}${effectiveTerm}`, derived: false, match: 'exact' }));
+      ladder = [ladder[0], ...prefixed, ...ladder.slice(1)];
+    }
+    for (const step of ladder) {
       const clauses = numberClauses(step);
       if (!clauses.length || clauses.every((c) => issued.has(c))) continue;
       clauses.forEach((c) => issued.add(c));
@@ -1300,8 +1807,8 @@ async function searchArcgis(cfg, term, type, res, { numberList = null } = {}) {
       : (type === 'name' ? claimNameFallbacks(effectiveTerm) : [tokens]);
     steps = sets.map((set) => ({ match: 'tokens', term: set.join(' ') || effectiveTerm, tokens: set }));
     whereFor = (step) => (step.tokens.length > 1
-      ? `(${step.tokens.map((t) => likeClause(field.name, t)).join(' AND ')})`
-      : likeClause(field.name, step.tokens[0] ?? effectiveTerm));
+      ? `(${step.tokens.map((t) => likeClause(field.name, t, { storedUpper })).join(' AND ')})`
+      : likeClause(field.name, step.tokens[0] ?? effectiveTerm, { storedUpper }));
   } else if (/^\d+$/.test(effectiveTerm)) {
     steps = [{ match: 'exact', term: effectiveTerm }];
     whereFor = () => `${field.name} = ${effectiveTerm}`;
@@ -1309,20 +1816,19 @@ async function searchArcgis(cfg, term, type, res, { numberList = null } = {}) {
     return res.status(400).json({ error: `${field.name} is numeric — enter digits only.` });
   }
 
-  const { features, meta, step } = await runLadder(steps, (attempt) => {
-    let where = whereFor(attempt);
-    if (scoping) where = `(${where}) AND ${scoping.where}`;
-    return arcgisQueryAll(layerUrl, {
-      where,
-      outFields: '*',
-      returnGeometry: 'true',
-      outSR: '4326',
-      // A widened NUMBER rung answers "the closest numbers we hold", and that
-      // answer is capped. Bounding it at FETCH time rather than slicing after
-      // means a three-digit prefix costs one page instead of paging a province
-      // back to throw most of it away.
-    }, attempt !== steps[0] && type === 'number' ? NEAR_MISS_LIMIT : undefined);
-  });
+  const { features, meta, step } = await runLadder(steps, (attempt) => queryLayer(cfg, layerUrl, {
+    where: whereFor(attempt),
+    outFields: '*',
+    returnGeometry: 'true',
+    outSR: '4326',
+  }, {
+    scoping,
+    // A widened NUMBER rung answers "the closest numbers we hold", and that
+    // answer is capped. Bounding it at FETCH time rather than slicing after
+    // means a three-digit prefix costs one page instead of paging a province
+    // back to throw most of it away.
+    maxTotal: attempt !== steps[0] && type === 'number' ? NEAR_MISS_LIMIT : undefined,
+  }));
   if (cfg.provider) meta.provider = cfg.provider;
 
   // The exact number is not a current claim: before offering near misses, see
@@ -2388,8 +2894,11 @@ export default async function handler(req, res) {
       } catch (e) {
         return res.status(502).json({ error: e.message });
       }
-      const { features, meta } = await arcgisQueryAll(layerUrl, {
-        ...(scoping ? { where: scoping.where } : {}),
+      // A bbox is already geographic, so a per-row US scope does not narrow it
+      // by serial prefix in SQL — rows are placed by their own location only.
+      const sqlScope = scoping && !scoping.perRow ? scoping.where : (scoping ? '1=1' : null);
+      const { features, meta } = await queryLayer(cfg, layerUrl, {
+        ...(sqlScope ? { where: sqlScope } : {}),
         geometry: JSON.stringify({ xmin: minLng, ymin: minLat, xmax: maxLng, ymax: maxLat, spatialReference: { wkid: 4326 } }),
         geometryType: 'esriGeometryEnvelope',
         spatialRel: 'esriSpatialRelIntersects',
@@ -2397,7 +2906,7 @@ export default async function handler(req, res) {
         outFields: '*',
         returnGeometry: 'true',
         outSR: '4326',
-      });
+      }, { scoping, narrow: false });
       return res.status(200).json({
         type: 'FeatureCollection',
         features: features.map((f) => ({ ...f, properties: normalizeProps(f.properties || {}, cfg) })),
@@ -2425,9 +2934,15 @@ export default async function handler(req, res) {
     for (const u of urls) {
       const started = Date.now();
       try {
-        const rr = await fetch(u, { headers: FALLBACK_FETCH_HEADERS, signal: AbortSignal.timeout(15000) });
+        // redirect: 'manual' so a moved service shows up as the 3xx it is.
+        const rr = await fetch(u, { headers: FALLBACK_FETCH_HEADERS, signal: AbortSignal.timeout(15000), redirect: 'manual' });
         const body = await rr.text().catch(() => '');
-        attempts.push({ url: u, ok: rr.ok, status: rr.status, ms: Date.now() - started, contentType: rr.headers.get('content-type'), bodySnippet: body.slice(0, 300) });
+        const moved = redirectTarget(u, rr);
+        attempts.push({
+          url: u, ok: rr.ok, status: rr.status, ms: Date.now() - started, contentType: rr.headers.get('content-type'),
+          ...(moved ? { location: rr.headers.get('location'), redirect: moved.error ? 'moved (path changed)' : 'same path' } : {}),
+          bodySnippet: body.slice(0, 300),
+        });
       } catch (e) {
         attempts.push({ url: u, error: String(e.name || e.message || e), ms: Date.now() - started });
       }
@@ -2482,17 +2997,33 @@ export default async function handler(req, res) {
         // merely administrative — report the resolved scoping verbatim so a
         // post-deploy check can see a degraded mode without guessing.
         ...(cfg.usState ? {
+          service: cfg.service,
+          layerId: cfg.layerId ?? null,
+          layerUrl: numberResolved.layerUrl,
+          layerName: numberResolved.layerName,
+          serviceFromEnv: Boolean(process.env.BLM_MLRS_SERVICE_URL),
+          layerFromEnv: Boolean(process.env.BLM_MLRS_LAYER_ID),
           scoping: (() => {
             try {
               const s = resolveUsScoping(cfg, numberResolved.fields);
-              return { method: s.method, field: s.field, degraded: s.degraded, where: s.where };
+              return {
+                method: s.method,
+                field: s.field,
+                degraded: s.degraded,
+                where: s.where,
+                perRow: Boolean(s.perRow),
+                ...(s.perRow ? { rowOrder: [s.geoField, s.legalField, s.prefixes?.sharedOffice ? null : 'serial prefix'].filter(Boolean) } : {}),
+              };
             } catch (e) {
               return { method: null, error: e.message };
             }
           })(),
           geoStateField: pickField(cfg.geoStateFields || [], numberResolved.fields)?.name || null,
           adminStateField: pickField(cfg.adminStateFields || [], numberResolved.fields)?.name || null,
+          legalDescriptionField: pickField(cfg.legalDescriptionFields || [], numberResolved.fields)?.name || null,
           recordDateField: pickField(cfg.recordDateFields || [], numberResolved.fields)?.name || null,
+          // A field that exists can still be empty — the October 2026 failure.
+          fillRates: req.query.fill === '0' ? 'skipped (fill=0)' : await usFieldFillRates(cfg, numberResolved.layerUrl, numberResolved.fields),
         } : {}),
       });
     } catch (e) {
