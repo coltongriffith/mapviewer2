@@ -82,7 +82,7 @@ export function setBlock(o) {
     if (o.holes !== undefined) S.holesShown = holeIds(o.holes);
     S.block = b;
     // To or from the side title, the block is framed again for the room the title takes.
-    if ((was === 'side') !== (b.page === 'side')) { redraw(); const c = H.getCam(); frame({ azimuth: c.azimuth, plunge: c.plunge, zoom: c.zoom }); }
+    if ((was === 'side') !== (b.page === 'side')) { const c = H.getCam(); frame({ azimuth: c.azimuth, plunge: c.plunge, zoom: c.zoom }); }
   }
   redraw();
 }

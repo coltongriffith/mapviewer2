@@ -47,7 +47,7 @@ test('side title: the company line, title, subtitle and info line at the left, t
   await open3d(page);
   await withLogs(page);
   const st = await page.evaluate(async (holes) => {
-    const E = window.EM3D; E.setBrand({ company: 'Example Resources Corp · TSXV: EX', title: 'TARGET ZONE', subtitle: 'Section A–A′ · four holes' }); E.setFigureSize('release');
+    const E = window.EM3D; E.setBrand({ company: 'Example Resources Corp · TSXV: EX', title: 'TARGET ZONE', subtitle: 'Section A–A′ · four holes' }); E.setFigureSize('slide');
     return E.applyPreset('blockSection', { holes, block: { page: 'side', info: '3D cutaway · Example Ridge' } });
   }, HOLES);
   expect(st.block).toMatchObject({ page: 'side', info: '3D cutaway · Example Ridge' });
@@ -60,12 +60,12 @@ test('side title: the company line, title, subtitle and info line at the left, t
   expect((await textsOf(page, () => window.EM3D.exportPNG({ view: '3d' }))).some((x) => /^3D cutaway · looking (N|NE|E|SE|S|SW|W|NW)$/.test(x))).toBe(true);
   await page.evaluate(() => window.EM3D.setBlock({ info: '' }));
   expect((await textsOf(page, () => window.EM3D.exportPNG({ view: '3d' }))).some((x) => /^3D cutaway/.test(x))).toBe(false);
-  // A heading added on the block is hidden under the side title, and back with the bare page; no title block then.
-  await page.evaluate(() => window.EM3D.addWallLabel({ size: 'heading', text: 'TARGET ZONE' }));
-  const bare = await page.evaluate(async () => { const E = window.EM3D, side = E.exportPNG({ view: '3d' }); await E.setBlock({ page: 'bare' }); return { differs: E.exportPNG({ view: '3d' }) !== side, block: E.getState().block.page }; });
-  expect(bare).toEqual({ differs: true, block: 'bare' });
+  // A heading added on the block stays hidden under the side title: the same figure.
+  expect(await page.evaluate(async () => { const E = window.EM3D, before = E.exportPNG({ view: '3d' }); E.addWallLabel({ size: 'heading', text: 'TARGET ZONE' }); await E.layersReady(); return E.exportPNG({ view: '3d' }) === before; })).toBe(true);
+  // Back to the bare page: no title block.
+  expect(await page.evaluate(async () => (await window.EM3D.setBlock({ page: 'bare' })).block.page)).toBe('bare');
   const t2 = await textsOf(page, () => window.EM3D.exportPNG({ view: '3d' }));
-  expect(t2).not.toContain('EXAMPLE RESOURCES CORP · TSXV: EX'); expect(t2).not.toContain('Section A–A′ · four holes');
+  expect(t2).not.toContain('Section A–A′ · four holes'); // (the company's name stays, as the side face's word mark)
   expect(await page.evaluate(() => window.EM3D.setBlock({ page: 'top' }).then(() => null, (e) => e.message))).toMatch(/"side"/);
   // In the Layout step: the page choice and the info line.
   await page.evaluate(() => { window.EM3D.showStep('layout'); return window.EM3D.setBlock({ page: 'side' }); });

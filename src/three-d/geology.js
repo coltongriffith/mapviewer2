@@ -436,7 +436,7 @@ function labelCanvas(hit, cols, size, len, ht, mirror, scr, font) {
   if (H.S.block) {
     const bw = 0.06 * H.frame()[0];
     H.project.holes.filter(H.holeOn).forEach((h) => h.path.forEach((p, i) => { if (i % 2) return; const q = H.proj(H.G.V(p.x, p.y, p.z)); for (let t = 0; t <= 1; t += 0.25) pts.push([q[0] + bw * t, q[1]]); }));
-    (H.G.wallLabelMeshes || []).forEach((m) => { const ps = [[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]].map(([x, y]) => H.proj(v.set(x, y, 0).applyMatrix4(m.matrixWorld))); boxes.push([Math.min(...ps.map((q) => q[0])), Math.min(...ps.map((q) => q[1])), Math.max(...ps.map((q) => q[0])), Math.max(...ps.map((q) => q[1]))]); });
+    (H.G.wallLabelMeshes || []).filter((m) => m.visible).forEach((m) => { const ps = [[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]].map(([x, y]) => H.proj(v.set(x, y, 0).applyMatrix4(m.matrixWorld))); boxes.push([Math.min(...ps.map((q) => q[0])), Math.min(...ps.map((q) => q[1])), Math.max(...ps.map((q) => q[0])), Math.max(...ps.map((q) => q[1]))]); });
   }
   g.drawImage(hit.base, 0, 0); g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = `${caps ? 700 : 600} ${size * kx}px ${font}`; if (caps && 'letterSpacing' in g) g.letterSpacing = `${size * kx * 0.08}px`;
   labelSpots(hit.cls, nx, ny, len / nx, ht / ny).forEach(({ c: cl, spots }) => {
