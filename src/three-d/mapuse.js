@@ -8,9 +8,12 @@ export function init(host) { H = host; }
 const USES = ['presentation', 'standalone'], FIELDS = ['what', 'project', 'date', 'sources'];
 export const on = () => H.S.mapInfo?.use === 'standalone';
 export function set(o = {}) {
-  const M = H.S.mapInfo;
+  const M = H.S.mapInfo, was = M.use;
   if (o.use !== undefined) { if (!USES.includes(o.use)) throw new Error('use must be "presentation" (a figure beside a slide or release) or "standalone" (its details and notes in the legend).'); M.use = o.use; }
   FIELDS.forEach((k) => { if (o[k] !== undefined) M[k] = String(o[k] ?? '').trim().slice(0, 200); });
+  // A block section turning standalone (or back) is framed again, so its details card has the free side of the frame.
+  if (M.use !== was && H.S.block) return H.load('block').then((b) => b.reframe());
+  return null;
 }
 export function renderUI(el) { if (el) el.hidden = !on(); }
 const today = () => new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });

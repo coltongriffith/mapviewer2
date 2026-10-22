@@ -415,7 +415,7 @@ let dirty = false;
 // difference is unsaved work. A state captured earlier carries its own
 // $files; otherwise the files on screen now are the ones it describes.
 const sig = (st) => {
-  const { step, $files, ...rest } = st || {};
+  const { step, $files, layout, ...rest } = st || {}; // layout: what the last drawing placed, not the figure's work
   let files = $files;
   if (files === undefined) try { files = studio().filesDigest(); } catch { files = null; }
   return JSON.stringify({ ...rest, $files: files });

@@ -11,19 +11,27 @@
 //   { furniture: true   the legend, logo, depth ticks and scale bar on the side face (the page's where it is too
 //                       foreshortened or they do not fit),
 //     traces: "overlay" thin black traces drawn over the faces (the tubes hidden), the grade bars over them too,
-//     brackets: "plain" a bracket and bold "154 m @ 0.51% Cu" text beside the hole (tags.js), or "card",
+//     brackets: "plain" a bracket and bold "154 m @ 0.51% Cu" text beside the hole (tags.js), "callout" (a bracket with
+//                       a domain heading, hole-ID chip and bold result on a leader, the holes on alternate sides), or "card",
 //     page: "bare"      the block alone on white: no title block, compass or notes, the credits small; "clean": no
 //                       title block while the block carries a heading; or "full",
 //     hist: { side: "face" (in the front face's plane) | "screen", scale: "linear" | "log", halo, length,
 //             palette: "orange" (four classes, pale yellow to deep orange, as the reference) | "bins",
-//             style: "spikes" (one thin spike per assay, linear in grade, as the reference) | "bars" } }.
+//             style: "spikes" (one thin spike per assay, linear in grade, as the reference) | "bars" },
+//     units: "auto" a wall label linked to a geology unit sits inside that unit's band on its face; "fixed" (blocks
+//                   made before this setting) where it was put,
+//     surface: "vivid" a see-through terrain (setStyle surface under 1) keeps its satellite colours, only the holes, bars
+//                   and shells under it showing through; "mix" (blocks made before) the plain transparent top,
+//     fadeBottom: 0 (off) to 1: the share of the block's height fading out toward its base }.
+// Settings missing from a block saved before them keep the earlier look (units "fixed", surface "mix", no fade).
+import * as THREE from 'three';
 import { fitLine } from './section-geometry.js';
 import { ORANGE } from './tags.js';
 
 let H, S;
 export function init(host) { H = host; S = host.S; }
 
-export const BLOCK = { furniture: true, traces: 'overlay', brackets: 'plain', page: 'bare', hist: { side: 'face', style: 'spikes', scale: 'linear', halo: false, length: 1, palette: 'orange' } };
+export const BLOCK = { furniture: true, traces: 'overlay', brackets: 'plain', page: 'bare', hist: { side: 'face', style: 'spikes', scale: 'linear', halo: false, length: 1, palette: 'orange' }, units: 'auto', surface: 'vivid', fadeBottom: 0 };
 const FACES = ['S', 'E', 'N', 'W'], RAD = Math.PI / 180, LOOK = { S: 0, E: 270, N: 180, W: 90 }; // looking at each face from outside
 const dx2 = (g) => (g.b[0] - g.a[0]) ** 2 + (g.b[1] - g.a[1]) ** 2;
 const at = (g, u) => [g.a[0] + (g.b[0] - g.a[0]) * u, g.a[1] + (g.b[1] - g.a[1]) * u];
@@ -56,7 +64,10 @@ export function setHolesShown(ids) {
 function patch(b, o) {
   if (o.furniture !== undefined) b.furniture = !!o.furniture;
   if (o.traces !== undefined) { if (!['overlay', 'tubes'].includes(o.traces)) throw new Error('traces must be "overlay" (thin black lines over the faces) or "tubes" (the coloured tubes).'); b.traces = o.traces; }
-  if (o.brackets !== undefined) { if (!['plain', 'card'].includes(o.brackets)) throw new Error('brackets must be "plain" (a bracket and bold text) or "card".'); b.brackets = o.brackets; }
+  if (o.brackets !== undefined) { if (!['plain', 'callout', 'card'].includes(o.brackets)) throw new Error('brackets must be "plain" (a bracket and bold text), "callout" (a bracket, domain heading, hole-ID chip and bold result, holes on alternate sides) or "card".'); b.brackets = o.brackets; }
+  if (o.units !== undefined) { if (!['auto', 'fixed'].includes(o.units)) throw new Error('units must be "auto" (a unit\'s wall label inside its band on the face) or "fixed" (where it was put).'); b.units = o.units; }
+  if (o.surface !== undefined) { if (!['vivid', 'mix'].includes(o.surface)) throw new Error('surface must be "vivid" (a see-through terrain keeps its satellite colours) or "mix" (the plain transparent top).'); b.surface = o.surface; }
+  if (o.fadeBottom !== undefined) { const v = +o.fadeBottom; if (!Number.isFinite(v)) throw new Error('fadeBottom must be 0 (off) to 1 (the share of the block\'s height fading toward its base).'); b.fadeBottom = Math.max(0, Math.min(1, v)); }
   if (o.page !== undefined) { if (!['bare', 'clean', 'full'].includes(o.page)) throw new Error('page must be "bare" (the block alone, credits only), "clean" (no title block while the block has a heading) or "full".'); b.page = o.page; }
   if (o.hist !== undefined) {
     const h = o.hist || {}, x = { ...(b.hist || BLOCK.hist) };
@@ -73,7 +84,7 @@ export function setBlock(o) {
   if (!H.G) throw new Error('Load data first.');
   if (o === null) S.block = null;
   else {
-    if (!o || typeof o !== 'object') throw new Error('setBlock takes { furniture, traces, brackets, page, hist, holes }, or null to turn the block look off.');
+    if (!o || typeof o !== 'object') throw new Error('setBlock takes { furniture, traces, brackets, page, hist, holes, units, surface, fadeBottom }, or null to turn the block look off.');
     const b = structuredClone(S.block || BLOCK); patch(b, o);
     if (o.holes !== undefined) S.holesShown = holeIds(o.holes);
     S.block = b;
@@ -98,13 +109,22 @@ function frame(v) {
   for (let i = 0; i < 4; i++) { const f = H.blockOverflow(); if (f <= 1.005) break; G.fit *= f * 1.01; H.setCamera(v, true); }
   if (S.block?.page === 'full') return;
   const [W, Hf] = H.frame(), u = Math.sqrt(W * Hf) / 900, top = 80 * u, bot = Hf - (S.block.page === 'bare' ? 36 : 64) * u, B = G.B, up = new H.aim.constructor(0, 1, 0);
+  // A standalone map keeps its details in a card at the right (studio.js, mapuse.js): the block is framed in the rest.
+  const card = S.mapInfo?.use === 'standalone' ? (230 + 28 + 18) * u : 0, Wa = W - card;
   const box = () => { const ps = []; [[B.x0, B.y0], [B.x1, B.y0], [B.x1, B.y1], [B.x0, B.y1]].forEach(([x, y]) => { ps.push(H.proj(G.V(x, y, B.z0)), H.proj(G.V(x, y, G.surf(x, y)))); }); return [Math.min(...ps.map((q) => q[0])), Math.min(...ps.map((q) => q[1])), Math.max(...ps.map((q) => q[0])), Math.max(...ps.map((q) => q[1]))]; };
   for (let i = 0; i < 4; i++) {
     H.camera.updateMatrixWorld(); const b = box(), t = H.controls.target, ppu = H.proj(t.clone().add(up))[1] - H.proj(t)[1];
     if (ppu) H.aim.y += ((b[1] + b[3]) / 2 - (top + bot) / 2) / ppu;
-    const k = Math.min(0.84 * (bot - top) / (b[3] - b[1]), 0.92 * W / (b[2] - b[0]));
+    if (card) { const r = new THREE.Vector3(1, 0, 0).applyQuaternion(H.camera.quaternion), ppx = H.proj(t.clone().add(r))[0] - H.proj(t)[0]; if (ppx) H.aim.addScaledVector(r, ((b[0] + b[2]) / 2 - Wa / 2) / ppx); }
+    const k = Math.min(0.84 * (bot - top) / (b[3] - b[1]), 0.92 * Wa / (b[2] - b[0]));
     v = { ...v, zoom: Math.max(40, Math.min(250, H.getCam().zoom * Math.min(k, 1.3))), pan: H.aim.toArray() }; H.setCamera(v, true);
   }
+}
+// Framed again in its current direction: a block section turning standalone or back (mapuse.js).
+export function reframe() {
+  if (!H.G || !S.block) return;
+  // From where the preset starts (zoom 120), so turning back to a presentation figure gives the preset's framing.
+  const c = H.getCam(); frame({ azimuth: c.azimuth, plunge: c.plunge, zoom: 120 }); H.setStyle({});
 }
 // The block around the holes: their traces with a margin, at least 75% as deep (across) as it is long along
 // them, so the side face shows; the base a little under the deepest of them.
@@ -160,6 +180,158 @@ export function sync() {
   if (over) G.tubes.visible = G.tubesP.visible = false;
   // The block's outline is the first line set added to the scene; the traces follow it.
   H.root.children.filter((o) => o.isLineSegments).slice(1).forEach((o) => { o.visible = !over; });
+  vivid(); curtain();
+}
+
+// ---------- the terrain made see-through without washing out (S.block.surface "vivid") ----------
+// A transparent top showed the block's own walls and faces through it, so the satellite surface went brown or grey
+// as its opacity dropped. With "vivid" the top stays opaque (and marks where it is drawn in the stencil); what lies
+// under it (the holes' tubes, the grade bars, shells and model shapes) is drawn again after the scene, only where the
+// top covers it (behind it in depth, inside its stencil), at the transparency asked: so the holes show through and the
+// imagery keeps its colours. "mix", and blocks saved before the setting, keep the plain transparent top.
+const ghost = { on: false, busy: false };
+// three.js constants (stencil, blending) as their numbers, so the shared three.js chunk the page loads exports no more names.
+const GL = { always: 519, replace: 7681, equal: 514, normal: 1, custom: 5, zero: 200, oneMinusSrcAlpha: 205 };
+function vivid() {
+  const G = H.G, m = G.top.material, on = S.block?.surface === 'vivid' && S.surf < 0.99;
+  ghost.on = on; m.stencilWrite = on;
+  if (on) { m.opacity = 1; m.depthWrite = true; m.stencilRef = 1; m.stencilFunc = GL.always; m.stencilZPass = GL.replace; }
+  H.scene.onAfterRender = ghostPass; H.scene.onBeforeRender = curtainSides;
+}
+// The ghost of one object's material: its own colour (instance colours still apply) and opacity, at the share the
+// terrain lets through, drawn only behind the top and inside its stencil; null for a material not drawn at all.
+const ghosts = new WeakMap();
+export function ghostMaterial(m, through) {
+  if (!m || Array.isArray(m) || m.visible === false || !(m.opacity > 0) || !(through > 0)) return null;
+  let g = ghosts.get(m);
+  if (!g) { g = new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, depthFunc: THREE.GreaterDepth, side: THREE.DoubleSide, stencilWrite: true, stencilRef: 1, stencilFunc: GL.equal }); ghosts.set(m, g); }
+  if (m.color) g.color.copy(m.color); else g.color.set('#ffffff');
+  if (g.vertexColors !== !!m.vertexColors) { g.vertexColors = !!m.vertexColors; g.needsUpdate = true; }
+  g.opacity = through * (m.transparent ? m.opacity : 1);
+  return g;
+}
+function ghostPass(renderer, scene, camera) {
+  const G = H.G; if (!ghost.on || ghost.busy || !G || !S.block) return;
+  const objs = [...H.root.children.filter((o) => o.isInstancedMesh && o.instanceColor && o.visible), ...(G.shellMesh?.visible ? G.shellMesh.children.filter((o) => o.visible) : []), ...(G.meshes || []).map((x) => x.m).filter((m) => m.visible)]
+    .map((o) => [o, o.material, ghostMaterial(o.material, 1 - S.surf)]).filter(([, , g]) => g); // each in its own colour and opacity; none at opacity 0
+  if (!objs.length) return;
+  const bg = scene.background, ac = renderer.autoClear, mask = camera.layers.mask;
+  objs.forEach(([o, , g]) => { o.layers.enable(5); o.material = g; }); ghost.busy = true;
+  try { scene.background = null; renderer.autoClear = false; camera.layers.set(5); renderer.render(scene, camera); } finally {
+    ghost.busy = false; scene.background = bg; renderer.autoClear = ac; camera.layers.mask = mask; objs.forEach(([o, m]) => { o.layers.disable(5); o.material = m; });
+  }
+}
+
+// ---------- the fade at the bottom (S.block.fadeBottom) ----------
+// A band in front of each face from the base up, fadeBottom of the block's height (up to the terrain), the page colour
+// fading out upward; on a transparent background it erases toward transparent instead. Only the faces toward the
+// camera show theirs. fadeAlpha(t): the band's opacity at t (0 at the base, 1 at its top).
+export const fadeAlpha = (t) => (1 - Math.max(0, Math.min(1, t))) ** 1.6;
+const fade = { G: null, k: null, meshes: [], mat: null };
+function curtain() {
+  const G = H.G, f = S.block?.fadeBottom || 0, k = `${f}`;
+  if (fade.G === G && fade.k === k) return;
+  fade.meshes.forEach((m) => { m.parent?.remove(m); m.geometry.dispose(); }); fade.meshes = []; fade.G = G; fade.k = k;
+  if (!(f > 0)) return;
+  fade.mat ||= new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide });
+  const z0 = G.B.z0, NI = 48, NJ = 16;
+  FACES.forEach((face) => {
+    const g = H.faceGeom(face), pos = [], col = [], idx = [];
+    for (let i = 0; i <= NI; i++) {
+      const p = at(g, i / NI), hb = Math.min(f * (G.zmax - z0), G.surf(p[0], p[1]) - z0);
+      for (let j = 0; j <= NJ; j++) { const v = G.V(p[0], p[1], z0 + hb * j / NJ).addScaledVector(g.n, G.diag * 0.004); pos.push(v.x, v.y, v.z); col.push(1, 1, 1, fadeAlpha(j / NJ)); }
+    }
+    for (let i = 0; i < NI; i++) for (let j = 0; j < NJ; j++) { const a = i * (NJ + 1) + j, b = a + NJ + 1; idx.push(a, b, a + 1, b, b + 1, a + 1); }
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 4)); geo.setIndex(idx);
+    const m = new THREE.Mesh(geo, fade.mat); m.renderOrder = 6.5; m.userData.face = face; H.root.add(m); fade.meshes.push(m); // over the faces and the top, under the wall labels
+  });
+}
+// Before each render: the bands on the faces toward the camera only, in the page colour (or erasing).
+function curtainSides(renderer, scene, camera) {
+  const G = H.G; if (!fade.meshes.length || !G) return;
+  const bg = scene.background, M = fade.mat, ht = G.zmax - G.B.z0;
+  fade.meshes.forEach((m) => { const g = H.faceGeom(m.userData.face), c = at(g, 0.5); m.visible = g.n.dot(camera.position.clone().sub(G.V(c[0], c[1], G.B.z0 + ht / 2))) > 0; });
+  if (bg?.isColor) { M.color.copy(bg); M.blending = GL.normal; } else { M.color.set('#ffffff'); M.blending = GL.custom; M.blendSrc = M.blendSrcAlpha = GL.zero; M.blendDst = M.blendDstAlpha = GL.oneMinusSrcAlpha; }
+}
+
+// ---------- wall labels by unit (S.block.units "auto") ----------
+// A wall label linked to a geology unit (addWallLabel({ unit })) goes inside that unit's colour band on its face, never
+// over another unit: at the largest size (down to 45%) at which it fits wholly inside the band, turned to follow it,
+// at the spot clearest of the holes shown, their grade bars, the other wall labels and what the overlay placed. With
+// no such spot it is hidden and says why (getState().layout.wallLabels[id].why). Placed again as the view turns 5° or zooms 10%.
+// bandSpot: the search on a face's class grid (cls: nx × ny cells, row 0 at the top), in the face's own units (len
+// across, ht from the base up to the grid's top); w × h the label's size. room(x, z, hw, hh, angle): how clear a spot
+// is (above 0: clear). Returns { x, z, angle (degrees), scale, r } or null.
+export function bandSpot(cls, nx, ny, ci, len, ht, w, h, room = () => 1) {
+  const dx = len / (nx - 1), dz = ht / (ny - 1), cell = (x, z) => { const i = Math.round(x / dx), j = Math.round((ht - z) / dz); return i >= 0 && j >= 0 && i < nx && j < ny ? cls[j * nx + i] : -2; };
+  const is = (i, j) => j >= 0 && j < ny && cls[j * nx + i] === ci;
+  // The middle row of the unit's run in column i nearest row j (within a sixth of the grid), or null.
+  const midRow = (i, j) => {
+    if (i < 0 || i >= nx) return null;
+    let r = -1; for (let d = 0; d <= ny / 6 && r < 0; d++) r = is(i, j - d) ? j - d : is(i, j + d) ? j + d : -1;
+    if (r < 0) return null; let a = r, b = r; while (is(i, a - 1)) a--; while (is(i, b + 1)) b++; return (a + b) / 2;
+  };
+  let first = null;
+  for (const sc of [1, 0.85, 0.7, 0.55, 0.45]) {
+    const hw = w * sc / 2, hh = h * sc / 2, di = Math.max(1, Math.round(hw / dx)), si = Math.max(1, Math.round(di / 4)), sj = Math.max(1, Math.round(hh / dz / 2));
+    let best = null; const seen = new Set();
+    for (let j = 0; j < ny; j += sj) for (let i = 0; i < nx; i += si) {
+      if (!is(i, j)) continue;
+      const mc = midRow(i, j), k = `${i}|${mc}`; if (seen.has(k)) continue; seen.add(k);
+      const m0 = midRow(i - di, Math.round(mc)), m1 = midRow(i + di, Math.round(mc));
+      let ang = m0 !== null && m1 !== null ? Math.atan2(-(m1 - m0) * dz, 2 * di * dx) : 0; ang = Math.max(-0.6, Math.min(0.6, ang)); if (Math.abs(ang) < 0.05) ang = 0;
+      const x = i * dx, z = ht - mc * dz, ca = Math.cos(ang), sa = Math.sin(ang);
+      let ok = true; // the label, a little larger than drawn, wholly inside the unit
+      for (let p = -1; p <= 1.001 && ok; p += 0.2) for (let q = -1; q <= 1.001; q += 0.5) if (cell(x + p * hw * 1.08 * ca - q * hh * 1.25 * sa, z + p * hw * 1.08 * sa + q * hh * 1.25 * ca) !== ci) { ok = false; break; }
+      if (!ok) continue;
+      const r = room(x, z, hw, hh, ang); if (!best || r > best.r) best = { x, z, angle: +(ang * 180 / Math.PI).toFixed(1), scale: sc, r };
+    }
+    if (best && best.r > 0) return best;
+    if (best?.r > -Infinity) first ||= best; // near a hole, at the largest size that fits; a covered spot never
+  }
+  return first;
+}
+const spots = new Map();
+// Where each unit's label went (or why not), by label ID: drawing results kept out of S, so neither saved nor undone
+// (getState().layout.wallLabels).
+const placed = new Map();
+export const placements = () => Object.fromEntries(S.wallLabels.filter((l) => placed.has(l.id)).map((l) => [l.id, placed.get(l.id)]));
+let side = { f: null, rects: [] }; // the side face's legend and logo as last laid out (plan)
+export function unitSpot(mesh) {
+  const L = mesh.userData.L, G = H.G;
+  if (S.block?.units !== 'auto' || !L.unit || L.size === 'heading' || !G) { placed.delete(L.id); return; } // where it was put
+  const grid = H.ext('geology')?.unitGrid(L.face, L.unit);
+  if (!grid) { placed.delete(L.id); return; } // no geology painted on that face: the label keeps its own place
+  const g = H.faceGeom(L.face), z0 = G.B.z0, A = G.V(g.a[0], g.a[1], z0), len = A.distanceTo(G.V(g.b[0], g.b[1], z0)), ht = A.distanceTo(G.V(g.a[0], g.a[1], G.zmax));
+  const e = mesh.matrix.elements, w = Math.hypot(e[0], e[1], e[2]), h = Math.hypot(e[4], e[5], e[6]), c = H.getCam();
+  // The side face's legend and logo (plan, as last laid out), in the face's own units: x across, z up from the base.
+  const fur = side.f === L.face ? side.rects.map(([u0, u1, za, zb]) => [u0 * len, u1 * len, (za - z0) / (G.zmax - z0) * ht, (zb - z0) / (G.zmax - z0) * ht]) : [];
+  const key = [grid.k, grid.id, L.unit, w.toPrecision(3), h.toPrecision(3), Math.round(c.azimuth / 5), Math.round(c.plunge / 5), Math.round(c.zoom / 10), S.holesShown, S.wallLabels.length, fur.flat().map(Math.round)].join('|');
+  let sp = spots.get(L.id);
+  if (!sp || sp.key !== key) {
+    H.camera.updateMatrixWorld();
+    const W = H.frame()[0], bw = 0.06 * W, pts = [], P = (x, z) => { const p = at(g, x / len); return H.proj(G.V(p[0], p[1], z0 + (G.zmax - z0) * z / ht)); };
+    H.project.holes.filter(H.holeOn).forEach((ho) => ho.path.forEach((p, i) => { if (i % 2) return; const q = H.proj(G.V(p.x, p.y, p.z)); for (let t = 0; t <= 1; t += 0.25) pts.push([q[0] + (S.histograms ? bw * t : 0), q[1]]); }));
+    const v = new THREE.Vector3(), box4 = (ps) => [Math.min(...ps.map((q) => q[0])), Math.min(...ps.map((q) => q[1])), Math.max(...ps.map((q) => q[0])), Math.max(...ps.map((q) => q[1]))];
+    const eye = H.camera.position, toward = (f) => { const gg = H.faceGeom(f), cc = at(gg, 0.5); return gg.n.dot(eye.clone().sub(G.V(cc[0], cc[1], z0))) > 0; }; // labels on the faces turned away are not seen
+    const boxes = (G.wallLabelMeshes || []).filter((m) => m.userData.L.id !== L.id && m.visible && toward(m.userData.L.face)).map((m) => box4([[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]].map(([x, y]) => H.proj(v.set(x, y, 0).applyMatrix4(m.matrixWorld)))));
+    const room = (x, z, hw, hh, a) => {
+      const ca = Math.cos(a), sa = Math.sin(a), ex = hw * Math.abs(ca) + hh * Math.abs(sa), ez = hw * Math.abs(sa) + hh * Math.abs(ca);
+      if (fur.some((f) => x + ex > f[0] && x - ex < f[1] && z + ez > f[2] && z - ez < f[3])) return -Infinity; // under the side face's legend or logo
+      const b = box4([[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([p, q]) => P(x + p * hw * ca - q * hh * sa, z + p * hw * sa + q * hh * ca)));
+      if (boxes.some((o) => !(b[2] < o[0] || b[0] > o[2] || b[3] < o[1] || b[1] > o[3]))) return -Infinity; // covered: never chosen
+      let d = Infinity; for (const [px, py] of pts) d = Math.min(d, Math.max(b[0] - px, px - b[2], b[1] - py, py - b[3]));
+      return d;
+    };
+    sp = { key, at: bandSpot(grid.cls, grid.nx, grid.ny, grid.ci, len, ht, w, h, room) }; spots.set(L.id, sp);
+  }
+  const s = sp.at;
+  if (!s) { placed.set(L.id, { at: null, why: 'no clear room inside its unit on this face' }); mesh.visible = false; return; }
+  const p = at(g, s.x / len), z = z0 + (G.zmax - z0) * s.z / ht, top = G.surf(p[0], p[1]), r = s.angle * RAD;
+  const right = new THREE.Vector3(g.b[0] - g.a[0], 0, -(g.b[1] - g.a[1])).normalize(), up = new THREE.Vector3(0, 1, 0);
+  const R = right.clone().multiplyScalar(Math.cos(r)).addScaledVector(up, Math.sin(r)), U = up.clone().multiplyScalar(Math.cos(r)).addScaledVector(right, -Math.sin(r));
+  mesh.matrix.makeBasis(R.multiplyScalar(w * s.scale), U.multiplyScalar(h * s.scale), g.n).setPosition(G.V(p[0], p[1], z).addScaledVector(g.n, G.diag * 0.003)); mesh.visible = true;
+  placed.set(L.id, { at: { u: +(s.x / len).toFixed(3), v: +((z - z0) / (top - z0)).toFixed(3), rotation: s.angle, scale: s.scale } });
 }
 // A heading on the block (wall label size "heading"): a bold title over smaller subtitle lines, in capitals,
 // right-aligned. Lines from the text's line breaks, or " | " typed in the one-line box. lines: its height in title lines.
@@ -221,6 +393,7 @@ function onFace(ctx, F, uu, z, r, fn) {
 // The side face, and what fits on it: of the two faces toward the camera, the one to the right on screen; none when
 // it is seen too nearly edge-on (under 150 px across, or under a quarter as wide as tall per metre).
 function plan(ctx, K) {
+  side = { f: null, rects: [] };
   const G = H.G, { u } = K, eye = H.camera.position, z0 = G.B.z0, ht = G.zmax - z0;
   const near = FACES.map((f) => ({ f, g: H.faceGeom(f) })).filter(({ g }) => { const m = at(g, 0.5); return g.n.dot(eye.clone().sub(G.V(m[0], m[1], z0 + ht / 2))) > 0; });
   if (near.length < 2) return null;
@@ -254,7 +427,7 @@ function plan(ctx, K) {
     for (const sc of [1, 0.8, 0.65]) {
       const lw = lw0 * sc, lh = lh0 * sc, uc = F.legend ? F.legend.uc : 0.6, k = hyp(frameAt(F, uc, z0 + 0.6 * hf).b), span = lw / k / F.len;
       const zc = F.legend ? F.legend.zc + F.legend.h * F.legend.sc / F.legend.k / 2 + 0.06 * hf + lh / k / 2 : z0 + 0.72 * hf;
-      if (uc - span / 2 > 0.12 && uc + span / 2 < 0.99 && zc + lh / k / 2 < z0 + 0.94 * hf) { F.logo = { uc, zc, lw, lh, sc, img, word }; break; }
+      if (uc - span / 2 > 0.12 && uc + span / 2 < 0.99 && zc + lh / k / 2 < z0 + 0.94 * hf) { F.logo = { uc, zc, lw, lh, sc, img, word, k, span }; break; }
     }
   }
   // Depth ticks down the face's near corner (at u = 0), below the terrain there.
@@ -263,6 +436,8 @@ function plan(ctx, K) {
   // The scale bar along the base, left of the legend.
   const room = ((F.legend ? F.legend.uc - F.legend.span / 2 : 0.92) - 0.14) * F.len, D = roundBelow(Math.min(room, 0.45 * F.len));
   if (D && D * hyp(frameAt(F, 0.3, z0).a) > 70 * u) F.scale = { D };
+  const R = (o, hg) => [o.uc - o.span / 2, o.uc + o.span / 2, o.zc - hg / o.k / 2, o.zc + hg / o.k / 2];
+  side = { f: F.f, rects: [F.legend && R(F.legend, F.legend.h * F.legend.sc), F.logo && R(F.logo, F.logo.lh)].filter(Boolean) }; // for the wall labels by unit
   return F;
 }
 function furniture(ctx, K, lay, F) {
@@ -313,8 +488,11 @@ export function renderUI(el) {
   if (!el) return;
   const holes = H.project?.holes || [], on = new Set(S.holesShown || holes.map((h) => h.id)), b = S.block, esc = H.esc, co = new Set(H.shownCallouts().map((c) => c.h.id)), hb = b?.hist || BLOCK.hist;
   el.innerHTML = `${b ? `<div class="row" style="gap:14px;flex-wrap:wrap"><label class="check"><input type="checkbox" data-bk="furniture" ${b.furniture !== false ? 'checked' : ''}>Legend, logo, depths and scale on the side face</label>
-      <label class="check"><input type="checkbox" data-bk="traces" ${b.traces === 'overlay' ? 'checked' : ''}>Thin traces over the faces</label><label class="check"><input type="checkbox" data-bk="brackets" ${b.brackets === 'plain' ? 'checked' : ''}>Plain brackets</label>
+      <label class="check"><input type="checkbox" data-bk="traces" ${b.traces === 'overlay' ? 'checked' : ''}>Thin traces over the faces</label><label class="check"><input type="checkbox" data-bk="units" ${b.units === 'auto' ? 'checked' : ''}>Unit wall labels inside their band</label>
       </div>
+    <div class="grid2" style="margin-top:6px"><label class="field"><span>Brackets</span><select data-bs="brackets">${[['plain', 'Plain: bracket and bold result'], ['callout', 'Callout: heading, hole chip, result'], ['card', 'In a card']].map(([v, t]) => `<option value="${v}" ${b.brackets === v ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+      <label class="field"><span>See-through terrain</span><select data-bs="surface"><option value="vivid" ${b.surface === 'vivid' ? 'selected' : ''}>Keeps its colours (holes show through)</option><option value="mix" ${b.surface !== 'vivid' ? 'selected' : ''}>Plain transparency</option></select></label>
+      <label class="field"><span>Fade at the bottom <output class="mono">${Math.round((b.fadeBottom || 0) * 100)}%</output></span><input type="range" min="0" max="100" step="5" data-bf value="${Math.round((b.fadeBottom || 0) * 100)}" aria-label="Fade at the bottom of the block"></label></div>
     <div class="grid2" style="margin-top:6px"><label class="field"><span>Page</span><select data-bs="page">${[['bare', 'The block alone (credits only)'], ['clean', 'No title block'], ['full', 'Title block, compass and notes']].map(([v, t]) => `<option value="${v}" ${b.page === v ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
       <label class="field"><span>Bar shape</span><select data-bh="style"><option value="spikes" ${hb.style === 'spikes' ? 'selected' : ''}>A spike per assay</option><option value="bars" ${hb.style !== 'spikes' ? 'selected' : ''}>Merged bars</option></select></label>
       <label class="field"><span>Bar colours</span><select data-bh="palette"><option value="orange" ${hb.palette === 'orange' ? 'selected' : ''}>Orange ramp</option><option value="bins" ${hb.palette !== 'orange' ? 'selected' : ''}>The grade colours</option></select></label></div>
@@ -332,7 +510,8 @@ export function renderUI(el) {
   el.querySelector('[data-hs-sec]')?.addEventListener('click', () => run(() => H.api.setHolesShown(S.section.holes)));
   el.querySelector('[data-bk-off]')?.addEventListener('click', () => run(() => H.api.setBlock(null)));
   el.querySelectorAll('[data-bs]').forEach((x) => x.addEventListener('change', () => run(() => H.api.setBlock({ [x.dataset.bs]: x.value }))));
-  const V = { traces: ['overlay', 'tubes'], brackets: ['plain', 'card'] };
+  const V = { traces: ['overlay', 'tubes'], units: ['auto', 'fixed'] };
+  el.querySelector('[data-bf]')?.addEventListener('change', (e) => run(() => H.api.setBlock({ fadeBottom: +e.target.value / 100 })));
   el.querySelectorAll('[data-bk]').forEach((cb) => cb.addEventListener('change', () => run(() => H.api.setBlock({ [cb.dataset.bk]: V[cb.dataset.bk] ? V[cb.dataset.bk][cb.checked ? 0 : 1] : cb.checked }))));
   el.querySelectorAll('[data-bh]').forEach((s) => s.addEventListener('change', () => run(() => H.api.setBlock({ hist: { [s.dataset.bh]: s.value } }))));
   const q = el.querySelector('[data-hq]'), filter = () => el.querySelectorAll('.prov-list label').forEach((l) => { l.hidden = !!query && !l.textContent.toLowerCase().includes(query); });
