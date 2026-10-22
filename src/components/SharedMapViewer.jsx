@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { loadSharedMap } from '../utils/cloudStorage';
 import { trackEvent } from '../utils/track';
+import { lazyGuarded } from '../utils/preloadGuard';
 
-const ReadOnlyMapStage = React.lazy(() => import('./ReadOnlyMapStage'));
+const ReadOnlyMapStage = lazyGuarded(() => import('./ReadOnlyMapStage'), { page: true });
 
 // ?download=png opens the map and downloads it as a PNG: the link an AI
 // assistant hands back with each map preview.

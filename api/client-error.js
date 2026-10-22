@@ -12,6 +12,7 @@ import { createClient } from '@supabase/supabase-js';
 import crypto from 'node:crypto';
 import { applyCors, handleMethods, rateLimited } from './_lib/guard.js';
 import { redact } from './_lib/redact.js';
+import { isChunkLoadError } from '../shared/chunkErrors.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -23,6 +24,20 @@ const MAX_STACK = 4000;
 // could write megabyte rows into error_events at the rate limit.
 const MAX_BODY_BYTES = 16 * 1024;
 const MAX_CONTEXT_BYTES = 2 * 1024;
+
+// 'stale_chunk': a lazy chunk a deploy removed (the page reloads or offers to), so Admin can tell it
+// from a crash. 'warning': degraded, not broken (a third-party tile source that fails). Tabs opened
+// before this shipped send their chunk failures as crashes and their tile failures as 'tile_error';
+// both are classified here too.
+const KINDS = ['error', 'unhandledrejection', 'react', 'api', 'stale_chunk', 'warning'];
+export function classifyKind(kind, message) {
+  if (kind === 'tile_error') return 'warning';
+  const known = KINDS.includes(kind) ? kind : 'error';
+  return known !== 'warning' && known !== 'api' && isChunkLoadError(message) ? 'stale_chunk' : known;
+}
+// What error_events held before those two kinds. error_events has no check on kind today, but should one
+// be added, an insert it rejects is written under the old kind rather than dropped.
+const LEGACY_KIND = { stale_chunk: 'error', warning: 'error' };
 
 // Free-form client context is stored as-is, so it is the one field a caller
 // could use to smuggle arbitrary large blobs into the table. Cap it.
@@ -67,9 +82,9 @@ export default async function handler(req, res) {
     if (typeof raw === 'string' && raw.length > MAX_BODY_BYTES) return res.status(204).end();
     const body = typeof raw === 'string' ? JSON.parse(raw) : (raw || {});
     if (JSON.stringify(body).length > MAX_BODY_BYTES) return res.status(204).end();
-    const kind = ['error', 'unhandledrejection', 'react', 'api'].includes(body.kind) ? body.kind : 'error';
     const message = redact(body.message)?.slice(0, MAX_MESSAGE);
     if (!message) return res.status(204).end();
+    const kind = classifyKind(body.kind, message);
 
     const stack = redact(body.stack)?.slice(0, MAX_STACK) || null;
     const path = String(body.path || '').slice(0, 300) || null;
@@ -107,7 +122,7 @@ export default async function handler(req, res) {
         .update({ seen_count: (existing.seen_count || 1) + 1 })
         .eq('id', existing.id);
     } else {
-      await sb.from('error_events').insert({
+      const row = {
         source: 'client',
         kind,
         message,
@@ -119,7 +134,11 @@ export default async function handler(req, res) {
         user_agent: String(req.headers?.['user-agent'] || '').slice(0, 300),
         context: boundedContext(body.context),
         fingerprint: fp,
-      });
+      };
+      const { error } = (await sb.from('error_events').insert(row)) || {};
+      if (error && LEGACY_KIND[kind]) {
+        await sb.from('error_events').insert({ ...row, kind: LEGACY_KIND[kind], context: { ...(row.context || {}), kind } });
+      }
     }
     return res.status(204).end();
   } catch {

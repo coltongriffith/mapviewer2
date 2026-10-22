@@ -108,7 +108,7 @@ export default function SummaryTab({ data, onOpenSession, onOpenUser, onOpenFeed
             <h4 className="sum-subhead">Errors people saw</h4>
             <ul className="sum-list">{errors.map((e, i) => (
               <li key={i}><span className="sum-msg" title={e.message}>{e.message}</span>
-                <span className="adm-muted">{fmtNum(e.people)} {Number(e.people) === 1 ? 'person' : 'people'} · {fmtNum(e.times)}× · {relTime(e.last_seen)}{e.path ? ` · ${e.path}` : ''}</span></li>))}</ul>
+                <span className="adm-muted">{e.kind === 'stale_chunk' ? 'Update reload, not a crash · ' : ''}{fmtNum(e.people)} {Number(e.people) === 1 ? 'person' : 'people'} · {fmtNum(e.times)}× · {relTime(e.last_seen)}{e.path ? ` · ${e.path}` : ''}</span></li>))}</ul>
           </>}
           {failed.length > 0 && <>
             <h4 className="sum-subhead">Searches that found nothing <InfoTip label="Searches that found nothing" text="If the company really holds claims in that province, the search missed it and is worth a look." /></h4>

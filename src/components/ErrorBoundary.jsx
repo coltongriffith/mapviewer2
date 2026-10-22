@@ -1,5 +1,7 @@
 import React from 'react';
 import { reportError } from '../utils/errorReporter';
+import { recoverFromStaleChunk, UpdatePage } from '../utils/preloadGuard';
+import { isChunkLoadError } from '../../shared/chunkErrors.js';
 import FeedbackModal from './FeedbackModal';
 
 export default class ErrorBoundary extends React.Component {
@@ -10,6 +12,9 @@ export default class ErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, info) {
+    // A chunk a deploy removed is not a crash: reload for the new build (once, and only with nothing
+    // unsaved; recoverFromStaleChunk logs it as 'stale_chunk'), else offer the reload below.
+    if (isChunkLoadError(error)) { recoverFromStaleChunk(error, window, { notice: false }); return; }
     console.error('App error:', error, info);
     // A render crash is the most severe client failure there is — make sure
     // it reaches our error sink, not just the user's console.
@@ -17,6 +22,7 @@ export default class ErrorBoundary extends React.Component {
   }
 
   render() {
+    if (this.state.error && isChunkLoadError(this.state.error)) return <UpdatePage />;
     if (this.state.error) {
       const crash = String(this.state.error?.message || this.state.error || '').slice(0, 300);
       return (

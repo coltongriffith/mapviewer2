@@ -35,9 +35,10 @@ beforeAll(async () => {
   `);
   // Oldest to newest; the last one to define a function is the one in effect.
   // The crawler migration also replaces the admin_session_ids stub above.
-  // The 3D usage migration replaces the summary again (a /3d visit, shared 3D figures).
+  // The 3D usage migration replaces the summary again (a /3d visit, shared 3D figures), and the error-kinds
+  // migration replaces it once more on top of that (kind per error, warnings left out).
   for (const file of ['20261002130000_admin_summary_real_visitors.sql', '20261019120000_admin_crawler_sessions.sql',
-    '20261030100000_admin_three_d_usage.sql']) {
+    '20261030100000_admin_three_d_usage.sql', '20261030110000_error_kinds_in_summary.sql']) {
     const sql = readFileSync(`supabase/migrations/${file}`, 'utf8');
     await db.exec(sql);
     await db.exec(sql); // idempotent
@@ -106,6 +107,21 @@ describe('admin summary SQL', () => {
     const d = await summary();
     expect(d.problems.failed_searches[0]).toMatchObject({ query: 'juggernaut exploration', province: 'BC' });
     expect(d.problems.errors[0]).toMatchObject({ message: 'Unable to preload CSS', people: 1 });
+  });
+
+  it('marks a stale chunk by its kind and leaves warnings out of the errors people saw', async () => {
+    await view('s', '2026-09-02T15:00:00Z', { referrer: 'https://www.bing.com/' });
+    const err = (fp, kind, message) => db.query("insert into public.error_events (session_id, fingerprint, kind, message, path, seen_count, occurred_at) values ('s',$1,$2,$3,'/',1,'2026-09-02T15:02:00Z')", [fp, kind, message]);
+    await err('a', 'stale_chunk', 'Importing a module script failed.');
+    await err('b', 'react', "Cannot read properties of undefined (reading '_removePath')");
+    await err('c', 'warning', 'Reference overlay "labels" failed to load tiles');
+    await err('d', null, 'An old row with no kind');
+    const d = await summary();
+    expect(d.problems.errors.map((e) => [e.message, e.kind]).sort()).toEqual([
+      ['An old row with no kind', null],
+      ["Cannot read properties of undefined (reading '_removePath')", 'react'],
+      ['Importing a module script failed.', 'stale_chunk'],
+    ]);
   });
 
   it('lists only errors and failed searches from real visitors', async () => {
