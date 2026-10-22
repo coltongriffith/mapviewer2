@@ -123,18 +123,34 @@ export function drawPills(ctx, K, opts) {
   pend?.(); // drawn last, so no pill's leader crosses a pending tag
 }
 function drawIdPills(ctx, K, { placed, occ, W, H: Hh }) {
-  const { u, font } = K; font(700, 12.5); drawn = new Set();
-  const items = H.project.holes.filter(tagShown).map((h) => {
+  const { u, font } = K; drawn = new Set();
+  // A block section's common pads (block.js, round 5H): one pill over the pad, first, in place of its holes' IDs.
+  const BK = H.ext('block'), pads = (BK?.pads() || []).filter((p) => p.holes.some(tagShown)), onPad = new Set(pads.flatMap((p) => p.holes));
+  font(800, 13);
+  const padItems = pads.map((pad) => {
+    const ss = pad.holes.map((h) => H.proj(H.G.V(h.c.x, h.c.y, h.c.z))); if (ss.some((s) => s[2] > 1)) return null;
+    const x = ss.reduce((a, s) => a + s[0], 0) / ss.length, y = Math.min(...ss.map((s) => s[1]));
+    return { pad, pri: -1, at: [x, y], x, y: y - 16 * u, w: ctx.measureText(pad.text).width + 22 * u, h: 22 * u };
+  });
+  font(700, 12.5);
+  const items = H.project.holes.filter((h) => tagShown(h) && !onPad.has(h)).map((h) => {
     const s = H.proj(H.G.V(h.c.x, h.c.y, h.c.z)); if (s[2] > 1) return null;
     const st = statusOf(h), pri = st === 'new' ? 0 : st === 'planned' ? 2 : st === 'previous' ? 3 : 1;
     return { hole: h, st, pri, x: s[0], y: s[1] - 4 * u, w: ctx.measureText(h.id).width + 14 * u, h: 20 * u };
-  }).filter(Boolean).sort((a, b) => a.pri - b.pri || a.x - b.x);
+  }).concat(padItems).filter(Boolean).sort((a, b) => a.pri - b.pri || a.x - b.x);
+  // A hole's own colour (block.js) on its pill or ID.
+  const colors = (p) => { const hc = BK?.colorOf(p.hole); return hc ? { fill: hc, text: H.textOn(hc), line: hc } : pillColors(p.st); };
   const collars = H.project.holes.map((h) => { const s = H.proj(H.G.V(h.c.x, h.c.y, h.c.z)); return [s[0] - 6 * u, s[1] - 6 * u, s[0] + 6 * u, s[1] + 6 * u]; });
   const res = placePills(items, [...placed, ...occ.filter((b) => b[3] - b[1] < Hh * 0.5), ...collars, ...(clear() ? bracketBoxes(H.shownCallouts(), u) : [])], { W, H: Hh, unit: u, pad: 3 * u, drop: true, leaders: clear() && 'far' });
   res.forEach((p) => drawn.add(p.st));
   // Leaders first, then every pill, so no leader crosses a pill.
   res.forEach((p) => {
-    const c = pillColors(p.st), x = p.cx - p.w / 2, y = p.cy - p.h / 2;
+    if (p.pad) { // a pad's pill: always a short leader from the pad, in its colour
+      const x = p.cx - p.w / 2, y = p.cy - p.h / 2, ex = Math.max(x + p.h / 2, Math.min(x + p.w - p.h / 2, p.at[0])), ey = p.at[1] < y ? y : p.at[1] > y + p.h ? y + p.h : p.cy;
+      ctx.lineCap = 'round'; ctx.strokeStyle = H.paper(0.9); ctx.lineWidth = 3.6 * u; ctx.beginPath(); ctx.moveTo(...p.at); ctx.lineTo(ex, ey); ctx.stroke();
+      ctx.strokeStyle = p.pad.color; ctx.lineWidth = 1.5 * u; ctx.stroke(); ctx.lineCap = 'butt'; return;
+    }
+    const c = colors(p), x = p.cx - p.w / 2, y = p.cy - p.h / 2;
     if (p.leader) {
       const ex = Math.max(x, Math.min(x + p.w, p.x)), ey = p.y + 4 * u < y ? y : p.y + 4 * u > y + p.h ? y + p.h : p.cy;
       ctx.lineCap = 'round'; ctx.strokeStyle = H.paper(0.9); ctx.lineWidth = 3.4 * u; ctx.beginPath(); ctx.moveTo(p.x, p.y + 4 * u); ctx.lineTo(ex, ey); ctx.stroke();
@@ -143,10 +159,16 @@ function drawIdPills(ctx, K, { placed, occ, W, H: Hh }) {
   });
   const plain = T().style === 'plain'; // the block section's IDs: bold text with a white halo, no pill
   res.forEach((p) => {
-    const c = pillColors(p.st), x = p.cx - p.w / 2, y = p.cy - p.h / 2;
+    const x = p.cx - p.w / 2, y = p.cy - p.h / 2;
+    if (p.pad) {
+      H.roundRect(ctx, x, y, p.w, p.h, p.h / 2); ctx.fillStyle = p.pad.color; ctx.fill(); ctx.lineWidth = u; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.stroke();
+      font(800, 13); ctx.fillStyle = H.textOn(p.pad.color); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(p.pad.text, p.cx, p.cy + 0.6 * u);
+      ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; placed.push(p.box); occ.push(p.box); BK.padDrawn(p.pad); return;
+    }
+    const c = colors(p);
     if (plain) {
       font(800, 14); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round'; ctx.lineWidth = 4 * u; ctx.strokeStyle = H.paper(0.92); ctx.strokeText(p.hole.id, p.cx, p.cy + 0.6 * u);
-      ctx.fillStyle = p.st === 'new' ? H.S.accent : H.INK; ctx.fillText(p.hole.id, p.cx, p.cy + 0.6 * u); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; placed.push(p.box); occ.push(p.box); return;
+      ctx.fillStyle = BK?.colorOf(p.hole) || (p.st === 'new' ? H.S.accent : H.INK); ctx.fillText(p.hole.id, p.cx, p.cy + 0.6 * u); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; placed.push(p.box); occ.push(p.box); return;
     }
     H.roundRect(ctx, x, y, p.w, p.h, p.h / 2); ctx.fillStyle = c.fill; ctx.fill();
     ctx.lineWidth = (c.fill === '#ffffff' ? 1.5 : 1) * u; ctx.strokeStyle = c.fill === '#ffffff' ? c.line : 'rgba(255,255,255,0.85)'; if (c.dash) ctx.setLineDash([3 * u, 2 * u]); ctx.stroke(); ctx.setLineDash([]);
@@ -327,6 +349,8 @@ export function bracketSides(items) {
 // halo beside the reported interval, and on a thin leader beside it, text only (no box, a white halo): the domain heading
 // (setCallout heading) with the hole-ID chip, the result in bold, and its "incl." line. side: -1 left, 1 right (past the
 // grade bars on the face); the text takes the first spot clear of everything placed, nearest its bracket. Returns its box.
+// Without "from N m" (S.block.inclFrom false, round 5H): "incl. 8.0 m @ 7.16 g/t Au", as on the reference.
+export const noFrom = (l2) => (l2 && H.S.block?.inclFrom === false ? l2.replace(/\s+from\s+[\d.,]+\s*m\b/g, '') : l2);
 // Several "incl." results on one line, as on a release figure: "incl. 3.6 m @ 4.15 & 10.0 m @ 2.29 g/t Au" (the unit
 // once, at the end, where they share it). One result, or a second line typed by hand, is kept as it is.
 export function joinIncl(l2) {
@@ -335,7 +359,7 @@ export function joinIncl(l2) {
   return `incl. ${(u && ps.every((t) => unit(t) === u) ? ps.map((t, i) => (i < ps.length - 1 ? t.slice(0, -u.length - 1) : t)) : ps).join(' & ')}`;
 }
 function calloutBracket(ctx, K, it, lay, side = -1) {
-  const { u, font } = K, c = it.c, b = c.ic.broad, L0 = H.calloutLines(c), L = H.coOv(c).line2 ? L0 : { ...L0, l2: joinIncl(L0.l2) }, head = String(H.coOv(c).heading || '').toUpperCase(), [W] = H.frame();
+  const { u, font } = K, c = it.c, b = c.ic.broad, L0 = H.calloutLines(c), L = H.coOv(c).line2 ? L0 : { ...L0, l2: joinIncl(noFrom(L0.l2)) }, head = String(H.coOv(c).heading || '').toUpperCase(), [W] = H.frame();
   const P = (d) => { const p = c.h.posAt(d); return H.proj(H.G.V(p.x, p.y, p.z)); }, a = P(b.from), e = P(b.from + b.len), mid = [(a[0] + e[0]) / 2, (a[1] + e[1]) / 2];
   let dx = e[0] - a[0], dy = e[1] - a[1]; const len = Math.hypot(dx, dy) || 1; dx /= len; dy /= len;
   // The text's rows: heading and chip, the result, the incl. line.
@@ -367,8 +391,8 @@ function calloutBracket(ctx, K, it, lay, side = -1) {
   // The text, right-aligned on the left side, left-aligned on the right; the chip on the side of the bracket.
   const R = side < 0, xa = R ? box[2] - 3 * u : box[0] + 3 * u, halo = (t, x, y) => { ctx.lineJoin = 'round'; ctx.lineWidth = 4 * u; ctx.strokeStyle = H.paper(0.92); ctx.strokeText(t, x, y); ctx.fillText(t, x, y); };
   ctx.textBaseline = 'middle'; let y = box[1] + rh / 2;
-  const cx = R ? xa - chip : xa; ctx.fillStyle = H.pri(); H.roundRect(ctx, cx, y - 7.5 * u, chip, 15 * u, 2.5 * u); ctx.fill();
-  font(700, 11); ctx.textAlign = 'center'; ctx.fillStyle = H.textOn(H.pri()); ctx.fillText(c.h.id, cx + chip / 2, y + 0.5 * u);
+  const cx = R ? xa - chip : xa, cc = H.ext('block')?.colorOf(c.h) || H.pri(); ctx.fillStyle = cc; H.roundRect(ctx, cx, y - 7.5 * u, chip, 15 * u, 2.5 * u); ctx.fill(); // the hole's own colour (block.js), else the brand's
+  font(700, 11); ctx.textAlign = 'center'; ctx.fillStyle = H.textOn(cc); ctx.fillText(c.h.id, cx + chip / 2, y + 0.5 * u);
   if (head) { font(800, 10.5); track(0.9 * u); ctx.textAlign = R ? 'right' : 'left'; ctx.fillStyle = H.brandTone('head'); halo(head, R ? cx - 7 * u : cx + chip + 7 * u, y); track(0); }
   ctx.textAlign = R ? 'right' : 'left'; y += rh / 2 + mh / 2; font(800, 18); ctx.fillStyle = H.INK; halo(L.l1, xa, y);
   if (L.l2) { y += mh / 2 + 7 * u; font(500, 11.5); ctx.fillStyle = H.INK; halo(L.l2, xa, y); }
@@ -439,6 +463,10 @@ function frontAlong(view) { const f = front(view); return new THREE.Vector3(f.b[
 // below the first, to the second, to the fourth, and above it.
 export const ORANGE = ['#f6efb4', '#f1dd3a', '#f7ae5c', '#e65a10'];
 export const orangeClass = (v, b) => (v < b[0] ? 0 : v < b[1] ? 1 : v < b[3] ? 2 : 3);
+// The release palette (S.block.hist.palette "release", round 5H): yellow, orange, red and magenta from the first to the
+// fourth colour limit and above it (0.4–1, 1–3, 3–10, ≥ 10 g/t on the reference); nothing is drawn under the first.
+export const RELEASE = ['#e6df3c', '#f59a2a', '#e4412d', '#de3fc6'];
+export const releaseClass = (v, b) => (v < b[1] ? 0 : v < b[2] ? 1 : v < b[3] ? 2 : 3);
 // The intervals as bars on a face: consecutive assays merged (length-weighted) to at least w metres, w the larger of
 // 2 m, the usual assay length, and what draws about 2.5 px thick in the export; a gap in the sampling starts a new bar.
 // max: the merged bar takes the highest grade of its group (spikes, so peaks survive) rather than the length-weighted mean.
@@ -470,8 +498,8 @@ export function placeHistograms() {
     hist.mesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }), cap);
     hist.mesh.frustumCulled = false; hist.mesh.renderOrder = 2; H.root.add(hist.mesh); hist.G = G; hist.halo = null;
   }
-  const spikes = face && B.style === 'spikes';
-  if (face && B.halo !== false && !spikes && !hist.halo) {
+  const spikes = face && B.style === 'spikes', thick = face && B.style === 'thick', rel = face && B.palette === 'release';
+  if (face && B.halo !== false && !spikes && !thick && !hist.halo) {
     hist.halo = new THREE.InstancedMesh(hist.mesh.geometry, new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false }), hist.mesh.instanceMatrix.count);
     hist.halo.frustumCulled = false; H.root.add(hist.halo);
   }
@@ -488,21 +516,22 @@ export function placeHistograms() {
   let n = 0, hn = 0;
   const fl = face && frontLen(view);
   H.project.holes.filter(holeOn).forEach((h) => { const D = face ? displayInts(h, S.valueCol, G, spikes) : { list: h.ints.map((it) => ({ from: it.from, to: it.to, v: it.vals[S.valueCol] })) }; D.list.forEach((it) => {
-    const v = it.v, bi = H.binIndex(v); if (pal ? !Number.isFinite(v) || cut(v) : !(bi >= 1) || cut(v)) return;
+    const v = it.v, bi = H.binIndex(v); if (pal ? !Number.isFinite(v) || cut(v) : rel ? !(v >= S.bins[0]) || cut(v) : !(bi >= 1) || cut(v)) return;
     const a = h.posAt(it.from), b = h.posAt(it.to), va = G.V(a.x, a.y, a.z), vb = G.V(b.x, b.y, b.z), dir = vb.clone().sub(va), len = dir.length(); if (len < 1e-6) return; dir.divideScalar(len);
-    if (face) { side.copy(along).addScaledVector(dir, -along.dot(dir)); if (side.lengthSq() < 1e-6) side.copy(right); side.normalize(); if (side.dot(right) < 0) side.negate(); } // in the face's plane, screen-right
-    else { side.crossVectors(dir, view); if (side.lengthSq() < 1e-8) side.copy(right); side.normalize(); if (side.dot(right) > 0) side.negate(); } // screen-left of the trace
+    if (face && !thick) { side.copy(along).addScaledVector(dir, -along.dot(dir)); if (side.lengthSq() < 1e-6) side.copy(right); side.normalize(); if (side.dot(right) < 0) side.negate(); } // in the face's plane, screen-right
+    else { side.crossVectors(dir, view); if (side.lengthSq() < 1e-8) side.copy(right); side.normalize(); if (side.dot(right) > 0) side.negate(); } // screen-left of the trace (thick: across it on screen, so never foreshortened)
     nrm.crossVectors(side, dir).normalize(); if (nrm.dot(view) > 0) nrm.negate();
     // Spikes: thin (about 1.9 px in the export, under 70% of the interval, so gaps show) and linear in grade.
-    const t = face ? histLength(v, pal ? vlo / 2 : vlo, vmax, B.scale === 'log') : v / vmax, L = spikes ? fl * spikeLength(v, S.bins[3]) * (B.length || 1) : Math.max(pal ? 0.5 * r : r, Lmax * Math.min(1, t));
-    const c = va.add(vb).multiplyScalar(0.5).addScaledVector(side, off + L / 2), th = spikes ? Math.min(len * 0.7, D.ppm > 0 ? 1.9 / D.ppm : len * 0.7) : len * (face ? 0.8 : 0.98);
+    // Thick (round 5H): one width, about 4% of the face's width, centred on the trace (which is drawn over it).
+    const t = face ? histLength(v, pal ? vlo / 2 : vlo, vmax, B.scale === 'log') : v / vmax, L = spikes ? fl * spikeLength(v, S.bins[3]) * (B.length || 1) : thick ? fl * 0.04 * (B.length || 1) : Math.max(pal ? 0.5 * r : r, Lmax * Math.min(1, t));
+    const c = va.add(vb).multiplyScalar(0.5).addScaledVector(side, (thick ? -L / 2 : off) + L / 2), th = spikes ? Math.min(len * 0.7, D.ppm > 0 ? 1.9 / D.ppm : len * 0.7) : len * (face && !thick ? 0.8 : 0.98);
     mx.makeBasis(side.clone().multiplyScalar(L), dir.clone().multiplyScalar(th), nrm).setPosition(c);
-    hist.mesh.setMatrixAt(n, mx); col.set(pal ? ORANGE[orangeClass(v, S.bins)] : H.BIN_COLORS[bi]); if (fade(h)) col.lerp(white, 0.55); hist.mesh.setColorAt(n, col); n++;
+    hist.mesh.setMatrixAt(n, mx); col.set(pal ? ORANGE[orangeClass(v, S.bins)] : rel ? RELEASE[releaseClass(v, S.bins)] : H.BIN_COLORS[bi]); if (fade(h)) col.lerp(white, 0.55); hist.mesh.setColorAt(n, col); n++;
     // No halo on the lowest grades (orange palette), which would read as a band along the hole.
-    if (hist.halo && !spikes && hn < hist.halo.instanceMatrix.count && (!pal || v >= S.bins[0])) { const e = 0.3 * r; mx.makeBasis(side.clone().multiplyScalar(L + 2 * e), dir.clone().multiplyScalar(len + 2 * e), nrm).setPosition(c.addScaledVector(nrm, -0.2 * r)); hist.halo.setMatrixAt(hn++, mx); }
+    if (hist.halo && !spikes && !thick && hn < hist.halo.instanceMatrix.count && (!pal || v >= S.bins[0])) { const e = 0.3 * r; mx.makeBasis(side.clone().multiplyScalar(L + 2 * e), dir.clone().multiplyScalar(len + 2 * e), nrm).setPosition(c.addScaledVector(nrm, -0.2 * r)); hist.halo.setMatrixAt(hn++, mx); }
   }); });
   hist.mesh.count = n; hist.mesh.visible = true; hist.mesh.instanceMatrix.needsUpdate = true; if (hist.mesh.instanceColor) hist.mesh.instanceColor.needsUpdate = true;
-  if (hist.halo) { hist.halo.count = hn; hist.halo.visible = face && B.halo !== false && !spikes; hist.halo.instanceMatrix.needsUpdate = true; }
+  if (hist.halo) { hist.halo.count = hn; hist.halo.visible = face && B.halo !== false && !spikes && !thick; hist.halo.instanceMatrix.needsUpdate = true; }
 }
 
 // ---------- location inset: satellite or topographic tiles around the property ----------

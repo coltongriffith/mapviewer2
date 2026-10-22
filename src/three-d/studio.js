@@ -1563,7 +1563,7 @@ function drawOverlay(ctx, k, forExport) {
   const hs = main.filter((s) => s.key === 'holes'), one = [...main.filter((s) => s.key !== 'holes'), ...ext, ...hs.map((s) => ({ ...s, title: 'Holes' }))];
   let merge = shouldMerge([...main, ...ext], LG.merge);
   if (merge && LG.merge === 'auto' && !LG.pos.main) { const [w, h] = cardSize(ctx, K, one); merge = lay.clear([W - m - w, footTop - 12 * u - h, W - m, footTop - 12 * u], soft) || lay.clear([W - m - w, trTop, W - m, trTop + h], soft); } // only where one card fits at the right
-  const cards = BK?.legend ? [] : merge ? [['main', one]] : [['main', main], ...ext.map((s) => [s.key, [s]])], cardBoxes = []; // EXT hook: the legend on a block's side face
+  const cards = BK?.legend ? [] : BK?.secs ? [['main', BK.secs(main, ext)]] : merge ? [['main', one]] : [['main', main], ...ext.map((s) => [s.key, [s]])], cardBoxes = []; // EXT hook: the legend on a block's side face
   if (SA) { const x = EXT.mapuse.secs(ctx, K); if (cards[0]) cards[0][1] = [...x, ...cards[0][1]]; else cards.push(['main', x]); } // EXT hook: a standalone map's details, atop the legend card
   let prev = null;
   const fixed = (k) => +(!!LG.pos[k] && LG.pos[k] !== 'auto'); // cards placed by hand go first
@@ -1574,7 +1574,7 @@ function drawOverlay(ctx, k, forExport) {
     const box = p?.x !== undefined ? lay.add(at(Math.max(0, Math.min(W - w, p.x * W)), Math.max(0, Math.min(H - h, p.y * H)))) : corner[p] ? lay.add(corner[p]) : lay.place(cands, Infinity, null, soft) || lay.add(cands[0]);
     drawCard(ctx, K, box[0], box[1], w, h, secs); hits.push({ kind: 'legend', id: key, box }); cardBoxes.push(box); prev = box;
   });
-  BK?.draw(lay); if (!BK?.scale) drawScaleBar(ctx, K, footTop, lay); PV?.labels(ctx, K, lay); // after the legends, so it keeps clear of them; the grid's numbers clear of it
+  BK?.draw(lay, footTop); if (!BK?.scale) drawScaleBar(ctx, K, footTop, lay); PV?.labels(ctx, K, lay); // after the legends, so it keeps clear of them; the grid's numbers clear of it
   // Orientation, bottom left: north arrow plus view direction
   occ.push([0, footTop - 60 * u, m + 160 * u, footTop]);
   const cam = getCam(), ox = m + 22 * u, oy = footTop - 34 * u, T = controls.target, n0 = proj(T), n1 = proj(T.clone().add(new THREE.Vector3(0, 0, -G.diag * 0.1)));
@@ -1619,7 +1619,7 @@ function drawOverlay(ctx, k, forExport) {
   }
   // Placed after the callouts so a tick never hides under a callout box; the deferred items (scale bar,
   // ticks) are drawn now, those pushed out by something more important left out.
-  if (S.elevTicks && !BK?.ticks) drawElevTicks(ctx, K, headBottom, footTop, lay, leaders);
+  BK?.late?.(lay); if (S.elevTicks && !BK?.ticks) drawElevTicks(ctx, K, headBottom, footTop, lay, leaders); // EXT hook: a block's elevation ticks
   lay.flush();
   drawLabels(ctx, K, forExport, occ.filter((b) => b[2] - b[0] < W - 1 && (b[2] - b[0] > 18 * u || b[3] - b[1] > 18 * u)), [0, headBottom, W, footTop]);
   if (!forExport) { overlayOcc = occ.slice(); labelHits = labelHits.concat(hits); } // legends and callouts drag too
@@ -2539,7 +2539,7 @@ function getState() {
     mapInfo: { ...S.mapInfo }, footnoteAuto: G ? autoNotes(S.view) : [], checks: getChecks(),
     ...extState(), // EXT hook: geology, geophys, tags
     // What the last drawing placed or left off: not settings, so neither saved nor compared for unsaved changes.
-    layout: { callouts: coHidden.map(([c, why]) => ({ key: c.key, holeId: c.h.id, why })), wallLabels: EXT.block?.placements() || {}, imageFits: EXT.geology?.imageFits() || {} },
+    layout: { callouts: coHidden.map(([c, why]) => ({ key: c.key, holeId: c.h.id, why })), wallLabels: EXT.block?.placements() || {}, imageFits: EXT.geology?.imageFits() || {}, block: EXT.block?.layout() },
     overlays: S.overlays.map((o) => ({ ...o, data: undefined, ...EXT.overlays?.info(o) })), shapes: structuredClone(S.shapes), sections: EXT.sections?.state() || null,
     figureSize: { key: S.format, width: f.w, height: f.h, label: f.label }, figureSizes: Object.fromEntries(Object.entries(FORMATS).map(([k, v]) => [k, `${v.label}, ${v.w}×${v.h}`])),
   };
