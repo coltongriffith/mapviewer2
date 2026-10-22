@@ -1001,6 +1001,16 @@ button, input, select, textarea { font: inherit; }
 .fig-footer .fig-cancel, .fig-footer .btn.primary { width: auto; flex: none; }
 .fig-footer .btn.primary, .fig-controls .btn.primary { width: auto; padding: 8px 18px; }
 .fig-layer-controls { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--ui-border); }
+.fig-mark { display: grid; gap: 2px; border-radius: 8px; }
+.fig-mark.is-active { background: var(--ui-surface-subtle); outline: 1px solid var(--ui-border); }
+.fig-mark input[aria-label="Layer name"] { flex: 1; min-width: 160px; padding: 4px 8px; border: 1px solid var(--ui-border); border-radius: 6px; font-size: 13px; }
+.fig-kind { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ui-text-muted); }
+.fig-review { padding: 0 6px 4px 28px; }
+.fig-find { cursor: pointer; }
+.fig-find-chip { padding: 2px 8px; }
+.fig-find-chip.is-pending { border-color: #f59e0b; }
+.fig-find-chip.is-accepted { border-color: #16a34a; background: #dcfce7; color: #14532d; }
+.fig-find-chip.is-rejected { color: var(--ui-text-muted); text-decoration: line-through; }
 @media (max-width: 760px) { .fig-panes { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; } }
 
 /* ── Panel drag-resize handles ── */
