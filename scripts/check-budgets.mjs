@@ -435,7 +435,12 @@ const BUDGETS = {
   // src/utils/logoBackground.js (~1.5 kB, fetched with the first logo added in the Brand step or a removal asked for),
   // geology.js +1.4 (the fit by known points, the A–A′ plane, getState().layout.imageFits, a fit whose hole has left the
   // data shown stretched), block.js +0.6 (the side title) and tags.js +0.1 (several "incl." results joined with " & ").
-  threeDLazyJsGzipKb: 154.9,
+  // 154.9 → 156.5 (Oct 2026, drill crew at true scale, measured 155.95, configured 156.17, 154.38 and 154.59 on main
+  // 99f75f6d, + 0.3; +1.6 kB): crew.js only, fetched only for a figure with the crew on: the "True scale" size (real
+  // dimensions in the scene's metres, heights with the vertical exaggeration, the mast's lean kept on the trace), its
+  // leader and label placed clear of the callouts, Zoom to crew and the closer zoom range while the camera looks at the
+  // crew. The page grows 0.04 kB (the setCamera, settle, overlay and zoomToCrew hooks) and stays inside threeDJsGzipKb.
+  threeDLazyJsGzipKb: 156.5,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.
