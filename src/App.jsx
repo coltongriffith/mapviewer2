@@ -5547,7 +5547,7 @@ export default function App({ initialAction = null }) {
               >On this device — sign in to keep</button>
             ) : (
               <span className={`ed-doc-state${isDirty ? ' ed-doc-state--dirty' : saveFlash ? ' ed-doc-state--saved' : ''}`}>
-                {projectHome?.readOnly ? (isDirty ? 'Not saved (view only)' : 'View only') : isDirty ? 'Unsaved' : saveFlash ? 'Saved' : user ? 'Saved to cloud' : 'Saved'}
+                {projectHome?.readOnly ? (isDirty ? 'Not saved (view only)' : 'View only') : isDirty ? 'Unsaved' : saveFlash ? 'Saved' : user && projectId && projectRevisionRef.current != null ? 'Saved to cloud' : 'Saved on this device'}
               </span>
             )}
           </div>

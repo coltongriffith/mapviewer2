@@ -15,6 +15,9 @@ test.use({
   },
 });
 
+// These flows deliberately leave edited figures; acknowledge the new unload warning.
+test.beforeEach(({ page }) => { page.on('dialog', (dialog) => dialog.type() === 'beforeunload' ? dialog.accept() : dialog.dismiss()); });
+
 const uid = '00000000-0000-4000-8000-0000000003d1';
 const user = { id: uid, email: 'three-d@example.test', role: 'authenticated', aud: 'authenticated', created_at: '2026-10-01T00:00:00Z', email_confirmed_at: '2026-10-01T00:00:00Z', user_metadata: {}, app_metadata: {} };
 const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
@@ -115,6 +118,19 @@ async function open3d(page, path = '/3d') {
   await page.waitForFunction(() => window.EM3D?.getState().ready);
 }
 const state = (page) => page.evaluate(() => window.EM3D.getState());
+
+test('an anonymous edited figure shows unsaved work and warns before leaving without loading account services', async ({ page }) => {
+  const fake = await fakeSupabase(page);
+  await open3d(page);
+  await page.waitForFunction(() => JSON.parse(document.getElementById('em3d-state').textContent || '{}').ready);
+  const warns = () => page.evaluate(() => !window.dispatchEvent(new Event('beforeunload', { cancelable: true })));
+  expect(await warns()).toBe(false);
+  await page.evaluate(() => window.EM3D.setBrand({ title: 'Unsaved field work' }));
+  await expect(page.locator('#acct-note')).toHaveText('Unsaved changes');
+  await expect(page.locator('#acct-note')).toBeVisible();
+  expect(await warns()).toBe(true);
+  expect(fake.requests).toEqual([]);
+});
 
 test('a figure survives getProject, clearFiles and loadProject unchanged', async ({ page }) => {
   await open3d(page);
@@ -503,9 +519,9 @@ test.describe('account', () => {
     expect(fake.upserts[1]).toMatchObject({ id, name: 'NORTH ZONE' });
     expect(fake.upserts[1].settings.settings.subtitle).toBe('Version two');
     await expect(page.locator('#acct-note')).toHaveText(/^Saved /);
-    // Each save writes its own folder; the earlier save's files go once the row moves on.
+    // Each save writes its own folder. Earlier revisions remain safe for other tabs and published versions.
     const stored = [...fake.objects.keys()].map((k) => k.replace(/^three-d-files\//, '')).sort();
-    expect(stored).toEqual(fake.upserts[1].file_paths.map((f) => f.path).sort());
+    expect(stored).toEqual(fake.upserts.flatMap((r) => r.file_paths.map((f) => f.path)).sort());
     expect(new Set(fake.upserts[1].file_paths.map((f) => f.path.split('/')[2])).size).toBe(1);
     expect(fake.upserts[1].file_paths[0].path).not.toBe(fake.upserts[0].file_paths[0].path);
 
