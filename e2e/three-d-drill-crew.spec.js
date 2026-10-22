@@ -54,14 +54,15 @@ test('off: the export is the default, byte for byte; on: the rig and crew stand 
   expect(r.off).toMatchObject({ on: false, shown: false });
   expect(r.on).toMatchObject({ on: true, at: 'auto', shown: true });
   expect(r.on.screen.every((v) => v > 0.05 && v < 0.95)).toBe(true);
-  expect(r.texts).toEqual(r.offTexts); // nothing in the legend or anywhere else in the annotations
+  expect(r.texts.filter((t) => !r.offTexts.includes(t))).toEqual([]); // nothing added to the legend or anywhere else in the annotations
+  expect(r.on.pick).toBe(r.on.hole); // auto stood at a collar with room around it, and keeps it
   const d = await diff(page, plain, r.fig, r.on.screen);
   expect(d.near).toBeGreaterThan(300); // the rig and crew around the projected collar
   expect(d.near).toBeGreaterThan(d.all * 0.9); // and nowhere else
   keep('3d-crew-off.png', plain); keep('3d-crew-auto.png', r.fig);
 });
 
-test('the layers ZIP: in the 3D render (scene.png) and the figure; the annotations untouched', async ({ page }) => {
+test('the layers ZIP: in the 3D render (scene.png) and the figure; the annotations change only at the rig', async ({ page }) => {
   test.setTimeout(240_000); // two layer ZIPs
   await open3d(page);
   const r = await page.evaluate(async () => {
@@ -71,7 +72,9 @@ test('the layers ZIP: in the 3D render (scene.png) and the figure; the annotatio
   const zOn = unzipSync(Buffer.from(r.zipOn.split(',')[1], 'base64')), zOff = unzipSync(Buffer.from(r.zipOff.split(',')[1], 'base64'));
   expect((await diff(page, png(zOff['scene.png']), png(zOn['scene.png']), r.on.screen)).near).toBeGreaterThan(300);
   expect((await diff(page, png(zOff['figure.png']), png(zOn['figure.png']), r.on.screen)).near).toBeGreaterThan(300);
-  expect(Buffer.from(zOn['annotations.png']).equals(Buffer.from(zOff['annotations.png']))).toBe(true);
+  // The annotations change only at the rig: collar rings under its pad give way, its own moves to the rod.
+  const an = await diff(page, png(zOff['annotations.png']), png(zOn['annotations.png']), r.on.screen);
+  expect(an.near).toBeGreaterThanOrEqual(an.all * 0.9);
 });
 
 test('at a hole: it moves there and the mast follows the hole; two exports in a row are identical', async ({ page }) => {
@@ -96,6 +99,19 @@ test('at a hole: it moves there and the mast follows the hole; two exports in a 
   keep('3d-crew-hole.png', r.b1);
 });
 
+test('collar rings under the pad give way to the rig; with it off every ring is drawn', async ({ page }) => {
+  await open3d(page);
+  const r = await page.evaluate(async () => {
+    const E = window.EM3D, P = CanvasRenderingContext2D.prototype, f = P.arc;
+    const rings = () => { let n = 0; P.arc = function (...a) { n++; return f.apply(this, a); }; try { E.exportPNG({ view: '3d' }); } finally { P.arc = f; } return n; };
+    const off = rings(), id = E.getState().project.holeIds[7];
+    await E.setCrew({ on: true, at: id, scale: 3 }); const on = rings();
+    await E.setCrew({ on: false }); return { off, on, again: rings() };
+  });
+  expect(r.on).toBeLessThan(r.off);
+  expect(r.again).toBe(r.off);
+});
+
 test('saved with the figure: it opens again where it was; an older figure opens with it off', async ({ page }) => {
   await open3d(page);
   const r = await page.evaluate(async () => {
@@ -105,11 +121,17 @@ test('saved with the figure: it opens again where it was; an older figure opens 
     await E.setCrew({ on: false, at: 'auto', scale: 1, heading: null });
     await E.loadProject(p); await E.layersReady();
     const back = E.getState().crew, again = E.exportPNG({ view: '3d' });
+    const auto = (await E.setCrew({ at: 'auto', scale: 1, heading: null })).crew, pa = E.getProject();
+    await E.setCamera({ azimuth: 200, plunge: 35 }); await E.setCrew({ on: false });
+    await E.loadProject(pa); await E.layersReady();
+    const autoBack = E.getState().crew;
     const old = structuredClone(p); delete old.settings.crew;
     await E.loadProject(old); await E.layersReady();
-    return { id: ids[4], saved: p.settings.crew, back, same: again === before, old: E.getState().crew };
+    return { id: ids[4], saved: p.settings.crew, back, same: again === before, auto, autoBack, old: E.getState().crew };
   });
   expect(r.saved).toEqual({ on: true, at: r.id, scale: 1.4, heading: 200 });
+  expect(r.auto.pick).toBeTruthy();
+  expect(r.autoBack).toMatchObject({ at: 'auto', pick: r.auto.pick, hole: r.auto.hole }); // reopened at the collar it chose, whatever the view
   expect(r.back).toMatchObject({ on: true, at: r.id, scale: 1.4, heading: 200, shown: true });
   expect(r.same).toBe(true);
   expect(r.old).toMatchObject({ on: false, at: 'auto', shown: false });
@@ -128,6 +150,12 @@ test('the Layout step: a "Drill crew" toggle and where it stands', async ({ page
   const id = await page.evaluate(() => window.EM3D.getState().project.holeIds[1]);
   await where.selectOption(id);
   await expect.poll(async () => (await page.evaluate(() => window.EM3D.getState())).crew.at).toBe(id);
+  const size = page.getByRole('combobox', { name: 'Drill crew size' });
+  await expect(size).toHaveValue('1');
+  await size.selectOption({ label: 'Large' });
+  await expect.poll(async () => (await page.evaluate(() => window.EM3D.getState())).crew.scale).toBe(1.6);
+  await size.selectOption({ label: 'Small' });
+  await expect.poll(async () => (await page.evaluate(() => window.EM3D.getState())).crew.scale).toBe(0.6);
   await box.uncheck();
   await expect.poll(async () => (await page.evaluate(() => window.EM3D.getState())).crew.on).toBe(false);
   await expect(page.locator('#crew-ui')).toBeHidden();

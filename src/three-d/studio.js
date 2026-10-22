@@ -1243,7 +1243,7 @@ function drawCallout(ctx, K, x, y, c, M, target) {
   const r = target[0] >= x + bw / 2, x0 = r ? x + bw : x, y0 = y + bh / 2, xm = r ? Math.max(x0 + 16 * u, Math.min(target[0] - 30 * u, x0 + 60 * u)) : Math.min(x0 - 16 * u, Math.max(target[0] + 30 * u, x0 - 60 * u));
   ctx.strokeStyle = pri(); ctx.lineWidth = 1.3 * u; ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(xm, y0); ctx.lineTo(target[0], target[1]); ctx.stroke();
   M.leader = [[x0, y0, xm, y0], [xm, y0, target[0], target[1]]];
-  ctx.beginPath(); ctx.arc(target[0], target[1], 3.6 * u, 0, Math.PI * 2); ctx.fillStyle = pri(); ctx.fill(); ctx.lineWidth = 1.2 * u; ctx.strokeStyle = '#fff'; ctx.stroke();
+  if (!EXT.crew?.covers(target)) { ctx.beginPath(); ctx.arc(target[0], target[1], 3.6 * u, 0, Math.PI * 2); ctx.fillStyle = pri(); ctx.fill(); ctx.lineWidth = 1.2 * u; ctx.strokeStyle = '#fff'; ctx.stroke(); } // EXT hook: none over the drill crew
   ctx.fillStyle = paper(0.96); ctx.strokeStyle = RULE; ctx.lineWidth = u; roundRect(ctx, x, y, bw, bh, 4 * u); ctx.fill(); ctx.stroke();
   ctx.fillStyle = S.accent; ctx.fillRect(x + 7 * u, y + 7 * u, 4 * u, bh - 14 * u);
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
@@ -1469,7 +1469,8 @@ function drawOverlay(ctx, k, forExport) {
   EXT.overlays?.draw(ctx, K, occ); // EXT hook: map overlays, under the collars
   const PV = EXT.plan?.begin(ctx, K); // EXT hook: a plan view's grid and interval bars (plan.js), under the collars
   project.holes.forEach((h) => {
-    const [cx, cy] = proj(G.V(h.c.x, h.c.y, h.c.z)), e = h.path[h.path.length - 1], [ex, ey] = proj(G.V(e.x, e.y, e.z));
+    const cr = EXT.crew?.collar(h); if (cr === false) return; // EXT hook: collars under the drill crew's pad give way; its own at the rod
+    const [cx, cy] = cr || proj(G.V(h.c.x, h.c.y, h.c.z)), e = h.path[h.path.length - 1], [ex, ey] = proj(G.V(e.x, e.y, e.z));
     ctx.beginPath(); ctx.arc(cx, cy, 5 * u, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 2.4 * u; ctx.strokeStyle = EXT.tags?.highlightOf(h) || '#142126'; if (h.prov || h.planned) ctx.setLineDash([2.5 * u, 2 * u]); ctx.stroke(); ctx.setLineDash([]);
     occ.push([cx - 8 * u, cy - 8 * u, cx + 8 * u, cy + 8 * u]); if (PV?.ids) return; // EXT hook: plan.js places them
     // EXT hook: key holes only (the default past 12 holes, when tags.js decides), and no ID where a pill is.

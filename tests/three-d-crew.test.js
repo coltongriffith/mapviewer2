@@ -37,6 +37,9 @@ describe('settings and saved figures', () => {
     expect(page).toMatch(/data-ext="crew\.on" aria-label="Drill crew[^"]*">Drill crew</);
     expect(page).toMatch(/id="crew-at" data-ext="crew\.at" aria-label=/);
     expect(page).toMatch(/EM3D\.setCrew\(\{on, at:/);
+    expect(page).toMatch(/id="crew-size" data-ext="crew\.scale" aria-label="Drill crew size"/);
+    expect(studio).toMatch(/const cr = EXT\.crew\?\.collar\(h\); if \(cr === false\) return;/); // collar rings under the pad give way
+    expect(studio).toMatch(/if \(!EXT\.crew\?\.covers\(target\)\)/); // no callout dot over the rig
   });
 });
 
@@ -55,6 +58,14 @@ describe('option validation (patch)', () => {
     expect(() => crew.patch(null, { at: 'EX-999' }, holes)).toThrow(/no hole "EX-999"/);
     expect(() => crew.patch(null, { at: [1] })).toThrow(/\[easting, northing\]/);
     expect(() => crew.patch(null, { at: [1, 'x'] })).toThrow(/\[easting, northing\]/);
+  });
+  it('keeps the collar "auto" chose until the crew is turned on again or moved', () => {
+    const c = { ...crew.CREW, on: true, pick: 'EX-002' };
+    expect(crew.patch(c, { scale: 2 }).pick).toBe('EX-002');
+    expect(crew.patch(c, { heading: 10 }).pick).toBe('EX-002');
+    expect(crew.patch(c, { on: true })).not.toHaveProperty('pick');
+    expect(crew.patch(c, { at: 'auto' })).not.toHaveProperty('pick');
+    expect(crew.patch({ ...c, pick: 7 }, {})).not.toHaveProperty('pick');
   });
   it('clamps the scale and wraps the heading', () => {
     expect(crew.patch(null, { scale: 9 }).scale).toBe(4);
@@ -86,6 +97,17 @@ describe('where it stands (spot) and the mast (lean)', () => {
     expect(crew.spot(auto, spread)).toEqual({ x: 50, y: 50, hole: null });
     expect(crew.spot(auto, spread, { shown: ['A', 'B'] })).toEqual({ x: 50, y: 0, hole: null });
     expect(crew.spot(auto, spread, { B: { x0: -10, x1: 60, y0: -10, y1: 150 } })).toEqual({ x: 0, y: 50, hole: null }); // the cut-back block's holes
+  });
+  it('auto on screen: of the collars with room for the rig, the nearest the camera; kept once chosen', () => {
+    // A tight cluster at the front, a roomy collar further back, another roomy one nearer; [x, y] of the frame, distance.
+    const at = { K1: [0.5, 0.6, 100], K2: [0.51, 0.6, 101], K3: [0.5, 0.61, 102], FAR: [0.3, 0.4, 300], NEAR: [0.7, 0.55, 150], OFF: null };
+    const hs = Object.keys(at).map((id, i) => hole(id, i * 100, 0)), view = Object.assign((h) => at[h.id], { frame: [1000, 600] });
+    expect(crew.spot(auto, hs, { view })).toMatchObject({ x: 400, hole: { id: 'NEAR' }, pick: 'NEAR' });
+    expect(crew.spot({ ...auto, scale: 8 }, hs, { view })).toMatchObject({ pick: 'FAR' }); // no room anywhere: the most room
+    expect(crew.spot({ ...auto, pick: 'FAR' }, hs, { view })).toMatchObject({ pick: 'FAR' }); // kept
+    expect(crew.spot({ ...auto, pick: 'GONE' }, hs, { view })).toMatchObject({ pick: 'NEAR' }); // chosen again
+    expect(crew.spot(auto, hs, { view, chosen: ['K2'] })).toMatchObject({ hole: { id: 'K2' } }); // a chosen hole first
+    expect(crew.spot(auto, hs, { view: Object.assign(() => null, { frame: [1000, 600] }) }).pick).toBeUndefined(); // nothing on screen: amid them
   });
   it('the mast follows a hole\'s azimuth and dip, with the vertical exaggeration', () => {
     const L = crew.lean(pad[1]);
@@ -146,6 +168,22 @@ describe('the model in the scene (sync, tick, state)', () => {
     crew.set({ at: 'auto' }); crew.sync(); expect(H.root.children.length).toBe(1);
     crew.set({ on: false }); crew.sync(); expect(H.root.children.length).toBe(0);
   });
+  it('auto keeps its choice in the settings; collars under the pad give way, its own moves to the rod', () => {
+    H.project.holes.push(hole('EX-003', 14, 24, { z: slope(14, 24) }), hole('EX-004', 300, 300, { z: slope(300, 300) }));
+    crew.set({ on: true, at: 'EX-001' }); crew.sync();
+    expect(crew.collar(H.project.holes[2])).toBe(false); // 6 m away, under the pad
+    expect(crew.collar(H.project.holes[3])).toBeUndefined(); // far off: as drawn
+    const own = crew.collar(H.project.holes[0]);
+    expect(own).toHaveLength(2);
+    const st = crew.state(), [W, Hh] = H.frame();
+    expect(crew.covers([st.screen[0] * W, st.screen[1] * Hh - 2])).toBe(true);
+    expect(crew.covers([5, 5])).toBe(false);
+    crew.set({ at: 'auto' }); crew.sync();
+    expect(typeof S.crew.pick).toBe('string');
+    crew.set({ on: false }); crew.sync();
+    expect(crew.collar(H.project.holes[2])).toBeUndefined(); // off: every ring as before
+    expect(crew.covers([st.screen[0] * W, st.screen[1] * Hh])).toBe(false);
+  });
   it('idles in the live view and holds one fixed pose for exports', () => {
     crew.set({ on: true }); crew.sync();
     const snap = () => { const out = []; H.root.traverse((o) => out.push(o.rotation.toArray().slice(0, 3).join(), o.position.toArray().join())); return out.join('|'); };
@@ -160,5 +198,12 @@ describe('the model in the scene (sync, tick, state)', () => {
     expect(el.hidden).toBe(false);
     expect([...el.querySelectorAll('option')].map((o) => o.value)).toEqual(['auto', 'EX-001', 'EX-002']);
     expect(el.querySelector('select').value).toBe('EX-002');
+    el.innerHTML = '<select></select><select></select>';
+    crew.set({ scale: 1.6 }); crew.renderUI(el);
+    const size = el.querySelectorAll('select')[1];
+    expect([...size.options].map((o) => o.textContent)).toEqual(['Small', 'Medium', 'Large']);
+    expect(size.value).toBe('1.6');
+    crew.set({ scale: 2.5 }); crew.renderUI(el);
+    expect(size.value).toBe('2.5'); // a size set through the API keeps its own entry
   });
 });
