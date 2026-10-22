@@ -74,7 +74,12 @@ const BUDGETS = {
   // and its hand-off to the lazy DrillPlanControls, the stage's hand-off to the lazy DrillPlanOverlay, the plan's
   // update/remove setters and the hook that loads its legend rows (utils/useDrillLegend.js). Reading the files,
   // laying out the plan, its legend rows and its painting are all lazy.
-  maxJsChunkGzipKb: 151.4,
+  // 151.4 → 151.8 (Oct 2026, import a company figure merged over the 2D drill plan, measured 151.45 configured, +0.33 kB over
+  // main's 151.12): the editor's hand-offs only: the Data step's "Import a company figure…" link, the dialog and the
+  // inspector's credit row (lazy FigureImport and FigureLayerControls chunks), "georeference it by points instead" from
+  // the image placement dialog, and no "Re-place image…" for a figure placed by its corners. The fit, the tracer and
+  // the layers are lazy.
+  maxJsChunkGzipKb: 151.8,
   initialJsGzipKb: 75,
   initialAuthJsGzipKb: 135,
   // The former configured check omitted VITE_ADMIN_EMAIL, which pruned the
@@ -173,7 +178,17 @@ const BUDGETS = {
   // ~1.5 kB: the Exploration Maps mark, wordmark, review status and "Prepared for" line under an export), shared so the
   // 2D exporter can use it later; /3d imports it only for an export that asks for the band, so it counts here, not in
   // the /3d page. Nothing else moves.
-  totalAuthJsGzipKb: 973.0,
+  // 973.0 → 990.8 (Oct 2026, import a company figure merged over the drill plan and round 5G, measured 990.5, +17.8 kB over
+  // main's 972.7): all of it lazy. The dialog (FigureImport.jsx with utils/georef.js, utils/figureImport.js and
+  // utils/figureMargins.js, 12.6 kB: the image kept as a JPEG, or WebP/PNG with alpha once its blank margins or a crop
+  // are hidden; points and grid labels fitted as a similarity or affine with residuals in metres; the satellite map for
+  // picking and previewing; colour samples; the credit; a re-fit reconciled with the layers traced before) and the
+  // tracer's Web Worker (figureTrace.worker.js, 2.9 kB, fetched on the first Trace) load only when the dialog opens;
+  // the turned-image overlay (figureOverlay.js, 0.7 kB) only for a map with a placed figure; the inspector's credit
+  // row (0.7 kB) only for a layer made from one. App as maxJsChunkGzipKb above, MapCanvas +0.19 kB (the lazy overlay
+  // hook), renderScene +0.17 kB (a figure drawn by its corners in PNG and SVG, its credit line) and
+  // RasterPlacementModal +0.1 kB (the link to the points dialog).
+  totalAuthJsGzipKb: 990.8,
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
@@ -203,7 +218,8 @@ const BUDGETS = {
   // 901.7 → 903.4 (measured 903.1): the drill plan review fixes, as totalAuthJsGzipKb above.
   // 903.4 → 904.8 (measured 904.5, 903.1 on main; on its own branch 879.1 → 880.6): the shared watermark band, as
   // totalAuthJsGzipKb above.
-  totalJsGzipKb: 904.8,
+  // 904.8 → 922.6 (measured 922.3, 904.5 on main): import a company figure, as totalAuthJsGzipKb above.
+  totalJsGzipKb: 922.6,
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the
   // totals above. /3d carries three.js (~109 kB gzip) and its editor.
@@ -439,10 +455,13 @@ const BUDGETS = {
   // 338.1 → 339.0 (Oct 2026, production errors, measured 338.7, 337.8 on main): the stale-chunk recovery in the entry and
   // the Canvas redraw fix in vendor-leaflet, as totalAuthJsGzipKb above.
   // 339.0 → 339.7 (Oct 2026, 2D drill plan, measured 339.4, 338.8 on main): the App code as maxJsChunkGzipKb above.
-  editorAuthJsGzipKb: 339.7,
+  // 339.7 → 340.2 (Oct 2026, import a company figure merged over the drill plan, measured 339.9, 339.4 on main): App as
+  // maxJsChunkGzipKb above and MapCanvas +0.19 kB (the lazy hook for a figure placed by its corners).
+  editorAuthJsGzipKb: 340.2,
   // 270 → 271.0 (Oct 2026, production errors, measured 270.7, 269.6 on main): the same as editorAuthJsGzipKb above.
   // 271.0 → 271.7 (Oct 2026, 2D drill plan, measured 271.4, 270.8 on main): the same as editorAuthJsGzipKb above.
-  editorJsGzipKb: 271.7,
+  // 271.7 → 272.2 (measured 271.9, 271.4 on main): import a company figure, as editorAuthJsGzipKb above.
+  editorJsGzipKb: 272.2,
   claimsAuthJsGzipKb: 355,
   claimsJsGzipKb: 290,
   // Stylesheet, gzipped. Today ~29 kB.
