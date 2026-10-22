@@ -27,9 +27,10 @@
 // AREA_IN_HECTARES, GOOD_TO_DATE, TITLE_TYPE_DESCRIPTION).
 
 import { fetchAllPages, fetchWfsAll, MAX_TOTAL_FEATURES, MAX_PAGES } from './_lib/paging.js';
-import { applyCors, handleMethods, queryTooLong, validateTerm, validateBbox, rateLimited, diagnosticsAllowed, publicErrorMessage } from './_lib/guard.js';
+import { applyCors, handleMethods, queryTooLong, validateTerm, MAX_TERM_LENGTH, validateBbox, rateLimited, diagnosticsAllowed, publicErrorMessage } from './_lib/guard.js';
 import { esriGeometryToGeoJSON } from './_lib/esri.js';
 import { resolveUsCompanyTiers, matchesCompany } from './_lib/us-aliases.js';
+import { parseClaimNumbers, cleanSingleNumber, MAX_CLAIM_NUMBERS, MAX_NUMBER_LIST_LENGTH } from '../shared/claimNumbers.js';
 
 const ARCGIS_PROVINCES = {
   on: {
@@ -1110,7 +1111,7 @@ async function searchUsCompany(cfg, company, res, { layerUrl, fields, scoping })
   });
 }
 
-async function searchArcgis(cfg, term, type, res) {
+async function searchArcgis(cfg, term, type, res, { numberList = null } = {}) {
   const { layerUrl, fields } = await resolveLayerAndFields(cfg, type);
 
   // US state scoping is resolved before anything queries the layer, so every
@@ -1203,6 +1204,42 @@ async function searchArcgis(cfg, term, type, res) {
   }
 
   const orJoin = (clauses) => (clauses.length > 1 ? `(${clauses.join(' OR ')})` : clauses[0]);
+
+  if (type === 'number' && numberList) {
+    // The whole list in one query: an exact IN on every identifier column,
+    // string columns compared in capitals, numeric ones only against all-digit
+    // tokens. No legacy lookup and no near misses (see numberListMeta).
+    const tokens = numberList.numbers.map((n) => (cfg.provider === 'blm-mlrs' ? n.replace(/[\s-]/g, '') : n));
+    const clauses = [];
+    for (const f of numberFields) {
+      if (isStringType(f)) {
+        clauses.push(`UPPER(${f.name}) IN (${tokens.map((t) => `'${escapeSql(t.toUpperCase())}'`).join(',')})`);
+      } else {
+        const digits = tokens.filter((t) => /^\d+$/.test(t));
+        if (digits.length) clauses.push(`${f.name} IN (${digits.join(',')})`);
+      }
+    }
+    if (!clauses.length) {
+      return res.status(400).json({
+        error: `${numberFields.map((f) => f.name).join(' and ')} `
+          + `${numberFields.length > 1 ? 'are' : 'is'} numeric — enter digits only.`,
+      });
+    }
+    let where = orJoin(clauses);
+    if (scoping) where = `(${where}) AND ${scoping.where}`;
+    const { features, meta } = await arcgisQueryAll(layerUrl, { where, outFields: '*', returnGeometry: 'true', outSR: '4326' });
+    if (cfg.provider) meta.provider = cfg.provider;
+    const shown = features.map((f) => ({ ...f, properties: normalizeProps(f.properties || {}, cfg) }));
+    return res.status(200).json({
+      type: 'FeatureCollection',
+      features: shown,
+      meta: {
+        ...withScopingMeta(meta, scoping),
+        numberList: numberListMeta({ ...numberList, numbers: tokens }, shown,
+          (f) => [f.properties?.TAG_NUMBER, ...numberFields.map((nf) => f.properties?.[nf.name])]),
+      },
+    });
+  }
 
   let steps;
   let whereFor;
@@ -1602,6 +1639,60 @@ export const MIN_NUMBER_PREFIX_LENGTH = 3;
 // what stops a two-digit-ish prefix from paging an entire province back.
 export const NEAR_MISS_LIMIT = 50;
 
+// ── Claim-number lists ─────────────────────────────────────────────────────
+//
+// A box holding several numbers (parseClaimNumbers in shared/claimNumbers.js)
+// is answered with ONE upstream query of exact matches, never a ladder per
+// number, and the response says which numbers were found and which were not.
+// "Found 28 of 30" with the two missing numbers named is the answer somebody
+// pasting a claim schedule needs; a near miss for each would bury it.
+
+/** meta.numberList: which of the asked-for numbers came back. */
+export function numberListMeta(list, features, idsOf) {
+  const key = (v) => String(v ?? '').toUpperCase().replace(/[\s-]/g, '');
+  const have = new Set(features.flatMap((f) => idsOf(f).filter((v) => v != null && v !== '').map(key)));
+  const found = [];
+  const missing = [];
+  list.numbers.forEach((n) => (have.has(key(n)) ? found : missing).push(n));
+  return {
+    requested: list.numbers.length,
+    total: list.total,
+    truncated: list.truncated,
+    max: MAX_CLAIM_NUMBERS,
+    found,
+    missing,
+  };
+}
+
+// What may go into a Quebec tag filter: the store keeps tags in capitals,
+// digits and letters only ("2654321", "156PTA").
+const QC_TAG_FORM = /^[A-Z0-9-]+$/;
+
+/** The spellings of each listed number the Quebec store may hold. */
+export function qcNumberForms(numbers) {
+  return [...new Set(numbers.flatMap((n) => {
+    const up = String(n).toUpperCase();
+    return [up, up.replace(/-/g, '')];
+  }))].filter((f) => QC_TAG_FORM.test(f));
+}
+
+/**
+ * The smallest string greater than every string that starts with `prefix`, for
+ * an indexed range scan (`>= prefix AND < bound`). Null when there is none
+ * ("999", "ZZ") — the caller then scans from the prefix in order and filters.
+ */
+export function prefixUpperBound(prefix) {
+  const chars = String(prefix ?? '').split('');
+  while (chars.length) {
+    const c = chars.pop();
+    if (/[0-8A-Ya-y]/.test(c)) {
+      chars.push(String.fromCharCode(c.charCodeAt(0) + 1));
+      return chars.join('');
+    }
+  }
+  return null;
+}
+
 /**
  * The ordered attempts for a claim-number search, widest last.
  *
@@ -1778,7 +1869,7 @@ export function relaxedTokenSetsPreservingSpelling(tokens) {
   return relaxedTokenSets(folded).map((set) => set.map((f) => original.get(f) ?? f));
 }
 
-async function searchQc(term, type, res) {
+async function searchQc(term, type, res, { numberList = null } = {}) {
   const creds = qcSupabaseCreds();
   if (!creds) {
     return res.status(503).json({ error: 'Quebec claims data is not available right now.' });
@@ -1835,20 +1926,61 @@ async function searchQc(term, type, res) {
     },
   });
 
+  if (type === 'number' && numberList) {
+    // A pasted list: one indexed IN query for all of them, exact matches only.
+    // A near miss for each of thirty numbers would bury the thirty answers.
+    const forms = qcNumberForms(numberList.numbers);
+    const r = forms.length ? await runQuery(`tag_number=in.(${forms.map(encodeURIComponent).join(',')})`) : { features: [], meta: {} };
+    return res.status(200).json({
+      type: 'FeatureCollection',
+      features: r.features,
+      meta: { ...r.meta, numberList: numberListMeta(numberList, r.features, (f) => [f.properties?.TAG_NUMBER]) },
+    });
+  }
+
   if (type === 'number') {
-    // Exact, then starts-with, then contains. Quebec's store holds 258,608 tag
-    // numbers of which 250,636 are seven digits, so somebody typing the first
-    // five digits off a claim schedule — or a number with a "CDC" prefix the
-    // store does not keep — used to get a blank page. Every QC number search on
-    // record returned nothing.
-    const ladder = numberSearchLadder(cleaned);
-    const { features, meta, step } = await runLadder(ladder, (s) => runQuery(
-      `tag_number=ilike.${encodeURIComponent(
-        s.match === 'prefix' ? `${s.term}*` : s.match === 'contains' ? `*${s.term}*` : s.term,
-      )}`,
-      // The widened rungs answer with the closest numbers, capped.
-      s.match === 'exact' ? undefined : NEAR_MISS_LIMIT,
-    ));
+    // Exact, then starts-with. Quebec's store holds ~253,000 tag numbers, most
+    // of them seven digits, so somebody typing the first five digits off a
+    // claim schedule — or a number with a "CDC" prefix the store does not keep
+    // — used to get a blank page.
+    //
+    // EVERY RUNG MUST USE THE qc_claims_tag BTREE INDEX. Until Oct 2026 the
+    // rungs were `ilike` patterns, which no btree index can serve, so each one
+    // was a sequential scan of the 132 MB table (~0.9 s warm, far longer cold).
+    // A number in the store answered on the first rung; any number NOT in the
+    // store fell through to the prefix scan, which ran into the anon role's
+    // 3 s statement_timeout, came back from PostgREST as a 500 and reached the
+    // user as an error — never as "not found". That was every failing Quebec
+    // number search on record (4527312, 5241271, 1212697, "#4527312", and the
+    // company names typed into the Claim # tab). So: exact is `in.(forms)`,
+    // a prefix is a `gte`/`lt` range in tag order, and there is no contains
+    // rung — a leading wildcard can only ever be a full scan.
+    const ladder = numberSearchLadder(cleaned)
+      .filter((s) => s.match !== 'contains')
+      .map((s) => ({ ...s, term: s.term.toUpperCase() }))
+      .filter((s) => QC_TAG_FORM.test(s.term));
+    const exactForms = [...new Set(ladder.filter((s) => s.match === 'exact').map((s) => s.term))];
+    const steps = [
+      ...(exactForms.length ? [{ match: 'exact', term: exactForms[0], forms: exactForms }] : []),
+      ...ladder.filter((s) => s.match === 'prefix'),
+    ];
+    const { features, meta, step } = await runLadder(steps, async (s) => {
+      if (s.match === 'exact') {
+        return runQuery(`tag_number=in.(${s.forms.map(encodeURIComponent).join(',')})`);
+      }
+      // The range finds the closest numbers in tag order; the startsWith check
+      // keeps only true prefix matches (it matters only when no upper bound
+      // could be formed, e.g. "999").
+      const upper = prefixUpperBound(s.term);
+      const r = await runQuery(
+        `tag_number=gte.${encodeURIComponent(s.term)}`
+          + (upper ? `&tag_number=lt.${encodeURIComponent(upper)}` : '')
+          + '&order=tag_number.asc',
+        NEAR_MISS_LIMIT,
+      );
+      const kept = r.features.filter((f) => String(f.properties?.TAG_NUMBER || '').toUpperCase().startsWith(s.term));
+      return { features: kept, meta: { ...r.meta, truncated: r.meta?.truncated === true && kept.length >= NEAR_MISS_LIMIT } };
+    });
     const widened = step && step.match !== 'exact';
     const shown = widened ? features.slice(0, NEAR_MISS_LIMIT) : features;
     return res.status(200).json({
@@ -2049,7 +2181,15 @@ export function bcCqlFilter(term, type, opts = {}) {
   return clauses.length > 1 ? `(${clauses.join(' AND ')})` : clauses[0];
 }
 
-async function searchBc(term, type, res) {
+/** CQL for a list of B.C. numbers: tenure numbers (numeric, unquoted) or tags. */
+export function bcNumberListFilter(numbers) {
+  const quoted = numbers.map((n) => `'${String(n).replace(/'/g, "''")}'`);
+  const tenures = numbers.filter((n) => /^\d+$/.test(n));
+  const tag = `TAG_NUMBER IN (${quoted.join(',')})`;
+  return tenures.length ? `(TENURE_NUMBER_ID IN (${tenures.join(',')}) OR ${tag})` : tag;
+}
+
+async function searchBc(term, type, res, { numberList = null } = {}) {
   const runFilter = (cqlFilter, maxTotal = undefined) => {
     const buildUrl = (startIndex, count) => [
       'https://openmaps.gov.bc.ca/geo/pub/wfs',
@@ -2070,6 +2210,17 @@ async function searchBc(term, type, res) {
       ...(maxTotal ? { maxTotal } : {}),
     });
   };
+
+  if (type === 'number' && numberList) {
+    // One filter for the whole list: the tenure numbers as a numeric IN, every
+    // token as a tag IN. Exact matches only (see numberListMeta).
+    const { features, meta } = await runFilter(bcNumberListFilter(numberList.numbers));
+    return res.status(200).json({
+      type: 'FeatureCollection',
+      features,
+      meta: { ...meta, numberList: numberListMeta(numberList, features, (f) => [f.properties?.TENURE_NUMBER_ID, f.properties?.TAG_NUMBER]) },
+    });
+  }
 
   if (type === 'number') {
     // Exact on both identifiers, then starts-with, then contains. All three
@@ -2130,6 +2281,66 @@ async function searchBc(term, type, res) {
 
   const { features, meta } = await runFilter(bcCqlFilter(term, type));
   return res.status(200).json({ type: 'FeatureCollection', features, meta });
+}
+
+// Canadian jurisdictions whose registry publishes a holder, so text typed into
+// the Claim # box can be answered as the company search it obviously is. Not
+// Manitoba (no holder field) and not the US, where "company" is a claim-NAME
+// match and must stay an explicit choice.
+function companySearchable(province) {
+  if (province === 'bc' || province === 'qc') return true;
+  const cfg = ARCGIS_PROVINCES[province];
+  return Boolean(cfg?.ownerFields?.length);
+}
+
+/**
+ * What a claim-number request should actually search.
+ *
+ *   "#4527312", "No. 627637"      → that one number, markers removed
+ *   "2351771 2351772, 2351773"    → a list (numberList), capped at MAX_CLAIM_NUMBERS
+ *   "big ridge gold corp"         → a company search, flagged meta.searchedAs
+ *                                   (where the registry publishes holders)
+ *   anything else in one piece    → searched exactly as before ("CB12345",
+ *                                   and the escaping tests' "%%" or "CB_2345")
+ *
+ * @returns {{type, term, numberList, extraMeta} | {error: string}}
+ */
+export function claimNumberRequest(term, province) {
+  const asBefore = { type: 'number', term, numberList: null, extraMeta: null };
+  const asCompany = () => {
+    const company = term.trim();
+    if (company.length > MAX_TERM_LENGTH) return { error: `Search term too long (max ${MAX_TERM_LENGTH} characters).` };
+    return { type: 'company', term: company, numberList: null, extraMeta: { searchedAs: 'company', requestedType: 'number' } };
+  };
+  // One piece with no "#" or separator: only a plain word changes meaning
+  // ("destiny" is a company); everything else is the number search it was.
+  if (!/[\s,;|#]/.test(term)) {
+    if (/^[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ.'&-]*$/.test(term) && companySearchable(province)) return asCompany();
+    if (term.length > MAX_TERM_LENGTH) return { error: `Search term too long (max ${MAX_TERM_LENGTH} characters).` };
+    return asBefore;
+  }
+  const parsed = parseClaimNumbers(term);
+  if (parsed.kind === 'text' && companySearchable(province)) return asCompany();
+  if (parsed.kind !== 'numbers') return term.length > MAX_TERM_LENGTH ? { error: `Search term too long (max ${MAX_TERM_LENGTH} characters).` } : asBefore;
+  if (parsed.total > 1) return { type: 'number', term, numberList: parsed, extraMeta: null };
+  // One number. Keep the spelling as typed ("CB 12345") when it is the same
+  // number, so the ladder still tries the registry's own separator.
+  const single = cleanSingleNumber(term);
+  const same = single.replace(/[\s-]/g, '').toUpperCase() === parsed.numbers[0].replace(/-/g, '').toUpperCase();
+  return { type: 'number', term: same ? single : parsed.numbers[0], numberList: null, extraMeta: null };
+}
+
+// Adds fields to the meta of a FeatureCollection response without the search
+// functions having to know about it.
+function withExtraMeta(res, extra) {
+  const wrapped = {
+    status(code) { res.status(code); return wrapped; },
+    setHeader: (...a) => res.setHeader?.(...a),
+    json(body) {
+      return res.json(body?.type === 'FeatureCollection' ? { ...body, meta: { ...(body.meta || {}), ...extra } } : body);
+    },
+  };
+  return wrapped;
 }
 
 export default async function handler(req, res) {
@@ -2308,18 +2519,30 @@ export default async function handler(req, res) {
   if (type === 'name' && province !== 'bc' && !getArcgisJurisdiction(province)?.nameFields?.length) {
     return res.status(400).json({ error: 'Claim-name search is not available for this jurisdiction.' });
   }
-  const checkedTerm = validateTerm(q);
+  // A claim-number box may hold a pasted list, so it gets the longer limit; the
+  // list is then capped by count (shared/claimNumbers.js), not by characters.
+  const checkedTerm = validateTerm(q, type === 'number' ? { max: MAX_NUMBER_LIST_LENGTH } : undefined);
   if (!checkedTerm.ok) return res.status(400).json({ error: checkedTerm.error });
-  const term = checkedTerm.term;
+  let term = checkedTerm.term;
   // No holder is named with digits alone; a bare number typed into company
   // search is a claim number (the one failed Ontario session of 2026-09-22
   // tried exactly that first).
   if ((type || 'company') === 'company' && /^\d{5,}$/.test(term)) type = 'number';
 
+  // Read the Claim # box the way a person means it (see claimNumberRequest).
+  let numberList = null;
+  let extraMeta = null;
+  if (type === 'number') {
+    const read = claimNumberRequest(term, province);
+    if (read.error) return res.status(400).json({ error: read.error });
+    ({ type, term, numberList, extraMeta } = read);
+  }
+  const out = extraMeta ? withExtraMeta(res, extraMeta) : res;
+
   try {
-    if (province === 'bc') return await searchBc(term, type, res);
-    if (province === 'qc') return await searchQc(term, type, res);
-    return await searchArcgis(getArcgisJurisdiction(province), term, type, res);
+    if (province === 'bc') return await searchBc(term, type, out, { numberList });
+    if (province === 'qc') return await searchQc(term, type, out, { numberList });
+    return await searchArcgis(getArcgisJurisdiction(province), term, type, out, { numberList });
   } catch (e) {
     if (process.env.NODE_ENV !== 'production') console.warn('[claims]', e?.message);
     return upstreamErrorResponse(res, e, 'Failed to reach the provincial registry.');

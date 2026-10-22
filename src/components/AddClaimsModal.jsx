@@ -5,7 +5,7 @@ import { US_CLAIMS_ENABLED } from '../utils/jurisdictions';
 
 const ClaimsFileUpload = lazyGuarded(() => import('./ClaimsFileUpload'));
 
-export default function AddClaimsModal({ onClose, onImport, onCSVFile, defaultPath = null, initialProvince = null, initialQuery = '', autoSearch = false }) {
+export default function AddClaimsModal({ onClose, onImport, onCSVFile, defaultPath = null, initialProvince = null, initialQuery = '', autoSearch = false, initialMode = null }) {
   const [path, setPath] = useState(defaultPath); // null | 'registry' | 'upload'
 
   function handleBackdropClick(e) {
@@ -46,6 +46,7 @@ export default function AddClaimsModal({ onClose, onImport, onCSVFile, defaultPa
             initialProvince={initialProvince}
             initialQuery={initialQuery}
             autoSearch={autoSearch}
+            initialMode={initialMode}
             onImport={(items) => {
               // items is [{geojson, name, provenance}, ...] — one entry per
               // geographic group. provenance carries degraded-scoping and
