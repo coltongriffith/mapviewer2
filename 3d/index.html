@@ -32,6 +32,8 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <script async src="https://www.googletagmanager.com/gtag/js?id=AW-18358773663"></script>
 <script defer src="/gtag-init.js"></script>
+<!-- Page view and first touch, as on /teams and the static pages (/api/track; your own browser and bots left out). -->
+<script defer src="/acquisition.js"></script>
 <script src="https://analytics.ahrefs.com/analytics.js" data-key="Nj1JOEhHV5bRKYBBoUJVVg" async></script>
 <style>
 /* Layout: Exploration Maps editor chrome. A four-step panel on the left, a grey workspace on the right
@@ -55,6 +57,10 @@ body { background: var(--map-white); color: var(--slate-950); font-family: var(-
 .brandbar .name { font-weight: 700; font-size: 17px; letter-spacing: -0.01em; color: inherit; text-decoration: none; }
 .badge { font-family: var(--mono); font-size: 11px; font-weight: 600; border: 1px solid var(--slate-300); border-radius: 4px; padding: 1px 6px; color: var(--slate-600); }
 .badge.cu { border-color: var(--copper); color: var(--copper); }
+.acct-dash { margin-left: auto; display: grid; justify-items: end; min-width: 0; font-size: 12.5px; font-weight: 600; color: var(--slate-800); text-decoration: none; line-height: 1.25; }
+.acct-dash[hidden] { display: none; }
+.acct-dash:hover span { text-decoration: underline; }
+.acct-dash small { font-weight: 400; color: var(--slate-600); max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .steps { display: grid; grid-template-columns: repeat(4, 1fr); border-bottom: 1px solid var(--slate-200); }
 .step { font: inherit; font-weight: 600; font-size: 14px; color: var(--slate-600); background: none; border: 0; border-bottom: 3px solid transparent; padding: 9px 4px 7px; cursor: pointer; display: grid; justify-items: center; gap: 1px; }
 .step b { display: inline-grid; place-items: center; width: 21px; height: 21px; border-radius: 50%; border: 1.5px solid currentColor; font-size: 12px; }
@@ -290,6 +296,7 @@ html.em3d-version .share-bar .btn { padding: 6px 11px; }
     <div class="brandbar">
       <svg viewBox="0 0 480 480" aria-hidden="true"><rect width="480" height="480" rx="77" fill="#fcfbf7"/><svg x="52.8" y="52.8" width="374.4" height="374.4" viewBox="18 40 427 450"><path fill="#142126" d="M60 40H180V85H410V250H445V480H30V385H60Z"/><path fill="none" stroke="#fff" stroke-width="22" d="M18 180H132L205 250H240V325L320 400V490"/><path fill="none" stroke="#fff" stroke-width="22" d="M205 250L260 195"/><rect x="250" y="145" width="90" height="90" fill="#fff"/><rect x="273" y="168" width="44" height="44" fill="#c65322"/></svg></svg>
       <a class="name" href="/">Exploration Maps</a><span class="badge cu">3D</span><span class="badge">Beta</span>
+      <a class="acct-dash" id="acct-dash" href="/dashboard" hidden><span>← Dashboard</span><small id="acct-who-top"></small></a>
     </div>
     <div class="steps" role="tablist" aria-label="Steps">
       <button class="step" role="tab" id="step-data" aria-controls="pane-data" aria-selected="true"><b>1</b>Data</button>
@@ -600,6 +607,8 @@ html.em3d-version .share-bar .btn { padding: 6px 11px; }
           <label class="check" title="Eastings and northings when looking straight down"><input type="checkbox" data-ext="style.grid">Grid in plan view</label>
           <label class="check"><input type="checkbox" id="opt-pending" data-ext="style.pendingLabels" checked>"Assays pending" from collar status</label>
           <label class="check"><input type="checkbox" id="opt-pending-none" data-ext="style.pendingNoAssays">Label holes without assays</label>
+          <label class="check"><input type="checkbox" id="opt-crew" data-ext="crew.on" aria-label="Drill crew: a toy drill rig and its crew at the drill pad">Drill crew</label>
+          <span id="crew-ui" hidden><select id="crew-at" data-ext="crew.at" aria-label="Where the drill crew stands"><option value="auto">Auto (at the drill pad)</option></select> <select id="crew-size" data-ext="crew.scale" aria-label="Drill crew size"><option value="0.6">Small</option><option value="1">Medium</option><option value="1.6">Large</option></select> <label class="check"><input type="checkbox" id="crew-chatter" data-ext="crew.chatter" checked>Crew chatter</label></span>
         </div>
         <div class="grid2" style="margin-top:8px">
           <label class="field"><span>Terrain</span><select id="terrain" data-ext="style.terrain">
@@ -1015,6 +1024,16 @@ Whole projects (to keep or move a figure):
                                   the top intercept, along the section). Returns the id
   Any shape takes views: "both" (default) | "3d" | "section", where it is drawn.
   EM3D.updateShape(id, {...}) / removeShape(id)   getState().shapes
+  EM3D.setCrew({on, at: "auto" | holeId | [e, n], scale, heading, chatter, life})   a toy drill rig and its crew in hard hats on a
+                                  levelled pad (off by default). "auto": the one hole chosen for the section, else
+                                  the common pad, else the visible collar with the most room on screen (near side
+                                  first; kept as pick); at a hole the mast follows its dip and azimuth. Collar rings
+                                  under the pad give way. scale (0.25-4) times the usual size (Small 0.6, Large 1.6); heading: degrees from north the
+                                  rig faces (null: along the hole). In the figure and the layers' 3D render, not the
+                                  legend; it idles in the live view only. life (default true): in the live view and on
+                                  share links the crew go about small routines; chatter (default true): now and then
+                                  one says a short line in a bubble; pointing at or tapping one, they notice, wave and
+                                  say hello. Never in an export. getState().crew: where, hole, shown, screen
   EM3D.layersReady()              Promise; resolves once the layers, face images and inset have loaded
   EM3D.setFigureStyle(style, {brandKitId, brandRevision})   a shared figure style (version 1: colours
                                   {primary, accent, ...}, type {title, subtitle, label, note: {family, weight,

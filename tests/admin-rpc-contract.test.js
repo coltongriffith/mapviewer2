@@ -159,6 +159,36 @@ describe('admin_get_failed_searches', () => {
   });
 });
 
+describe('admin_get_three_d_usage', () => {
+  // The 3D & sharing tab. The same failure modes as every admin report: the dashboard binds its arguments by
+  // name, and a definer function without the gate is a public endpoint.
+  const def = currentDefinition('admin_get_three_d_usage');
+
+  it('is defined by some migration, with the arguments the dashboard sends', () => {
+    expect(def, 'no migration defines admin_get_three_d_usage').toBeTruthy();
+    const body = bodyOf(def.sql, 'admin_get_three_d_usage');
+    expect(body).toMatch(/p_start\s+timestamptz,\s*p_end\s+timestamptz,\s*p_tz\s+text\s+default/);
+    const hook = readFileSync('src/components/admin/useDashboardData.js', 'utf8');
+    expect(hook).toMatch(/useRpc\('admin_get_three_d_usage', reportingParams\(window\)/);
+  });
+
+  it('gates on is_admin() with an empty search path, and is granted to authenticated only', () => {
+    const body = bodyOf(def.sql, 'admin_get_three_d_usage');
+    expect(body).toMatch(/security\s+definer/i);
+    expect(body).toMatch(/set search_path = ''/);
+    expect(body).toMatch(/if not public\.is_admin\(\) then\s+raise exception 'forbidden'/);
+    expect(def.sql).toMatch(/revoke all on function public\.admin_get_three_d_usage\(timestamptz, timestamptz, text\) from public, anon, authenticated;/);
+    expect(def.sql).toMatch(/grant execute on function public\.admin_get_three_d_usage\(timestamptz, timestamptz, text\) to authenticated;/);
+    expect(def.sql).not.toMatch(/grant\s+execute[^;]*admin_get_three_d_usage[^;]*\b(anon|public)\b/i);
+  });
+
+  it('scopes its windows half-open', () => {
+    const body = bodyOf(def.sql, 'admin_get_three_d_usage');
+    expect(body).toMatch(/created_at >= p_start and \w+\.created_at < p_end/);
+    expect(body).not.toMatch(/<=\s*p_end/);
+  });
+});
+
 describe('admin_get_overview feed fix', () => {
   // This one is applied by rewriting the DEPLOYED definition rather than
   // restating ~200 lines of plpgsql, so what needs pinning is not the SQL but

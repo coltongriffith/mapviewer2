@@ -19,6 +19,7 @@
 // carries org_id and property_id, its files live under org/<org>/<id>/, and
 // the database lets every member read it and editors and up save it.
 import { authRedirectUrl } from '../utils/authRedirect.js';
+import { track } from './track.js';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -306,6 +307,8 @@ export async function saveProject(name, existingId, dest = null, { force = false
       if (stale.length) await sb.storage.from(BUCKET).remove(stale);
     } catch { /* leftovers are harmless */ }
   }
+  // Once per figure per tab, like the editor's project_saved: "worked on this session", not a count of Ctrl+S.
+  track('three_d_project_saved', { project: current.id, created: !existingId, workspace: !!home }, current.id);
   return { ...current };
 }
 
@@ -443,7 +446,7 @@ function renderNote() {
 function setUrlProject(id) {
   try {
     const url = new URL(location.href);
-    if (id) url.searchParams.set('project', id); else url.searchParams.delete('project');
+    if (id) { url.searchParams.set('project', id); url.searchParams.delete('property'); } else url.searchParams.delete('project');
     history.replaceState(history.state, '', url.pathname + url.search);
   } catch { /* cosmetic */ }
 }
@@ -491,7 +494,9 @@ async function fillDest(toProperty = false) {
   for (const p of editable) { if (!groups.has(p.orgName)) groups.set(p.orgName, []); groups.get(p.orgName).push(p); }
   sel.innerHTML = '<option value="">My personal 3D maps</option>' + [...groups].map(([org, list]) =>
     `<optgroup label="${esc(org)}">${list.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</optgroup>`).join('');
-  const preferred = current?.home && canEdit(current.home.role) ? current.home.propertyId : toProperty ? editable[0].id : '';
+  // /3d?property=<id> (a property page's "+ New 3D figure"): its first save goes there unless changed.
+  const asked = current ? '' : new URLSearchParams(location.search).get('property') || '';
+  const preferred = current?.home && canEdit(current.home.role) ? current.home.propertyId : toProperty ? editable[0].id : asked;
   sel.value = editable.some((p) => p.id === preferred) ? preferred : '';
   row.hidden = false;
 }
@@ -540,6 +545,9 @@ async function doSave(name, id, dest = null, opts) {
 }
 
 function renderButtons() {
+  // Signed in: the way back to the dashboard, and whose account this is.
+  const dash = $('acct-dash');
+  if (dash) { dash.hidden = !user; dash.title = user ? `Signed in as ${user.email}. Open your dashboard.` : ''; const who = $('acct-who-top'); if (who) who.textContent = user?.email || ''; }
   // "From property drill database" for a member of a company property.
   const d = $('drill-add');
   if (d) { if (!user) { d.hidden = true; $('drill-pick').hidden = true; } else listHomes().then(({ properties }) => { d.hidden = !user || !properties.length; }); }

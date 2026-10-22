@@ -5192,14 +5192,26 @@ export default function App({ initialAction = null }) {
 
   // "New map in this property": the row is created in the property first, so
   // every save after this goes to the company, then the editor opens it.
-  const startPropertyMap = async (property) => {
+  // With a file (the property's "Start a map from a file", or "Use in map" on
+  // a data library file), the editor's own import adds it once the new map is
+  // open, so it lands in that map and is saved to the property.
+  const [pendingImport, setPendingImport] = useState(null); // { file, projectId }
+  const startPropertyMap = async (property, { file = null } = {}) => {
     const base = createInitialProjectState();
     const blank = { ...base, layout: { ...seedLayoutWithSettings(base.layout), title: property.name } };
-    const name = `${property.name} map`;
+    const name = file ? `${property.name} – ${file.name.replace(/\.[^.]+$/, '')}` : `${property.name} map`;
     const created = await saveCloudProject({ id: null, name, payload: blank, propertyId: property.id });
     await openProjectFromRecent({ id: created.id, name, payload: blank, revision: created.revision ?? 1 });
+    if (file) setPendingImport({ file, projectId: created.id });
     setScreen('editor');
   };
+  useEffect(() => {
+    if (!pendingImport || screen !== 'editor' || projectId !== pendingImport.projectId) return;
+    setPendingImport(null);
+    handleUploadFile(pendingImport.file);
+  // handleUploadFile is a fresh closure each render; this runs once per pending file.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingImport, screen, projectId]);
 
   // A sign-in link that lost its way back to /invite (Supabase falls back to
   // the site root for an unlisted redirect) still finishes the invite.

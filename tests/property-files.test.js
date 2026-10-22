@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createHash } from 'node:crypto';
-import { library, guessKind, staleRefs, safeName, sha256Hex, formatBytes, libraryError } from '../src/utils/propertyFiles.js';
+import { library, guessKind, staleRefs, safeName, sha256Hex, formatBytes, libraryError, opensInMap, MAP_IMPORT_ACCEPT } from '../src/utils/propertyFiles.js';
 
 // src/utils/propertyFiles.js: kind guesses, the newer-version check the 3D
 // maker uses, and the calls it makes to Supabase (storage first, then the RPC).
@@ -137,8 +137,24 @@ describe('library client', () => {
     expect(await lib.downloadUrl('o/p/f/v1/a.csv', 'a.csv')).toBe('https://x/o/p/f/v1/a.csv');
     expect(calls[0].sign).toEqual(['property-files', 'o/p/f/v1/a.csv', 300, { download: 'a.csv' }]);
     expect(await lib.text('o/p/f/v1/a.csv')).toBe('HoleID,From,To');
+    // "Use in map" hands the editor's import a File with the library name.
+    const f = await lib.file('o/p/f/v1/tag-a.csv', 'a.csv');
+    expect(f.name).toBe('a.csv');
+    expect(await f.text()).toBe('HoleID,From,To');
     await lib.remove('f1');
     expect(calls.at(-1)).toMatchObject({ table: 'property_files', ops: [['update', { deleted_at: expect.any(String) }], ['eq', 'id', 'f1']] });
     await expect(lib.remove('gone')).rejects.toThrow(/not found/);
+  });
+});
+
+describe('what opens in a 2D map', () => {
+  it('offers the formats the editor imports, and nothing else', () => {
+    for (const n of ['claims.geojson', 'x.JSON', 'b.kml', 'b.kmz', 'shp.zip', 'collars.csv']) expect(opensInMap(n)).toBe(true);
+    for (const n of ['report.pdf', 'ortho.tif', 'photo.jpg', 'grid.xyz', 'noext']) expect(opensInMap(n)).toBe(false);
+    expect(MAP_IMPORT_ACCEPT).toBe('.geojson,.json,.kml,.kmz,.zip,.csv');
+  });
+  it('files a GeoTIFF as a map layer unless its name says geophysics', () => {
+    expect(guessKind('ortho.tif')).toEqual({ kind: 'layer', role: null });
+    expect(guessKind('mag-grid.tif')).toEqual({ kind: 'geophysics', role: null });
   });
 });

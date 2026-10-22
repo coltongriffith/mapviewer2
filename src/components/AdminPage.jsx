@@ -9,8 +9,10 @@ const TeamEnquiriesCard = lazyGuarded(() => import('./admin/TeamEnquiriesCard'))
 const UsersTab = lazyGuarded(() => import('./admin/UsersTab'));
 const RevenueTab = lazyGuarded(() => import('./admin/RevenueTab'));
 const TenureTab = lazyGuarded(() => import('./admin/TenureTab'));
+const ThreeDTab = lazyGuarded(() => import('./admin/ThreeDTab'));
 import {
   useRpc, useDashboardWindow, useSummary, useUsersOverview, useUserDetail, useFeedback, useClaimRequests, useTeamEnquiries, useRevenue, useTenureOps,
+  useThreeDUsage,
 } from './admin/useDashboardData';
 import { pacificDate, addCalendarDays } from './admin/dateWindow';
 import { markInternalBrowser } from '../utils/attribution';
@@ -84,9 +86,11 @@ function SessionTimelineModal({ sessionId, events, error, onClose }) {
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 const TABS = [
-  ['overview', 'Overview'], ['users', 'Users'], ['feedback', 'Feedback'],
+  ['overview', 'Overview'], ['three_d', '3D & sharing'], ['users', 'Users'], ['feedback', 'Feedback'],
   ['revenue', 'Revenue'], ['tenure', 'Tenure'],
 ];
+// Tabs that report on the chosen 7/30/90-day window.
+const RANGED = new Set(['overview', 'three_d']);
 
 export default function AdminPage({ onExit }) {
   const { user, loading: authLoading, signIn, signOut } = useAuth();
@@ -105,6 +109,7 @@ export default function AdminPage({ onExit }) {
   useEffect(() => { if (isAdmin) markInternalBrowser(); }, [isAdmin]);
   const dashWindow = useDashboardWindow(range);
   const summary = useSummary(dashWindow, isAdmin && tab === 'overview');
+  const threeD = useThreeDUsage(dashWindow, isAdmin && tab === 'three_d');
   const usersOverview = useUsersOverview(isAdmin && tab === 'users');
   const [feedbackFilter, setFeedbackFilter] = useState('new');
   const feedback = useFeedback(isAdmin && tab === 'feedback', feedbackFilter);
@@ -113,7 +118,7 @@ export default function AdminPage({ onExit }) {
   const revenue = useRevenue(isAdmin && tab === 'revenue');
   const tenureOps = useTenureOps(isAdmin && tab === 'tenure');
   const userDetail = useUserDetail();
-  const active = { overview: summary, users: usersOverview, revenue, tenure: tenureOps, feedback }[tab];
+  const active = { overview: summary, three_d: threeD, users: usersOverview, revenue, tenure: tenureOps, feedback }[tab];
   const timeline = useRpc('admin_get_session_timeline', { p_session_id: openSessionId }, isAdmin && !!openSessionId);
   const openSession = id => setOpenSessionId(id);
   const openUser = id => { userDetail.load(id); setFocusedUser(id); setTab('users'); };
@@ -196,7 +201,7 @@ export default function AdminPage({ onExit }) {
         </div>
         <div className="adm-report-toolbar">
           <div>
-            {tab === 'overview' ? <>
+            {RANGED.has(tab) ? <>
               <div className="admx-range" aria-label="Days in report">
                 {[7, 30, 90].map(r => <button key={r} className={`admx-range-btn${range === r ? ' active' : ''}`} aria-pressed={range === r} onClick={() => setRange(r)}>{r}d</button>)}
               </div>
@@ -213,6 +218,9 @@ export default function AdminPage({ onExit }) {
           : <React.Suspense fallback={<div className="adm-skeleton adm-skeleton-block" role="status" aria-label="Opening report" />}>
         {tab === 'overview' && summary.data && (
           <SummaryTab data={summary.data} onOpenSession={openSession} onOpenUser={openUser} onOpenFeedback={openFeedback} />
+        )}
+        {tab === 'three_d' && threeD.data && (
+          <ThreeDTab data={threeD.data} onOpenUser={openUser} />
         )}
         {tab === 'users' && (
           <UsersTab

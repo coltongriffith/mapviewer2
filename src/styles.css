@@ -2443,7 +2443,7 @@ button.claim-notices-chip[aria-expanded="true"] { border-color: var(--ui-border-
   display: inline-block; margin-left: 8px;
   color: var(--ui-text-muted); font-family: var(--ui-font-mono); font-size: var(--fs-body); vertical-align: middle;
 }
-.dash-project-tools { display: flex; gap: 8px; }
+.dash-project-tools { display: flex; flex-wrap: wrap; gap: 8px; }
 .dash-search, .dash-sort {
   height: var(--ctl-h); font-size: var(--fs-body); padding: 0 10px;
   border: 1px solid var(--ui-border-strong);

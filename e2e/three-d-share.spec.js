@@ -160,6 +160,24 @@ test.describe('sharing', () => {
     await expect(page.locator('#status')).not.toContainText('unsampled');
   });
 
+  test('opening a shared figure reports one view, never data added, a save or an export (admin 3D usage)', async ({ page, context }) => {
+    const legacy = JSON.parse(await readFile('tests/fixtures/three-d/pre-round4-project.json', 'utf8')), id = 'd'.repeat(32), at = '2026-10-19T12:00:00.000Z';
+    // A coordinate system, so the figure's real terrain loads as it opens (the path that reported "data added").
+    legacy.settings = { ...legacy.settings, crs: 'EPSG:32610' };
+    await fakeSupabase(context, { shares: new Map([[id, { id, state: legacy, thumbnail: null, user_id: uid, creator_key: null, project_id: null, created_at: at, updated_at: at, expires_at: null, revoked_at: null, view_count: 0 }]]) });
+    const posts = [];
+    await page.route('**/api/track', (r) => { posts.push(JSON.parse(r.request().postData() || '{}')); return r.fulfill({ status: 204 }); });
+    // Every DEM and imagery tile answers with one opaque pixel, so the terrain "loads" offline.
+    const pixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
+    await page.route(/arcgisonline\.com|elevation-tiles-prod/, (r) => r.fulfill({ status: 200, contentType: 'image/png', headers: { 'Access-Control-Allow-Origin': '*' }, body: pixel }));
+    await openShared(page, `/3d/share/${id}`);
+    await page.evaluate(() => window.EM3D.terrainReady());
+    expect((await state(page)).terrain.status).toBe('ready');
+    await expect.poll(() => posts.filter((p) => p.event === 'three_d_share_viewed').length).toBe(1);
+    await page.waitForTimeout(2500);
+    expect(posts.filter((p) => p.kind === 'event').map((p) => p.event)).toEqual(['three_d_share_viewed']);
+  });
+
   test('signed out: share, view read-only, download, update the same link, embed and revoke', async ({ page, context }, testInfo) => {
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));

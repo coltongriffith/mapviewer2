@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { beforeAll, beforeEach, afterAll, describe, it, expect } from 'vitest';
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { PGlite } from '@electric-sql/pglite';
 
 // Run admin_get_summary (the Overview tab, src/components/admin/SummaryTab.jsx)
@@ -36,10 +36,9 @@ beforeAll(async () => {
   // Oldest to newest; the last one to define a function is the one in effect.
   // The crawler migration also replaces the admin_session_ids stub above.
   // The 3D usage migration replaces the summary again (a /3d visit, shared 3D figures), and the error-kinds
-  // migration replaces it once more on top of that (kind per error, warnings left out). The 3D usage file is
-  // skipped while this branch does not have it yet (PR #314).
+  // migration replaces it once more on top of that (kind per error, warnings left out).
   for (const file of ['20261002130000_admin_summary_real_visitors.sql', '20261019120000_admin_crawler_sessions.sql',
-    '20261030100000_admin_three_d_usage.sql', '20261030110000_error_kinds_in_summary.sql'].filter((f) => existsSync(`supabase/migrations/${f}`))) {
+    '20261030100000_admin_three_d_usage.sql', '20261030110000_error_kinds_in_summary.sql']) {
     const sql = readFileSync(`supabase/migrations/${file}`, 'utf8');
     await db.exec(sql);
     await db.exec(sql); // idempotent
@@ -183,6 +182,27 @@ describe('admin summary SQL', () => {
     const d = await summary();
     expect(d.totals).toMatchObject({ people: 1, engaged: 1, you: 1, bots: 2 });
     expect(d.recent.map((r) => r.session_id)).toEqual(['sg-reader']);
+  });
+
+  it('counts the 3D figure maker without taking its own open event for engagement', async () => {
+    // Opened /3d from Google and left: the page's open event is not something they did.
+    await view('3d-look', '2026-09-02T15:00:00Z', { referrer: 'https://www.google.com/', path: '/3d' });
+    await event('3d-look', 'three_d_opened', '2026-09-02T15:00:02Z');
+    // Opened /3d and exported a figure.
+    await view('3d-made', '2026-09-02T16:00:00Z', { referrer: 'https://www.bing.com/', path: '/3d' });
+    await event('3d-made', 'three_d_opened', '2026-09-02T16:00:02Z');
+    await event('3d-made', 'three_d_export_completed', '2026-09-02T16:03:00Z', { kind: 'png' });
+    // A shared 3D figure from LinkedIn: grouped like /map/… and counted as viewing a shared map.
+    await view('3d-share', '2026-09-02T17:00:00Z', { referrer: 'https://www.linkedin.com/', path: `/3d/share/${'a'.repeat(32)}` });
+    await event('3d-share', 'three_d_share_viewed', '2026-09-02T17:00:02Z', { embed: false });
+
+    const d = await summary();
+    expect(d.totals).toMatchObject({ people: 3, engaged: 2, bounced: 1 });
+    expect(d.usage.features.find((f) => f.label === '3D figure maker').n).toBe(2);
+    expect(d.usage.features.find((f) => f.label === 'Viewed a shared map').n).toBe(1);
+    expect(d.pages.map((p) => p.path).sort()).toEqual(['/3d', '/3d/share/… (shared 3D figures)']);
+    expect(d.sources.find((s) => s.channel === 'LinkedIn').people).toBe(1);
+    expect(d.recent.find((r) => r.session_id === '3d-made').steps).toEqual(['Opened 3D', 'Exported 3D']);
   });
 
   it('refuses non-admins and is never granted to anon', async () => {

@@ -34,9 +34,12 @@ async function open3d(page) {
   await page.waitForFunction(() => window.EM3D?.getState().ready);
   await page.evaluate(() => window.EM3D.layersReady());
 }
+// The texts drawn while fn runs, on off-screen canvases only: the export's canvas and the faces' textures. The live
+// preview (a canvas on the page) keeps redrawing every frame, so while fn awaits a setting it can draw the figure as it
+// was before; those texts are not the export's.
 const textsOf = (page, fn) => page.evaluate(async (src) => {
   const out = [], P = CanvasRenderingContext2D.prototype, f = P.fillText;
-  P.fillText = function (t, ...a) { out.push(String(t)); return f.call(this, t, ...a); };
+  P.fillText = function (t, ...a) { if (!this.canvas.isConnected) out.push(String(t)); return f.call(this, t, ...a); };
   try { await (0, eval)(src)(); } finally { P.fillText = f; }
   return out;
 }, fn.toString());
@@ -114,7 +117,8 @@ test('hidden holes lose their traces, IDs and callouts; every hole again gives b
   expect([...r.callouts, ...r.cands].every((id) => ['EX-015', 'EX-021'].includes(id))).toBe(true);
   expect(r.bad).toMatch(/No hole "EX-999"/);
   expect(r).toMatchObject({ differs: true, same: true, secSame: true, backShown: null });
-  const t = await textsOf(page, async () => { await window.EM3D.setHolesShown(['EX-015', 'EX-021']); window.EM3D.setTags({ idMode: 'all' }); return window.EM3D.exportPNG({ view: '3d' }); });
+  await page.evaluate(async () => { await window.EM3D.setHolesShown(['EX-015', 'EX-021']); await window.EM3D.setTags({ idMode: 'all' }); });
+  const t = await textsOf(page, () => window.EM3D.exportPNG({ view: '3d' }));
   expect([...new Set(t.filter((x) => /^EX-\d{3}$/.test(x)))].sort()).toEqual(['EX-015', 'EX-021']); // at the toe, and on the callouts
   // The picker in the Layout step lists every hole, the shown ones ticked; unticking one hides it.
   await page.evaluate(() => window.EM3D.showStep('layout'));
@@ -205,13 +209,12 @@ test('a block section with the export options (#308) and the claim map inset (#3
 
 test('a hidden hole leaves the section too, chosen or not: no trace, bars or ID', async ({ page }) => {
   await open3d(page);
-  const t = await textsOf(page, async () => {
-    const E = window.EM3D; await E.setSection({ holes: ['EX-015', 'EX-021'] }); await E.setHolesShown(['EX-015']);
-    return E.exportPNG({ view: 'section' });
-  });
+  await page.evaluate(async () => { const E = window.EM3D; await E.setSection({ holes: ['EX-015', 'EX-021'] }); await E.setHolesShown(['EX-015']); });
+  const t = await textsOf(page, () => window.EM3D.exportPNG({ view: 'section' }));
   expect(t.some((x) => x.startsWith('EX-015'))).toBe(true);
   expect(t.some((x) => x.includes('EX-021'))).toBe(false);
-  const both = await textsOf(page, async () => { await window.EM3D.setHolesShown(null); return window.EM3D.exportPNG({ view: 'section' }); });
+  await page.evaluate(() => window.EM3D.setHolesShown(null));
+  const both = await textsOf(page, () => window.EM3D.exportPNG({ view: 'section' }));
   expect(both.some((x) => x.includes('EX-021'))).toBe(true);
 });
 

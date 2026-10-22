@@ -67,6 +67,7 @@ export function useRpc(fn, params, enabled = true) {
 
 const reportingParams = window => ({ ...window, p_tz: window.p_start >= '2026-03-09' ? 'Etc/GMT+7' : 'America/Vancouver' });
 export const useSummary = (window, enabled) => useRpc('admin_get_summary', reportingParams(window), enabled);
+export const useThreeDUsage = (window, enabled) => useRpc('admin_get_three_d_usage', reportingParams(window), enabled);
 export const useUsersOverview = enabled => useRpc('admin_get_users_overview', { p_tz: pacificDate() >= '2026-03-09' ? 'Etc/GMT+7' : 'America/Vancouver' }, enabled);
 export const useRevenue = enabled => useRpc('admin_get_billing_metrics', {}, enabled);
 export const useTenureOps = enabled => useRpc('admin_get_tenure_ops', {}, enabled);
@@ -77,9 +78,12 @@ export const useTeamEnquiries = (enabled, openOnly = true) => useRpc('admin_get_
 export function useUserDetail() {
   const [userId, load] = useState(null);
   const result = useRpc('admin_get_user_detail', { p_user_id: userId }, !!userId);
+  // Their 3D figures, links and exports: a report of its own, so the account opens even where it fails.
+  const threeD = useRpc('admin_get_user_three_d', { p_user_id: userId }, !!userId);
   return {
     byId: result.data && !result.loading ? { [userId]: result.data } : {},
+    threeDById: threeD.data && !threeD.loading ? { [userId]: threeD.data } : {},
     loadingId: result.loading ? userId : null, error: result.error,
-    load: id => { if (id === userId) result.reload(); else load(id); },
+    load: id => { if (id === userId) { result.reload(); threeD.reload(); } else load(id); },
   };
 }

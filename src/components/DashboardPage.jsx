@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { Suspense, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../hooks/useAuth.jsx';
 import BrandMark from './BrandMark';
 import {
@@ -11,6 +11,11 @@ import { formatSyncTimestamp } from '../utils/tenureDates';
 import { listMyWorkspaces, listProperties, pickActive, setActiveWorkspaceId } from '../utils/workspace';
 import { jurisdictionLabel } from '../utils/jurisdictions';
 import { mapName, copyName } from '../utils/mapName.js';
+import { SORTS, filterAndSort, fmtRelative } from '../utils/dashboardList.js';
+import { lazyGuarded } from '../utils/preloadGuard';
+
+// The 3D figures section (list, rename, duplicate, move, delete) is its own chunk.
+const FiguresSection = lazyGuarded(() => import('./FiguresSection'));
 
 // The signed-in home.
 //
@@ -27,22 +32,6 @@ import { mapName, copyName } from '../utils/mapName.js';
 // The one rule it follows throughout: never make the user hunt. A project list
 // is only useful if you can find a project in it, which is why search and sort
 // are here at any size rather than appearing once the list gets long.
-
-function fmtRelative(iso) {
-  if (!iso) return '';
-  const diff = Date.now() - new Date(iso).getTime();
-  const days = Math.floor(diff / 86400000);
-  if (days <= 0) return 'Today';
-  if (days === 1) return 'Yesterday';
-  if (days < 7) return `${days} days ago`;
-  if (days < 30) return `${Math.floor(days / 7)} week${days < 14 ? '' : 's'} ago`;
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-}
-
-const SORTS = [
-  { id: 'recent', label: 'Last edited' },
-  { id: 'name', label: 'Name' },
-];
 
 function ProjectTile({ entry, onOpen, onRename, onDelete, onDuplicate }) {
   const [editing, setEditing] = useState(false);
@@ -295,13 +284,7 @@ export default function DashboardPage({
     setError("Couldn't refresh your projects — the last loaded list is shown.");
   });
 
-  const visible = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const list = q ? projects.filter((p) => (p.name || '').toLowerCase().includes(q)) : [...projects];
-    if (sort === 'name') list.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-    else list.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
-    return list;
-  }, [projects, query, sort]);
+  const visible = useMemo(() => filterAndSort(projects, query, sort), [projects, query, sort]);
 
   // The copy is named as the editor names it ("<name> (copy)", then
   // "(copy 2)"…) and opened, so the map being edited is the copy, by name.
@@ -418,6 +401,9 @@ export default function DashboardPage({
               </div>
             )}
           </section>
+          <Suspense fallback={<p className="dash-muted" style={{ marginTop: 28 }}>Loading your 3D figures…</p>}>
+            <FiguresSection onError={setError} />
+          </Suspense>
           </div>
 
           <aside className="dash-side">
