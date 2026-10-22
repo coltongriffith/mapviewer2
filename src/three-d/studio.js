@@ -705,7 +705,8 @@ function syncRealTerrain() {
     const msgs = [], B = { ...G.B }, fwd = (x, y) => geo.fwd(x, y);
     if (getDem) { try { realT.dem = await (await rtLoad()).loadDem(key, B, fwd); msgs.push(`real terrain (z${realT.dem.z}, ${realT.dem.tiles} tiles)`); } catch (e) { realT.dem = { key, ok: false, error: e.message }; } }
     if (getImg) { try { realT.img = await (await rtLoad()).loadImagery(key, B, fwd); msgs.push(`satellite imagery (z${realT.img.z}, ${realT.img.tiles} tiles)`); } catch (e) { realT.img = { key, ok: false, error: e.message }; } }
-    if (msgs.length && !usingSample) usage('three_d_data_added', { kind: 'terrain' }, 'terrain');
+    // Only for data this visitor added here: not the sample, a saved figure, a version or a shared figure opening.
+    if (msgs.length && usage.own && !usingSample) usage('three_d_data_added', { kind: 'terrain' }, 'terrain');
     if (job !== realT.job || !G) return;
     const fails = [realT.dem && !realT.dem.ok && getDem && `real terrain (${realT.dem.error})`, realT.img && !realT.img.ok && getImg && `satellite imagery (${realT.img.error})`].filter(Boolean);
     realT.status = fails.length ? (msgs.length ? 'partial' : 'failed') : 'ready';
@@ -1907,6 +1908,7 @@ function addUserFiles(arr, o = {}) {
   arr.forEach((a) => { if (a.lib) S.libRefs[a.name] = { libFileId: String(a.lib.libFileId), version: +a.lib.version }; else delete S.libRefs[a.name]; });
   refresh.secSet = false; addFiles(arr); extAutoOn(arr); refresh(); // extAutoOn: EXT hook
   const mine = files.filter((f) => arr.some((a) => a.name === f.name)), added = mine.map((f) => `${f.name} → ${ROLE_LABEL[f.role]}`);
+  usage.own = true;
   new Set(mine.map((f) => f.role)).forEach((kind) => usage('three_d_data_added', { kind, source: o.drillSource ? 'drill_db' : 'file' }, kind)); // once per kind a tab
   status(project.empty ? `Added ${added.join(', ')}. Still need a collar file.` : `Added ${added.join(', ')}. ${project.holes.length} holes on the figure.`);
   return getState();
@@ -2537,7 +2539,7 @@ async function loadProject(p) {
   if (isImg(logo)) await setLogo(logo.$image, { autoColor: false }); else await setLogo(null);
   Object.entries(rest).forEach(([k, v]) => { S[k] = imgs[k] || (v && typeof v === 'object' ? structuredClone(v) : v); });
   S.section = cleanSection(S.section);
-  files = []; usingSample = !!p.usingSample; addFiles(p.files.map(({ name, text }) => ({ name, text })));
+  files = []; usingSample = !!p.usingSample; usage.own = false; addFiles(p.files.map(({ name, text }) => ({ name, text })));
   p.files.forEach((sf) => {
     const f = files.find((x) => x.name === sf.name); if (!f) return;
     if (f.header && sf.cols && typeof sf.cols === 'object') f.cols = Object.fromEntries(Object.entries(sf.cols).filter(([, i]) => Number.isInteger(i)));
@@ -2603,6 +2605,7 @@ window.EM3D = Object.freeze({ ...window.EM3D, help: () => FULL_HELP, ...EXT_API,
 // 12. Start
 // ============================================================
 // Usage counts for the admin dashboard (track.js, loaded on first use: /api/track, as the app). Never throws or waits.
+// usage.own: the figure's data was added in this page (addUserFiles), not opened from a save, version or share.
 function usage(...a) { import('./track.js').then((m) => m.track(...a)).catch(() => {}); }
 const viewer = () => document.documentElement.classList.contains('em3d-viewer'); // a shared figure: counted by share.js
 function exported(kind) { if (!viewer()) usage('three_d_export_completed', { kind, format: S.format }); }

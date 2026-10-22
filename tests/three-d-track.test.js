@@ -49,6 +49,22 @@ describe('3D usage events', () => {
     expect(sessionStorage.getItem('em3d_track:three_d_opened:tab')).toBe('1');
   });
 
+  it('on a shared figure, sends only the view and the copy: opening it is not data added, a save or an export', async () => {
+    document.documentElement.classList.add('em3d-viewer');
+    try {
+      for (const [event, props] of [['three_d_data_added', { kind: 'terrain' }], ['three_d_data_added', { kind: 'collar' }],
+        ['three_d_project_saved', { project: 'p1' }], ['three_d_export_completed', { kind: 'png' }], ['three_d_opened', null]]) {
+        expect(await track(event, props), event).toBe(false);
+      }
+      expect(await track('three_d_share_viewed', { embed: false })).toBe(true);
+      expect(await track('three_d_share_forked')).toBe(true);
+      expect(bodies().map((b) => b.event)).toEqual(['three_d_share_viewed', 'three_d_share_forked']);
+      expect(bodies().some((b) => b.event === 'three_d_data_added')).toBe(false);
+    } finally { document.documentElement.classList.remove('em3d-viewer'); }
+    // The once-per-kind key was not used up by the dropped event.
+    expect(await track('three_d_data_added', { kind: 'terrain' }, 'terrain')).toBe(true);
+  });
+
   it('never throws or rejects when the network or storage fails', async () => {
     fetchMock.mockImplementationOnce(() => Promise.reject(new Error('offline')));
     await expect(track('three_d_share_viewed', { embed: false })).resolves.toBe(false);

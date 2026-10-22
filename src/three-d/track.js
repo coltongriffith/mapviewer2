@@ -34,10 +34,17 @@ function once(key) {
   return true;
 }
 
+// A shared figure (/3d/share/<id>, /3d/embed/<id>; public/3d/mode.js marks the page) reports only that it was viewed
+// and copied. Opening it loads its data and terrain like any figure, which must not count as the viewer adding data,
+// saving or exporting.
+const VIEWER_EVENTS = new Set(['three_d_share_viewed', 'three_d_share_forked']);
+const viewer = () => { try { return document.documentElement.classList.contains('em3d-viewer'); } catch { return false; } };
+
 /** Fire-and-forget. `dedupe` sends the event at most once per tab for that key. Resolves to whether it was sent. */
 export function track(event, props, dedupe) {
   try {
     if (!EVENTS.has(event)) return Promise.resolve(false);
+    if (viewer() && !VIEWER_EVENTS.has(event)) return Promise.resolve(false);
     if (dedupe != null && !once(`${event}:${dedupe}`)) return Promise.resolve(false);
     const p = props && typeof props === 'object' && Object.keys(props).length ? props : undefined;
     return postTrack({ kind: 'event', event, props: p }, storedToken()).catch(() => false);
