@@ -63,7 +63,45 @@ Montana, Wyoming, Colorado, New Mexico, California, Oregon, Washington.**
   `STATUS` on every feature (shown in result rows + popups) rather than
   filtered — the service itself excludes closed cases.
 
-## Architecture (why there is no sync job)
+## Weekly mirror (`public.us_claims`, since October 2026)
+
+After BLM moved its service without notice and every US search failed for
+days, US searches now prefer a weekly copy in Supabase and use live BLM only
+as the fallback.
+
+- **Table and functions:** `supabase/migrations/20261031100000_us_claims_mirror.sql`.
+  The migration is additive. It creates `us_claims` (serial, legacy serial,
+  claim name, `states[]` with `state_source`, type, disposition, acres,
+  location date, simplified GeoJSON plus a generated PostGIS `geom`), with
+  indexes on serial and legacy serial (`text_pattern_ops`: equality and
+  prefix), a trigram index on claim name, a GIN index on states and a GiST
+  index on geom. RLS is on, with public read only. It also adds
+  `us_claims_in_bbox(...)` and the same atomic stage → publish → abort import
+  that Quebec uses. `import_headroom()` gains `us_claims_bytes` and
+  `us_import_started_at`, so the disk guard keeps all three bulk imports
+  apart.
+- **Loader:** `scripts/update-us-claims.mjs`, scheduled by
+  `.github/workflows/update-us-claims.yml` (Thursdays 06:00 UTC, plus
+  `workflow_dispatch`, in the shared `registry-db-import` concurrency group).
+  - It fetches every OBJECTID with one `returnIdsOnly` call (about 7 s), then
+    pages the layer in OBJECTID ranges of 250, 6 at a time, with retries and
+    backoff (about 1 s a page).
+  - It simplifies geometry at about 1 m and keeps claims in, or administered
+    from, the 11 states.
+  - It replaces the whole table in one transaction, so claims that closed
+    disappear and a failed run leaves last week's copy in place.
+  - Dry run: `node scripts/update-us-claims.mjs --dry-run [--sample N]`.
+- **Read path:** `api/claims.js` (`usMirrorStatus`, `searchUsMirror`,
+  `searchUsMirrorBbox`). The mirror is used when it is populated and at most
+  `US_CLAIMS_MAX_AGE_DAYS` old (default 10). Otherwise, or if any mirror query
+  fails, live BLM answers. Every US response says which one answered:
+  `meta.source = 'mirror' | 'live'`, plus `mirrorRetrievedAt` and
+  `mirrorAgeDays`. Set `US_CLAIMS_MIRROR=off` to force live. `?schema=1`
+  reports the mirror's status.
+- **State placement** is shared with the live path (`shared/usClaimStates.js`),
+  so both paths place a claim the same way and declare scoping the same way.
+
+## Architecture (live path)
 
 US claims are served through the same server-side proxy engine
 (`api/claims.js`) that already powers ON/SK/MB/NL/YT — self-configuring field
@@ -356,6 +394,28 @@ public-read), because it already solves "no live API, periodic refresh":
    nothing to seed against, which is why the review queue is header-only. Once
    `us_claim_claimants` exists, point the script at it (or feed report 120 via
    `--claimants <csv>`, which it already accepts) and work the queue.
+
+### Re-checked October 2026: still no scriptable claimant source
+
+- `reports.blm.gov` report 120 is still an Oracle BI app behind a Login.gov
+  sign-in. The page offers CSV export, but only inside an authenticated
+  session.
+- The new public `Mining_Claims/MiningClaims/MapServer` (layers 0 Case,
+  1 Active, 2 Closed) publishes no claimant field.
+
+So the claimant store stays a manual monthly step, and the weekly workflow
+does not load it. The owner's steps:
+
+1. Sign in at <https://reports.blm.gov/report/MLRS/120/Serial-Number-Crosswalk-by-Customer-All-Products-/>
+   with Login.gov.
+2. Filter by state, product "Mining Claims" and active cases, then export as
+   **CSV**. Do one state per file if the export is large.
+3. Run `node scripts/update-us-claimants.mjs --file report120-nv.csv --source mlrs_report_120 --snapshot <export date> --dry-run`
+   to check the inferred column mapping. Then run it again without
+   `--dry-run`, using `SUPABASE_SERVICE_ROLE_KEY`.
+
+The join matches the MLRS serial (`CSE_NR`) and the legacy LR2000 serial
+(`LEG_CSE_NR`), on both the live path and the mirror path.
 
 ### Status: plumbing built, inert until a snapshot is loaded
 

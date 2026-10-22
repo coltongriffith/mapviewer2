@@ -43,6 +43,8 @@ export const DEFAULT_CEILING_MB = Math.round(8192 * 0.7);
 export const GROWTH_FACTORS = {
   qc: { preflight: 2, publish: 1 },
   tenure: { preflight: 2, promote: 1 },
+  // us.preflight/publish: same shape as Quebec (jsonb staging + the new copy).
+  us: { preflight: 2, publish: 1 },
 };
 
 /**
@@ -51,9 +53,13 @@ export const GROWTH_FACTORS = {
  * by a killed job (the 2026-10-20 B.C. run is still recorded as `running`)
  * stops blocking once that job cannot possibly still be alive.
  */
-export const LIVE_WINDOW_MINUTES = { qc: 30, tenure: 75 };
+export const LIVE_WINDOW_MINUTES = { qc: 30, tenure: 75, us: 70 };
 
-const LABEL = { qc: 'Quebec claims refresh', tenure: 'B.C. tenure full sync' };
+const LABEL = { qc: 'Quebec claims refresh', tenure: 'B.C. tenure full sync', us: 'U.S. claims mirror refresh' };
+
+// Snapshot keys: the size an import rewrites, and its in-progress marker.
+const BASE_KEY = { qc: 'qc_claims_bytes', tenure: 'tenure_bytes', us: 'us_claims_bytes' };
+const STARTED_KEY = { qc: 'qc_import_started_at', tenure: 'tenure_full_run_started_at', us: 'us_import_started_at' };
 
 export function ceilingBytesFromEnv(env = process.env) {
   const mb = Number(env.IMPORT_DB_SIZE_CEILING_MB);
@@ -61,12 +67,15 @@ export function ceilingBytesFromEnv(env = process.env) {
 }
 
 /** Bytes this import may still add, from the sizes in the snapshot. */
-export function expectedGrowthBytes(snapshot, { importer, phase, mode = 'full' }) {
+// `minBaseBytes`: the importer's own estimate of the table it writes, for a
+// first load into an empty table (the U.S. mirror), which would otherwise size
+// itself at zero and pass any ceiling.
+export function expectedGrowthBytes(snapshot, { importer, phase, mode = 'full', minBaseBytes = 0 }) {
   if (importer === 'tenure' && mode !== 'full') return 0;
   const factor = GROWTH_FACTORS[importer]?.[phase] ?? 0;
-  const base = importer === 'qc' ? snapshot?.qc_claims_bytes : snapshot?.tenure_bytes;
-  const bytes = Number(base);
-  return Number.isFinite(bytes) && bytes > 0 ? factor * bytes : 0;
+  const measured = Number(snapshot?.[BASE_KEY[importer]]);
+  const bytes = Math.max(Number.isFinite(measured) ? measured : 0, Number(minBaseBytes) || 0);
+  return bytes > 0 ? factor * bytes : 0;
 }
 
 /**
@@ -81,11 +90,11 @@ export function expectedGrowthBytes(snapshot, { importer, phase, mode = 'full' }
  * @returns {{ok: boolean, reasons: string[], report: object}}
  */
 export function evaluateHeadroom(snapshot, {
-  importer, phase, mode = 'full', ceilingBytes = ceilingBytesFromEnv(),
+  importer, phase, mode = 'full', ceilingBytes = ceilingBytesFromEnv(), minBaseBytes = 0,
 }) {
   const reasons = [];
   const used = Number(snapshot?.database_bytes);
-  const growth = expectedGrowthBytes(snapshot, { importer, phase, mode });
+  const growth = expectedGrowthBytes(snapshot, { importer, phase, mode, minBaseBytes });
 
   if (!Number.isFinite(used) || used <= 0) {
     reasons.push('The database size could not be read, so there is no way to know the import fits.');
@@ -99,19 +108,21 @@ export function evaluateHeadroom(snapshot, {
   // Only a bulk import can collide with another one. A targeted tenure refresh
   // writes a few dozen rows, and the Quebec job ignores those too: the source
   // of tenure_full_run_started_at is full runs only.
-  const bulk = importer === 'qc' || mode === 'full';
-  const other = importer === 'qc' ? 'tenure' : 'qc';
-  const otherStarted = importer === 'qc'
-    ? snapshot?.tenure_full_run_started_at
-    : snapshot?.qc_import_started_at;
+  const bulk = importer !== 'tenure' || mode === 'full';
   const now = Date.parse(snapshot?.checked_at) || Date.now();
-  const startedMs = Date.parse(otherStarted);
-  if (bulk && Number.isFinite(startedMs)
-    && now - startedMs < LIVE_WINDOW_MINUTES[other] * 60_000) {
-    reasons.push(
-      `The ${LABEL[other]} has been writing since ${otherStarted}. Two bulk imports at once `
-      + 'is what filled the disk on 2026-10-20; this one will run on its next schedule.',
-    );
+  let otherStarted = null;
+  for (const other of Object.keys(STARTED_KEY)) {
+    if (other === importer) continue;
+    const started = snapshot?.[STARTED_KEY[other]];
+    const startedMs = Date.parse(started);
+    if (started && !otherStarted) otherStarted = started;
+    if (bulk && Number.isFinite(startedMs)
+      && now - startedMs < LIVE_WINDOW_MINUTES[other] * 60_000) {
+      reasons.push(
+        `The ${LABEL[other]} has been writing since ${started}. Two bulk imports at once `
+        + 'is what filled the disk on 2026-10-20; this one will run on its next schedule.',
+      );
+    }
   }
 
   return {
@@ -122,7 +133,7 @@ export function evaluateHeadroom(snapshot, {
       database_bytes: Number.isFinite(used) ? used : null,
       expected_growth_bytes: growth,
       ceiling_bytes: ceilingBytes,
-      other_import_started_at: otherStarted || null,
+      other_import_started_at: otherStarted,
     },
   };
 }

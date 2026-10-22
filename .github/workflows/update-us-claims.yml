@@ -1,0 +1,64 @@
+name: Update US Claims Mirror
+
+# Weekly copy of BLM's "Active Mining Claims" layer into public.us_claims
+# (scripts/update-us-claims.mjs). /api/claims serves US searches from the copy
+# while it is fresh and falls back to live BLM otherwise, so a missed week only
+# costs speed, never correctness.
+
+on:
+  schedule:
+    # Thursday 06:00 UTC: clear of the Quebec refresh (Tue 05:00) and the
+    # tenure crons (11, 15, 23 UTC). Cron delivery is best-effort; the shared
+    # concurrency group and the disk-headroom check are what keep imports apart.
+    - cron: '0 6 * * 4'
+  # Manual trigger from the Actions tab (first load, or after a BLM outage).
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Shared with update-qc-claims.yml and tenure-sync.yml: one bulk registry
+  # import against the database at a time, queued rather than cancelled.
+  group: registry-db-import
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install (locked)
+        run: npm ci
+
+      - name: Download from BLM and load the US claims mirror
+        env:
+          # ~575k claims are held in memory as rows before staging.
+          NODE_OPTIONS: --max-old-space-size=8192
+          SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          # Session pooler connection string; the publish outlasts the 60 s REST limit.
+          SUPABASE_DB_URL:           ${{ secrets.SUPABASE_DB_URL }}
+          # Optional overrides, same names as the Vercel ones, for the next BLM move.
+          BLM_MLRS_SERVICE_URL:      ${{ vars.BLM_MLRS_SERVICE_URL }}
+          BLM_MLRS_LAYER_ID:         ${{ vars.BLM_MLRS_LAYER_ID }}
+          IMPORT_DB_SIZE_CEILING_MB: ${{ vars.IMPORT_DB_SIZE_CEILING_MB }}
+        run: node scripts/update-us-claims.mjs
+
+      # The script discards its own staging when it fails, but not when the job
+      # is cancelled or times out.
+      - name: Discard staging left by a failed or cancelled run
+        if: failure() || cancelled()
+        timeout-minutes: 5
+        env:
+          SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node scripts/update-us-claims.mjs --abort-stale
