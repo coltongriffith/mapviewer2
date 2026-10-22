@@ -56,6 +56,15 @@ export function looksLikeMapSheet(query) {
   return /^\d{3}\s?[A-Za-z]\s?\d{0,3}$/.test(String(query ?? '').trim());
 }
 
+// The registry of record a claim number can be checked in, for the searches
+// that name a number we do not hold.
+const OFFICIAL_REGISTRIES = {
+  qc: { name: 'GESTIM', url: 'https://gestim.mines.gouv.qc.ca/' },
+  on: { name: 'Ontario MLAS', url: 'https://www.lioapplications.lrc.gov.on.ca/MLAS/Index.html?viewer=MLAS.MLAS&locale=en-CA' },
+  bc: { name: 'Mineral Titles Online', url: 'https://www.mtonline.gov.bc.ca/' },
+};
+export const officialRegistry = (province) => OFFICIAL_REGISTRIES[province] || null;
+
 export function emptyResultMessage({ resolution, query, jurisdictionLabel, isUs, mode, province }) {
   if (resolution?.status === 'unresolved') {
     const base = `We couldn't link "${query}" to a claim holder in ${jurisdictionLabel}.`;
@@ -124,7 +133,11 @@ export function emptyResultMessage({ resolution, query, jurisdictionLabel, isUs,
     return {
       kind: 'empty',
       headline: `No active claims found for "${query}" in ${jurisdictionLabel}.`,
-      detail: null,
+      // Quebec is a weekly copy of GESTIM's active titles, not a live query,
+      // so a missing number has two innocent explanations worth saying.
+      detail: province === 'qc'
+        ? 'Our Quebec data is the public file of active GESTIM titles, refreshed weekly, so a title registered since the last refresh — or one that is no longer active — will not be in it.'
+        : null,
       hint: 'Check the number and try again, or search by company name instead.',
     };
   }
