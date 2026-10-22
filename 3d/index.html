@@ -123,7 +123,8 @@ input[type="range"] { width: 100%; }
 input[type="color"] { width: 34px; height: 26px; border: 1px solid var(--slate-200); border-radius: 4px; padding: 1px; background: #fff; }
 .logo-box { display: grid; grid-template-columns: 96px 1fr; gap: 12px; align-items: center; border: 1px solid var(--slate-200); border-radius: 8px; padding: 10px; }
 .logo-prev { width: 96px; height: 56px; border: 1px dashed var(--slate-300); border-radius: 6px; display: grid; place-items: center; background: #fff; overflow: hidden; color: var(--slate-500); font-size: 12px; }
-.logo-prev img { max-width: 90px; max-height: 50px; }
+.logo-prev img, .logo-prev canvas { max-width: 90px; max-height: 50px; }
+.logo-checker { background: repeating-conic-gradient(#e3e8e9 0 25%, #fff 0 50%) 0 0 / 12px 12px; }
 .swatches { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
 .swatches label { display: flex; gap: 6px; align-items: center; font-size: 13.5px; }
 .callout-ed { display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; align-items: center; border-top: 1px solid var(--slate-100); padding-top: 8px; }
@@ -402,6 +403,10 @@ html.em3d-version .share-bar .btn { padding: 6px 11px; }
         <div class="logo-prev" id="logo-prev">No logo</div>
         <div class="field"><span>Company logo (PNG, JPG or SVG)</span><input type="file" id="logo-input" accept="image/*"><button class="btn" type="button" id="logo-clear" style="justify-self:start;padding:3px 9px">Remove logo</button></div>
       </div>
+      <div class="logo-box" id="logo-bg" hidden>
+        <div class="logo-prev logo-checker" id="logo-bg-prev"></div>
+        <div class="field"><label class="check"><input type="checkbox" id="logo-bg-on">Remove the logo's white or flat background</label><span class="muted">Preview: the logo without it, on a checkerboard. The colour inside the logo is kept.</span></div>
+      </div>
       <section>
         <h3>Brand colours</h3>
         <div class="swatches">
@@ -574,6 +579,7 @@ html.em3d-version .share-bar .btn { padding: 6px 11px; }
         <label class="check"><input type="checkbox" data-ext="geology.enabled">Paint lithology or alteration on the block faces</label>
         <p class="muted" style="margin-top:4px">From a log with Hole ID, From, To and a code column (step 1), interpolated between holes; or a drawn section image per face.</p>
         <div id="geo-ui" style="margin-top:8px"></div>
+        <div id="geo-fit" class="geo-fit" style="margin-top:8px" hidden></div>
       </section>
       <section id="ext-geophys">
         <h3>Geophysics</h3>
@@ -671,6 +677,13 @@ html.em3d-version .share-bar .btn { padding: 6px 11px; }
         <label class="field"><span>Background</span><select id="export-bg"><option value="white">White</option><option value="transparent">Transparent</option></select></label>
         <label class="check" style="margin-top:6px"><input type="checkbox" id="opt-shadow" data-ext="style.dropShadow" checked>Drop shadow under the block</label>
         <p class="muted" style="margin-top:4px">Transparent: no page colour or footer band behind the figure; the legend, inset and callout cards keep their fill and text keeps its halo. For the PNGs and the layers ZIP; saved previews stay white. Choosing it turns the drop shadow off (tick it to keep it). Terrain shadows are in Layout, Sun, shadows and haze.</p>
+      </section>
+      <section>
+        <div class="grid2"><label class="field"><span>Pixel size</span><select id="export-scale"><option value="1">The figure size</option><option value="2">2×</option><option value="3">3×</option><option value="w">A width in pixels</option></select></label>
+          <label class="field" id="export-width-f" hidden><span>Width (px)</span><input type="number" id="export-width" min="200" max="16000" step="1" value="3484"></label></div>
+        <label class="check" style="margin-top:6px"><input type="checkbox" id="export-wm">Watermark band under the figure</label>
+        <label class="field" id="export-client-f" style="margin-top:4px" hidden><span>Prepared for</span><input type="text" id="export-client" placeholder="Company name"></label>
+        <p class="muted" style="margin-top:4px">The pixel size is the export's whatever the screen: the figure is laid out as at the figure size above. The band adds the Exploration Maps logo, "Draft for review · Not for publication", who it was prepared for and the year under the figure (the PNGs, and figure.png and section.png in the layers ZIP).</p>
       </section>
       <section class="row">
         <button class="btn primary" type="button" id="export-3d">Download 3D figure (PNG)</button>
@@ -802,6 +815,9 @@ JavaScript API (run in the page console or via your agent's evaluate tool):
   EM3D.setBrand({company, title, subtitle, footnote, primary, accent, credit})
                                   colours as hex, e.g. primary: "#0b3954"
   EM3D.setLogo(dataUrl)           Promise. Also picks primary and accent from the logo
+  EM3D.setLogo(dataUrl, {removeBackground: true})   a white or flat background round the logo made
+                                  transparent first (kept if none is found; the same colour inside the logo
+                                  stays). getState().brand.logoBackgroundRemoved
   EM3D.setStyle({valueCol, valueLabel, bins: [4 lower limits], autoBins: true,
                  coCount, coMin, coCut, coIncl, secAz (0-179), secW,
                  walls, ids, inset, surface (0.15-1), dropShadow (the block's soft shadow, default on), meshes: {name: {show, color, opacity}},
@@ -894,6 +910,12 @@ JavaScript API (run in the page console or via your agent's evaluate tool):
                                   background "transparent": no page colour or footer band (cards keep
                                   their fill); the block's drop shadow is left off unless shadow: true.
                                   exportLayers takes background and shadow too
+  EM3D.exportPNG({..., width: 3484} | {..., scale: 2 | 3})   that many pixels whatever the screen, the figure
+                                  laid out exactly as at the figure size (exportLayers takes them too)
+  EM3D.exportPNG({..., watermark: true | {client, year, status}})   Promise of the data URL: the Exploration
+                                  Maps band under the figure (logo, "DRAFT FOR REVIEW · NOT FOR
+                                  PUBLICATION", "Prepared for <client>" (default: the company) and ©
+                                  year). Off unless asked. exportLayers puts it under figure.png and section.png
   EM3D.setMapUse({use: "presentation" | "standalone", what, project, date, sources})   Promise.
                                   standalone: the title, what it shows (one line; else the subtitle),
                                   project and company, date (else today), coordinate system, sources,
@@ -946,7 +968,14 @@ Whole projects (to keep or move a figure):
                                   Indicator inverse-distance interpolation of the logged codes along the hole
                                   traces, blurred then the highest weight wins; plain beyond the search radius.
                                   The footnote says it is schematic while it shows
-  EM3D.setFaceImage("N" | "S" | "E" | "W", dataUrl | null)   a drawn section stretched over a face
+  EM3D.setFaceImage("N" | "S" | "E" | "W" | "section", dataUrl | null, {points})   a drawn section stretched
+                                  over a face ("section": the A–A′ plane), or fitted by known points
+  EM3D.fitFaceImage(face, [{px: [x, y], d, z} | {px: [x, y], hole, depth}, ...] | null)   fits the face's
+                                  image: px a pixel on the image, d metres along the face from its left end as
+                                  seen from outside (the section: from A), z its elevation; or a hole's collar
+                                  (depth: down it). Two points or more: across and up are each scaled, so
+                                  vertical exaggeration fits. getState().geology.imageFits[face]: metres a
+                                  pixel, the misfit (rms, m) and where the image lies. null: stretched again
   EM3D.addWallLabel({..., unit: code}) / updateWallLabel(id, {unit})   a label on the block written in a
                                   darker shade of that unit's legend colour (null: back to its own colour)
   Geophysics file: X, Y, Z and a value column (chargeability, resistivity, conductivity...), CSV or
@@ -1057,6 +1086,9 @@ Whole projects (to keep or move a figure):
                  halo, length, palette: "orange" | "bins", style: "spikes" | "bars"}, holes} | null)
                                   the block look (getState().block); furniture falls back to the page where the
                                   side face is too foreshortened
+  EM3D.setBlock({page: "side", info})   the side title: the company line, title, subtitle and an info line (info;
+                                  default "3D cutaway · looking SW", "" for none) large at the top left, the logo
+                                  and legend on the page at the right, no heading on the block (reframed to fit)
   EM3D.setGeology({faces: "near", blend (0-3: soft contacts), dash (dashed contact lines), fade (0-1),
                    fadeDir: "down" | "up" | "left" | "right", labelStyle: "caps"})   the block section's faces
   EM3D.setTags({style: "plain"})   bold hole IDs with no pill

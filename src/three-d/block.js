@@ -13,7 +13,10 @@
 //     traces: "overlay" thin black traces drawn over the faces (the tubes hidden), the grade bars over them too,
 //     brackets: "plain" a bracket and bold "154 m @ 0.51% Cu" text beside the hole (tags.js), or "card",
 //     page: "bare"      the block alone on white: no title block, compass or notes, the credits small; "clean": no
-//                       title block while the block carries a heading; or "full",
+//                       title block while the block carries a heading; "full"; or "side": a large title block at the
+//                       top left (company line, title, subtitle, info line), the logo and legend card on the page at
+//                       the right, no heading on the block (round 5G),
+//     info: the side title's muted last line (page "side"; unset: "3D cutaway · looking SW"),
 //     hist: { side: "face" (in the front face's plane) | "screen", scale: "linear" | "log", halo, length,
 //             palette: "orange" (four classes, pale yellow to deep orange, as the reference) | "bins",
 //             style: "spikes" (one thin spike per assay, linear in grade, as the reference) | "bars" } }.
@@ -57,7 +60,8 @@ function patch(b, o) {
   if (o.furniture !== undefined) b.furniture = !!o.furniture;
   if (o.traces !== undefined) { if (!['overlay', 'tubes'].includes(o.traces)) throw new Error('traces must be "overlay" (thin black lines over the faces) or "tubes" (the coloured tubes).'); b.traces = o.traces; }
   if (o.brackets !== undefined) { if (!['plain', 'card'].includes(o.brackets)) throw new Error('brackets must be "plain" (a bracket and bold text) or "card".'); b.brackets = o.brackets; }
-  if (o.page !== undefined) { if (!['bare', 'clean', 'full'].includes(o.page)) throw new Error('page must be "bare" (the block alone, credits only), "clean" (no title block while the block has a heading) or "full".'); b.page = o.page; }
+  if (o.page !== undefined) { if (!['bare', 'clean', 'full', 'side'].includes(o.page)) throw new Error('page must be "bare" (the block alone, credits only), "clean" (no title block while the block has a heading), "full" or "side" (a large title block at the left, the logo and legend at the right).'); b.page = o.page; }
+  if (o.info !== undefined) { if (o.info === null) delete b.info; else b.info = String(o.info).slice(0, 160); }
   if (o.hist !== undefined) {
     const h = o.hist || {}, x = { ...(b.hist || BLOCK.hist) };
     if (h.side !== undefined) { if (!['face', 'screen'].includes(h.side)) throw new Error('hist.side must be "face" (in the face\'s plane) or "screen".'); x.side = h.side; }
@@ -74,9 +78,11 @@ export function setBlock(o) {
   if (o === null) S.block = null;
   else {
     if (!o || typeof o !== 'object') throw new Error('setBlock takes { furniture, traces, brackets, page, hist, holes }, or null to turn the block look off.');
-    const b = structuredClone(S.block || BLOCK); patch(b, o);
+    const b = structuredClone(S.block || BLOCK), was = S.block?.page; patch(b, o);
     if (o.holes !== undefined) S.holesShown = holeIds(o.holes);
     S.block = b;
+    // To or from the side title, the block is framed again for the room the title takes.
+    if ((was === 'side') !== (b.page === 'side')) { redraw(); const c = H.getCam(); frame({ azimuth: c.azimuth, plunge: c.plunge, zoom: c.zoom }); }
   }
   redraw();
 }
@@ -97,12 +103,13 @@ function frame(v) {
   const G = H.G; H.aim.set(0, 0, 0); G.fit = 1; H.setCamera(v, true);
   for (let i = 0; i < 4; i++) { const f = H.blockOverflow(); if (f <= 1.005) break; G.fit *= f * 1.01; H.setCamera(v, true); }
   if (S.block?.page === 'full') return;
-  const [W, Hf] = H.frame(), u = Math.sqrt(W * Hf) / 900, top = 80 * u, bot = Hf - (S.block.page === 'bare' ? 36 : 64) * u, B = G.B, up = new H.aim.constructor(0, 1, 0);
+  // The side title: the block under the title block and clear of the legend at the right.
+  const [W, Hf] = H.frame(), u = Math.sqrt(W * Hf) / 900, side = S.block.page === 'side', top = side ? (S.company ? 150 : 128) * u : 80 * u, bot = Hf - (S.block.page === 'bare' ? 36 : 64) * u, B = G.B, up = new H.aim.constructor(0, 1, 0);
   const box = () => { const ps = []; [[B.x0, B.y0], [B.x1, B.y0], [B.x1, B.y1], [B.x0, B.y1]].forEach(([x, y]) => { ps.push(H.proj(G.V(x, y, B.z0)), H.proj(G.V(x, y, G.surf(x, y)))); }); return [Math.min(...ps.map((q) => q[0])), Math.min(...ps.map((q) => q[1])), Math.max(...ps.map((q) => q[0])), Math.max(...ps.map((q) => q[1]))]; };
   for (let i = 0; i < 4; i++) {
     H.camera.updateMatrixWorld(); const b = box(), t = H.controls.target, ppu = H.proj(t.clone().add(up))[1] - H.proj(t)[1];
     if (ppu) H.aim.y += ((b[1] + b[3]) / 2 - (top + bot) / 2) / ppu;
-    const k = Math.min(0.84 * (bot - top) / (b[3] - b[1]), 0.92 * W / (b[2] - b[0]));
+    const k = Math.min(0.84 * (bot - top) / (b[3] - b[1]), (side ? 0.7 : 0.92) * W / (b[2] - b[0]));
     v = { ...v, zoom: Math.max(40, Math.min(250, H.getCam().zoom * Math.min(k, 1.3))), pan: H.aim.toArray() }; H.setCamera(v, true);
   }
 }
@@ -142,8 +149,8 @@ export async function applyPreset(name = 'blockSection', o = {}) {
   // Framed once the real terrain for the new block has loaded (it sets the block's height).
   await globalThis.EM3D?.terrainReady?.();
   frame({ azimuth: (LOOK[front] - 38 + 360) % 360, plunge: 20, zoom: 120 }); // no title block: closer, unless the block would leave the frame
-  // The heading on the front face, from the figure's title and subtitle (kept if the block has one).
-  if (!S.wallLabels.some((l) => l.size === 'heading')) {
+  // The heading on the front face, from the figure's title and subtitle (kept if the block has one); none under a side title.
+  if (b.page !== 'side' && !S.wallLabels.some((l) => l.size === 'heading')) {
     const at2 = headingU(front, hs), t = S.title.split('·').map((x) => x.trim()).filter(Boolean), n = S.wallLabels.reduce((mx, l) => Math.max(mx, +String(l.id).replace(/\D/g, '') || 0), 0) + 1;
     S.wallLabels.push({ id: `W${n}`, text: [t[t.length - 1] || S.title || 'TARGET ZONE', S.subtitle].filter(Boolean).join('\n'), face: front, u: at2[0], v: at2[1], size: 'heading', scale: 1, rotation: 0, color: null });
   }
@@ -181,7 +188,24 @@ export function begin(ctx, K) {
   if (B.traces === 'overlay') traces(ctx, K);
   const F = B.furniture !== false ? plan(ctx, K) : null;
   const bare = B.page === 'bare';
-  return { head: B.page !== 'full' && S.wallLabels.some((l) => l.size === 'heading' || l.size === 'title'), bare, foot: bare && ((credits) => foot(ctx, K, credits)), logo: !!F?.logo, legend: !!F?.legend, ticks: !!F?.ticks, scale: !!F?.scale, draw: (lay) => F && furniture(ctx, K, lay, F) };
+  return { head: B.page !== 'full' && S.wallLabels.some((l) => l.size === 'heading' || l.size === 'title'), title: B.page === 'side' && (() => sideTitle(ctx, K)), bare, foot: bare && ((credits) => foot(ctx, K, credits)), logo: !!F?.logo, legend: !!F?.legend, ticks: !!F?.ticks, scale: !!F?.scale, draw: (lay) => F && furniture(ctx, K, lay, F) };
+}
+// The side title's last line: S.block.info, else the view ("3D cutaway · looking SW").
+export const compass8 = (az) => ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round((((az % 360) + 360) % 360) / 45) % 8];
+const infoLine = () => S.block.info ?? `3D cutaway · looking ${compass8(H.getCam().azimuth)}`;
+// The side title (page "side"), top left with no frame: the company line in small tracked capitals in the accent
+// colour, the title large and bold in the primary colour, the subtitle, an accent bar beside those three, and a muted
+// info line. Returns its foot, for the layout pass.
+function sideTitle(ctx, K) {
+  const { u, m, font } = K, [W] = H.frame(), x = m + 18 * u, maxW = 0.55 * W, one = (t) => H.fitText(ctx, t, maxW);
+  let y = m; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  if (S.company) { font(800, 13); H.setSpacing(ctx, 1.8 * u); ctx.fillStyle = S.accent; y += 13 * u; ctx.fillText(one(S.company.toUpperCase()), x, y); H.setSpacing(ctx, 0); y += 9 * u; }
+  let ts = 50; font(800, ts); while (ts > 24 && ctx.measureText(S.title).width > maxW) font(800, --ts);
+  y += ts * 0.86 * u; ctx.fillStyle = H.pri(); ctx.fillText(one(S.title), x, y);
+  if (S.subtitle) { font(700, 21); ctx.fillStyle = H.INK; y += 31 * u; ctx.fillText(one(S.subtitle), x, y); }
+  ctx.fillStyle = S.accent; ctx.fillRect(m, m, 5 * u, y + 7 * u - m);
+  const info = infoLine(); if (info) { font(400, 13.5); ctx.fillStyle = H.MUTED; y += 27 * u; ctx.fillText(one(info), x, y); }
+  return y + 14 * u;
 }
 // A bare block section's foot: the sources (imagery, elevation) and the Exploration Maps credit, small, bottom right.
 // Returns the footer's top for the layout pass.
@@ -236,7 +260,7 @@ function plan(ctx, K) {
   // Two layouts: one card, or the layers' card (lithology) beside the rest, which is lower and wider.
   const rest = secs.filter((x) => !ext.includes(x)), gap = 10 * u;
   const layout = (groups) => { let x = 0; const cards = groups.filter((g) => g.length).map((g) => { const [w, h] = H.cardSize(ctx, K, g), c = { secs: g, x, w, h }; x += w + gap; return c; }); return { cards, w: x - gap, h: Math.max(...cards.map((c) => c.h)) }; };
-  const tries = secs.length ? [[layout([secs]), [1, 0.85, 0.7]], ...(ext.length && rest.length ? [[layout([ext, rest]), [1, 0.85, 0.7]]] : []), [layout([secs]), [0.6]]] : [];
+  const tries = secs.length && S.block.page !== 'side' ? [[layout([secs]), [1, 0.85, 0.7]], ...(ext.length && rest.length ? [[layout([ext, rest]), [1, 0.85, 0.7]]] : []), [layout([secs]), [0.6]]] : [];
   for (const [L, scs] of tries) {
     for (const sc of scs) {
       const { w, h } = L; let k = hyp(frameAt(F, 0.75, z0 + 0.3 * hf).b), span = w * sc / k / F.len; const uc = 0.96 - span / 2;
@@ -248,7 +272,7 @@ function plan(ctx, K) {
   }
   // The logo (or the company's name in capitals), above the legend or high on the face, smaller where it must be.
   const img = S.logo, word = !img && S.company ? S.company.toUpperCase() : '', ratio = img ? (img.naturalWidth / img.naturalHeight) || 1 : 0;
-  if (img || word) {
+  if ((img || word) && S.block.page !== 'side') { // a side title has the logo and legend on the page
     K.font(800, 17); if ('letterSpacing' in ctx) ctx.letterSpacing = `${2 * u}px`;
     const lw0 = img ? Math.min(210 * u, 46 * u * ratio) : ctx.measureText(word).width, lh0 = img ? lw0 / ratio : 26 * u; if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
     for (const sc of [1, 0.8, 0.65]) {
@@ -315,7 +339,8 @@ export function renderUI(el) {
   el.innerHTML = `${b ? `<div class="row" style="gap:14px;flex-wrap:wrap"><label class="check"><input type="checkbox" data-bk="furniture" ${b.furniture !== false ? 'checked' : ''}>Legend, logo, depths and scale on the side face</label>
       <label class="check"><input type="checkbox" data-bk="traces" ${b.traces === 'overlay' ? 'checked' : ''}>Thin traces over the faces</label><label class="check"><input type="checkbox" data-bk="brackets" ${b.brackets === 'plain' ? 'checked' : ''}>Plain brackets</label>
       </div>
-    <div class="grid2" style="margin-top:6px"><label class="field"><span>Page</span><select data-bs="page">${[['bare', 'The block alone (credits only)'], ['clean', 'No title block'], ['full', 'Title block, compass and notes']].map(([v, t]) => `<option value="${v}" ${b.page === v ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+    <div class="grid2" style="margin-top:6px"><label class="field"><span>Page</span><select data-bs="page">${[['bare', 'The block alone (credits only)'], ['clean', 'No title block'], ['full', 'Title block, compass and notes'], ['side', 'Side title: title left, logo and legend right']].map(([v, t]) => `<option value="${v}" ${b.page === v ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+      ${b.page === 'side' ? `<label class="field"><span>Info line under the title</span><input type="text" data-bi value="${esc(b.info ?? '')}" placeholder="3D cutaway · looking ${compass8(H.getCam().azimuth)}"></label>` : ''}
       <label class="field"><span>Bar shape</span><select data-bh="style"><option value="spikes" ${hb.style === 'spikes' ? 'selected' : ''}>A spike per assay</option><option value="bars" ${hb.style !== 'spikes' ? 'selected' : ''}>Merged bars</option></select></label>
       <label class="field"><span>Bar colours</span><select data-bh="palette"><option value="orange" ${hb.palette === 'orange' ? 'selected' : ''}>Orange ramp</option><option value="bins" ${hb.palette !== 'orange' ? 'selected' : ''}>The grade colours</option></select></label></div>
     <div class="grid2" style="margin-top:6px"><label class="field"><span>Grade bars</span><select data-bh="side"><option value="face" ${hb.side === 'face' ? 'selected' : ''}>On the front face</option><option value="screen" ${hb.side !== 'face' ? 'selected' : ''}>Facing the camera</option></select></label>
@@ -331,6 +356,7 @@ export function renderUI(el) {
   el.querySelector('[data-hs-all]')?.addEventListener('click', () => run(() => H.api.setHolesShown(null)));
   el.querySelector('[data-hs-sec]')?.addEventListener('click', () => run(() => H.api.setHolesShown(S.section.holes)));
   el.querySelector('[data-bk-off]')?.addEventListener('click', () => run(() => H.api.setBlock(null)));
+  el.querySelector('[data-bi]')?.addEventListener('change', (e) => run(() => H.api.setBlock({ info: e.target.value.trim() || null })));
   el.querySelectorAll('[data-bs]').forEach((x) => x.addEventListener('change', () => run(() => H.api.setBlock({ [x.dataset.bs]: x.value }))));
   const V = { traces: ['overlay', 'tubes'], brackets: ['plain', 'card'] };
   el.querySelectorAll('[data-bk]').forEach((cb) => cb.addEventListener('change', () => run(() => H.api.setBlock({ [cb.dataset.bk]: V[cb.dataset.bk] ? V[cb.dataset.bk][cb.checked ? 0 : 1] : cb.checked }))));

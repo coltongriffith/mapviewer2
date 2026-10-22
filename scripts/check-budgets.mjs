@@ -154,7 +154,11 @@ const BUDGETS = {
   // 944.7): the homepage's "New in Exploration Maps" section (3D figures, Studio, sharing, workspace) in its own lazy
   // LandingNew chunk (~1.2 kB with its alt texts and copy), so the homepage's initial JS and its budget are unchanged
   // (+0.1 kB measured for the section heading and the guarded lazy hand-off); the editor route is unchanged.
-  totalAuthJsGzipKb: 946.4,
+  // 946.4 → 947.8 (Oct 2026, 3D round 5G, measured 947.5, 946.0 on main): the watermark band (src/export/watermarkBand.js,
+  // ~1.5 kB: the Exploration Maps mark, wordmark, review status and "Prepared for" line under an export), shared so the
+  // 2D exporter can use it later; /3d imports it only for an export that asks for the band, so it counts here, not in
+  // the /3d page. Nothing else moves.
+  totalAuthJsGzipKb: 947.8,
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
@@ -180,7 +184,8 @@ const BUDGETS = {
   // 871.5 → 876.5 (measured 876.14, +4.92 kB over main's 871.22): the admin 3D usage tab, as totalAuthJsGzipKb above.
   // 876.5 → 877.8 (Oct 2026, production errors, measured 877.5, 876.1 on main): as totalAuthJsGzipKb above.
   // 877.8 → 879.1 (measured 878.8, 877.5 on main): the homepage's lazy LandingNew chunk, as totalAuthJsGzipKb above.
-  totalJsGzipKb: 879.1,
+  // 879.1 → 880.6 (measured 880.3, 878.8 on main): the shared watermark band, as totalAuthJsGzipKb above.
+  totalJsGzipKb: 880.6,
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the
   // totals above. /3d carries three.js (~109 kB gzip) and its editor.
@@ -268,7 +273,12 @@ const BUDGETS = {
   // 172.8 → 173.3 (Oct 2026, production errors merged over admin 3D usage, measured 173.0, configured 173.0, 172.4 on
   // main): uncaught errors and rejections reported to error_events like the 2D app's, and stale chunks recovered from a
   // bare import() too (studio.js plus its copy of shared/chunkErrors.js).
-  threeDJsGzipKb: 173.3,
+  // 173.3 → 174.3 (Oct 2026, 3D round 5G, measured 173.9, configured 174.0, 173.0 on main, + 0.3): the hooks for the
+  // round's opt-in features, all of whose work is lazy: the export's pixel size (width or scale, checked against the
+  // browser's graphics limit) and the watermark band's lazy import for exportPNG, exportLayers and the Export step's
+  // controls; setLogo's removeBackground and the Brand step's offer (logo-bg.js); setFaceImage's fit and fitFaceImage;
+  // the block's side title in place of the title block, and its heading label hidden under it (~0.9 kB in all).
+  threeDJsGzipKb: 174.3,
   // /3d's own modules fetched on first use (the geology, geophysics and tag layers, the account
   // client). They never load with the page or the app, so they sit outside the page and app totals.
   // 32 → 34 (Oct 2026, round 4): per-hole tags, grouped pending tags, callouts beside or bracketed on their
@@ -371,7 +381,11 @@ const BUDGETS = {
   // over main): track.js (the 3D events' allowlist, the stored token, once per tab, nothing but views and copies on a
   // shared figure) with the app's shared /api/track sender (utils/trackCore.js and utils/session.js), fetched a moment
   // after the editor opens, and the calls in account-core.js, share.js and versions.js (Google tag calls kept).
-  threeDLazyJsGzipKb: 144.8,
+  // 144.8 → 150.4 (Oct 2026, 3D round 5G, measured 149.9, configured 150.1, 144.4 on main, + 0.3): image-fit.js (~2.3 kB,
+  // the picker that fits a section image to a face by known points, fetched on its button), logo-bg.js with the shared
+  // src/utils/logoBackground.js (~1.5 kB, fetched with the first logo added in the Brand step or a removal asked for),
+  // geology.js +1.4 (the fit by known points, the A–A′ plane, getState's imageFits) and block.js +0.6 (the side title).
+  threeDLazyJsGzipKb: 150.4,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.

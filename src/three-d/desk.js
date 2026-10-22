@@ -26,10 +26,12 @@ async function annotationsSVG(f, X) {
 export async function exportLayers(opts = {}) {
   if (!H.G) throw new Error('Nothing to export yet: add a collar file and an assay file.');
   // opts.background "transparent" (and opts.shadow) as for EM3D.exportPNG: every PNG layer, and the SVG without the footer band.
-  const f = H.format(), X = H.xopts(opts), fig = (v, l) => H.figureCanvas(v, l, undefined, X);
+  // opts.width or scale: every layer at that size; opts.watermark: the band under figure.png and section.png only (the
+  // two layers stay the figure's size, to stack).
+  const X = H.xopts(opts), f = X.size || H.format(), fig = (v, l) => H.figureCanvas(v, l, undefined, X), band = opts.watermark ? await H.watermark(opts.watermark) : (c) => c;
   H.status(`Preparing layers at ${f.w} × ${f.h} px…`);
   const bytes = async (c) => new Uint8Array(await (await canvasBlob(c)).arrayBuffer());
-  const png = { figure: await bytes(fig('3d')), scene: await bytes(fig('3d', 'scene')), annotations: await bytes(fig('3d', 'annotations')), section: await bytes(fig('section')) };
+  const png = { figure: await bytes(band(fig('3d'))), scene: await bytes(fig('3d', 'scene')), annotations: await bytes(fig('3d', 'annotations')), section: await bytes(band(fig('section'))) };
   const svg = opts.svg ? await annotationsSVG(f, X) : null;
   const layers = svg ? { ...LAYER_FILES, annotationsSvg: 'annotations.svg', note: `${LAYERS_NOTE} annotations.svg is annotations.png with live text, at the same size.` } : { ...LAYER_FILES, note: LAYERS_NOTE };
   const settings = { ...H.getState(), layers, exportedAt: new Date().toISOString() };
