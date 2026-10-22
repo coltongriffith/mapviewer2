@@ -97,12 +97,14 @@ describe('exportLayers', () => {
     }));
     vi.doMock('../src/export/exportPNG', () => ({ figureCanvas: async (s, o) => { calls.push(['figure', o.watermarkBand?.client]); return canvas('figure'); } }));
     const { layerFiles } = await import('../src/export/exportLayers.js');
-    const files = await layerFiles({}, { pixelRatio: 2, watermarkBand: { client: 'Star' }, svg: true });
+    const files = await layerFiles({}, { pixelRatio: 2, watermarkBand: { client: 'Star' }, draftOverlay: true, svg: true });
     expect(Object.keys(files)).toEqual(['figure.png', 'map.png', 'annotations.png', 'annotations.svg', 'layers.json']);
     expect(calls).toEqual([['figure', 'Star'], ['canvas', 'map', undefined], ['canvas', 'annotations', 'transparent'], ['svg', 'annotations']]);
     expect(new TextDecoder().decode(files['map.png'])).toBe('map');
     const about = JSON.parse(new TextDecoder().decode(files['layers.json']));
     expect(about).toMatchObject({ width: 1600, height: 1000, files: ['figure.png', 'map.png', 'annotations.png', 'annotations.svg'] });
+    expect(about.note).toContain('without its optional draft overlay or watermark band');
+    expect(about.draftOverlay).toContain('on figure.png only');
     expect(about.watermarkBand).toMatch(/under figure\.png only/);
     const plain = await layerFiles({}, {});
     expect(Object.keys(plain)).toEqual(['figure.png', 'map.png', 'annotations.png', 'layers.json']);

@@ -13,7 +13,7 @@ import { figureCanvas } from './exportPNG';
 import { downloadBlob, blobAs } from '../utils/svg';
 
 export const LAYER_FILES = { figure: 'figure.png', map: 'map.png', annotations: 'annotations.png', svg: 'annotations.svg', about: 'layers.json' };
-const NOTE = 'map.png and annotations.png stack (map below) to make figure.png; annotations.png is transparent.';
+const NOTE = 'map.png and annotations.png stack (map below) to make the figure without its optional draft overlay or watermark band; annotations.png is transparent.';
 
 const pngBytes = (c) => new Promise((resolve, reject) => c.toBlob((b) => (b ? b.arrayBuffer().then((a) => resolve(new Uint8Array(a)), reject) : reject(new Error('The PNG could not be encoded.'))), 'image/png'));
 
@@ -27,6 +27,7 @@ export async function layerFiles(scene, opts = {}) {
   const about = {
     note: opts.svg ? `${NOTE} annotations.svg is annotations.png with live text, at the same size.` : NOTE,
     files: Object.keys(files), width: map.width, height: map.height,
+    draftOverlay: Boolean(opts.draftOverlay) && 'on figure.png only; map.png and the annotation layers stay clean',
     watermarkBand: Boolean(opts.watermarkBand) && 'under figure.png only, so the layers stay the figure\'s size to stack',
     exportedAt: new Date().toISOString(),
   };

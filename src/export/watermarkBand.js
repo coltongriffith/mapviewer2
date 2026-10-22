@@ -69,10 +69,13 @@ export function drawWatermarkBand(ctx, x, y, width, opts = {}) {
   return h;
 }
 
-// A new canvas: the figure with the band under it, the full width of the figure.
+// A new canvas: the figure with the band under it, the full width of the figure. opts.overlay: the draft mark
+// (drawDraftOverlay below) across the figure too, above the band.
 export function withWatermarkBand(figure, opts = {}) {
   const h = bandHeight(figure.width), out = document.createElement('canvas'); out.width = figure.width; out.height = figure.height + h;
-  const ctx = out.getContext('2d'); ctx.drawImage(figure, 0, 0); drawWatermarkBand(ctx, 0, figure.height, figure.width, opts);
+  const ctx = out.getContext('2d'); ctx.drawImage(figure, 0, 0);
+  if (opts.overlay) drawDraftOverlay(ctx, figure.width, figure.height);
+  drawWatermarkBand(ctx, 0, figure.height, figure.width, opts);
   return out;
 }
 
@@ -132,4 +135,79 @@ export async function bandFontsReady(doc = typeof document !== 'undefined' ? doc
   const f = doc?.fonts; if (!f?.load) return;
   let t; await Promise.race([Promise.all([300, 400, 600, 700, 800].map((w) => f.load(`${w} 12px "Source Sans 3"`).catch(() => null))), new Promise((r) => { t = setTimeout(r, 3000); })]);
   clearTimeout(t);
+}
+
+// ── The draft mark across the figure ─────────────────────────────────────────────────────────────────────────
+// The band can be cropped off; this cannot, simply: "DRAFT · EXPLORATIONMAPS.COM" with the mark, repeated on a
+// loose diagonal grid (−30°) over the whole figure (map and annotations, not the band), faint enough that the map
+// still reads, as a proofing mark does. On a canvas each mark takes the brand ink over light ground and cream over
+// dark (sampled from the figure under it); the SVG, which cannot sample its basemap, uses one mid-grey.
+export const DRAFT_TEXT = 'DRAFT · EXPLORATIONMAPS.COM';
+export const DRAFT_ALPHA = { ink: 0.1, cream: 0.14, grey: 0.13 };
+const DRAFT_GREY = '#76848a';
+const ANGLE = -30, RAD = (ANGLE * Math.PI) / 180;
+// Type size, the gap after each mark and the row pitch, from the figure's size.
+export function draftGrid(w, h, textWidth) {
+  const size = Math.max(10, Math.round(Math.min(w, h * 1.5) / 52));
+  const markW = size * 1.15, unit = markW + size * 0.45 + textWidth(size);
+  return { size, markW, dx: unit + size * 7, dy: size * 7.5, unit };
+}
+function draftWidth(ctx, font) {
+  return (size) => { ctx.font = `700 ${size}px ${font}`; track(ctx, size * 0.12); const w = ctx.measureText(DRAFT_TEXT).width; track(ctx, 0); return w; };
+}
+
+// Draws the mark over (0, 0, w, h) of ctx's canvas. opts.font: the type family.
+export function drawDraftOverlay(ctx, w, h, opts = {}) {
+  const font = opts.font || SANS, g = draftGrid(w, h, draftWidth(ctx, font));
+  // The figure's lightness on a coarse grid (one sample per ~24 px), to pick ink or cream for each mark.
+  const k = Math.max(1, Math.ceil(Math.max(w, h) / 600)) * 4, sw = Math.max(1, Math.ceil(w / k)), sh = Math.max(1, Math.ceil(h / k));
+  let lum = null;
+  try {
+    const small = document.createElement('canvas'); small.width = sw; small.height = sh;
+    const sg = small.getContext('2d'); sg.drawImage(ctx.canvas, 0, 0, w, h, 0, 0, sw, sh);
+    const d = sg.getImageData(0, 0, sw, sh).data; lum = new Float32Array(sw * sh);
+    for (let i = 0; i < lum.length; i++) { const a = d[i * 4 + 3] / 255; lum[i] = (0.2126 * d[i * 4] + 0.7152 * d[i * 4 + 1] + 0.0722 * d[i * 4 + 2]) / 255 * a + (1 - a); }
+  } catch { lum = null; } // a tainted canvas cannot be read: ink everywhere
+  const light = (x, y) => { if (!lum) return 1; const i = Math.min(sh - 1, Math.max(0, Math.floor(y / k))) * sw + Math.min(sw - 1, Math.max(0, Math.floor(x / k))); return lum[i]; };
+  const cos = Math.cos(RAD), sin = Math.sin(RAD), cx = w / 2, cy = h / 2, R = Math.hypot(w, h) / 2 + g.dx;
+  const at = (u, v) => [cx + u * cos - v * sin, cy + u * sin + v * cos];
+  ctx.save();
+  ctx.font = `700 ${g.size}px ${font}`; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+  for (let row = 0, v = -R; v <= R; row++, v += g.dy) {
+    for (let u = -R - (row % 2 ? g.dx / 2 : 0); u <= R; u += g.dx) {
+      // Lightness along the mark (its two ends and middle); skip marks wholly outside the figure.
+      const pts = [0, 0.5, 1].map((t) => at(u + g.unit * t, v));
+      if (pts.every(([x, y]) => x < -g.size || y < -g.size || x > w + g.size || y > h + g.size)) continue;
+      const inside = pts.filter(([x, y]) => x >= 0 && y >= 0 && x < w && y < h);
+      const l = inside.length ? inside.reduce((s, [x, y]) => s + light(x, y), 0) / inside.length : 1;
+      const dark = l < 0.45, colour = dark ? BAND_COLORS.cream : BAND_COLORS.ink;
+      ctx.save();
+      ctx.translate(...at(u, v)); ctx.rotate(RAD); ctx.globalAlpha = dark ? DRAFT_ALPHA.cream : DRAFT_ALPHA.ink;
+      drawMark(ctx, 0, -g.markW * 0.54, g.markW, { ink: colour, orange: colour });
+      ctx.fillStyle = colour; track(ctx, g.size * 0.12); ctx.fillText(DRAFT_TEXT, g.markW + g.size * 0.45, 0); track(ctx, 0);
+      ctx.restore();
+    }
+  }
+  ctx.restore();
+}
+
+// An exported SVG document with the draft mark over the whole figure: a <pattern> of the mark and text in one
+// mid-grey, filling a rect on top of everything (before the band, which goes under it). opts.ctx: a 2D context
+// to measure with (a scratch canvas by default).
+export function withDraftOverlaySvg(svg, opts = {}) {
+  const m = svg.match(/<svg\b[^>]*\bwidth="([\d.]+)"[^>]*\bheight="([\d.]+)"[^>]*>/);
+  if (!m) return svg;
+  const w = +m[1], h = +m[2], font = opts.font || SANS;
+  const ctx = opts.ctx || document.createElement('canvas').getContext('2d');
+  ctx.save(); const g = draftGrid(w, h, draftWidth(ctx, font)); ctx.restore();
+  const k = g.markW / 520, P = (a) => a.map(([px, py]) => `${n(px * k)},${n(py * k - g.markW * 0.54)}`).join(' ');
+  const mark = `<polygon points="${P([[60, 40], [180, 40], [180, 85], [410, 85], [410, 250], [445, 250], [445, 480], [30, 480], [30, 385], [60, 385]])}"/>`;
+  const text = `<text x="${n(g.markW + g.size * 0.45)}" y="0" dominant-baseline="middle" font-family="${esc(font)}" font-size="${g.size}" font-weight="700" letter-spacing="${n(g.size * 0.12)}">${esc(DRAFT_TEXT)}</text>`;
+  const cell = (x, y) => `<g transform="translate(${n(x)} ${n(y)})">${mark}${text}</g>`;
+  // Two rows per tile, the second offset by half a step, as the canvas lays them.
+  const pattern = `<pattern id="em-draft-mark" patternUnits="userSpaceOnUse" width="${n(g.dx)}" height="${n(g.dy * 2)}" patternTransform="translate(${n(w / 2)} ${n(h / 2)}) rotate(${ANGLE})">`
+    + `<g fill="${DRAFT_GREY}">${cell(0, g.dy / 2)}${cell(-g.dx / 2, g.dy * 1.5)}${cell(g.dx / 2, g.dy * 1.5)}</g></pattern>`;
+  const overlay = `<defs>${pattern}</defs><rect id="em-draft-overlay" x="0" y="0" width="${w}" height="${h}" fill="url(#em-draft-mark)" fill-opacity="${DRAFT_ALPHA.grey}" pointer-events="none"/>`;
+  const at = svg.lastIndexOf('</svg>');
+  return `${svg.slice(0, at)}${overlay}</svg>`;
 }

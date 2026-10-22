@@ -54,3 +54,12 @@ export function pdfPage(pdf, canvas, size) {
   }
   pdf.addImage(imgData, 'JPEG', imgX, imgY, imgW, imgH);
 }
+
+// The canvas on opaque white, for a PDF page: the page image is a JPEG, which has no alpha, so a transparent
+// figure (a transparent-background export, or a PNG with alpha added to a package) would otherwise turn black.
+// The figure itself is left as it is: its PNG keeps the transparency.
+export function onWhite(canvas, doc = document) {
+  const out = doc.createElement('canvas'); out.width = canvas.width; out.height = canvas.height;
+  const g = out.getContext('2d'); g.fillStyle = '#ffffff'; g.fillRect(0, 0, out.width, out.height); g.drawImage(canvas, 0, 0);
+  return out;
+}

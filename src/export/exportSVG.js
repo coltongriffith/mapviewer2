@@ -9,11 +9,13 @@ export async function exportSVG(scene, options = {}) {
 
   const baseName = options.filename || scene.project.layout?.exportSettings?.filename || "exploration-maps-export";
   let svg = await renderSceneToSvg(scene, options);
-  // The Exploration Maps band under the figure, when asked for (export/watermarkBand.js, loaded only then).
-  if (options.watermarkBand) {
+  // The draft mark across the figure and the Exploration Maps band under it, when asked for
+  // (export/watermarkBand.js, loaded only then).
+  if (options.watermarkBand || options.draftOverlay) {
     const band = await import('./watermarkBand.js');
     await band.bandFontsReady();
-    svg = band.withWatermarkBandSvg(svg, options.watermarkBand);
+    if (options.draftOverlay) svg = band.withDraftOverlaySvg(svg);
+    if (options.watermarkBand) svg = band.withWatermarkBandSvg(svg, options.watermarkBand);
   }
   // options.as (window.EMAP): the SVG as the download holds it, returned instead.
   if (options.as) return blobAs(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }), options.as);
