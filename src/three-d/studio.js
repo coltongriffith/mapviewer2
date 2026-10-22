@@ -1249,7 +1249,7 @@ function drawCallout(ctx, K, x, y, c, M, target) {
   const r = target[0] >= x + bw / 2, x0 = r ? x + bw : x, y0 = y + bh / 2, xm = r ? Math.max(x0 + 16 * u, Math.min(target[0] - 30 * u, x0 + 60 * u)) : Math.min(x0 - 16 * u, Math.max(target[0] + 30 * u, x0 - 60 * u));
   ctx.strokeStyle = pri(); ctx.lineWidth = 1.3 * u; ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(xm, y0); ctx.lineTo(target[0], target[1]); ctx.stroke();
   M.leader = [[x0, y0, xm, y0], [xm, y0, target[0], target[1]]];
-  ctx.beginPath(); ctx.arc(target[0], target[1], 3.6 * u, 0, Math.PI * 2); ctx.fillStyle = pri(); ctx.fill(); ctx.lineWidth = 1.2 * u; ctx.strokeStyle = '#fff'; ctx.stroke();
+  if (!EXT.crew?.covers(target)) { ctx.beginPath(); ctx.arc(target[0], target[1], 3.6 * u, 0, Math.PI * 2); ctx.fillStyle = pri(); ctx.fill(); ctx.lineWidth = 1.2 * u; ctx.strokeStyle = '#fff'; ctx.stroke(); } // EXT hook: none over the drill crew
   ctx.fillStyle = paper(0.96); ctx.strokeStyle = RULE; ctx.lineWidth = u; roundRect(ctx, x, y, bw, bh, 4 * u); ctx.fill(); ctx.stroke();
   ctx.fillStyle = S.accent; ctx.fillRect(x + 7 * u, y + 7 * u, 4 * u, bh - 14 * u);
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
@@ -1477,7 +1477,8 @@ function drawOverlay(ctx, k, forExport) {
   const PV = EXT.plan?.begin(ctx, K); // EXT hook: a plan view's grid and interval bars (plan.js), under the collars
   const BK = EXT.block?.begin(ctx, K); // EXT hook: the block section's traces, and what goes on the side face (block.js)
   project.holes.filter(holeOn).forEach((h) => {
-    const [cx, cy] = proj(G.V(h.c.x, h.c.y, h.c.z)), e = h.path[h.path.length - 1], [ex, ey] = proj(G.V(e.x, e.y, e.z));
+    const cr = EXT.crew?.collar(h); if (cr === false) return; // EXT hook: collars under the drill crew's pad give way; its own at the rod
+    const [cx, cy] = cr || proj(G.V(h.c.x, h.c.y, h.c.z)), e = h.path[h.path.length - 1], [ex, ey] = proj(G.V(e.x, e.y, e.z));
     ctx.beginPath(); ctx.arc(cx, cy, 5 * u, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 2.4 * u; ctx.strokeStyle = EXT.tags?.highlightOf(h) || '#142126'; if (h.prov || h.planned) ctx.setLineDash([2.5 * u, 2 * u]); ctx.stroke(); ctx.setLineDash([]);
     occ.push([cx - 8 * u, cy - 8 * u, cx + 8 * u, cy + 8 * u]); if (PV?.ids) return; // EXT hook: plan.js places them
     // EXT hook: key holes only (the default past 12 holes, when tags.js decides), and no ID where a pill is.
@@ -1745,7 +1746,7 @@ function loop(now) {
     camera.position.lerpVectors(tween.from, tween.to, e); controls.target.lerpVectors(tween.fromT, tween.toT, e); if (k >= 1) tween = null; }
   controls.update(); if (ortho()) camera.updateProjectionMatrix(); hazeNow();
   if (G && S.view === '3d') { camera.updateMatrixWorld(); if (!G.ribbonView || camera.getWorldDirection(tmpV).dot(G.ribbonView) < 0.99998) { placeRibbons(); faceWalls(); } }
-  if (S.view === '3d') { foot(S.dropShadow); renderer.render(scene, camera); drawOverlay(ov.getContext('2d'), DPR, false); syncCamUI(); }
+  if (S.view === '3d') { foot(S.dropShadow); EXT.crew?.tick(now); renderer.render(scene, camera); drawOverlay(ov.getContext('2d'), DPR, false); syncCamUI(); }
   requestAnimationFrame(loop);
 }
 // One export canvas at the chosen size. layer "scene" is the WebGL render alone on transparent;
@@ -1760,7 +1761,7 @@ function figureCanvas(view, layer = 'figure', wrap = (c) => c, o = {}) {
   clearBg = o.background === 'transparent';
   try {
     if (view === 'section') { ctx.scale(f.w / W, f.h / H); drawSection(ctx, W, H, true); return out; }
-    const k = f.w / W; tween = null; controls.update(); camera.updateProjectionMatrix(); hazeNow(); placeRibbons(); faceWalls();
+    const k = f.w / W; tween = null; controls.update(); camera.updateProjectionMatrix(); hazeNow(); placeRibbons(); faceWalls(); EXT.crew?.tick(); // EXT hook: the crew's fixed pose
     if (layer !== 'annotations') {
       const bg = scene.background; if (layer === 'scene' || clearBg) scene.background = null; // the renderer has alpha, so this clears to transparent
       foot(o.shadow ?? S.dropShadow); renderer.setPixelRatio(k); renderer.setSize(W, H, false); renderer.render(scene, camera);
@@ -2314,14 +2315,15 @@ Object.assign(S, {
   tags: { at: 'toe', style: 'dark', status: {}, fadePrevious: false, newLabel: '', prevLabel: 'Previously released', plannedLabel: 'Planned', groups: [], autoGroup: false, groupRadius: 140, emphasis: 'auto', highlight: {}, highlightNew: true, idMode: 'auto', showId: {}, showTag: {}, hideRows: [], pending: 'collar' },
   histograms: false, insetStyle: 'plan', overlays: [], shapes: [], // overlays.js, shapes.js
   holesShown: null, block: null, // block.js: the holes drawn (null: all) and the block section's look
+  crew: { on: false, at: 'auto', scale: 1, heading: null }, // the drill rig and crew at the pad (crew.js)
 });
-const EXT = {}, extLoading = {}, EXT_IMPORT = { geology: () => import('./geology.js'), geophys: () => import('./geophys.js'), tags: () => import('./tags.js'), look: () => import('./look.js'), section: () => import('./section.js'), type: () => import('./typography.js'), overlays: () => import('./overlays.js'), shapes: () => import('./shapes.js'), sections: () => import('./sections.js'), plan: () => import('./plan.js'), desurvey: () => import('./min-curvature.js'), mapuse: () => import('./mapuse.js'), claims: () => import('./claims.js'), block: () => import('./block.js') };
+const EXT = {}, extLoading = {}, EXT_IMPORT = { geology: () => import('./geology.js'), geophys: () => import('./geophys.js'), tags: () => import('./tags.js'), look: () => import('./look.js'), section: () => import('./section.js'), type: () => import('./typography.js'), overlays: () => import('./overlays.js'), shapes: () => import('./shapes.js'), sections: () => import('./sections.js'), plan: () => import('./plan.js'), desurvey: () => import('./min-curvature.js'), mapuse: () => import('./mapuse.js'), claims: () => import('./claims.js'), block: () => import('./block.js'), crew: () => import('./crew.js') };
 const hasRole = (r) => files.some((f) => f.role === r);
 // Holes from a property's drill database follow their surveys by minimum curvature (shared/desurvey.js).
 const mcWanted = () => !!S.drillSource && hasRole('survey'), mcPath = (h) => h.surveyed && mcWanted() && !!EXT.desurvey;
 function extWanted() {
   const gp = S.geophys.mode !== 'off' && hasRole('geophys'), t = S.tags;
-  return { look: S.shell.enabled || ortho() || S.scene.haze > 0 || (uses(S, 'clearLeaders') && S.labels.some((l) => l.arrow)), geology: (S.geology.enabled && hasRole('litho')) || Object.keys(S.geology.images || {}).length > 0 || gp, geophys: gp, section: !!(S.section || S.sections) || uses(S, 'padIds'), sections: !!S.sections, plan: uses(S, 'planView') || S.grid, mapuse: S.mapInfo.use === 'standalone', overlays: S.overlays.length > 0 || hasRole('overlay'), shapes: S.shapes.length > 0, desurvey: mcWanted(), block: !!(S.block || S.holesShown) || S.wallLabels.some((l) => l.size === 'heading'),
+  return { look: S.shell.enabled || ortho() || S.scene.haze > 0 || (uses(S, 'clearLeaders') && S.labels.some((l) => l.arrow)), geology: (S.geology.enabled && hasRole('litho')) || Object.keys(S.geology.images || {}).length > 0 || gp, geophys: gp, section: !!(S.section || S.sections) || uses(S, 'padIds'), sections: !!S.sections, plan: uses(S, 'planView') || S.grid, mapuse: S.mapInfo.use === 'standalone', crew: !!S.crew?.on, overlays: S.overlays.length > 0 || hasRole('overlay'), shapes: S.shapes.length > 0, desurvey: mcWanted(), block: !!(S.block || S.holesShown) || S.wallLabels.some((l) => l.size === 'heading'),
     tags: t.at !== 'toe' || t.fadePrevious || t.idMode === 'key' || (t.idMode !== 'all' && (project?.holes?.length || 0) > 12) || Object.keys(t.showId).length > 0 || Object.keys(t.showTag || {}).length > 0 || t.emphasis === 'key' || Object.keys(t.highlight || {}).length > 0
       || S.coPlacement !== 'column' || Object.values(coMap()).some((o) => o.placement || o.x !== undefined) || (S.pendingLabels && t.pending === 'collar' && !!project?.holes?.some(isPending)) || t.autoGroup || t.groups.length > 0 || Object.keys(t.status).length > 0 || S.histograms || S.insetStyle !== 'plan' || S.labels.some((l) => l.kind === 'stat') };
 }
@@ -2354,7 +2356,7 @@ async function extReady() {
 function extScene() {
   if (Object.entries(extWanted()).some(([k, v]) => v && !EXT[k])) { extReady().catch((e) => status(e.message)); return; }
   if (!G) return;
-  EXT.geophys?.syncCurtains(); faceWalls(); EXT.tags?.placeHistograms(); EXT.tags?.syncInset(); EXT.tags?.syncHoles(); EXT.overlays?.sync(); EXT.sections?.sync(); EXT.plan?.sync(); EXT.block?.sync();
+  EXT.geophys?.syncCurtains(); faceWalls(); EXT.tags?.placeHistograms(); EXT.tags?.syncInset(); EXT.tags?.syncHoles(); EXT.overlays?.sync(); EXT.sections?.sync(); EXT.plan?.sync(); EXT.block?.sync(); EXT.crew?.sync();
 }
 const extView = () => { if (G) EXT.geology?.syncFaces(); };
 const extRestyle = () => { if (G) { EXT.geophys?.syncCurtains(); faceWalls(); EXT.tags?.syncHoles(); EXT.sections?.sync(); EXT.block?.sync(); } };
@@ -2393,16 +2395,16 @@ function extStyle(o) {
 }
 function extState() {
   const imgs = (g) => ({ ...structuredClone({ ...g, images: undefined }), images: Object.fromEntries(Object.keys(g.images || {}).map((k) => [k, true])) });
-  return { geology: EXT.geology ? EXT.geology.state() : imgs(S.geology), geophys: EXT.geophys ? EXT.geophys.state() : structuredClone(S.geophys), tags: EXT.tags ? EXT.tags.state() : { ...structuredClone(S.tags), histograms: S.histograms, insetStyle: S.insetStyle } };
+  return { geology: EXT.geology ? EXT.geology.state() : imgs(S.geology), geophys: EXT.geophys ? EXT.geophys.state() : structuredClone(S.geophys), tags: EXT.tags ? EXT.tags.state() : { ...structuredClone(S.tags), histograms: S.histograms, insetStyle: S.insetStyle }, crew: EXT.crew ? EXT.crew.state() : structuredClone(S.crew) };
 }
 function renderExtUI() {
   document.querySelectorAll('[data-ext]').forEach((el) => { const [g, k] = el.dataset.ext.split('.'), v = g === 'style' || g === 'view' ? S[k] : S[g][k]; if (el.type === 'checkbox') el.checked = !!v; else el.value = v; });
-  [['geology', 'geo-ui'], ['geophys', 'gp-ui'], ['tags', 'tag-ui'], ['section', 'sec-holes'], ['overlays', 'ov-ui'], ['shapes', 'shape-ui'], ['sections', 'sec-tabs'], ['mapuse', 'mapinfo-ui'], ['block', 'block-ui']].forEach(([k, id]) => { if (EXT[k]) EXT[k].renderUI($(id)); });
+  [['geology', 'geo-ui'], ['geophys', 'gp-ui'], ['tags', 'tag-ui'], ['section', 'sec-holes'], ['overlays', 'ov-ui'], ['shapes', 'shape-ui'], ['sections', 'sec-tabs'], ['mapuse', 'mapinfo-ui'], ['block', 'block-ui'], ['crew', 'crew-ui']].forEach(([k, id]) => { if (EXT[k]) EXT[k].renderUI($(id)); });
   document.querySelectorAll('[data-secmode]').forEach((b) => b.setAttribute('aria-pressed', String((b.dataset.secmode === 'chosen') === !!S.section?.holes)));
 }
 document.querySelectorAll('[data-ext]').forEach((el) => el.addEventListener('change', () => {
   const [g, k] = el.dataset.ext.split('.'), v = el.type === 'checkbox' ? el.checked : el.value;
-  Promise.resolve().then(() => (g === 'style' ? setStyle({ [k]: v }, false) : g === 'imagery' ? setStyle({ imagery: { [k]: +v } }, false) : g === 'scene' ? setScene({ [k]: el.type === 'range' ? +v : v }) : g === 'view' ? setView({ [k]: v }) : EXT_API[{ geology: 'setGeology', geophys: 'setGeophys', tags: 'setTags', mapInfo: 'setMapUse' }[g]]({ [k]: v }))).catch((e) => status(e.message));
+  Promise.resolve().then(() => (g === 'style' ? setStyle({ [k]: v }, false) : g === 'imagery' ? setStyle({ imagery: { [k]: +v } }, false) : g === 'scene' ? setScene({ [k]: el.type === 'range' ? +v : v }) : g === 'view' ? setView({ [k]: v }) : EXT_API[{ geology: 'setGeology', geophys: 'setGeophys', tags: 'setTags', mapInfo: 'setMapUse', crew: 'setCrew' }[g]]({ [k]: v }))).catch((e) => status(e.message));
 }));
 $('stat-add').addEventListener('click', () => {
   const title = $('stat-title').value.trim(); if (!title) { status('Type the stat box title first.'); $('stat-title').focus(); return; }
@@ -2429,6 +2431,7 @@ const EXT_API = {
     renderLabelList(); schedulePublish(); status(`Stat box "${L.text}" added. Drag it on the preview to place it.`); return id;
   },
   async setMapUse(o = {}) { (await extLoad('mapuse')).set(o); await extReady(); return getState(); },
+  async setCrew(o = {}) { (await extLoad('crew')).set(o); await extReady(); return getState(); },
   layersReady: async () => { await extReady(); return getState(); },
   async setFigureStyle(style, meta) { await (await extLoad('type')).setFigureStyle(style, meta); return getState(); },
 };

@@ -16,6 +16,8 @@ import {
 } from '../utils/cloudStorage';
 import { renderBrandKitSwatch } from '../utils/brandKitSwatch';
 import AgentConnectionsSection from './AgentConnectionsSection';
+import { listMyFigures } from '../utils/figures';
+import { formatBytes } from '../utils/propertyFiles';
 
 function fmtRelative(iso) {
   if (!iso) return '';
@@ -316,6 +318,8 @@ export default function AccountPage({ onExit, onOpenDashboard, onApplyBrandKit, 
   const { user, signOut } = useAuth();
   // Count only — the dashboard owns the list, this page owns settings.
   const [projectCount, setProjectCount] = useState(null);
+  // 3D figures from /3d: how many, and the data files they keep in storage.
+  const [figures, setFigures] = useState(null);
   const [brandKits, setBrandKits] = useState([]);
   const [loading, setLoading] = useState(true);
   // Visible, non-destructive error banner. Failures never wipe data that
@@ -328,6 +332,8 @@ export default function AccountPage({ onExit, onOpenDashboard, onApplyBrandKit, 
     setLoading(true);
     setLoadError(null);
     // Independent requests: one failing must not blank the other's data.
+    // 3D figures are a count only, and optional: a failure leaves the line out.
+    listMyFigures().then((f) => { if (!cancelled) setFigures(f); }).catch(() => {});
     Promise.allSettled([listCloudProjects(), listBrandKits()])
       .then(([p, k]) => {
         if (cancelled) return;
@@ -401,6 +407,13 @@ export default function AccountPage({ onExit, onOpenDashboard, onApplyBrandKit, 
               ? 'Your saved maps live on the dashboard.'
               : `${projectCount} saved ${projectCount === 1 ? 'map' : 'maps'}. Open, rename and organise them on the dashboard.`}
           </p>
+          {figures && (
+            <p className="acct-section-hint" data-testid="acct-3d-usage">
+              {figures.length} saved 3D {figures.length === 1 ? 'figure' : 'figures'}
+              {figures.length > 0 && `, ${formatBytes(figures.reduce((n, f) => n + (f.bytes || 0), 0))} of data files`}.
+              {' '}They don&apos;t count toward your plan&apos;s map limit; each data file can be up to 50 MB.
+            </p>
+          )}
         </section>
 
         <TrashSection onError={surfaceActionError('Recently deleted')} onRestored={refreshProjects} />
