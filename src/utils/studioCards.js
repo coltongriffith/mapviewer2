@@ -3,7 +3,8 @@
 // title card with a caps kicker, a scale bar beside its north arrow, a dark locator card and haloed labels.
 //
 // Each card is laid out here once, as primitives (rect, path, text, line, circle, polygon, image and a
-// "slot" the host fills), in composition px. The PNG exporter paints them on its canvas (paintCanvas), the
+// "slot" the host fills; the drill plan adds open polylines, rotated text and a circle's fill opacity), in
+// composition px. The PNG exporter paints them on its canvas (paintCanvas), the
 // SVG exporter writes them as markup (paintSvg) and the editor stage draws them as React SVG
 // (components/StudioCard.jsx), so the three cannot disagree about where anything sits. Text is measured with
 // one canvas context in all three.
@@ -364,6 +365,7 @@ export async function paintCanvas(ctx, prims, s, opts = {}) {
     } else if (p.t === 'path') {
       ctx.scale(s, s); ctx.fillStyle = p.fill; ctx.fill(new Path2D(p.d));
     } else if (p.t === 'text') {
+      if (p.rot) { ctx.translate(p.x * s, p.y * s); ctx.rotate((p.rot * Math.PI) / 180); ctx.translate(-p.x * s, -p.y * s); }
       ctx.font = `${p.weight} ${p.size * s}px ${fontCss(p)}`;
       if ('letterSpacing' in ctx) ctx.letterSpacing = `${(p.ls || 0) * s}px`;
       ctx.textAlign = p.anchor === 'middle' ? 'center' : p.anchor === 'end' ? 'right' : 'left';
@@ -376,11 +378,15 @@ export async function paintCanvas(ctx, prims, s, opts = {}) {
     } else if (p.t === 'line') {
       ctx.globalAlpha = p.opacity ?? 1; ctx.strokeStyle = p.stroke; ctx.lineWidth = (p.sw || 1) * s;
       ctx.beginPath(); ctx.moveTo(p.x1 * s, p.y1 * s); ctx.lineTo(p.x2 * s, p.y2 * s); ctx.stroke();
+    } else if (p.t === 'pline') {
+      ctx.globalAlpha = p.opacity ?? 1; ctx.strokeStyle = p.stroke; ctx.lineWidth = (p.sw || 1) * s;
+      ctx.lineCap = p.cap || 'round'; ctx.lineJoin = 'round'; if (p.dash) ctx.setLineDash(p.dash.map((d) => d * s));
+      ctx.beginPath(); p.pts.forEach(([x, y], i) => (i ? ctx.lineTo(x * s, y * s) : ctx.moveTo(x * s, y * s))); ctx.stroke();
     } else if (p.t === 'circle' || p.t === 'poly') {
       ctx.beginPath();
       if (p.t === 'circle') ctx.arc(p.cx * s, p.cy * s, p.r * s, 0, Math.PI * 2);
       else { p.pts.forEach(([x, y], i) => (i ? ctx.lineTo(x * s, y * s) : ctx.moveTo(x * s, y * s))); ctx.closePath(); }
-      if (p.fill) { ctx.globalAlpha = p.t === 'poly' ? p.opacity ?? 1 : 1; ctx.fillStyle = p.fill; ctx.fill(); }
+      if (p.fill) { ctx.globalAlpha = p.t === 'poly' ? p.opacity ?? 1 : p.fo ?? 1; ctx.fillStyle = p.fill; ctx.fill(); }
       if (p.stroke) { ctx.globalAlpha = p.t === 'circle' ? p.opacity ?? 1 : 1; ctx.strokeStyle = p.stroke; ctx.lineWidth = (p.sw || 1) * s; ctx.lineJoin = 'round'; ctx.stroke(); }
     } else if (p.t === 'image') {
       const img = await opts.loadImage?.(p.href).catch(() => null);
@@ -428,11 +434,16 @@ export function paintSvg(prims, s, defs = [], opts = {}) {
       const anchor = p.anchor && p.anchor !== 'start' ? ` text-anchor="${p.anchor}"` : '';
       const ls = p.ls ? ` letter-spacing="${f2(p.ls * s)}"` : '';
       const cls = p.role ? ` class="em-studio-${p.role}"` : '';
-      return `<text${cls} x="${f2(p.x * s)}" y="${f2(p.y * s)}"${anchor} font-family="${escapeXml(fontCss(p))}" font-size="${f2(p.size * s)}" font-weight="${p.weight}"${svgPaint('fill', p.fill, p.opacity ?? 1)}${ls}${halo}>${escapeXml(p.s)}</text>`;
+      const rot = p.rot ? ` transform="rotate(${f2(p.rot)} ${f2(p.x * s)} ${f2(p.y * s)})"` : '';
+      return `<text${cls} x="${f2(p.x * s)}" y="${f2(p.y * s)}"${rot}${anchor} font-family="${escapeXml(fontCss(p))}" font-size="${f2(p.size * s)}" font-weight="${p.weight}"${svgPaint('fill', p.fill, p.opacity ?? 1)}${ls}${halo}>${escapeXml(p.s)}</text>`;
     }
     if (p.t === 'line') return `<line x1="${f2(p.x1 * s)}" y1="${f2(p.y1 * s)}" x2="${f2(p.x2 * s)}" y2="${f2(p.y2 * s)}"${svgPaint('stroke', p.stroke, p.opacity ?? 1)} stroke-width="${f2((p.sw || 1) * s)}" />`;
+    if (p.t === 'pline') {
+      const dash = p.dash ? ` stroke-dasharray="${p.dash.map((d) => f2(d * s)).join(' ')}"` : '';
+      return `<polyline points="${p.pts.map(([x, y]) => `${f2(x * s)},${f2(y * s)}`).join(' ')}" fill="none"${svgPaint('stroke', p.stroke, p.opacity ?? 1)} stroke-width="${f2((p.sw || 1) * s)}" stroke-linecap="${p.cap || 'round'}" stroke-linejoin="round"${dash}${p.role ? ` class="em-studio-${p.role}"` : ''} />`;
+    }
     if (p.t === 'circle' || p.t === 'poly') {
-      const fill = p.fill ? svgPaint('fill', p.fill, p.t === 'poly' ? p.opacity ?? 1 : 1) : ' fill="none"';
+      const fill = p.fill ? svgPaint('fill', p.fill, p.t === 'poly' ? p.opacity ?? 1 : p.fo ?? 1) : ' fill="none"';
       const stroke = p.stroke ? `${svgPaint('stroke', p.stroke, p.t === 'circle' ? p.opacity ?? 1 : 1)} stroke-width="${f2((p.sw || 1) * s)}" stroke-linejoin="round"` : '';
       return p.t === 'circle'
         ? `<circle cx="${f2(p.cx * s)}" cy="${f2(p.cy * s)}" r="${f2(p.r * s)}"${fill}${stroke} />`

@@ -47,6 +47,9 @@ const PublicationCheck = lazyGuarded(() => import('./components/PublicationCheck
 const ExportBackground = lazyGuarded(() => import('./components/ExportBackground'));
 const StudioCard = lazyGuarded(() => import('./components/StudioCard'));
 const StudioControls = lazyGuarded(() => import('./components/StudioControls'));
+const DrillPlanOverlay = lazyGuarded(() => import('./components/DrillPlanOverlay'));
+const DrillPlanControls = lazyGuarded(() => import('./components/DrillPlanControls'));
+import { useLazyDrillLegend } from './utils/useDrillLegend.js';
 const NameDialog = lazyGuarded(() => import('./components/NameDialog'));
 import { mapName, copyName } from './utils/mapName.js';
 import { loadGeoJSON, loadCSV, loadShapefileSet, MAX_FEATURES } from './utils/importers';
@@ -901,6 +904,7 @@ export default function App({ initialAction = null }) {
   // Annotate step.
   const [collapsedSections, setCollapsedSections] = useState({ drillhole: false, areaClaims: true, refoverlays: true, regions: true, advancedStyle: true });
   const toggleSection = (key) => setCollapsedSections((prev) => ({ ...prev, [key]: !prev[key] }));
+  const drillPlanOpen = collapsedSections.drillPlan === undefined ? !!project.drillPlan : !collapsedSections.drillPlan;
 
   const selectedMarker = useMemo(() => project.markers?.find((marker) => marker.id === selectedMarkerId) || null, [project.markers, selectedMarkerId]);
   const selectedEllipse = useMemo(() => project.ellipses?.find((ellipse) => ellipse.id === selectedEllipseId) || null, [project.ellipses, selectedEllipseId]);
@@ -924,9 +928,11 @@ export default function App({ initialAction = null }) {
 
   // Before customization — the editor needs this to offer a removed entry back,
   // which it could not do from a list the removal has already been applied to.
+  // The drill plan's rows (utils/drillPlanLegend.js), loaded with the first plan; none without one.
+  const drillPlanLegend = useLazyDrillLegend(project.drillPlan);
   const derivedLegendItems = useMemo(
-    () => [...legendItems, ...areaClaimsLegendItems],
-    [legendItems, areaClaimsLegendItems],
+    () => [...legendItems, ...areaClaimsLegendItems, ...drillPlanLegend],
+    [legendItems, areaClaimsLegendItems, drillPlanLegend],
   );
   const allLegendItems = useMemo(
     () => applyLegendCustomization(derivedLegendItems, project.layout),
@@ -4086,6 +4092,15 @@ export default function App({ initialAction = null }) {
     setSelectedCalloutId(null);
   };
 
+  // The drill plan (utils/drillPlan.js): opt-in, absent on every map until one is built; removing it removes the
+  // key, so the map is again as it was.
+  const updateDrillPlan = (patch) => setProject((prev) => (prev.drillPlan ? { ...prev, drillPlan: { ...prev.drillPlan, ...patch } } : prev));
+  const replaceDrillPlan = (plan) => setProject((prev) => {
+    if (plan) return { ...prev, drillPlan: plan };
+    const { drillPlan: _gone, ...rest } = prev;
+    return rest;
+  });
+
   const updateCallout = (calloutId, patch) => {
     setProject((prev) => ({
       ...prev,
@@ -6839,6 +6854,22 @@ export default function App({ initialAction = null }) {
               <div className="small-note">Click a drillhole point on the map to open its callout editor.</div>
             )}
           </section>
+          {/* The drill plan: traces, assay bars, pad, tags and cards from drill files (lazy controls). Closed until
+              opened, or open while the map has one. */}
+          <section className="control-section cs-collapsible">
+            <h2 className="control-section-heading">
+              <button type="button" className="section-toggle-btn" onClick={() => setCollapsedSections((prev) => ({ ...prev, drillPlan: drillPlanOpen }))} aria-expanded={drillPlanOpen} aria-controls="section-drill-plan">
+                Drill plan <span aria-hidden="true" className={`section-chevron${drillPlanOpen ? ' open' : ''}`}>›</span>
+              </button>
+            </h2>
+            {drillPlanOpen && (
+              <div id="section-drill-plan">
+                <React.Suspense fallback={<div className="small-note">Loading…</div>}>
+                  <DrillPlanControls plan={project.drillPlan || null} onChange={updateDrillPlan} onReplace={replaceDrillPlan} map={leafletMapRef.current} propertyId={projectHome?.propertyId || null} zones={resolvedZones} layout={project.layout} />
+                </React.Suspense>
+              </div>
+            )}
+          </section>
           <section className="control-section cs-collapsible" ref={calloutsSectionRef}>
             <h2>Callouts</h2>
             <div className="button-row" style={{ marginBottom: 10 }}>
@@ -7573,6 +7604,11 @@ export default function App({ initialAction = null }) {
               onSelectDistanceLine={setSelectedDistanceLineId}
               onRemoveDistanceLine={removeDistanceLine}
             />
+            {project.drillPlan && (
+              <React.Suspense fallback={null}>
+                <DrillPlanOverlay map={leafletMapRef.current} plan={project.drillPlan} zones={resolvedZones} layout={project.layout} onChange={updateDrillPlan} />
+              </React.Suspense>
+            )}
             <CalloutsOverlay
               map={leafletMapRef.current}
               callouts={project.callouts}
