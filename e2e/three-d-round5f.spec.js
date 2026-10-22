@@ -173,9 +173,9 @@ test('item 34: a unit\'s wall label sits inside its band on that face, says why 
     const work = () => { const { layout: _l, step: _s, ...rest } = E.getState(); return JSON.stringify(rest); }, w0 = work();
     E.exportPNG({ view: '3d' }); E.exportPNG({ view: '3d' });
     const s = E.getState(), at = s.layout.wallLabels, L = { ...s.wallLabels.find((l) => l.id === id), ...at[id] }, Lp = { ...at[long] };
-    const saved = JSON.stringify(E.getProject().settings.wallLabels);
+    const saved = JSON.stringify(E.getProject().settings.wallLabels), same = work() === w0;
     await E.setBlock({ units: 'fixed' }); const f = { ...E.getState().wallLabels.find((l) => l.id === id), ...E.getState().layout.wallLabels[id] };
-    return { L, Lp, fixed: f, same: work() === w0, saved };
+    return { L, Lp, fixed: f, same, saved };
   }, HOLES);
   expect(r.L.text).toBe('EARLY BIOTITE');
   expect(r.L.at).toBeTruthy(); expect(r.L.why).toBeUndefined();
