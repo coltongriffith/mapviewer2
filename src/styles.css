@@ -2074,6 +2074,7 @@ body.is-dragging .template-zone .panel-delete-btn { opacity: 0 !important; }
 .claims-preview-block { display: grid; gap: 10px; }
 .claims-preview-count { font-size: 14px; color: var(--ui-success); font-weight: 600; margin: 0; }
 .claims-error { margin: 0; font-size: 13px; color: var(--ui-danger); max-width: 100%; overflow-wrap: break-word; word-break: break-word; white-space: normal; max-height: 4.5em; overflow-y: auto; }
+.claims-error-retry { margin-left: 6px; background: none; border: 0; padding: 0; color: inherit; font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; }
 .claims-empty { margin: 0; font-size: 13px; color: var(--ui-text-muted); font-style: italic; }
 .claims-request-line { margin: 0; font-size: 12.5px; color: var(--ui-text-muted); line-height: 1.45; }
 .claims-request-line .link-btn { font-size: inherit; }
@@ -3318,6 +3319,14 @@ button.claim-notices-chip[aria-expanded="true"] { border-color: var(--ui-border-
 .post-export-toast-dismiss, .update-notice button { background: transparent; border: 0; color: #8fa0a4; font-size: 15px; cursor: pointer; padding: 4px; line-height: 1; }
 .post-export-toast-dismiss:hover, .update-notice button:hover { color: #fff; }
 .update-notice { z-index: 10000; font-size: 13px; line-height: 1.5; }
+.update-notice .update-notice-reload { color: #fff; font-size: 13px; font-weight: 700; text-decoration: underline; }
+/* A stale chunk after a deploy, in place of the crash screen (src/utils/preloadGuard.js) */
+.update-page { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; min-height: 100vh; padding: 24px; text-align: center; font-family: 'Source Sans 3', system-ui, -apple-system, Segoe UI, sans-serif; color: #5f6e72; }
+.update-page h2 { margin: 0; color: #142126; }
+.update-page p { margin: 0; max-width: 36em; }
+.update-page button { padding: 10px 24px; background: #142126; color: #fff; border: 0; border-radius: 8px; cursor: pointer; font-size: 15px; }
+.stale-chunk-note { margin: 8px 0; font-size: 13px; color: var(--ui-text); }
+.stale-chunk-note button { margin-left: 4px; background: none; border: 0; padding: 0; color: inherit; font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; }
 @media (max-width: 1140px) { .lm-cta { margin-left: 28px; margin-right: 28px; } }
 @media (prefers-reduced-motion: reduce) {
   .lm-reveal { opacity: 1; transform: none; transition: none; }

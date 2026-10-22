@@ -2,6 +2,9 @@ import React, { useEffect, useId, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { resolvePointSymbol, symbolSvg } from '../utils/pointSymbol.js';
+// The Canvas renderer's pending-frame fix: a redraw requested before a view change ran after the map was
+// removed ("reading 'clearRect'" of a deleted context). See the module.
+import '../utils/leafletRenderers.js';
 
 // Leaflet rounds a circle marker's radius to a whole pixel, so a size-13 point
 // (radius 6.5) drew 14 px across on screen and 13 px in every export. Draw the
@@ -253,8 +256,8 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
           if (reportedTileErrors.current.has(key)) return;
           reportedTileErrors.current.add(key);
           reportError(`Reference overlay "${key}" failed to load tiles`, {
-            kind: 'tile_error',
-            context: { overlay: key, url: cfg.url },
+            kind: 'warning',
+            context: { tiles: true, overlay: key, url: cfg.url },
           });
           onOverlayErrorRef.current?.(key);
         });

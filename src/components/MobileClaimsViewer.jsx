@@ -4,6 +4,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import '../styles/mobile-viewer.css';
 import { BASEMAPS } from '../utils/basemapConfig';
+import { pathRenderer } from '../utils/leafletRenderers';
 import {
   normalizeClaims, claimGroups, summarize, commonHolder, handoffProject, daysLeftText, displayName,
 } from '../utils/mobileClaims';
@@ -99,6 +100,7 @@ export default function MobileClaimsViewer({
 
   const mapEl = useRef(null);
   const mapRef = useRef(null);
+  const drawable = useRef(true);
   const sheetRef = useRef(null);
   const layerIndex = useRef(new Map());
   const selectRef = useRef(null);
@@ -127,7 +129,13 @@ export default function MobileClaimsViewer({
 
   // ── Map ────────────────────────────────────────────────────────────────────
   useEffect(() => {
-    const map = L.map(mapEl.current, { zoomControl: false, attributionControl: true, zoomSnap: 0.25 });
+    // This map's own renderer, or none: where the browser can draw neither SVG nor Canvas, Leaflet's
+    // default renderer is null and adding a claim throws, then the unmount throws again
+    // (utils/leafletRenderers.js). Without one the claims stay off the map and the list leads.
+    const renderer = pathRenderer();
+    drawable.current = Boolean(renderer);
+    if (!renderer) setView('list');
+    const map = L.map(mapEl.current, { zoomControl: false, attributionControl: true, zoomSnap: 0.25, ...(renderer ? { renderer } : {}) });
     map.attributionControl.setPrefix(false);
     L.control.scale({ imperial: false, position: 'bottomleft', maxWidth: 110 }).addTo(map);
     map.on('click', () => selectRef.current?.(null));
@@ -161,7 +169,8 @@ export default function MobileClaimsViewer({
       },
     });
     claims.forEach((c) => geo.addData({ type: 'Feature', geometry: c.feature.geometry, properties: { key: c.key } }));
-    geo.addTo(map);
+    // Off the map, the layers still give the list its bounds for framing.
+    if (drawable.current) geo.addTo(map);
     return () => { geo.remove(); };
   }, [claims, byKey]);
 
