@@ -42,7 +42,7 @@ const REGION_PAD_PX = 6;
 // than nothing.
 const CLAIM_PAD = 4;
 
-export default function SatelliteInset({ layers, markerColor, region, basemap = 'satellite' }) {
+export default function SatelliteInset({ layers, markerColor, region, basemap = 'satellite', onMarker }) {
   const elRef = useRef(null);
   const mapRef = useRef(null);
   const regionRef = useRef(null);
@@ -190,8 +190,13 @@ export default function SatelliteInset({ layers, markerColor, region, basemap = 
           radius: 7, color: colour, weight: 1.5, fill: false, interactive: false,
         }),
       ]).addTo(map);
+      // Where the marker landed, for the Studio locator card's ringed marker and project name: on the element
+      // for the export (renderScene reads it beside the captured tiles), and to the card on the stage.
+      const p = map.latLngToContainerPoint(centre);
+      elRef.current.dataset.marker = `${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+      onMarker?.(p);
     }
-  }, [activeRegion, bounds?.minLat, bounds?.minLng, bounds?.maxLat, bounds?.maxLng, markerColor]);
+  }, [activeRegion, bounds?.minLat, bounds?.minLng, bounds?.maxLat, bounds?.maxLng, markerColor, onMarker]);
 
   useEffect(() => { applyView(); }, [applyView]);
 

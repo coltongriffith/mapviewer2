@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { beforeAll, beforeEach, afterAll, describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { PGlite } from '@electric-sql/pglite';
 
 // Run admin_get_summary (the Overview tab, src/components/admin/SummaryTab.jsx)
@@ -35,7 +35,11 @@ beforeAll(async () => {
   `);
   // Oldest to newest; the last one to define a function is the one in effect.
   // The crawler migration also replaces the admin_session_ids stub above.
-  for (const file of ['20261002130000_admin_summary_real_visitors.sql', '20261019120000_admin_crawler_sessions.sql', '20261030100000_error_kinds_in_summary.sql']) {
+  // The 3D usage migration replaces the summary again (a /3d visit, shared 3D figures), and the error-kinds
+  // migration replaces it once more on top of that (kind per error, warnings left out). The 3D usage file is
+  // skipped while this branch does not have it yet (PR #314).
+  for (const file of ['20261002130000_admin_summary_real_visitors.sql', '20261019120000_admin_crawler_sessions.sql',
+    '20261030100000_admin_three_d_usage.sql', '20261030110000_error_kinds_in_summary.sql'].filter((f) => existsSync(`supabase/migrations/${f}`))) {
     const sql = readFileSync(`supabase/migrations/${file}`, 'utf8');
     await db.exec(sql);
     await db.exec(sql); // idempotent

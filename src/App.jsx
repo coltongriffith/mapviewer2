@@ -45,6 +45,8 @@ const UpgradeModal = lazyGuarded(() => import('./components/UpgradeModal'));
 const FullResOfferModal = lazyGuarded(() => import('./components/FullResOfferModal'));
 const PublicationCheck = lazyGuarded(() => import('./components/PublicationCheck'));
 const ExportBackground = lazyGuarded(() => import('./components/ExportBackground'));
+const StudioCard = lazyGuarded(() => import('./components/StudioCard'));
+const StudioControls = lazyGuarded(() => import('./components/StudioControls'));
 const NameDialog = lazyGuarded(() => import('./components/NameDialog'));
 import { mapName, copyName } from './utils/mapName.js';
 import { loadGeoJSON, loadCSV, loadShapefileSet, MAX_FEATURES } from './utils/importers';
@@ -76,6 +78,7 @@ import { cleanLayerName } from './utils/cleanLayerName';
 import regionsNA from './assets/regionsIndex.json';
 import { fitProjectToTemplate } from './utils/frameMapForTemplate';
 import { getThemeTokens } from './utils/themeTokens';
+import { studioOn } from './utils/studioLayout.js';
 import { saveLead, getLastLeadEmail } from './utils/leadCapture';
 import { trackSearch, trackEvent, trackEventOnce } from './utils/track';
 import { isPhoneDevice } from './utils/device';
@@ -969,6 +972,9 @@ export default function App({ initialAction = null }) {
     }
     return Object.keys(overrides).length ? { ...base, ...overrides } : base;
   }, [project.layout?.themeId, project.layout?.accentColor, project.layout?.titleBgColor, project.layout?.titleFgColor, project.layout?.panelBgColor, project.layout?.panelFgColor]);
+  // The Studio theme's cards, drawn on the stage by the lazy StudioCard (the exporters paint the same).
+  const studio = studioOn(project.layout);
+  const sc = (kind) => <React.Suspense fallback={null}><StudioCard kind={kind} layout={project.layout} zones={resolvedZones} map={leafletMapRef.current} layers={project.layers} /></React.Suspense>;
 
   // Brand palette shown as one-click swatches on every color picker: the
   // current project's 5 theme colors + the default brand kit's 5 colors,
@@ -5854,6 +5860,7 @@ export default function App({ initialAction = null }) {
           <section className="control-section">
             <h2 className="ins-group-title">Theme</h2>
             <ThemePicker value={project.layout.themeId || 'investor_clean'} onChange={(themeId) => updateLayout({ themeId, onboardingLayoutSelected: true })} />
+            {project.layout.themeId === 'studio' && <React.Suspense fallback={null}><StudioControls layout={project.layout} updateLayout={updateLayout} /></React.Suspense>}
           </section>
           <section className="control-section">
             <h2 className="ins-group-title">Frame shape</h2>
@@ -7576,6 +7583,7 @@ export default function App({ initialAction = null }) {
         />
 
         <CoordinateFrameOverlay map={leafletMapRef.current} frame={mapFrame} stage={mapSize} />
+        {(project.layout.themeId === 'studio' || project.layout.labelHalo) && sc('style')}
 
         {project.layout.templateId === 'ni_43101_technical' && (() => {
           const STRIP_H = 72;
@@ -7643,7 +7651,7 @@ export default function App({ initialAction = null }) {
 
         {project.layout.templateId !== 'ni_43101_technical' && project.layout.showTitle !== false && <div className="template-zone" style={{ ...zoneStyle(resolvedZones.title), zIndex: 410, opacity: dragging?.id === 'title' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('title', project.layout.titleWidthPx ?? 520, project.layout.titleHeightPx ?? 92)}>
           <button className="panel-delete-btn" title="Hide title" onClick={() => updateLayout({ showTitle: false })}>×</button>
-          <div className={`template-card title-card${project.layout.titleTransparent ? ' panel--transparent' : ''}`}>
+          {studio ? sc('title') : <div className={`template-card title-card${project.layout.titleTransparent ? ' panel--transparent' : ''}`}>
             {editingTitleField === 'title' ? (
               <input
                 className="title-inline-input"
@@ -7670,7 +7678,7 @@ export default function App({ initialAction = null }) {
               const meta = [project.layout.mapDate, project.layout.projectNumber, project.layout.mapScaleNote].filter(Boolean);
               return meta.length ? <div className="title-meta-row" style={{ fontSize: Math.round(10 * (project.layout.titleFontScale ?? 1)) + 'px' }}>{meta.join('  ·  ')}</div> : null;
             })()}
-          </div>
+          </div>}
           {makeResizeHandles(project.layout.titleCorner || 'tl', {
             elemId: 'title', startW: project.layout.titleWidthPx ?? 520, startH: project.layout.titleHeightPx ?? 92,
             minW: 300, maxW: 800, minH: 60, maxH: 180,
@@ -7726,7 +7734,7 @@ export default function App({ initialAction = null }) {
         {project.layout.showNorthArrow !== false && resolvedZones.northArrow?.width > 0 && (
           <div className={`template-zone${project.layout.northArrowTransparent ? ' panel--transparent' : ''}`} style={{ ...zoneStyle(resolvedZones.northArrow), opacity: dragging?.id === 'northArrow' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('northArrow', resolvedZones.northArrow?.width ?? 80, project.layout.northArrowHeightPx ?? 100)}>
             <button className="panel-delete-btn" title="Hide compass rose" onClick={() => updateLayout({ showNorthArrow: false })}>×</button>
-            <NorthArrow scale={project.layout.northArrowHeightPx ?? 100} style={project.layout.northArrowStyle || 'classic'} />
+            {studio ? sc('north') : <NorthArrow scale={project.layout.northArrowHeightPx ?? 100} style={project.layout.northArrowStyle || 'classic'} />}
             {makeResizeHandles(project.layout.northArrowCorner || 'br', {
               elemId: 'northArrow', startW: resolvedZones.northArrow?.width ?? 80, startH: project.layout.northArrowHeightPx ?? 100,
               minW: 40, maxW: 200, minH: 50, maxH: 200,
@@ -7737,7 +7745,7 @@ export default function App({ initialAction = null }) {
         {project.layout.insetEnabled !== false && resolvedZones.inset?.width ? (
           <div className="template-zone" style={{ ...zoneStyle(resolvedZones.inset), opacity: dragging?.id === 'inset' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('inset', project.layout.insetWidthPx ?? 244, project.layout.insetHeightPx ?? 190)}>
             <button className="panel-delete-btn" title="Hide inset map" onClick={() => updateLayout({ insetEnabled: false })}>×</button>
-            <LocatorInset layers={project.layers} insetMode={project.layout.insetMode} insetBasemap={project.layout.insetBasemap} insetImage={project.layout.insetImage} autoInsetRegion={project.layout.autoInsetRegion} insetTitle={project.layout.insetTitle} insetLabel={project.layout.insetLabel} mode={project.layout.mode} zone={{ width: '100%', height: '100%' }} regionFill={project.layout.insetRegionFill} regionStroke={project.layout.insetRegionStroke} bgFill={project.layout.insetBgFill} markerColor={project.layout.insetMarkerColor} />
+            {studio ? sc('inset') : <LocatorInset layers={project.layers} insetMode={project.layout.insetMode} insetBasemap={project.layout.insetBasemap} insetImage={project.layout.insetImage} autoInsetRegion={project.layout.autoInsetRegion} insetTitle={project.layout.insetTitle} insetLabel={project.layout.insetLabel} mode={project.layout.mode} zone={{ width: '100%', height: '100%' }} regionFill={project.layout.insetRegionFill} regionStroke={project.layout.insetRegionStroke} bgFill={project.layout.insetBgFill} markerColor={project.layout.insetMarkerColor} />}
             {makeResizeHandles(project.layout.insetCorner || 'tr', {
               elemId: 'inset', startW: project.layout.insetWidthPx ?? 244, startH: project.layout.insetHeightPx ?? 190,
               minW: 100, maxW: 600, minH: 80, maxH: 500,
@@ -7745,9 +7753,9 @@ export default function App({ initialAction = null }) {
             })}
           </div>
         ) : null}
-        {project.layout.showScaleBar !== false && (
+        {project.layout.showScaleBar !== false && resolvedZones.scaleBar?.height > 0 && (
           <div className={`template-zone${project.layout.scaleBarTransparent ? ' panel--transparent' : ''}`} style={{ ...zoneStyle(resolvedZones.scaleBar), width: project.layout.scaleBarWidthPx || resolvedZones.scaleBar?.width, opacity: dragging?.id === 'scaleBar' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('scaleBar', project.layout.scaleBarWidthPx || resolvedZones.scaleBar?.width || 160, scaleBarHeight(project.layout))}>
-            <ScaleBar map={leafletMapRef.current} projection={!!project.layout.showProjectionLabel} projectionName={project.layout.projectionName} />
+            {studio ? sc('scale') : <ScaleBar map={leafletMapRef.current} projection={!!project.layout.showProjectionLabel} projectionName={project.layout.projectionName} />}
             <button className="panel-delete-btn" title="Hide scale bar" onClick={() => updateLayout({ showScaleBar: false })}>×</button>
             {makeResizeHandles(project.layout.scaleBarCorner || 'bl', {
               elemId: 'scaleBar', startW: project.layout.scaleBarWidthPx || resolvedZones.scaleBar?.width || 160, startH: scaleBarHeight(project.layout),

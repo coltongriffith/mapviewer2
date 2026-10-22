@@ -7,14 +7,15 @@
 -- error_events_source_check exists), so neither needs a schema change; the endpoint still falls back to
 -- kind 'error' should an insert ever be rejected.
 --
--- This replaces admin_get_summary with the definition from 20261019120000_admin_crawler_sessions.sql
--- (identical to production's, compared by md5 of the body) plus two changes, both in "Errors people saw":
+-- Runs after 20261030100000_admin_three_d_usage.sql and replaces admin_get_summary with that migration's
+-- definition (the /3d open event as on-load, /3d share grouping, the 3D feature and steps), unchanged
+-- except for two things in "Errors people saw":
 --   * each entry carries its latest kind, so SummaryTab.jsx can mark a stale chunk as an update reload;
 --   * warnings are left out.
--- Nothing else in the function changes. Additive for the tab: an entry without kind renders as before.
+-- Additive for the tab: an entry without kind renders as before.
 --
--- NOT APPLIED. Apply with the Supabase CLI or the dashboard when this ships.
--- Rollback: re-run the admin_get_summary definition in 20261019120000_admin_crawler_sessions.sql.
+-- NOT APPLIED. Apply after 20261030100000_admin_three_d_usage.sql (Actions -> Apply migration).
+-- Rollback: re-run the admin_get_summary definition in 20261030100000_admin_three_d_usage.sql.
 
 create or replace function public.admin_get_summary(
   p_start timestamptz, p_end timestamptz, p_tz text default 'America/Vancouver')
@@ -63,22 +64,25 @@ begin
       (array_agg(pv.country order by pv.created_at) filter (where pv.country is not null))[1] as country,
       (array_agg(pv.device order by pv.created_at) filter (where pv.device is not null))[1] as device,
       (array_agg(pv.user_id order by pv.created_at) filter (where pv.user_id is not null))[1] as user_id,
-      bool_or(pv.path like '/tenure-monitor%') as tenure_page
+      bool_or(pv.path like '/tenure-monitor%') as tenure_page,
+      bool_or(pv.path ~ '^/3d/?$') as three_d_page
     from pv group by pv.session_id
   ),
-  -- Events the editor fires by itself on load (demo map, deep link) are not
-  -- something a person did; the same list admin_session_ids uses.
+  -- Events the editor fires by itself on load (demo map, deep link, /3d
+  -- opening) are not something a person did; the same list
+  -- admin_automated_session_ids uses.
   evs as (
     select e.session_id,
       bool_or(e.event not in ('editor_opened', 'first_map_checklist_shown', 'first_layer_added',
-          'mobile_editor_banner_shown', 'internal_session', 'claim_intent')
+          'mobile_editor_banner_shown', 'internal_session', 'claim_intent', 'three_d_opened')
         and not (e.event = 'layer_added' and coalesce(e.props->>'source', '') in ('demo', 'deeplink'))) as acted,
       bool_or(e.event = 'editor_opened') as opened_editor,
       bool_or(e.event = 'registry_claims_imported'
         or (e.event = 'layer_added' and coalesce(e.props->>'source', '') not in ('demo', 'deeplink'))) as added_data,
       bool_or(e.event in ('export_completed', 'share_created')) as made_map,
-      bool_or(e.event = 'share_viewed') as viewed_share,
+      bool_or(e.event in ('share_viewed', 'three_d_share_viewed')) as viewed_share,
       bool_or(e.event like 'tenure\_%') as tenure_event,
+      bool_or(e.event like 'three\_d\_%' and e.event <> 'three_d_share_viewed') as three_d_event,
       bool_or(e.event in ('export_gate_shown', 'pro_gate_shown')) as hit_wall,
       bool_or(e.event = 'export_failed') as export_failed,
       bool_or(e.event = 'signup_link_failed') as signup_failed,
@@ -130,8 +134,9 @@ begin
       coalesce(ev.opened_editor, false) as opened_editor,
       coalesce(ev.added_data, false) as added_data,
       coalesce(ev.made_map, false) as made_map,
-      coalesce(ev.viewed_share, false) or s.landing like '/map/%' as viewed_share,
+      coalesce(ev.viewed_share, false) or s.landing like '/map/%' or s.landing ~ '^/3d/(share|embed)/' as viewed_share,
       coalesce(ev.tenure_event, false) or s.tenure_page as tenure,
+      coalesce(ev.three_d_event, false) or s.three_d_page as three_d,
       coalesce(x.n, 0) > 0 as searched,
       coalesce(ev.hit_wall, false) as hit_wall,
       coalesce(ev.export_failed, false) as export_failed,
@@ -167,7 +172,7 @@ begin
         when s2.referrer ~* 'linkedin\.' or coalesce(s2.utm_source, '') ~* 'linkedin' then 'LinkedIn'
         when s2.referrer ~* '(facebook\.|instagram\.|(^|\.)t\.co$|twitter\.com|(^|\.)x\.com|reddit\.com)'
           or coalesce(s2.utm_source, '') ~* '(facebook|twitter|reddit|instagram)' then 'Other social'
-        when s2.landing like '/map/%' then 'Shared map links'
+        when s2.landing like '/map/%' or s2.landing ~ '^/3d/(share|embed)/' then 'Shared map links'
         when s2.referrer is not null and s2.referrer !~* 'explorationmaps\.com' then 'Other websites'
         when s2.utm_source is not null and s2.utm_source !~* '^(blog|companies)/?$' then 'Campaigns'
         else 'Direct'
@@ -264,6 +269,7 @@ begin
         order by t.people desc, t.path), '[]'::jsonb)
       from (
         select case when p.landing like '/map/%' then '/map/… (shared maps)'
+            when p.landing ~ '^/3d/(share|embed)/' then '/3d/share/… (shared 3D figures)'
             else coalesce(nullif(rtrim(p.landing, '/'), ''), '/') end as path,
           count(*) as people, count(*) filter (where p.kind = 'engaged') as engaged
         from people p group by 1 order by 2 desc, 1 limit 8
@@ -282,7 +288,8 @@ begin
         jsonb_build_object('label', 'Map editor', 'n', (select count(*) from people where opened_editor)),
         jsonb_build_object('label', 'Claim search', 'n', (select count(*) from people where searched)),
         jsonb_build_object('label', 'Viewed a shared map', 'n', (select count(*) from people where viewed_share)),
-        jsonb_build_object('label', 'Tenure Monitor', 'n', (select count(*) from people where tenure))
+        jsonb_build_object('label', 'Tenure Monitor', 'n', (select count(*) from people where tenure)),
+        jsonb_build_object('label', '3D figure maker', 'n', (select count(*) from people where three_d))
       ),
       'ai', jsonb_build_object(
         'maps', (select count(*) from agent_maps),
@@ -336,7 +343,12 @@ begin
                     or (e.event = 'layer_added' and coalesce(e.props->>'source', '') not in ('demo', 'deeplink')) then 'Added data'
                   when e.event = 'export_completed' then 'Exported'
                   when e.event = 'share_created' then 'Shared'
-                  when e.event = 'share_viewed' then 'Viewed shared map'
+                  when e.event in ('share_viewed', 'three_d_share_viewed') then 'Viewed shared map'
+                  when e.event = 'three_d_opened' then 'Opened 3D'
+                  when e.event = 'three_d_data_added' then 'Added 3D data'
+                  when e.event = 'three_d_export_completed' then 'Exported 3D'
+                  when e.event = 'three_d_share_created' then 'Shared 3D'
+                  when e.event in ('three_d_project_saved', 'three_d_share_forked', 'three_d_version_published') then 'Saved 3D'
                   when e.event like 'tenure\_%' then 'Tenure Monitor'
                   when e.event in ('export_gate_shown', 'pro_gate_shown') then 'Hit sign-up prompt'
                   when e.event = 'signup_link_sent' then 'Started sign-up'
