@@ -108,6 +108,8 @@ test('a section image fitted by two known points, shown in the picker; stretched
   await expect(page.locator('#geo-fit [data-fm]')).toContainText('Fitted:');
   const fit = await page.evaluate(() => window.EM3D.getState().geology.imageFits.S);
   expect(fit.points).toHaveLength(2); expect(fit.metresPerPixel[0]).toBeCloseTo(0.5, 1);
+  // The clicks at the canvas's corners land on the image's corners: the whole canvas takes clicks.
+  expect(fit.points[0].px.every((v) => v <= 4)).toBe(true); expect(fit.points[1].px[0]).toBeGreaterThan(395); expect(fit.points[1].px[1]).toBeGreaterThan(295);
 });
 
 test('a fit by a hole that leaves the data falls back to the stretched image and says so; the render goes on', async ({ page }) => {

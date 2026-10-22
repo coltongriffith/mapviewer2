@@ -1878,12 +1878,13 @@ const toHex = (rgb) => `#${rgb.map((v) => Math.round(Math.max(0, Math.min(255, v
 let LB = null; const lbLoad = () => import('./logo-bg.js').then((m) => (LB = m));
 function setLogo(src, opts = {}) {
   if (src && opts.removeBackground) return lbLoad().then((m) => m.set(setLogo, status, src, opts)).then(getState);
-  if (LB) { if (!opts.keep) LB.state.src = src; LB.state.removed = false; LB.render(); }
+  if (LB && !opts.keep) LB.state.src = src;
+  const shown = () => { if (LB) { LB.state.removed = false; LB.render(); } }; // once the logo drawn is this one (logo-bg.js marks a removal after)
   return new Promise((resolve, reject) => {
-    if (!src) { S.logo = null; $('logo-prev').textContent = 'No logo'; drawSectionView(); schedulePublish(); status('Logo removed.'); resolve(getState()); return; }
+    if (!src) { S.logo = null; shown(); $('logo-prev').textContent = 'No logo'; drawSectionView(); schedulePublish(); status('Logo removed.'); resolve(getState()); return; }
     const img = new Image();
     img.onload = async () => {
-      S.logo = img; $('logo-prev').innerHTML = ''; const pv = new Image(); pv.src = src; pv.alt = 'Your logo'; $('logo-prev').appendChild(pv);
+      S.logo = img; shown(); $('logo-prev').innerHTML = ''; const pv = new Image(); pv.src = src; pv.alt = 'Your logo'; $('logo-prev').appendChild(pv);
       let picked = null; // the colour picker (logo-colours.js) loads with the first logo
       if (opts.autoColor !== false) try { picked = (await import('./logo-colours.js')).brandFromLogo(img); } catch { /* keep the colours */ }
       if (picked) { setBrand({ primary: picked.primary, accent: picked.accent }); $('col-note').textContent = picked.note; }

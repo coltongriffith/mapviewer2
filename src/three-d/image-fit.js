@@ -23,7 +23,7 @@ function render(el, img) {
   const esc = H.esc, holes = H.project.holes.map((h) => h.id), k = Math.min(1, 640 / img.naturalWidth);
   el.innerHTML = `<div class="row" style="justify-content:space-between"><strong>Fit the ${face === 'section' ? 'A–A′' : esc(face)} image by known points</strong><button class="btn" type="button" data-fx aria-label="Close the fit">×</button></div>
     <p class="muted" style="margin:4px 0">${esc(planeText())} Click the image to add a point (two or more), then give each its distance along and elevation, or a hole's collar (or a depth down it).</p>
-    <canvas data-fc width="${Math.round(img.naturalWidth * k)}" height="${Math.round(img.naturalHeight * k)}" style="width:100%;cursor:crosshair;border:1px solid #c6cecf;border-radius:4px" aria-label="The section image: click to add a point"></canvas>
+    <canvas data-fc width="${Math.round(img.naturalWidth * k)}" height="${Math.round(img.naturalHeight * k)}" style="display:block;box-sizing:border-box;width:100%;cursor:crosshair;border:1px solid #c6cecf" aria-label="The section image: click to add a point"></canvas>
     <div class="files" style="margin-top:6px">${pts.map((p, i) => `<div class="label-row" style="grid-template-columns:auto 1fr 1fr 1fr auto;gap:4px" data-fp="${i}">
       <b style="color:${ACCENT}">${i + 1}</b>
       <input type="number" data-k="d" value="${p.hole ? '' : esc(n1(p.d))}" placeholder="m along" aria-label="Point ${i + 1}: metres along" ${p.hole ? 'disabled' : ''}>
@@ -34,7 +34,9 @@ function render(el, img) {
     <div class="row" style="gap:6px"><button class="btn primary" type="button" data-fa ${pts.length < 2 ? 'disabled' : ''}>Apply fit</button><button class="btn" type="button" data-fs>Stretch over the face instead</button></div>`;
   const cv = el.querySelector('[data-fc]');
   draw(cv, img, k);
-  cv.addEventListener('click', (e) => { const r = cv.getBoundingClientRect(), x = (e.clientX - r.left) / r.width * cv.width / k, y = (e.clientY - r.top) / r.height * cv.height / k; pts.push({ px: [Math.round(x), Math.round(y)] }); render(el, img); });
+  // A click anywhere on the canvas, its 1 px border included (clamped to the image), adds a point.
+  const at = (v, lo, inner, n) => Math.max(0, Math.min(n, (v - lo) / inner * n));
+  cv.addEventListener('click', (e) => { const r = cv.getBoundingClientRect(), x = at(e.clientX, r.left + cv.clientLeft, cv.clientWidth, cv.width) / k, y = at(e.clientY, r.top + cv.clientTop, cv.clientHeight, cv.height) / k; pts.push({ px: [Math.round(x), Math.round(y)] }); render(el, img); });
   el.querySelectorAll('[data-fp]').forEach((row) => {
     const p = pts[+row.dataset.fp];
     row.querySelectorAll('[data-k]').forEach((inp) => inp.addEventListener('change', () => {
