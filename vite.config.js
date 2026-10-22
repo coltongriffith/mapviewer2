@@ -26,14 +26,15 @@ export default defineConfig({
     // The intercept and metal-equivalent maths (shared/intercepts.js, shared/metalEq.js) have one source, built
     // into each entry that uses it: inline in /3d's page, as before, and a copy of their own in the app's lazy
     // results chunk. Shared as one chunk, /3d's page would load an extra chunk (~0.3 kB more gzip) for code it
-    // already carried. Pure modules (no state), so two copies behave as one.
+    // already carried. Pure modules (no state), so two copies behave as one. shared/chunkErrors.js (the
+    // stale-chunk test, used by both entries) is copied the same way, so neither page waits on a shared chunk.
     {
       name: 'em-shared-maths-per-entry',
       enforce: 'pre',
       async resolveId(source, importer, options) {
-        if (!importer || !/(^|[\\/])(intercepts|metalEq)\.js$/.test(source) || /[\\/]src[\\/]three-d[\\/]/.test(importer) || /\?app$/.test(importer)) return null;
+        if (!importer || !/(^|[\\/])(intercepts|metalEq|chunkErrors)\.js$/.test(source) || /[\\/]src[\\/]three-d[\\/]/.test(importer) || /\?app$/.test(importer)) return null;
         const r = await this.resolve(source, importer, { ...options, skipSelf: true });
-        return r && /[\\/]shared[\\/](intercepts|metalEq)\.js$/.test(r.id) ? `${r.id}?app` : null;
+        return r && /[\\/]shared[\\/](intercepts|metalEq|chunkErrors)\.js$/.test(r.id) ? `${r.id}?app` : null;
       },
     },
     react(),
@@ -64,6 +65,8 @@ export default defineConfig({
           // engine into the marketing page just to perform dynamic imports.
           if (id.includes('vite/preload-helper')) return 'vendor-preload';
           if (id.includes('node_modules/leaflet')) return 'vendor-leaflet';
+          // The renderer choice and Canvas fix every Leaflet map uses travel with Leaflet, not as a chunk of their own.
+          if (/[\\/]src[\\/]utils[\\/]leafletRenderers\.js$/.test(id)) return 'vendor-leaflet';
           if (id.includes('node_modules/three')) return 'vendor-three';
           // Drafts need compression immediately; PDF/ZIP engines are only
           // needed on export/import. Grouping them loaded ~157 KiB of export

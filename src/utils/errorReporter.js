@@ -12,6 +12,7 @@
 
 import { supabase } from '../lib/supabase';
 import { getSessionId } from './session';
+import { isChunkLoadError } from '../../shared/chunkErrors.js';
 
 // Vite replaces this at build time; ties a report to the deploy that produced
 // it, which is what makes "did my last deploy break something" answerable.
@@ -45,11 +46,15 @@ function shouldSend(key) {
 
 /**
  * Report an error. Safe to call from anywhere, including inside a catch.
+ * Kinds: 'error', 'unhandledrejection', 'react' (crashes), 'stale_chunk' (a chunk a deploy removed; the
+ * page recovers, see utils/preloadGuard.js) and 'warning' (degraded, not broken: a tile source that fails).
  * @param {Error|string} error
  * @param {{kind?: string, context?: object}} [opts]
  */
 export function reportError(error, { kind = 'error', context } = {}) {
   try {
+    // However it surfaced, a stale chunk is told apart from a real crash in Admin.
+    if (kind !== 'warning' && isChunkLoadError(error)) kind = 'stale_chunk';
     const message = String(error?.message || error || '').slice(0, 500);
     if (!message) return;
     recent.push({ at: new Date().toISOString(), kind, message: message.slice(0, 200) });

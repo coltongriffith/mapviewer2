@@ -147,7 +147,14 @@ const BUDGETS = {
   // usage events (track.js, ~0.5 kB, lazy). The app's /api/track sender moved to utils/trackCore.js so /3d shares it
   // without supabase-js; as its own chunk it costs ~0.3 kB of chunk overhead in the homepage and editor routes (see
   // editorAuthJsGzipKb).
-  totalAuthJsGzipKb: 943.8,
+  // 943.8 → 945.0 (Oct 2026, production errors merged over admin 3D usage, measured 944.7, 943.5 on main): the stale-chunk
+  // recovery (shared/chunkErrors.js, the retry, the update page and the unhandled-rejection path in the entry, +0.9 kB on
+  // the homepage), the Leaflet renderer fixes (in vendor-leaflet) and /3d's error reporting (threeDJsGzipKb).
+  // 945.0 → 946.4 (Oct 2026, marketing refresh merged over the production-error fixes, measured 946.0, +1.3 kB over main's
+  // 944.7): the homepage's "New in Exploration Maps" section (3D figures, Studio, sharing, workspace) in its own lazy
+  // LandingNew chunk (~1.2 kB with its alt texts and copy), so the homepage's initial JS and its budget are unchanged
+  // (+0.1 kB measured for the section heading and the guarded lazy hand-off); the editor route is unchanged.
+  totalAuthJsGzipKb: 946.4,
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
@@ -171,7 +178,9 @@ const BUDGETS = {
   // 851.4 → 866.3 (measured 865.9): the 2D Studio style, as totalAuthJsGzipKb above.
   // 866.3 → 871.5 (measured 871.22): 3D figures in the account, as totalAuthJsGzipKb above.
   // 871.5 → 876.5 (measured 876.14, +4.92 kB over main's 871.22): the admin 3D usage tab, as totalAuthJsGzipKb above.
-  totalJsGzipKb: 876.5,
+  // 876.5 → 877.8 (Oct 2026, production errors, measured 877.5, 876.1 on main): as totalAuthJsGzipKb above.
+  // 877.8 → 879.1 (measured 878.8, 877.5 on main): the homepage's lazy LandingNew chunk, as totalAuthJsGzipKb above.
+  totalJsGzipKb: 879.1,
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the
   // totals above. /3d carries three.js (~109 kB gzip) and its editor.
@@ -256,7 +265,10 @@ const BUDGETS = {
   // main): the usage hooks (the lazy import of track.js, three_d_opened a moment after start, data added per kind in
   // addUserFiles and real terrain, exports counted in exportPNG and exportLayers). The sender itself is lazy
   // (track.js, below); the page view comes from /acquisition.js in public/, outside these budgets.
-  threeDJsGzipKb: 172.8,
+  // 172.8 → 173.3 (Oct 2026, production errors merged over admin 3D usage, measured 173.0, configured 173.0, 172.4 on
+  // main): uncaught errors and rejections reported to error_events like the 2D app's, and stale chunks recovered from a
+  // bare import() too (studio.js plus its copy of shared/chunkErrors.js).
+  threeDJsGzipKb: 173.3,
   // /3d's own modules fetched on first use (the geology, geophysics and tag layers, the account
   // client). They never load with the page or the app, so they sit outside the page and app totals.
   // 32 → 34 (Oct 2026, round 4): per-hole tags, grouped pending tags, callouts beside or bracketed on their
@@ -376,8 +388,11 @@ const BUDGETS = {
   // 337.7 → 338.1 (Oct 2026, admin 3D usage, measured 337.75, +0.36 kB over main's 337.39): the app's /api/track sender
   // and tab session id (utils/trackCore.js, utils/session.js) are now one chunk shared with /3d's lazy track.js; the
   // code is unchanged, the extra chunk's overhead is what is new.
-  editorAuthJsGzipKb: 338.1,
-  editorJsGzipKb: 270,
+  // 338.1 → 339.0 (Oct 2026, production errors, measured 338.7, 337.8 on main): the stale-chunk recovery in the entry and
+  // the Canvas redraw fix in vendor-leaflet, as totalAuthJsGzipKb above.
+  editorAuthJsGzipKb: 339.0,
+  // 270 → 271.0 (Oct 2026, production errors, measured 270.7, 269.6 on main): the same as editorAuthJsGzipKb above.
+  editorJsGzipKb: 271.0,
   claimsAuthJsGzipKb: 355,
   claimsJsGzipKb: 290,
   // Stylesheet, gzipped. Today ~29 kB.

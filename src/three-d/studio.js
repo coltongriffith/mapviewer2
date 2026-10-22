@@ -10,8 +10,27 @@ import { DESIGN_VERSION, FEATURES, uses, withDefaults } from './design-version.j
 import { intercept, calloutText, avgOver, ribbonPieces, gradeText } from './intercepts.js';
 import { fitLine, lineThrough, secFrame, toSection, lerp, clipSlab, clipPath, cleanSection } from './section-geometry.js';
 import { watchVersion } from './version-check.js';
+import { isChunkLoadError } from '../../shared/chunkErrors.js';
 
 const $ = (id) => document.getElementById(id);
+// Uncaught errors and rejections reach Admin's error_events as the 2D app's do (src/utils/errorReporter.js
+// and api/client-error.js): the same tab id, at most 25 different faults a tab, one report a minute per kind and message
+// (the server groups by fingerprint), fire-and-forget, and never throwing itself.
+const sentErrs = new Map();
+function reportError(err, kind) {
+  try {
+    if (isChunkLoadError(err)) kind = 'stale_chunk';
+    const message = String(err?.message || err || '').slice(0, 500), now = Date.now(), key = `${kind}:${message}`;
+    if (!message || sentErrs.size >= 25 || now - (sentErrs.get(key) || 0) < 6e4) return;
+    sentErrs.set(key, now);
+    let sessionId = sessionStorage.getItem('em_live_sid');
+    if (!sessionId) sessionStorage.setItem('em_live_sid', (sessionId = `${now}-${Math.random().toString(36).slice(2)}`));
+    fetch('/api/client-error', { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind, message, stack: err?.stack ? String(err.stack).slice(0, 4000) : null, path: location.pathname, release: typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev', sessionId }) }).catch(() => {});
+  } catch { /* telemetry must never surface */ }
+}
+// A failed image or script load has no message and is not a fault of the page.
+addEventListener('error', (e) => { if (e.message) reportError(e.error || e.message, 'error'); });
+addEventListener('unhandledrejection', (e) => reportError(e.reason, 'unhandledrejection'));
 // ============================================================
 // 1. Reading files: CSV parsing, column matching, file roles
 // ============================================================
@@ -1816,11 +1835,17 @@ const unsaved = () => !usingSample || HIST?.state().entries.length > 1;
 const newVersion = () => { $('ver-save').hidden = !unsaved(); $('ver').hidden = false; };
 $('ver-reload').addEventListener('click', () => location.reload()); $('ver-x').addEventListener('click', () => { $('ver').hidden = true; });
 watchVersion(newVersion);
-addEventListener('vite:preloadError', (e) => {
-  if (unsaved()) { newVersion(); return; }
-  try { const k = 'em3d.reloadedAt'; if (Date.now() - (+sessionStorage.getItem(k) || 0) < 60000) return; sessionStorage.setItem(k, String(Date.now())); } catch { return; }
-  e.preventDefault(); location.reload();
-});
+// Every way a stale chunk surfaces: vite:preloadError, or a bare import() rejecting (Safari's "Importing a
+// module script failed.", a chunk with no dependencies). A reload it may not make (unsaved work, or one a
+// moment ago) is offered by the banner instead, never a dead control; logged as 'stale_chunk'.
+const staleChunk = (err) => {
+  reportError(err, 'stale_chunk');
+  if (unsaved()) { newVersion(); return false; }
+  try { const k = 'em3d.reloadedAt'; if (Date.now() - (+sessionStorage.getItem(k) || 0) < 60000) throw 0; sessionStorage.setItem(k, String(Date.now())); } catch { newVersion(); return false; }
+  location.reload(); return true;
+};
+addEventListener('vite:preloadError', (e) => { if (staleChunk(e.payload)) e.preventDefault(); });
+addEventListener('unhandledrejection', (e) => { if (isChunkLoadError(e.reason)) { e.preventDefault(); staleChunk(e.reason); } });
 const desk = () => import('./desk.js').then((m) => { m.init(host()); return m; });
 const sendToDesignDesk = (o) => settled().then(desk).then((m) => m.sendToDesignDesk(o));
 $('desk').addEventListener('submit', (e) => { e.preventDefault(); settled().then(desk).then((m) => m.submit(), (err) => status(err.message)); });

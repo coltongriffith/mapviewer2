@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { lazyGuarded } from '../utils/preloadGuard';
-import { useClaims } from '../hooks/useClaims';
+import { useClaims, NETWORK_ERROR } from '../hooks/useClaims';
 import { trackSearch, trackEvent } from '../utils/track';
 import {
   US_CLAIMS_ENABLED, US_STATES, US_GROUP_LABEL,
@@ -511,6 +511,14 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
     search(query.trim(), mode, province);
   }
 
+  // The same search again, after a dropped connection.
+  function retrySearch() {
+    clearSelections();
+    pendingSearchRef.current = { ...submitted };
+    setSubmitted({ ...submitted });
+    search(submitted.query, submitted.mode, submitted.province);
+  }
+
   function handleQueryChange(val) {
     setQuery(val);
     if (results || error) {
@@ -755,7 +763,10 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
         </div>
       </form>
 
-      {error && <p className="claims-error">⚠ {error}</p>}
+      {error && <p className="claims-error">⚠ {error}{error === NETWORK_ERROR && submitted?.query && (
+        <> <button type="button" className="claims-error-retry" disabled={loading}
+          onClick={retrySearch}>Try again</button></>
+      )}</p>}
 
 
       {/* Claim-name resolution is not an ownership finding. The user has to say
