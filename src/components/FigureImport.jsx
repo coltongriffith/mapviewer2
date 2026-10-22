@@ -4,10 +4,11 @@ import { BASEMAPS } from '../utils/basemapConfig.js';
 import { fitTransform, describeFit, formatMetres, applyFit } from '../utils/georef.js';
 import { TRACE_DEFAULTS, samplePatch } from '../utils/figureTrace.js';
 import {
-  loadFigureImage, figurePixels, makeProjector, constraintsFor, placeFigure, runTrace, unitColour, ringsToLngLat,
+  loadFigureImage, figurePixels, makeProjector, constraintsFor, placeFigure, runTrace, unitColour, unitFill, ringsToLngLat,
   figureCreditText, figureRasterLayer, tracedLayer, utmZoneOf, parseCoord, FIGURE_MAX_EDGE,
 } from '../utils/figureImport.js';
 import { figureOverlay } from '../utils/figureOverlay.js';
+import { trackEvent } from '../utils/track';
 
 // "Import a company figure": put a figure from a news release on the map
 // (georeference it by a few known points, rotation included), trace its map
@@ -22,10 +23,12 @@ const KIND_LABEL = { point: 'Point', e: 'Easting label', n: 'Northing label' };
 const MIN_AREA_STEPS = [0.02, 0.05, 0.1, 0.3, 1];
 const areasLabel = (n) => (n == null ? 'not traced' : `${n} area${n === 1 ? '' : 's'}`);
 
-export default function FigureImport({ source, existing, mapView, onDone, onClose }) {
+export default function FigureImport({ source, existing, map: editorMap, setProject, onClose }) {
   const er = existing?.raster;
   const g = er?.georef;
-  const centre = mapView || { lat: 50, lng: -120, zoom: 12 };
+  const [centre] = useState(() => {
+    try { const c = editorMap.getCenter(); return { lat: c.lat, lng: c.lng, zoom: editorMap.getZoom() }; } catch { return { lat: 50, lng: -120, zoom: 12 }; }
+  });
   const [image, setImage] = useState(er ? { dataUri: er.dataUri, width: er.width, height: er.height, name: existing.sourceName || existing.name } : null);
   const [error, setError] = useState('');
   const [tab, setTab] = useState('place');
@@ -43,6 +46,7 @@ export default function FigureImport({ source, existing, mapView, onDone, onClos
   const [traceOpts, setTraceOpts] = useState({ lineWidth: TRACE_DEFAULTS.lineWidth, gap: TRACE_DEFAULTS.gap, minAreaPct: 0.05 });
   const [area, setArea] = useState(g?.area || null);
   const [areaPick, setAreaPick] = useState(null); // null | 'first' | { x, y }
+  const [fillPick, setFillPick] = useState(null); // the unit whose fill the next click takes
   const [trace, setTrace] = useState(null); // { results, scale, units }
   const [tracing, setTracing] = useState(false);
   const [fig, setFig] = useState(() => ({ source: '', date: '', subject: '', ...(existing?.figure || {}) }));
@@ -164,7 +168,7 @@ export default function FigureImport({ source, existing, mapView, onDone, onClos
     if (!traced.length) return;
     tracedRef.current = L.featureGroup(traced.map(({ unit, polygons }) => L.geoJSON(
       { type: 'FeatureCollection', features: polygons.map((coordinates) => ({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates } })) },
-      { style: { color: '#111827', weight: 1, fillColor: unitColour(unit.samples), fillOpacity: 0.6, interactive: false } },
+      { style: { color: '#111827', weight: 1, fillColor: unitFill(unit), fillOpacity: 0.6, interactive: false } },
     ))).addTo(map);
   }, [traced]);
 
@@ -192,6 +196,11 @@ export default function FigureImport({ source, existing, mapView, onDone, onClos
       }
       const px = await getPixels();
       const colour = samplePatch(px, x / px.scale, y / px.scale, 2);
+      if (fillPick) {
+        setUnits((prev) => prev.map((u) => (u.id === fillPick ? { ...u, fill: unitColour([colour]) } : u)));
+        setFillPick(null);
+        return;
+      }
       if (!activeUnit || !units.some((u) => u.id === activeUnit)) {
         const u = { id: uid(), name: '', samples: [colour], tolerance: TRACE_DEFAULTS.tolerance };
         setUnits((prev) => [...prev, u]);
@@ -233,12 +242,24 @@ export default function FigureImport({ source, existing, mapView, onDone, onClos
         id: existing?.id || uid(), image, placement, opacity, figure,
         georef: {
           crs, mode, points, area, kind: fit.kind, rms: +fit.rms.toFixed(2), work: projector.work,
-          units: units.map(({ name, samples, tolerance }) => ({ name, samples, tolerance })),
+          units: units.map(({ name, samples, tolerance, fill }) => ({ name, samples, tolerance, fill })),
         },
       }));
     }
     traced.forEach(({ unit, polygons }) => layers.push(tracedLayer({ id: uid(), unit, polygons, figure })));
-    onDone({ layers, replaceId: existing?.id || null, bounds: placement.bounds });
+    // Added to the map, or swapped in for the figure being re-fitted; an
+    // empty map is framed on the figure.
+    const replaceId = existing?.id;
+    const added = layers.filter((l) => l.id !== replaceId);
+    setProject((prev) => {
+      if (!prev.layers.length) {
+        const b = placement.bounds;
+        setTimeout(() => editorMap?.fitBounds([[b.south, b.west], [b.north, b.east]]), 0);
+      }
+      return { ...prev, layers: [...prev.layers.map((l) => (l.id === replaceId ? layers[0] : l)), ...added] };
+    });
+    added.forEach((l) => trackEvent('layer_added', { source: 'figure', role: l.role, kind: l.type, feature_count: l.geojson?.features?.length ?? 0 }));
+    onClose(layers[layers.length - 1]?.id);
   };
 
   useEffect(() => {
@@ -264,7 +285,7 @@ export default function FigureImport({ source, existing, mapView, onDone, onClos
   return (
     <div className="export-hd-overlay" role="dialog" aria-modal="true" aria-label="Import a company figure">
       <div className="export-hd-card fig-import-card">
-        <button className="export-hd-close" type="button" onClick={onClose} aria-label="Close">✕</button>
+        <button className="export-hd-close" type="button" onClick={() => onClose()} aria-label="Close">✕</button>
         <div className="fig-import-head">
           <h3 className="export-hd-title">Import a company figure</h3>
           <div className="fig-tabs" role="tablist">
@@ -307,7 +328,7 @@ export default function FigureImport({ source, existing, mapView, onDone, onClos
                   <svg viewBox={`0 0 ${image.width} ${image.height}`} preserveAspectRatio="none">
                     {trace && tab !== 'place' && trace.results.map((res, i) => res.polygons.map((p, j) => (
                       <path key={`${i}-${j}`} d={[p.outer, ...p.holes].map((ring) => `M${ring.map(([x, y]) => `${(x * trace.scale).toFixed(1)},${(y * trace.scale).toFixed(1)}`).join('L')}Z`).join('')}
-                        fill={unitColour(trace.units[i].samples)} fillOpacity="0.55" fillRule="evenodd" stroke="#111827" strokeWidth={1.2 / zoom} />
+                        fill={unitFill(units.find((u) => u.id === trace.units[i].id) || trace.units[i])} fillOpacity="0.55" fillRule="evenodd" stroke="#111827" strokeWidth={1.2 / zoom} />
                     )))}
                     {area && <rect x={area.x0} y={area.y0} width={area.x1 - area.x0} height={area.y1 - area.y0} fill="none" stroke="#2563eb" strokeWidth={2 / zoom} strokeDasharray={`${6 / zoom} ${4 / zoom}`} />}
                     {tab === 'place' && points.map((p, i) => (
@@ -392,12 +413,16 @@ export default function FigureImport({ source, existing, mapView, onDone, onClos
               {tab === 'trace' && (
                 <>
                   <p className="small-note">
-                    Click inside a map unit on the figure to sample its colour (sample where it lies over imagery, not the legend swatch; add samples where it looks different), then name it from the legend. Lines, lettering and symbols thinner than the line width are ignored.
+                    Click inside a map unit on the figure to sample its colour (where it lies over imagery; add samples where it looks different), then name it from the legend and take its fill from the legend swatch. Lines, lettering and symbols thinner than the line width are ignored.
                   </p>
                   {units.map((u) => (
                     <div key={u.id} className={`fig-unit${activeUnit === u.id ? ' is-active' : ''}`}>
                       <input type="radio" name="fig-unit" aria-label="Sample this unit" checked={activeUnit === u.id} onChange={() => setActiveUnit(u.id)} />
-                      <span className="fig-swatch" style={{ background: unitColour(u.samples) }} />
+                      <input type="color" className="fig-swatch" aria-label="Fill colour" value={unitFill(u)}
+                        onChange={(e) => setUnits((prev) => prev.map((x) => (x.id === u.id ? { ...x, fill: e.target.value } : x)))} />
+                      <button type="button" className={`fig-chip${fillPick === u.id ? ' is-active' : ''}`} onClick={() => setFillPick(fillPick === u.id ? null : u.id)}>
+                        {fillPick === u.id ? 'Click the legend swatch…' : 'Fill from legend'}
+                      </button>
                       <input aria-label="Unit name" placeholder="Name from the legend, e.g. Durand Stock diorite" value={u.name}
                         onChange={(e) => setUnits((prev) => prev.map((x) => (x.id === u.id ? { ...x, name: e.target.value } : x)))} />
                       <span className="small-note">{u.samples.length} sample{u.samples.length === 1 ? '' : 's'}</span>
@@ -458,7 +483,7 @@ export default function FigureImport({ source, existing, mapView, onDone, onClos
               <span className="small-note">
                 {traced.length ? `${traced.length} traced unit${traced.length === 1 ? '' : 's'} · ` : ''}{credit ? `Credit: ${credit}` : 'No credit line yet (Credit tab).'}
               </span>
-              <button className="export-hd-skip fig-cancel" type="button" onClick={onClose}>Cancel</button>
+              <button className="export-hd-skip fig-cancel" type="button" onClick={() => onClose()}>Cancel</button>
               <button className="btn primary" type="button" disabled={!ok || (!keepImage && !existing && !traced.length)} onClick={add}>{existing ? 'Update map' : 'Add to map'}</button>
             </div>
           </>

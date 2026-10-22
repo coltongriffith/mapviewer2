@@ -2963,23 +2963,6 @@ export default function App({ initialAction = null }) {
     setUploadStatus({ type: 'info', message: `${layer.displayName} placed. Adjust its edges or opacity under Layers.` });
   };
 
-  // A company figure's layers (the placed picture, the traced units), added,
-  // or swapped in for the figure being re-fitted.
-  const addFigureLayers = ({ layers, replaceId, bounds }) => {
-    setFigureImport(null);
-    const wasEmpty = !project.layers.length;
-    setProject((prev) => ({
-      ...prev,
-      layers: [...prev.layers.map((l) => (l.id === replaceId ? layers.find((n) => n.id === replaceId) : l)), ...layers.filter((n) => n.id !== replaceId)],
-    }));
-    layers.filter((n) => n.id !== replaceId).forEach((l) => trackEvent('layer_added', { source: 'figure', role: l.role, kind: l.type, feature_count: l.geojson?.features?.length ?? 0 }));
-    if (layers.length) setSelectedLayerId(layers[layers.length - 1].id);
-    if (wasEmpty) leafletMapRef.current?.fitBounds([[bounds.south, bounds.west], [bounds.north, bounds.east]]);
-  };
-  const updateFigure = (figureId, patch) => setProject((prev) => ({
-    ...prev, layers: prev.layers.map((l) => (l.figure?.id === figureId ? { ...l, figure: { ...l.figure, ...patch } } : l)),
-  }));
-
   const addCustomTileLayer = () => {
     const error = validateTileSource(customTile);
     if (error) { setCustomTile((c) => ({ ...c, error })); return; }
@@ -5600,7 +5583,7 @@ export default function App({ initialAction = null }) {
               </button>
             </div>
             <UploadPanel onUploadFile={handleUploadFile} onUploadFiles={handleUploadFiles} inputRef={uploadInputRef} status={uploadStatus} />
-            <button type="button" className="link-btn ins-sample-link" onClick={() => setFigureImport({})}>Import a company figure (georeference, trace geology)…</button>
+            <button type="button" className="link-btn ins-sample-link" onClick={() => setFigureImport({})}>Import a company figure…</button>
             {/* Loading the sample replaces the open map, so it is offered only
                 while there is nothing on the map to lose. */}
             {project.layers.length === 0 && (
@@ -6782,7 +6765,7 @@ export default function App({ initialAction = null }) {
             ) : <p className="small-note">Select a layer to edit its display label, role, order, and colors.</p>}
             {selectedLayer?.figure ? (
               <React.Suspense fallback={null}>
-                <FigureLayerControls layer={selectedLayer} onUpdateFigure={updateFigure} onEdit={() => setFigureImport({ layerId: selectedLayer.id })} />
+                <FigureLayerControls layer={selectedLayer} setProject={setProject} onEdit={() => setFigureImport({ layerId: selectedLayer.id })} />
               </React.Suspense>
             ) : null}
           </InspectorGroup>
@@ -8336,9 +8319,9 @@ export default function App({ initialAction = null }) {
           <FigureImport
             source={figureImport.source}
             existing={project.layers.find((l) => l.id === figureImport.layerId)}
-            mapView={(() => { try { const m = leafletMapRef.current, c = m.getCenter(); return { lat: c.lat, lng: c.lng, zoom: m.getZoom() }; } catch { return null; } })()}
-            onDone={addFigureLayers}
-            onClose={() => setFigureImport(null)}
+            map={leafletMapRef.current}
+            setProject={setProject}
+            onClose={(id) => { setFigureImport(null); if (id) setSelectedLayerId(id); }}
           />
         ) : null}
         {csvMappingData ? (

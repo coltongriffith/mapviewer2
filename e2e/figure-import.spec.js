@@ -86,6 +86,11 @@ test('a company figure is placed by points, traced by colour, credited and kept'
   await dialog.getByRole('tab', { name: '2 · Trace colours' }).click();
   await clickFigure(200, 100);
   await dialog.getByLabel('Unit name').fill('Pink diorite');
+  // Its fill taken from a "legend swatch" (the white title box here).
+  await dialog.getByRole('button', { name: 'Fill from legend' }).click();
+  await clickFigure(20, 20);
+  await expect(dialog.getByLabel('Fill colour')).toHaveValue('#ffffff');
+  await dialog.getByLabel('Fill colour').fill('#d6a0b4');
   await dialog.getByRole('button', { name: 'Trace', exact: true }).click();
   await expect(dialog.getByText('1 area', { exact: true })).toBeVisible({ timeout: 30_000 });
 

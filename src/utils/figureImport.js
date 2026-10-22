@@ -9,7 +9,6 @@
 
 import { rasterLayer, utmProjString } from './rasterOverlay.js';
 import { applyFit } from './georef.js';
-import { traceColours } from './figureTrace.js';
 
 // Stored inside the project and in shared copies (2 MB limit per share), so
 // the picture is kept to 2048 px on its long edge and about 1.2 MB as a data
@@ -130,23 +129,26 @@ export function placeFigure(fit, width, height, projector) {
 // ── tracing ───────────────────────────────────────────────────────────────
 let worker = null;
 let seq = 0;
-/** Runs the tracer in a Web Worker; on the main thread only if workers are unavailable. */
+/** Runs the tracer in a Web Worker, so the dialog stays responsive (and the tracer is not in its chunk). */
 export function runTrace(image, units, options) {
   const id = ++seq;
-  if (typeof Worker === 'undefined') {
-    return Promise.resolve().then(() => traceColours(image, units, options));
-  }
+  if (typeof Worker === 'undefined') return Promise.reject(new Error('This browser cannot trace figures (no Web Workers).'));
   if (!worker) worker = new Worker(new URL('./figureTrace.worker.js', import.meta.url), { type: 'module' });
   return new Promise((resolve, reject) => {
+    const w = worker;
+    const done = () => { w.removeEventListener('message', onMessage); w.removeEventListener('error', onError); };
     const onMessage = (event) => {
       if (event.data?.id !== id) return;
-      worker.removeEventListener('message', onMessage);
+      done();
       if (event.data.error) reject(new Error(event.data.error)); else resolve(event.data.result);
     };
-    worker.addEventListener('message', onMessage);
+    // A worker that fails to load is dropped, so the next Trace starts a new one.
+    const onError = (event) => { done(); worker = null; reject(new Error(event.message || 'Tracing failed.')); };
+    w.addEventListener('message', onMessage);
+    w.addEventListener('error', onError);
     // The pixels are copied, not transferred: the dialog traces again with
     // other settings from the same buffer.
-    worker.postMessage({ id, image: { data: image.data, width: image.width, height: image.height }, units, options });
+    w.postMessage({ id, image: { data: image.data, width: image.width, height: image.height }, units, options });
   });
 }
 
@@ -158,6 +160,12 @@ export function unitColour(samples) {
   const m = samples.reduce((s, c) => [s[0] + c[0], s[1] + c[1], s[2] + c[2]], [0, 0, 0]).map((v) => v / samples.length);
   return hex(m);
 }
+/**
+ * A unit's fill: the colour picked from the legend swatch when there is one
+ * (a figure paints its units half transparent over imagery, so the samples
+ * from the map come out muddier than the unit's own colour), else the samples.
+ */
+export const unitFill = (unit) => unit.fill || unitColour(unit.samples);
 export function darker(hexColour, f = 0.6) {
   const n = parseInt(hexColour.slice(1), 16);
   return hex([(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => v * f));
@@ -186,7 +194,7 @@ export function figureRasterLayer({ id, image, placement, opacity, georef, figur
 }
 
 export function tracedLayer({ id, unit, polygons, figure }) {
-  const fill = unitColour(unit.samples);
+  const fill = unitFill(unit);
   const name = String(unit.name || '').trim() || 'Traced unit';
   return {
     id,

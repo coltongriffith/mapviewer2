@@ -992,7 +992,7 @@ button, input, select, textarea { font: inherit; }
 .fig-unit { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 8px; }
 .fig-unit.is-active { background: var(--ui-surface-subtle); outline: 1px solid var(--ui-border); }
 .fig-unit input[aria-label="Unit name"] { flex: 1; min-width: 160px; padding: 4px 8px; border: 1px solid var(--ui-border); border-radius: 6px; font-size: 13px; }
-.fig-swatch { width: 22px; height: 16px; border-radius: 3px; border: 1px solid rgba(0, 0, 0, 0.25); flex: none; }
+.fig-swatch { width: 30px; height: 22px; padding: 0; border-radius: 4px; border: 1px solid rgba(0, 0, 0, 0.25); flex: none; cursor: pointer; }
 .fig-tol { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--ui-text-muted); }
 .fig-tol input { width: 90px; }
 .fig-credit { flex: 1; min-width: 320px; }
