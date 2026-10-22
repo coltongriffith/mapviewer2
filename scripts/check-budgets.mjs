@@ -214,13 +214,14 @@ const BUDGETS = {
   // advisories GHSA-p98j-92pf-mc4p and related; the fixed release is ~0.3 kB larger.
   // 993.2 → 1009.4 (measured 1009.1): 2D labels and geology styling (above, measured 1008.4) merged over the dompurify
   // update.
-  // 1009.4 → 1020.4 (Oct 2026, import a company figure: lines and points, measured 1020.1, +11.0 kB over main's 1009.1):
+  // 1009.4 → 1021.8 (Oct 2026, import a company figure: lines and points, measured 1021.5, +12.3 kB over main's 1009.2):
   // all lazy, loaded only when the figure dialog opens and on the first Detect. The tracer's worker gains the line and
-  // symbol detector (utils/figureMarks.js, +7.45 kB in figureTrace.worker: Lab colour mask, Zhang–Suen skeleton cut at
-  // junctions, dash and dot chaining, the lettering and frame filters, shape by the outline's harmonics); the
-  // FigureImport chunk gains the "Lines & points" step with its review (FigureMarks.jsx, the line and point layers, the
-  // accepted finds on the preview map; +3.6 kB). App, the editor's initial JS and the exporters are unchanged.
-  totalAuthJsGzipKb: 1020.4,
+  // symbol detector (utils/figureMarks.js, +8.35 kB in figureTrace.worker: Lab colour mask, Zhang–Suen skeleton cut at
+  // junctions, dash and dot chaining, dashes read along a line, the lettering and frame filters, shape by the outline's
+  // harmonics); the FigureImport chunk gains the "Lines & points" step with its review (FigureMarks.jsx, the line and
+  // point layers, the accepted finds on the preview map, tracing from the upload's own colours; +3.97 kB). App, the
+  // editor's initial JS and the exporters are unchanged.
+  totalAuthJsGzipKb: 1021.8,
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
@@ -257,9 +258,9 @@ const BUDGETS = {
   // 924.4 → 924.9 (measured 924.6): dompurify 3.4.17 security update, as totalAuthJsGzipKb above.
   // 924.9 → 940.9 (measured 940.6): 2D labels and geology styling (above, measured 940.0) merged over the dompurify
   // update.
-  // 940.9 → 952.0 (Oct 2026, measured 951.7, +11.1 kB over main's 940.6): import a company figure, lines and points, as
+  // 940.9 → 953.4 (Oct 2026, measured 953.1, +12.3 kB over main's 940.8): import a company figure, lines and points, as
   // totalAuthJsGzipKb above.
-  totalJsGzipKb: 952.0,
+  totalJsGzipKb: 953.4,
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the
   // totals above. /3d carries three.js (~109 kB gzip) and its editor.
