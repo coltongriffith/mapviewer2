@@ -848,7 +848,8 @@ JavaScript API (run in the page console or via your agent's evaluate tool):
   EM3D.setCallout(holeId, {show, line1, line2, incl: false, placement: "column" | "beside" | "bracket",
                   x, y, heading})   null resets a field; x, y place the box (0-1 of the frame), its leader follows;
                                   heading: a domain heading over a block section's bracket callout ("Upper domain").
-                                  getState().callouts.hidden lists any shown callout left off the last drawing, and why.
+                                  getState().layout.callouts lists any shown callout left off the last drawing, and why
+                                  (layout: what the last drawing placed; not saved, and not unsaved work).
                                   In published mode the id is a result ID; line1 (and line2, the callout's second
                                   line, its "incl." results unless reworded) rewords that result only, and
                                   stays with the depths it was written for (getState().callouts.published:
@@ -1064,7 +1065,7 @@ Whole projects (to keep or move a figure):
                                   side face is too foreshortened. brackets "callout": a bracket with the domain heading
                                   (setCallout heading), the hole-ID chip and the bold result on a leader, the holes on
                                   alternate sides. units "auto": a wall label with a unit sits inside that unit's band on
-                                  its face (getState().wallLabels[].at), or is hidden and says why (.why). surface
+                                  its face (getState().layout.wallLabels[id].at), or is hidden and says why (.why). surface
                                   "vivid": setStyle surface under 1 keeps the satellite colours, only holes, bars and
                                   shells showing through. fadeBottom: the share of the block's height fading out at its
                                   base (0, off, by default). A block saved before these keeps "fixed", "mix" and no fade.

@@ -1596,7 +1596,7 @@ function drawOverlay(ctx, k, forExport) {
   const gap = 30 * u, left = cardBoxes.filter((b) => b[0] < W * 0.3), tag = 18 * u, boxes = [];
   const maxY = Math.min(oy - 36 * u, ...left.filter((b) => b[1] > H / 2).map((b) => b[1] - 12 * u)), top = Math.max(headBottom + 18 * u, ...left.filter((b) => b[1] <= H / 2).map((b) => b[3] + 12 * u));
   let items = shownCallouts().map((c, rank) => { const p = c.h.posAt(c.ic.broad.mid); return { c, rank, s: proj(G.V(p.x, p.y, p.z)), M: measureCallout(ctx, K, c) }; });
-  // Callouts left off this drawing, and why (getState().callouts.hidden; the layers ZIP's settings carry it).
+  // Callouts left off this drawing, and why (getState().layout.callouts; the layers ZIP's settings carry it).
   coHidden = items.filter(({ s }) => s[2] >= 1).map(({ c }) => [c, 'its interval is behind the camera']); items = items.filter(({ s }) => s[2] < 1).sort((a, b) => a.s[1] - b.s[1]);
   items = extGroups(ctx, K, items); // EXT hook: grouped intercept boxes
   let free = []; if (EXT.tags) ({ col: items, free } = EXT.tags.splitCallouts(items)); // EXT hook: beside, bracket or dragged
@@ -2493,7 +2493,7 @@ function getState() {
     grade: { column: S.valueCol, label: S.valueLabel, available: project?.cols || [], bins: S.bins, binColors: BIN_COLORS },
     design: { version: S.designVersion, current: DESIGN_VERSION, optIn: S.designOptIn },
     callouts: { mode: S.calloutMode, coCount: S.coCount, coMin: S.coMin, coCut: S.coCut, coIncl: S.coIncl, sampled: uses(S, 'sampledIntercepts'), warnings: gapCallouts().map(gapText),
-      shown: shownCallouts().map((c) => { const L = calloutLines(c); return { holeId: c.h.id, ...PR?.ids(c), line1: L.l1 + L.l1b, line2: L.l2 }; }), hidden: coHidden.map(([c, why]) => ({ key: c.key, holeId: c.h.id, why })),
+      shown: shownCallouts().map((c) => { const L = calloutLines(c); return { holeId: c.h.id, ...PR?.ids(c), line1: L.l1 + L.l1b, line2: L.l2 }; }),
       published: PR?.summary(files, project?.holes, S.pubOverrides) || null,
       candidates: calcCallouts.slice(0, 15).map((c) => ({ holeId: c.h.id, broad: icText(c.ic.broad, c.h), fromM: Math.round(c.ic.broad.from), incl: c.ic.incl ? icText(c.ic.incl, c.h) : null })), overrides: coMap(), valueCol2: S.valueCol2 },
     brand: { company: S.company, title: S.title, subtitle: S.subtitle, footnote: S.footnote, primary: S.primary, accent: S.accent, hasLogo: !!S.logo, credit: S.credit },
@@ -2509,6 +2509,8 @@ function getState() {
     equivalent: S.eq ? (() => { const i = eqInfo(); return { column: i.name, formula: i.formula, note: i.note, factors: Object.fromEntries(i.factors.map((f) => [f.metal, +f.factor.toPrecision(6)])), ...structuredClone(S.eq) }; })() : null,
     mapInfo: { ...S.mapInfo }, footnoteAuto: G ? autoNotes(S.view) : [], checks: getChecks(),
     ...extState(), // EXT hook: geology, geophys, tags
+    // What the last drawing placed or left off: not settings, so neither saved nor compared for unsaved changes.
+    layout: { callouts: coHidden.map(([c, why]) => ({ key: c.key, holeId: c.h.id, why })), wallLabels: EXT.block?.placements() || {} },
     overlays: S.overlays.map((o) => ({ ...o, data: undefined, ...EXT.overlays?.info(o) })), shapes: structuredClone(S.shapes), sections: EXT.sections?.state() || null,
     figureSize: { key: S.format, width: f.w, height: f.h, label: f.label }, figureSizes: Object.fromEntries(Object.entries(FORMATS).map(([k, v]) => [k, `${v.label}, ${v.w}×${v.h}`])),
   };

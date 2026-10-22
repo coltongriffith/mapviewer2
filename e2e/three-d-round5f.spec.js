@@ -84,25 +84,28 @@ test('B6: every bracket exports, through surface changes and grouping; a callout
   for (const surface of [1, 0.6, 0.25]) {
     const r = await page.evaluate(async (s) => {
       const E = window.EM3D; E.setStyle({ surface: s }); await E.layersReady();
-      const zip = await E.exportLayers({ svg: true }); return { zip, hidden: E.getState().callouts.hidden };
+      const zip = await E.exportLayers({ svg: true }); return { zip, hidden: E.getState().layout.callouts };
     }, surface);
     const svg = new TextDecoder().decode(unzipSync(Buffer.from(r.zip.split(',')[1], 'base64'))['annotations.svg']);
     for (const t of ['60.0 m @', '130.0 m @', '160.0 m @']) expect(svg).toContain(`>${t}<`);
     for (const t of ['0.62% Cu', '0.71% Cu', '0.44% Cu', '0.55% Cu']) expect(svg).toContain(`>${t}<`); // both upper and both lower domains
     expect(r.hidden).toEqual([]);
     const settings = JSON.parse(new TextDecoder().decode(unzipSync(Buffer.from(r.zip.split(',')[1], 'base64'))['figure-settings.json']));
-    expect(settings.callouts.hidden).toEqual([]); // the layers' settings carry the report
+    expect(settings.layout.callouts).toEqual([]); // the layers' settings carry the report
   }
   // In the left column, callouts that do not fit are left off, and listed with the reason.
   const col = await page.evaluate(async () => {
     const E = window.EM3D; await E.setBlock(null); E.setStyle({ coPlacement: 'column', calloutMode: 'calculated', coCount: 12 }); await E.setHolesShown(null); E.setFigureSize('square'); await E.layersReady();
     const t = []; const P = CanvasRenderingContext2D.prototype, f = P.fillText; P.fillText = function (x, ...a) { if (!this.canvas.isConnected) t.push(String(x)); return f.call(this, x, ...a); };
+    // What a drawing leaves off is not the figure's work: the rest of the state is the same before and after it.
+    const work = () => { const { layout: _l, step: _s, ...rest } = E.getState(); return JSON.stringify(rest); }, w0 = work();
     try { E.exportPNG({ view: '3d' }); } finally { P.fillText = f; }
-    const s = E.getState(); return { shown: s.callouts.shown.map((c) => c.line1), hidden: s.callouts.hidden, t };
+    const s = E.getState(); return { shown: s.callouts.shown.map((c) => c.line1), hidden: s.layout.callouts, t, same: work() === w0 };
   });
   const missing = col.shown.filter((l) => !col.t.some((x) => x.startsWith(l.split(' from')[0])));
   expect(col.hidden.length).toBe(missing.length);
   col.hidden.forEach((h) => expect(h.why).toMatch(/no room in the callout column|behind the camera/));
+  expect(col.same).toBe(true);
 });
 
 test('a standalone block section keeps its details card in the free side of the frame, clear of the block', async ({ page }) => {
@@ -164,10 +167,15 @@ test('item 34: a unit\'s wall label sits inside its band on that face, says why 
     const front = E.getState().wallLabels.find((l) => l.size === 'heading').face;
     const id = await E.addWallLabel({ unit: 'BIO', face: front, size: 'title' }); // named after the unit
     const long = await E.addWallLabel({ unit: 'PHY', face: front, size: 'title', text: 'PHYLLIC ALTERATION, SERICITE-QUARTZ-PYRITE, IN A BAND FAR TOO THIN FOR SO LONG A NAME AS THIS ONE, WHICH RUNS ON AND ON' });
-    await E.layersReady(); E.exportPNG({ view: '3d' });
-    const s = E.getState(), L = s.wallLabels.find((l) => l.id === id), Lp = s.wallLabels.find((l) => l.id === long);
-    await E.setBlock({ units: 'fixed' }); const f = E.getState().wallLabels.find((l) => l.id === id);
-    return { L, Lp, fixed: f };
+    await E.layersReady();
+    // Where the labels went is a drawing result (getState().layout), never part of the figure's settings: placing them
+    // changes nothing that is saved, undone or compared for unsaved changes.
+    const work = () => { const { layout: _l, step: _s, ...rest } = E.getState(); return JSON.stringify(rest); }, w0 = work();
+    E.exportPNG({ view: '3d' }); E.exportPNG({ view: '3d' });
+    const s = E.getState(), at = s.layout.wallLabels, L = { ...s.wallLabels.find((l) => l.id === id), ...at[id] }, Lp = { ...at[long] };
+    const saved = JSON.stringify(E.getProject().settings.wallLabels);
+    await E.setBlock({ units: 'fixed' }); const f = { ...E.getState().wallLabels.find((l) => l.id === id), ...E.getState().layout.wallLabels[id] };
+    return { L, Lp, fixed: f, same: work() === w0, saved };
   }, HOLES);
   expect(r.L.text).toBe('EARLY BIOTITE');
   expect(r.L.at).toBeTruthy(); expect(r.L.why).toBeUndefined();
@@ -175,6 +183,7 @@ test('item 34: a unit\'s wall label sits inside its band on that face, says why 
   expect(r.L.at.v).toBeLessThan(0.75); // in the biotite, under the cover and phyllic bands
   expect(r.Lp.at).toBe(null); expect(r.Lp.why).toMatch(/no clear room inside its unit/);
   expect(r.fixed.at).toBeUndefined(); expect(r.fixed.u).toBe(r.L.u); // where it was put
+  expect(r.same).toBe(true); expect(r.saved).not.toMatch(/"at"|"why"/); // nothing of the placement saved
 });
 
 test('item 34: new logs with the same block and settings place a unit\'s wall label again', async ({ page }) => {
@@ -183,12 +192,12 @@ test('item 34: new logs with the same block and settings place a unit\'s wall la
   const r = await page.evaluate(async (holes) => {
     const E = window.EM3D; E.setFigureSize('release'); await E.applyPreset('blockSection', { holes });
     const front = E.getState().wallLabels.find((l) => l.size === 'heading').face, id = await E.addWallLabel({ unit: 'BIO', face: front, size: 'title' });
-    await E.layersReady(); E.exportPNG({ view: '3d' }); const before = E.getState().wallLabels.find((l) => l.id === id).at;
+    await E.layersReady(); E.exportPNG({ view: '3d' }); const before = E.getState().layout.wallLabels[id].at;
     // The biotite starts far deeper in the new logs: the same bounds, units and settings, other data.
     const ids = E.getState().project.holeIds, lith = ['HoleID,From,To,Lith,Description', ...ids.flatMap((h) => [`${h},0,60,COV,Cover`, `${h},60,330,PHY,Phyllic alteration`, `${h},330,700,BIO,Early biotite`])].join('\n');
     E.addFiles([...E.getProject().files.filter((f) => f.name !== 'lithology.csv').map(({ name, text }) => ({ name, text })), { name: 'lithology.csv', text: lith }]);
     await E.layersReady(); E.exportPNG({ view: '3d' });
-    return { before, after: E.getState().wallLabels.find((l) => l.id === id).at };
+    return { before, after: E.getState().layout.wallLabels[id].at };
   }, HOLES);
   expect(r.before).toBeTruthy(); expect(r.after).toBeTruthy();
   expect(r.after.v).toBeLessThan(r.before.v - 0.05); // lower down, in the biotite as it now lies

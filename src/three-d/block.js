@@ -258,7 +258,7 @@ function curtainSides(renderer, scene, camera) {
 // A wall label linked to a geology unit (addWallLabel({ unit })) goes inside that unit's colour band on its face, never
 // over another unit: at the largest size (down to 45%) at which it fits wholly inside the band, turned to follow it,
 // at the spot clearest of the holes shown, their grade bars, the other wall labels and what the overlay placed. With
-// no such spot it is hidden and says why (getState().wallLabels[].why). Placed again as the view turns 5° or zooms 10%.
+// no such spot it is hidden and says why (getState().layout.wallLabels[id].why). Placed again as the view turns 5° or zooms 10%.
 // bandSpot: the search on a face's class grid (cls: nx × ny cells, row 0 at the top), in the face's own units (len
 // across, ht from the base up to the grid's top); w × h the label's size. room(x, z, hw, hh, angle): how clear a spot
 // is (above 0: clear). Returns { x, z, angle (degrees), scale, r } or null.
@@ -292,12 +292,16 @@ export function bandSpot(cls, nx, ny, ci, len, ht, w, h, room = () => 1) {
   return first;
 }
 const spots = new Map();
+// Where each unit's label went (or why not), by label ID: drawing results kept out of S, so neither saved nor undone
+// (getState().layout.wallLabels).
+const placed = new Map();
+export const placements = () => Object.fromEntries(S.wallLabels.filter((l) => placed.has(l.id)).map((l) => [l.id, placed.get(l.id)]));
 let side = { f: null, rects: [] }; // the side face's legend and logo as last laid out (plan)
 export function unitSpot(mesh) {
   const L = mesh.userData.L, G = H.G;
-  if (S.block?.units !== 'auto' || !L.unit || L.size === 'heading' || !G) { delete L.at; delete L.why; return; } // where it was put
+  if (S.block?.units !== 'auto' || !L.unit || L.size === 'heading' || !G) { placed.delete(L.id); return; } // where it was put
   const grid = H.ext('geology')?.unitGrid(L.face, L.unit);
-  if (!grid) { delete L.at; delete L.why; return; } // no geology painted on that face: the label keeps its own place
+  if (!grid) { placed.delete(L.id); return; } // no geology painted on that face: the label keeps its own place
   const g = H.faceGeom(L.face), z0 = G.B.z0, A = G.V(g.a[0], g.a[1], z0), len = A.distanceTo(G.V(g.b[0], g.b[1], z0)), ht = A.distanceTo(G.V(g.a[0], g.a[1], G.zmax));
   const e = mesh.matrix.elements, w = Math.hypot(e[0], e[1], e[2]), h = Math.hypot(e[4], e[5], e[6]), c = H.getCam();
   // The side face's legend and logo (plan, as last laid out), in the face's own units: x across, z up from the base.
@@ -322,12 +326,12 @@ export function unitSpot(mesh) {
     sp = { key, at: bandSpot(grid.cls, grid.nx, grid.ny, grid.ci, len, ht, w, h, room) }; spots.set(L.id, sp);
   }
   const s = sp.at;
-  if (!s) { L.at = null; L.why = 'no clear room inside its unit on this face'; mesh.visible = false; return; }
+  if (!s) { placed.set(L.id, { at: null, why: 'no clear room inside its unit on this face' }); mesh.visible = false; return; }
   const p = at(g, s.x / len), z = z0 + (G.zmax - z0) * s.z / ht, top = G.surf(p[0], p[1]), r = s.angle * RAD;
   const right = new THREE.Vector3(g.b[0] - g.a[0], 0, -(g.b[1] - g.a[1])).normalize(), up = new THREE.Vector3(0, 1, 0);
   const R = right.clone().multiplyScalar(Math.cos(r)).addScaledVector(up, Math.sin(r)), U = up.clone().multiplyScalar(Math.cos(r)).addScaledVector(right, -Math.sin(r));
   mesh.matrix.makeBasis(R.multiplyScalar(w * s.scale), U.multiplyScalar(h * s.scale), g.n).setPosition(G.V(p[0], p[1], z).addScaledVector(g.n, G.diag * 0.003)); mesh.visible = true;
-  L.at = { u: +(s.x / len).toFixed(3), v: +((z - z0) / (top - z0)).toFixed(3), rotation: s.angle, scale: s.scale }; delete L.why;
+  placed.set(L.id, { at: { u: +(s.x / len).toFixed(3), v: +((z - z0) / (top - z0)).toFixed(3), rotation: s.angle, scale: s.scale } });
 }
 // A heading on the block (wall label size "heading"): a bold title over smaller subtitle lines, in capitals,
 // right-aligned. Lines from the text's line breaks, or " | " typed in the one-line box. lines: its height in title lines.
