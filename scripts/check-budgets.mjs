@@ -150,7 +150,11 @@ const BUDGETS = {
   // 943.8 → 945.0 (Oct 2026, production errors merged over admin 3D usage, measured 944.7, 943.5 on main): the stale-chunk
   // recovery (shared/chunkErrors.js, the retry, the update page and the unhandled-rejection path in the entry, +0.9 kB on
   // the homepage), the Leaflet renderer fixes (in vendor-leaflet) and /3d's error reporting (threeDJsGzipKb).
-  totalAuthJsGzipKb: 945.0,
+  // 945.0 → 946.4 (Oct 2026, marketing refresh merged over the production-error fixes, measured 946.0, +1.3 kB over main's
+  // 944.7): the homepage's "New in Exploration Maps" section (3D figures, Studio, sharing, workspace) in its own lazy
+  // LandingNew chunk (~1.2 kB with its alt texts and copy), so the homepage's initial JS and its budget are unchanged
+  // (+0.1 kB measured for the section heading and the guarded lazy hand-off); the editor route is unchanged.
+  totalAuthJsGzipKb: 946.4,
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
@@ -175,7 +179,8 @@ const BUDGETS = {
   // 866.3 → 871.5 (measured 871.22): 3D figures in the account, as totalAuthJsGzipKb above.
   // 871.5 → 876.5 (measured 876.14, +4.92 kB over main's 871.22): the admin 3D usage tab, as totalAuthJsGzipKb above.
   // 876.5 → 877.8 (Oct 2026, production errors, measured 877.5, 876.1 on main): as totalAuthJsGzipKb above.
-  totalJsGzipKb: 877.8,
+  // 877.8 → 879.1 (measured 878.8, 877.5 on main): the homepage's lazy LandingNew chunk, as totalAuthJsGzipKb above.
+  totalJsGzipKb: 879.1,
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the
   // totals above. /3d carries three.js (~109 kB gzip) and its editor.
