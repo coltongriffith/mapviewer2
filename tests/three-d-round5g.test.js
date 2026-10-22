@@ -3,6 +3,7 @@ import { bandHeight, bandText, drawWatermarkBand, BAND_STATUS } from '../src/exp
 import { findBackground, removeBackground } from '../src/utils/logoBackground.js';
 import { fitAxes } from '../src/three-d/geology.js';
 import { init, setBlock, BLOCK, compass8 } from '../src/three-d/block.js';
+import { joinIncl } from '../src/three-d/tags.js';
 
 // Exploration Maps 3D round 5G: the watermark band (shared), logo background removal (shared), a section image fitted
 // by known points, and the block section's side title.
@@ -110,5 +111,17 @@ describe('side title layout', () => {
   });
   it('names the view in eight points of the compass', () => {
     expect([0, 44, 90, 226, 315, 359, -45].map(compass8)).toEqual(['N', 'NE', 'E', 'SW', 'NW', 'N', 'NW']);
+  });
+});
+
+describe('bracket callout incl. line', () => {
+  it('joins several incl. results with " & ", the shared unit once at the end, as the reference', () => {
+    expect(joinIncl('incl. 3.6 m @ 4.15 g/t Au; incl. 10.0 m @ 2.29 g/t Au')).toBe('incl. 3.6 m @ 4.15 & 10.0 m @ 2.29 g/t Au');
+    expect(joinIncl('incl. 2 m @ 1.2% Cu; incl. 4 m @ 3.1 g/t Au')).toBe('incl. 2 m @ 1.2% Cu & 4 m @ 3.1 g/t Au'); // units differ: each kept
+    expect(joinIncl('incl. 3.6 m @ 4.15 g/t Au from 70 m; incl. 1 m @ 9 g/t Au from 80 m')).toBe('incl. 3.6 m @ 4.15 g/t Au from 70 m & 1 m @ 9 g/t Au from 80 m');
+  });
+  it('keeps one result, or none, as it is', () => {
+    expect(joinIncl('incl. 8.0 m @ 7.16 g/t Au')).toBe('incl. 8.0 m @ 7.16 g/t Au');
+    expect(joinIncl(null)).toBe(null);
   });
 });

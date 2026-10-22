@@ -202,8 +202,8 @@ function groupLines(ctx, K, it) {
 }
 // Replaces callouts that belong together with one box: by the groups set with groupCallouts, then
 // (with autoGroup) by intercepts whose screen positions lie within groupRadius of each other.
-export function groupItems(ctx, K, items) {
-  const { u } = K, t = T(), used = new Set(), out = [];
+export function groupItems(ctx, K, all) {
+  const { u } = K, t = T(), used = new Set(), out = [], keep = all.filter((it) => placementOf(it) === 'bracket'), items = all.filter((it) => !keep.includes(it)); // brackets stay on their hole
   const make = (members) => {
     const rows = members.map((it) => ({ it, ...groupLines(ctx, K, it) })), bw = Math.max(...rows.map((r) => r.w)) + 30 * u, bh = 12 * u + rows.reduce((s, r) => s + r.h, 0) + (rows.length - 1) * 8 * u + 2 * u;
     const s = [members.reduce((a, m) => a + m.s[0], 0) / members.length, members.reduce((a, m) => a + m.s[1], 0) / members.length, 0];
@@ -213,7 +213,7 @@ export function groupItems(ctx, K, items) {
   const rest = items.filter((it) => !used.has(it));
   const at = (it) => { const p = it.c.h.posAt(it.c.ic.broad.mid); return [p.x, p.y, p.z]; }, v2 = uses(H.S, 'holeTags'); // groupRadius is in metres (version 1: screen px)
   if (t.autoGroup) clusters(v2 ? rest.map(at) : rest.map((it) => it.s.slice(0, 2)), (t.groupRadius || 140) * (v2 ? 1 : u)).forEach((cl) => { if (cl.length >= 2) { const ms = cl.map((i) => rest[i]); ms.forEach((m) => used.add(m)); out.push(make(ms)); } });
-  return items.filter((it) => !used.has(it)).concat(out).sort((a, b) => a.s[1] - b.s[1]);
+  return items.filter((it) => !used.has(it)).concat(out, keep).sort((a, b) => a.s[1] - b.s[1]);
 }
 export function drawGroup(ctx, K, x, y, g) {
   const { u, font } = K, S = H.S, { bw, bh } = g.M; g.M.leader = [];
@@ -265,9 +265,11 @@ export function drawFree(ctx, K, items, { lay, W, H: Hh, hits }) {
   // The brackets' lines first, so a box set beside its hole keeps off them; then the brackets (they sit on
   // their hole), so the boxes beside a hole keep clear of their text.
   if (cl) bracketBoxes(items.map((it) => it.c), u).forEach((b) => lay.add(b));
-  (cl ? items.slice().sort((a, b) => (placementOf(b) === 'bracket') - (placementOf(a) === 'bracket')) : items).forEach((it) => {
+  const co = H.S.block?.brackets === 'callout', bk = items.filter((it) => placementOf(it) === 'bracket'), sides = co && bracketSides(bk.map((it) => { const b = it.c.ic.broad, p = it.c.h.posAt(b.from + b.len / 2); return { id: it.c.h.id, x: H.proj(H.G.V(p.x, p.y, p.z))[0] }; }));
+  // The bracket callouts top down, so each hole's stack reads in order.
+  (cl ? (co ? bk.slice().sort((a, b) => a.s[1] - b.s[1]) : bk).concat(items.filter((it) => !bk.includes(it))) : items).forEach((it) => {
     const o = H.coOv(it.c), free = placementOf(it) === 'free';
-    if (placementOf(it) === 'bracket') { hits.push({ kind: 'callout', id: it.c.key, box: drawBracket(ctx, K, it, lay) }); return; }
+    if (placementOf(it) === 'bracket') { hits.push({ kind: 'callout', id: it.c.key, box: co ? calloutBracket(ctx, K, it, lay, sides.get(it.c.h.id)) : drawBracket(ctx, K, it, lay) }); return; }
     const { M, s } = it, tag = 18 * u, at = (x, y) => [x, y, x + M.bw, y + M.bh + tag];
     const cands = free ? [at(Math.min(o.x * W, W - M.bw), Math.min(o.y * Hh, Hh - M.bh - tag))]
       : [[1, -0.5], [-1, -0.5], [1, -1.4], [-1, -1.4], [1, 0.4], [-1, 0.4], [1.8, -0.5], [-1.8, -0.5], ...(cl ? [[1, 1.4], [-1, 1.4], [1, -2.4], [-1, -2.4], [3, -0.5], [-3, -0.5], [3, 0.8], [-3, 0.8], [3, -1.8], [-3, -1.8]] : [])].map(([sx, sy]) => at(sx > 0 ? s[0] + 40 * u * sx : s[0] + 40 * u * sx - M.bw, s[1] + sy * M.bh));
@@ -312,6 +314,67 @@ function drawBracket(ctx, K, it, lay) {
   return box;
 }
 
+// The candidates whose box lies inside the frame (else all): a bracket's text is never placed off the figure, where an
+// export would lose it (B6).
+const inFrame = (cands, boxOf) => { const [W, Hh] = H.frame(), ok = cands.filter((c) => { const b = boxOf(c); return b[0] >= 0 && b[1] >= 0 && b[2] <= W && b[3] <= Hh; }); return ok.length ? ok : cands; };
+// The side of each hole's bracket callouts: the holes ordered left to right by their brackets on screen, alternating
+// left (-1) and right (1), so two holes from one pad (077, 078) read on opposite sides. items: [{ id, x }].
+export function bracketSides(items) {
+  const xs = new Map(); items.forEach(({ id, x }) => { const v = xs.get(id) || [0, 0]; xs.set(id, [v[0] + x, v[1] + 1]); });
+  return new Map([...xs].sort((a, b) => a[1][0] / a[1][1] - b[1][0] / b[1][1]).map(([id], i) => [id, i % 2 ? 1 : -1]));
+}
+// The block section's bracket callout (S.block.brackets "callout"), as on a release figure: a black bracket over a white
+// halo beside the reported interval, and on a thin leader beside it, text only (no box, a white halo): the domain heading
+// (setCallout heading) with the hole-ID chip, the result in bold, and its "incl." line. side: -1 left, 1 right (past the
+// grade bars on the face); the text takes the first spot clear of everything placed, nearest its bracket. Returns its box.
+// Several "incl." results on one line, as on a release figure: "incl. 3.6 m @ 4.15 & 10.0 m @ 2.29 g/t Au" (the unit
+// once, at the end, where they share it). One result, or a second line typed by hand, is kept as it is.
+export function joinIncl(l2) {
+  const ps = String(l2 || '').split('; ').map((t) => t.replace(/^incl\.\s*/i, '')); if (ps.length < 2) return l2;
+  const unit = (t) => (/^[\d.,]+\s*m @ [\d.,]+ (.+)$/.exec(t) || [])[1], u = unit(ps[0]);
+  return `incl. ${(u && ps.every((t) => unit(t) === u) ? ps.map((t, i) => (i < ps.length - 1 ? t.slice(0, -u.length - 1) : t)) : ps).join(' & ')}`;
+}
+function calloutBracket(ctx, K, it, lay, side = -1) {
+  const { u, font } = K, c = it.c, b = c.ic.broad, L0 = H.calloutLines(c), L = H.coOv(c).line2 ? L0 : { ...L0, l2: joinIncl(L0.l2) }, head = String(H.coOv(c).heading || '').toUpperCase(), [W] = H.frame();
+  const P = (d) => { const p = c.h.posAt(d); return H.proj(H.G.V(p.x, p.y, p.z)); }, a = P(b.from), e = P(b.from + b.len), mid = [(a[0] + e[0]) / 2, (a[1] + e[1]) / 2];
+  let dx = e[0] - a[0], dy = e[1] - a[1]; const len = Math.hypot(dx, dy) || 1; dx /= len; dy /= len;
+  // The text's rows: heading and chip, the result, the incl. line.
+  const track = (px) => { if ('letterSpacing' in ctx) ctx.letterSpacing = `${px}px`; };
+  font(800, 10.5); track(0.9 * u); const hw = head ? ctx.measureText(head).width : 0; track(0);
+  font(700, 11); const chip = ctx.measureText(c.h.id).width + 10 * u, rw = chip + (head ? 7 * u + hw : 0);
+  font(800, 18); const w1 = ctx.measureText(L.l1).width; font(500, 11.5); const w2 = L.l2 ? ctx.measureText(L.l2).width : 0;
+  const tw = Math.max(rw, w1, w2), rh = 18 * u, mh = 24 * u, th = rh + mh + (L.l2 ? 15 * u : 0) + 2 * u, big = lay.boxes.filter((o) => (o[2] - o[0]) * (o[3] - o[1]) > 1600 * u * u);
+  // The spot on one side (sd): the first clear of everything placed whose leader crosses no card or label (the small
+  // boxes along brackets and leaders aside), nearest the bracket; else the one overlapping least.
+  const place = (sd) => {
+    const k0 = -dy * sd < 0 ? -1 : 1, bars = sd > 0 && H.S.histograms && H.S.block?.hist?.side === 'face' ? 0.025 * W * (H.S.block.hist.length || 1) : 0, off = 9 * u + bars;
+    const q = (p, k) => [p[0] - dy * k0 * k, p[1] + dx * k0 * k], m0 = q(mid, off), x0 = sd > 0 ? Math.max(a[0], e[0]) + off : Math.min(a[0], e[0]) - off;
+    const boxOf = ([gap, k]) => { const x = sd > 0 ? x0 + gap * u : x0 - gap * u - tw, y = m0[1] - rh - mh / 2 + k * th; return [x - 3 * u, y, x + tw + 3 * u, y + th]; };
+    const across = (bx) => { const ex = sd > 0 ? bx[0] : bx[2], ey = bx[1] + rh + mh / 2; for (let i = 1; i < 10; i++) { const x = m0[0] + (ex - m0[0]) * i / 10, y = m0[1] + (ey - m0[1]) * i / 10; if (big.some((o) => x > o[0] && x < o[2] && y > o[1] && y < o[3])) return true; } return false; };
+    const cands = [24, 60, 110, 170, 240, 320].flatMap((g) => [0, -0.75, 0.75, -1.5, 1.5, -2.25, 2.25].map((k) => [g, k])), ok = cands.find((cd) => lay.clear(boxOf(cd)) && !across(boxOf(cd)));
+    const on = (bx) => lay.boxes.reduce((t, o) => t + overlapArea(bx, o), 0) + (across(bx) ? 1e6 * u * u : 0);
+    return { sd, q, off, m0, ok: !!ok, box: boxOf(ok || inFrame(cands, boxOf).reduce((m, cd) => (on(boxOf(cd)) < on(boxOf(m)) ? cd : m))) };
+  };
+  // The hole's side; the other where only that one has a clear spot.
+  let Pl = place(side); if (!Pl.ok) { const o = place(-side); if (o.ok) Pl = o; }
+  const { q, off, m0 } = Pl, tick = 8 * u, box = lay.add(Pl.box); side = Pl.sd;
+  // The bracket, then the leader from the result's line to the bracket's middle; both over a white halo.
+  const stroke = (pts) => { ctx.beginPath(); pts.forEach((p, i) => (i ? ctx.lineTo(...p) : ctx.moveTo(...p))); ctx.strokeStyle = H.paper(0.92); ctx.lineWidth = 4.6 * u; ctx.stroke(); ctx.strokeStyle = H.INK; ctx.lineWidth = 1.9 * u; ctx.stroke(); };
+  ctx.lineJoin = 'miter'; ctx.lineCap = 'butt'; stroke([q(a, off - tick), q(a, off), q(e, off), q(e, off - tick)]);
+  const ly = box[1] + rh + mh / 2, lx = side > 0 ? box[0] - 2 * u : box[2] + 2 * u;
+  if (Math.hypot(lx - m0[0], ly - m0[1]) > 6 * u) { ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(...m0); ctx.strokeStyle = H.paper(0.85); ctx.lineWidth = 3 * u; ctx.stroke(); ctx.strokeStyle = H.INK; ctx.lineWidth = 0.9 * u; ctx.stroke(); ctx.lineCap = 'butt';
+    const n = Math.ceil(Math.hypot(lx - m0[0], ly - m0[1]) / (12 * u)); for (let i = 1; i < n; i++) { const x = lx + (m0[0] - lx) * i / n, y = ly + (m0[1] - ly) * i / n; lay.add([x - 2 * u, y - 2 * u, x + 2 * u, y + 2 * u]); } }
+  // The text, right-aligned on the left side, left-aligned on the right; the chip on the side of the bracket.
+  const R = side < 0, xa = R ? box[2] - 3 * u : box[0] + 3 * u, halo = (t, x, y) => { ctx.lineJoin = 'round'; ctx.lineWidth = 4 * u; ctx.strokeStyle = H.paper(0.92); ctx.strokeText(t, x, y); ctx.fillText(t, x, y); };
+  ctx.textBaseline = 'middle'; let y = box[1] + rh / 2;
+  const cx = R ? xa - chip : xa; ctx.fillStyle = H.pri(); H.roundRect(ctx, cx, y - 7.5 * u, chip, 15 * u, 2.5 * u); ctx.fill();
+  font(700, 11); ctx.textAlign = 'center'; ctx.fillStyle = H.textOn(H.pri()); ctx.fillText(c.h.id, cx + chip / 2, y + 0.5 * u);
+  if (head) { font(800, 10.5); track(0.9 * u); ctx.textAlign = R ? 'right' : 'left'; ctx.fillStyle = H.brandTone('head'); halo(head, R ? cx - 7 * u : cx + chip + 7 * u, y); track(0); }
+  ctx.textAlign = R ? 'right' : 'left'; y += rh / 2 + mh / 2; font(800, 18); ctx.fillStyle = H.INK; halo(L.l1, xa, y);
+  if (L.l2) { y += mh / 2 + 7 * u; font(500, 11.5); ctx.fillStyle = H.INK; halo(L.l2, xa, y); }
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  return box;
+}
 // The block section's bracket (S.block.brackets "plain"): a square bracket beside the hole over the reported
 // interval, "154 m @" over "0.51% Cu" in bold beside it (no card, no ID chip, no "incl." line), on the side with
 // room, the left first (the grade bars run to the right). Returns its box.
@@ -325,7 +388,7 @@ function plainBracket(ctx, K, it, lay) {
   const off = 9 * u, x0Of = (side) => (side > 0 ? Math.max(a[0], e[0]) + off + 9 * u : Math.min(a[0], e[0]) - off - 9 * u - tw), boxOf = ([side, k]) => [x0Of(side) - 3 * u, mid[1] + k * th - th / 2, x0Of(side) + tw + 3 * u, mid[1] + k * th + th / 2];
   // With the grade bars on the face (to the right of the hole) only the left side, opposite them.
   const away = H.S.histograms && H.S.block?.hist?.side === 'face', reach = Math.abs(e[1] - a[1]) / 2 / th + 0.5, cands = [0, -0.7, 0.7, -1.4, 1.4, -2.1, 2.1, -2.8, 2.8].filter((k) => !k || Math.abs(k) <= reach).flatMap((k) => (away ? [[-1, k]] : [[-1, k], [1, k]]));
-  const on = (bx) => lay.boxes.reduce((t, o) => t + overlapArea(bx, o), 0), pick = cands.find((c) => lay.clear(boxOf(c))) || cands.reduce((m, c) => (on(boxOf(c)) < on(boxOf(m)) ? c : m)), side = pick[0], box = lay.add(boxOf(pick));
+  const on = (bx) => lay.boxes.reduce((t, o) => t + overlapArea(bx, o), 0), inF = inFrame(cands, boxOf), pick = cands.find((c) => lay.clear(boxOf(c))) || inF.reduce((m, c) => (on(boxOf(c)) < on(boxOf(m)) ? c : m)), side = pick[0], box = lay.add(boxOf(pick));
   let nx = -dy, ny = dx; if (nx * side < 0) { nx = -nx; ny = -ny; }
   const tick = 7 * u, q = (p, k) => [p[0] + nx * k, p[1] + ny * k];
   ctx.lineJoin = 'miter'; ctx.lineCap = 'butt'; ctx.beginPath(); ctx.moveTo(...q(a, off - tick)); ctx.lineTo(...q(a, off)); ctx.lineTo(...q(e, off)); ctx.lineTo(...q(e, off - tick));

@@ -372,6 +372,8 @@ function samplesNow() {
   return cache.samples;
 }
 // The code index of every cell on a plane, cached by plane and method settings.
+// id: a new one each time the grid is classified again (other logs, legend or settings), for block.js's placements.
+let gridSerial = 0;
 export function planeClasses(key, a, b, sizeOverride) {
   const P = samplesNow(), g = cfg(), [nx, ny] = sizeOverride || gridSize(a, b), k = `${key}|${a}|${b}|${nx}x${ny}|${g.anisotropy}|${searchNow()}|${g.smooth}|${g.clean}`;
   let hit = cache.grids[key]; if (hit && hit.k === k) return hit;
@@ -380,7 +382,7 @@ export function planeClasses(key, a, b, sizeOverride) {
   // surroundings), and the grid refined to about 1000 px across with smooth contacts for the face texture.
   const nc = cache.fold.classes.length, sm = smoothClasses(grid, g.smooth ?? 2), clean = g.clean !== false;
   const cls = clean ? dropSpecks(modeFilter(sm, nx, ny, nc, 1), nx, ny, Math.max(4, nx * ny * 0.003)) : sm, f = clean ? Math.max(1, Math.round(1000 / nx)) : 1;
-  hit = { k, nx, ny, cls, f, fine: f > 1 ? refine(cls, nx, ny, nc, f) : cls, canvas: null, ck: null, covered: grid.cover.reduce((s, v) => s + v, 0) / (nx * ny) };
+  hit = { k, id: ++gridSerial, nx, ny, cls, f, fine: f > 1 ? refine(cls, nx, ny, nc, f) : cls, canvas: null, ck: null, covered: grid.cover.reduce((s, v) => s + v, 0) / (nx * ny) };
   cache.grids[key] = hit; return hit;
 }
 // Face colours: the legend colour at the wall colour strength, the same as the legend swatches.
@@ -405,8 +407,10 @@ function geologyCanvas(key, a, b) {
   // In capitals (a block section's names) about 24 u in the export, the cap height 1.6 times the bracket text's.
   const fm = H.format?.(), want = cfg().labelStyle === 'caps' && fm ? 24 * Math.sqrt(fm.w * fm.h) / 900 : 22;
   const size = Math.min(ht * (want > 22 ? 0.1 : 0.06), Math.max(ht * 0.015, want / (pv * k || 1))), bucket = Math.round(Math.log(size) / Math.log(1.2));
-  const mirror = faceWanted('far', key), font = labelFont(), lk = `${ck}|${bucket}|${mirror}|${cfg().legend.map((e) => e.name).join()}|${viewKey()}|${font}${cfg().labelStyle === 'caps' ? '|caps' : ''}${H.S.block ? `|b${H.S.holesShown}|${H.format?.().w}` : ''}`;
-  if (hit.lk !== lk) { hit.canvas = labelCanvas(hit, cols, 1.2 ** bucket, len, ht, mirror, { at, ph, pv }, font); hit.lk = lk; }
+  // A unit with its own wall label on this face (block.js, units "auto") is named by that label, not painted here too.
+  const wall = H.S.block?.units === 'auto' ? H.S.wallLabels.filter((l) => l.unit && l.face === key).map((l) => l.unit) : [];
+  const mirror = faceWanted('far', key), font = labelFont(), lk = `${ck}|${bucket}|${mirror}|${cfg().legend.map((e) => e.name).join()}|${viewKey()}|${font}${cfg().labelStyle === 'caps' ? '|caps' : ''}${H.S.block ? `|b${H.S.holesShown}|${H.format?.().w}${wall.length ? `|w${wall}` : ''}` : ''}`;
+  if (hit.lk !== lk) { hit.canvas = labelCanvas(hit, cols, 1.2 ** bucket, len, ht, mirror, { at, ph, pv }, font, wall); hit.lk = lk; }
   return hit.canvas;
 }
 // Each name goes where it fits inside its unit's largest patch and lies farthest from the holes, collars,
@@ -422,10 +426,10 @@ const viewKey = () => { const c = H.getCam(); return `${Math.round(c.azimuth / 5
 // The figure's sans (typography.js sets a brand family once loaded). Part of the names' cache key, so a
 // font change repaints them rather than reusing names drawn in the earlier face.
 export const labelFont = () => H?.fonts?.() || '"Source Sans 3", "Segoe UI", sans-serif';
-function labelCanvas(hit, cols, size, len, ht, mirror, scr, font) {
+function labelCanvas(hit, cols, size, len, ht, mirror, scr, font, wall = []) {
   const c = document.createElement('canvas'), { nx, ny, f } = hit; c.width = hit.base.width; c.height = hit.base.height;
   // labelStyle "caps": the names in tracked bold capitals, as on a hand-drawn block section.
-  const caps = cfg().labelStyle === 'caps', g = c.getContext('2d'), kx = c.width / len, ky = c.height / ht, names = cache.fold.classes.map((code) => { const t = code === OTHER ? null : cfg().legend.find((e) => e.code === code)?.name || code; return t && caps ? t.toUpperCase() : t; });
+  const caps = cfg().labelStyle === 'caps', g = c.getContext('2d'), kx = c.width / len, ky = c.height / ht, names = cache.fold.classes.map((code) => { const t = code === OTHER || wall.includes(code) ? null : cfg().legend.find((e) => e.code === code)?.name || code; return t && caps ? t.toUpperCase() : t; });
   // What a name keeps clear of: the key, highlighted and new holes and the grade shell on screen, and the
   // collars, pills, cards and brackets as last drawn. Plain and faded traces may pass over a name, as on
   // hand-drawn sections.
@@ -462,6 +466,13 @@ function labelCanvas(hit, cols, size, len, ht, mirror, scr, font) {
     }
   });
   return c;
+}
+// A face's class grid and a unit's index in it, for block.js (wall labels inside their unit's band); null when the
+// face is not painted with geology or the unit is not on it as its own class.
+export function unitGrid(face, code) {
+  const m = layer.meshes[face]; if (!m?.visible || m.userData.owner !== 'geology') return null;
+  const [a, b] = faceEnds(face), hit = planeClasses(face, a, b), ci = cache.fold.classes.indexOf(code);
+  return ci < 0 ? null : { ...hit, ci };
 }
 export const hasLogs = () => H.files().some((f) => f.role === 'litho') && logsNow().codes.length > 0;
 // Face images: a geologist's drawn section stretched over a face from its base to its highest point, or (round 5G)
@@ -513,7 +524,7 @@ function imageCanvas(face) {
   }
   return e.canvas;
 }
-// The fit as getState().geology.imageFits shows it, and the picker draws it: the plane, the scale, the misfit, and
+// The fit as getState().layout.imageFits shows it, and the picker draws it: the plane, the scale, the misfit, and
 // the image's corners in metres.
 export function fitInfo(face) {
   const fit = cfg().fits?.[face], e = images[face]; if (!fit || !H.G) return null;
@@ -523,6 +534,8 @@ export function fitInfo(face) {
     plane: { length: r(Math.hypot(b[0] - a[0], b[1] - a[1])), z: [r(H.G.B.z0), r(H.G.zmax)] },
     image: iw ? { along: [r(F.ox), r(F.ox + F.sx * iw)], z: [r(F.oz + F.sz * ih), r(F.oz)] } : null };
 }
+// Every fit as fitInfo gives it, for getState().layout.imageFits: worked out from the figure, so kept out of its saved work.
+export const imageFits = () => Object.fromEntries(Object.keys(cfg().fits || {}).map((k) => [k, fitInfo(k)]));
 export const imagesReady = () => Promise.all(Object.keys(cfg().images || {}).map((f) => { imageCanvas(f); return images[f]?.ready; }));
 addPainter({ rank: 0, paint: (key) => { const c = imageCanvas(key); return c ? { canvas: c, opacity: Math.max(cfg().opacity, 0.9), owner: 'image' } : null; } });
 addPainter({ rank: 2, paint: (key) => {
@@ -555,7 +568,6 @@ export function state() {
   const g = cfg(), L = H.G ? logsNow() : { codes: [], byHole: new Map() };
   return { ...structuredClone({ ...g, images: undefined }), images: Object.fromEntries(Object.entries(g.images || {}).filter(([, v]) => v).map(([k]) => [k, true])),
     searchUsed: H.G ? searchNow() : null, logs: { holes: L.byHole.size, codes: L.codes.map((c) => ({ code: c.code, metres: Math.round(c.metres) })) },
-    imageFits: Object.fromEntries(Object.keys(g.fits || {}).map((k) => [k, fitInfo(k)])),
     shown: H.G ? geologyShown() : false, facesPainted: Object.keys(faceState()), coverage: Object.fromEntries(Object.entries(cache.grids).map(([k, v]) => [k, +v.covered.toFixed(2)])) };
 }
 

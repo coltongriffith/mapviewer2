@@ -88,7 +88,7 @@ test('a section image fitted by two known points, shown in the picker; stretched
     const h = await E.fitFaceImage('S', [{ px: [50, 20], hole }, { px: [400, 300], d: 400, z: 900 }]);
     const sec = await E.setFaceImage('section', src, { points: [{ px: [0, 0], d: 0, z: 1300 }, { px: [400, 300], d: 300, z: 1000 }] });
     const back = await E.fitFaceImage('S', null);
-    return { bad, info: s.geology.imageFits.S, holeFit: h.geology.imageFits.S, sec: Object.keys(sec.geology.imageFits), painted: sec.geology.facesPainted, back: back.geology.imageFits, differs: fitted !== stretched };
+    return { bad, info: s.layout.imageFits.S, holeFit: h.layout.imageFits.S, sec: Object.keys(sec.layout.imageFits), painted: sec.geology.facesPainted, back: back.layout.imageFits, differs: fitted !== stretched };
   });
   expect(r.bad).toMatch(/two points or more/);
   expect(r.info).toMatchObject({ metresPerPixel: [1, 1], rms: 0, image: { along: [0, 400], z: [1000, 1300] } });
@@ -106,7 +106,7 @@ test('a section image fitted by two known points, shown in the picker; stretched
   for (const [i, d, z] of [[0, 0, 1300], [1, 200, 1100]]) { for (const [k, v] of [['d', d], ['z', z]]) { const inp = rows.nth(i).locator(`[data-k="${k}"]`); await inp.fill(String(v)); await inp.dispatchEvent('change'); } }
   await page.locator('#geo-fit [data-fa]').click();
   await expect(page.locator('#geo-fit [data-fm]')).toContainText('Fitted:');
-  const fit = await page.evaluate(() => window.EM3D.getState().geology.imageFits.S);
+  const fit = await page.evaluate(() => window.EM3D.getState().layout.imageFits.S);
   expect(fit.points).toHaveLength(2); expect(fit.metresPerPixel[0]).toBeCloseTo(0.5, 1);
   // The clicks at the canvas's corners land on the image's corners: the whole canvas takes clicks.
   expect(fit.points[0].px.every((v) => v <= 4)).toBe(true); expect(fit.points[1].px[0]).toBeGreaterThan(395); expect(fit.points[1].px[1]).toBeGreaterThan(295);
@@ -124,7 +124,7 @@ test('a fit by a hole that leaves the data falls back to the stretched image and
     E.addFiles(E.getProject().files.map(({ name, text }) => ({ name, text: text.split('\n').filter((l) => !l.startsWith(`${hole},`)).join('\n') })));
     await E.layersReady(); await new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok)));
     const st = E.getState();
-    return { hole, still: st.project.holeIds.includes(hole), fit: st.geology.imageFits.S, painted: st.geology.facesPainted, png: E.exportPNG({ view: '3d' }).length > 1000 };
+    return { hole, still: st.project.holeIds.includes(hole), fit: st.layout.imageFits.S, painted: st.geology.facesPainted, png: E.exportPNG({ view: '3d' }).length > 1000 };
   });
   expect(r.still).toBe(false);
   expect(r.fit.invalid).toContain(`hole "${r.hole}" is not in the data`);

@@ -273,12 +273,17 @@ const BUDGETS = {
   // 172.8 → 173.3 (Oct 2026, production errors merged over admin 3D usage, measured 173.0, configured 173.0, 172.4 on
   // main): uncaught errors and rejections reported to error_events like the 2D app's, and stale chunks recovered from a
   // bare import() too (studio.js plus its copy of shared/chunkErrors.js).
-  // 173.3 → 174.3 (Oct 2026, 3D round 5G, measured 173.9, configured 174.0, 173.0 on main, + 0.3): the hooks for the
+  // 173.3 → 173.6 (Oct 2026, round 5F merged over main bebbd02b, measured 173.2, configured 173.3, +0.2 kB over main's 173.0, + 0.3): the
+  // hooks only: the section view repainted by every geology setter (B5), the callouts left off a drawing and why
+  // (getState().layout, kept out of the unsaved-work signature, B6), a callout's domain heading in setCallout, the unit wall label's hook in
+  // placeWallLabel and its name from the legend, and setMapUse waiting for the block to be framed again. The rest is lazy.
+  // 173.6 → 174.5 (Oct 2026, 3D round 5G merged over round 5F (940ea04e), measured 174.2, configured 174.2, 173.2 and 173.3
+  // on main, + 0.3; on its own branch 173.3 → 174.3, measured 173.9 over 173.0): the hooks for the
   // round's opt-in features, all of whose work is lazy: the export's pixel size (width or scale, checked against the
   // browser's graphics limit) and the watermark band's lazy import for exportPNG, exportLayers and the Export step's
   // controls; setLogo's removeBackground and the Brand step's offer (logo-bg.js); setFaceImage's fit and fitFaceImage;
   // the block's side title in place of the title block, and its heading label hidden under it (~0.9 kB in all).
-  threeDJsGzipKb: 174.3,
+  threeDJsGzipKb: 174.5,
   // /3d's own modules fetched on first use (the geology, geophysics and tag layers, the account
   // client). They never load with the page or the app, so they sit outside the page and app totals.
   // 32 → 34 (Oct 2026, round 4): per-hole tags, grouped pending tags, callouts beside or bracketed on their
@@ -381,11 +386,19 @@ const BUDGETS = {
   // over main): track.js (the 3D events' allowlist, the stored token, once per tab, nothing but views and copies on a
   // shared figure) with the app's shared /api/track sender (utils/trackCore.js and utils/session.js), fetched a moment
   // after the editor opens, and the calls in account-core.js, share.js and versions.js (Google tag calls kept).
-  // 144.8 → 150.4 (Oct 2026, 3D round 5G, measured 149.9, configured 150.1, 144.4 on main, + 0.3): image-fit.js (~2.3 kB,
+  // 144.8 → 150.2 (Oct 2026, round 5F merged over main bebbd02b, measured 149.7, configured 149.9, with the review fixes; +5.5 kB over main's 144.2, + 0.3): block.js
+  // +3.7 kB (wall labels by unit: the band search and its placement; the see-through terrain that keeps its colours,
+  // a stencil and a second pass for what lies under it; the fade at the bottom; the standalone framing; the Layout
+  // controls), tags.js +1.5 kB (the bracket callout with its heading, chip, leader and alternate sides; brackets kept
+  // out of group cards; bracket text kept inside the frame), geology.js +0.15 kB (a face's class grid for block.js;
+  // no painted name where the unit has its own wall label), mapuse.js +0.04 kB. All fetched only for a block section.
+  // 150.2 → 156.1 (Oct 2026, 3D round 5G merged over round 5F (940ea04e), measured 155.6, configured 155.8, 149.7 and
+  // 149.9 on main, + 0.3; on its own branch 144.8 → 150.4, measured 149.9 over 144.2): image-fit.js (~2.3 kB,
   // the picker that fits a section image to a face by known points, fetched on its button), logo-bg.js with the shared
   // src/utils/logoBackground.js (~1.5 kB, fetched with the first logo added in the Brand step or a removal asked for),
-  // geology.js +1.4 (the fit by known points, the A–A′ plane, getState's imageFits) and block.js +0.6 (the side title).
-  threeDLazyJsGzipKb: 150.4,
+  // geology.js +1.4 (the fit by known points, the A–A′ plane, getState().layout.imageFits, a fit whose hole has left the
+  // data shown stretched), block.js +0.6 (the side title) and tags.js +0.1 (several "incl." results joined with " & ").
+  threeDLazyJsGzipKb: 156.1,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.

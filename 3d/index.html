@@ -862,7 +862,10 @@ JavaScript API (run in the page console or via your agent's evaluate tool):
                                   perspective; u 0-1 left to right seen from outside, v 0 (base) to 1 (terrain)
   EM3D.updateWallLabel(id, {...}) EM3D.removeWallLabel(id)
   EM3D.setCallout(holeId, {show, line1, line2, incl: false, placement: "column" | "beside" | "bracket",
-                  x, y})   null resets a field; x, y place the box (0-1 of the frame), its leader follows.
+                  x, y, heading})   null resets a field; x, y place the box (0-1 of the frame), its leader follows;
+                                  heading: a domain heading over a block section's bracket callout ("Upper domain").
+                                  getState().layout.callouts lists any shown callout left off the last drawing, and why
+                                  (layout: what the last drawing placed; not saved, and not unsaved work).
                                   In published mode the id is a result ID; line1 (and line2, the callout's second
                                   line, its "incl." results unless reworded) rewords that result only, and
                                   stays with the depths it was written for (getState().callouts.published:
@@ -974,10 +977,13 @@ Whole projects (to keep or move a figure):
                                   image: px a pixel on the image, d metres along the face from its left end as
                                   seen from outside (the section: from A), z its elevation; or a hole's collar
                                   (depth: down it). Two points or more: across and up are each scaled, so
-                                  vertical exaggeration fits. getState().geology.imageFits[face]: metres a
-                                  pixel, the misfit (rms, m) and where the image lies. null: stretched again
+                                  vertical exaggeration fits. getState().layout.imageFits[face]: metres a
+                                  pixel, the misfit (rms, m) and where the image lies, or invalid: why (a hole
+                                  no longer in the data: the image is stretched). null: stretched again
   EM3D.addWallLabel({..., unit: code}) / updateWallLabel(id, {unit})   a label on the block written in a
-                                  darker shade of that unit's legend colour (null: back to its own colour)
+                                  darker shade of that unit's legend colour (null: back to its own colour); with no
+                                  text, the unit's name in capitals. On a block section (units "auto") it goes inside
+                                  that unit's band on its face, turned to follow it.
   Geophysics file: X, Y, Z and a value column (chargeability, resistivity, conductivity...), CSV or
   Geosoft XYZ with "Line" records; an optional line column.
   EM3D.setGeophys({mode: "curtain" | "faces" | "off", lines: "auto" | "section" | "all" | [lineIds] |
@@ -1081,11 +1087,18 @@ Whole projects (to keep or move a figure):
                                   side face, the camera 38° round from the front. Only sets settings; change any after
   EM3D.setHolesShown([holeIds] | null)   only these holes drawn (trace, ID, bars, callouts); they all still
                                   shape the geology and the shell. getState().holesShown
-  EM3D.setBlock({furniture, traces: "overlay" | "tubes", brackets: "plain" | "card", page: "bare" (the block
+  EM3D.setBlock({furniture, traces: "overlay" | "tubes", brackets: "plain" | "callout" | "card", page: "bare" (the block
                  alone, credits only) | "clean" | "full", hist: {side: "face" | "screen", scale: "linear" | "log",
-                 halo, length, palette: "orange" | "bins", style: "spikes" | "bars"}, holes} | null)
+                 halo, length, palette: "orange" | "bins", style: "spikes" | "bars"}, holes, units: "auto" | "fixed",
+                 surface: "vivid" | "mix", fadeBottom: 0-1} | null)
                                   the block look (getState().block); furniture falls back to the page where the
-                                  side face is too foreshortened
+                                  side face is too foreshortened. brackets "callout": a bracket with the domain heading
+                                  (setCallout heading), the hole-ID chip and the bold result on a leader, the holes on
+                                  alternate sides. units "auto": a wall label with a unit sits inside that unit's band on
+                                  its face (getState().layout.wallLabels[id].at), or is hidden and says why (.why). surface
+                                  "vivid": setStyle surface under 1 keeps the satellite colours, only holes, bars and
+                                  shells showing through. fadeBottom: the share of the block's height fading out at its
+                                  base (0, off, by default). A block saved before these keeps "fixed", "mix" and no fade.
   EM3D.setBlock({page: "side", info})   the side title: the company line, title, subtitle and an info line (info;
                                   default "3D cutaway · looking SW", "" for none) large at the top left, the logo
                                   and legend on the page at the right, no heading on the block (reframed to fit)
