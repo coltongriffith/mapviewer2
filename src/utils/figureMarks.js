@@ -65,6 +65,8 @@ function colourMask(image, lab, samples, tolerance, region) {
   const refs = samples.map((s) => rgbToLab(s[0], s[1], s[2]));
   const t2 = tolerance * tolerance;
   const m = new Uint8Array(n);
+  // each pixel's distance to the nearest sample, within tolerance (else ∞)
+  const d = new Float32Array(n).fill(Infinity);
   for (let i = 0; i < n; i += 1) {
     if (data[i * 4 + 3] < 128) continue;
     if (region) {
@@ -73,10 +75,28 @@ function colourMask(image, lab, samples, tolerance, region) {
     }
     const L = lab[i * 3], A = lab[i * 3 + 1], B = lab[i * 3 + 2];
     for (const r of refs) {
-      if ((L - r[0]) ** 2 + (A - r[1]) ** 2 + (B - r[2]) ** 2 <= t2) { m[i] = 1; break; }
+      const e = (L - r[0]) ** 2 + (A - r[1]) ** 2 + (B - r[2]) ** 2;
+      if (e <= t2) { m[i] = 1; d[i] = Math.min(d[i], Math.sqrt(e)); }
     }
   }
-  return m;
+  return { m, d };
+}
+
+// Dashes too close together for the mask to keep apart (a compressed
+// figure blurs a 3 px gap into the line's colour) still show along the line:
+// the colour comes and goes. Returns [on, off] when it does so regularly.
+function dashesAlong(pts, d, w, tol) {
+  const on = pts.map(([x, y]) => d[y * w + x] <= 0.5 * tol);
+  const runs = [];
+  for (let i = 0, len = 0; i < on.length; i += 1) {
+    len += 1;
+    if (i === on.length - 1 || on[i + 1] !== on[i]) { runs.push([on[i], len]); len = 0; }
+  }
+  const inner = runs.slice(1, -1);
+  const offs = inner.filter((r) => !r[0]).map((r) => r[1]), ons = inner.filter((r) => r[0]).map((r) => r[1]);
+  if (offs.length < 3 || offs.reduce((a, b) => a + b, 0) < 0.05 * pts.length) return null;
+  if (cv(ons) > 0.5 || cv(offs) > 0.7) return null;
+  return [Math.round(median(ons)), Math.round(median(offs))];
 }
 
 // Chamfer (3-4) distance to the nearest unset pixel, in pixels.
@@ -288,7 +308,7 @@ const cv = (a) => { if (a.length < 2) return 0; const m = a.reduce((s, v) => s +
  * Lines of one colour. Returns [{ points: [[x, y]…], length, width, dashed,
  * dash: [on, off] | null, pieces }] in image pixels, longest first.
  */
-export function traceLines(mask, w, h, options = {}) {
+export function traceLines(mask, w, h, options = {}, dist = null) {
   const o = { ...MARK_DEFAULTS, ...options };
   const n = w * h;
   // 1. A light closing joins strokes broken by anti-aliasing; anything wider
@@ -481,7 +501,9 @@ export function traceLines(mask, w, h, options = {}) {
     // A mapped line runs on; the skeleton of a word of touching letters
     // turns back and forth.
     if (turning(simplifyLine(pts, 2)) > Math.max(1.6, (3 * length) / 100)) return;
-    const dashed = dashLinks >= 2 && gaps / length >= 0.1;
+    let dashed = dashLinks >= 2 && gaps / length >= 0.1;
+    const along = !dashed && dist ? dashesAlong(pts, dist, w, o.tolerance) : null;
+    if (along) dashed = true;
     const width = median(parts.map((p) => pieces[p.piece].width));
     out.push({
       teeth: teethOf(parts, pts, length),
@@ -489,7 +511,7 @@ export function traceLines(mask, w, h, options = {}) {
       length: Math.round(length),
       width: +width.toFixed(1),
       dashed,
-      dash: dashed ? [Math.round(median(lens.slice(1, -1).length ? lens.slice(1, -1) : lens)), Math.round(median(gapList))] : null,
+      dash: along || (dashed ? [Math.round(median(lens.slice(1, -1).length ? lens.slice(1, -1) : lens)), Math.round(median(gapList))] : null),
       pieces: parts.length,
     });
   };
@@ -516,7 +538,81 @@ export function traceLines(mask, w, h, options = {}) {
     emit(parts);
   }
   out.push(...dashLines(dashes, o));
-  return out.sort((a, b) => b.length - a.length);
+  return joinLines(out, o).sort((a, b) => b.length - a.length);
+}
+
+// Lines found apart (a run of dashes, then a stretch where the dashes ran
+// together) whose ends face each other across a short gap are one line:
+// dashed when most of its length is.
+function joinLines(lines, o) {
+  const COS = Math.cos((25 * Math.PI) / 180);
+  const end = (l, e) => {
+    const p = l.points, a = e ? p[p.length - 1] : p[0];
+    let k = e ? p.length - 2 : 1;
+    while (k > 0 && k < p.length - 1 && Math.hypot(p[k][0] - a[0], p[k][1] - a[1]) < 6) k += e ? -1 : 1;
+    const b = p[k], len = Math.hypot(a[0] - b[0], a[1] - b[1]) || 1;
+    return { a, u: [(a[0] - b[0]) / len, (a[1] - b[1]) / len] };
+  };
+  const ends = lines.flatMap((l, i) => [0, 1].map((e) => ({ i, e, ...end(l, e) })));
+  const pairs = [];
+  for (let x = 0; x < ends.length; x += 1) {
+    for (let y = x + 1; y < ends.length; y += 1) {
+      const p = ends[x], q = ends[y];
+      if (p.i === q.i) continue;
+      const vx = q.a[0] - p.a[0], vy = q.a[1] - p.a[1], dist = Math.hypot(vx, vy);
+      if (dist > o.maxGap || p.u[0] * q.u[0] + p.u[1] * q.u[1] > -0.85) continue;
+      if (dist >= 2 && ((p.u[0] * vx + p.u[1] * vy) / dist < COS || -(q.u[0] * vx + q.u[1] * vy) / dist < COS)) continue;
+      const wa = lines[p.i].width, wb = lines[q.i].width;
+      if (Math.max(wa, wb) > 2 * Math.min(wa, wb) + 1) continue;
+      pairs.push([dist, x, y]);
+    }
+  }
+  if (!pairs.length) return lines;
+  pairs.sort((a, b) => a[0] - b[0]);
+  const link = new Map();
+  const parent = lines.map((_, i) => i);
+  const find = (i) => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
+  for (const [dist, x, y] of pairs) {
+    const p = ends[x], q = ends[y];
+    if (link.has(x) || link.has(y) || find(p.i) === find(q.i)) continue;
+    link.set(x, { to: y, dist }); link.set(y, { to: x, dist });
+    parent[find(p.i)] = find(q.i);
+  }
+  const used = new Uint8Array(lines.length);
+  const out = [];
+  const chain = (i, e) => { // start at line i, entering at its end e
+    const parts = [];
+    for (let gap = 0; ;) {
+      used[i] = 1;
+      parts.push({ l: lines[i], rev: e === 1, gap });
+      const l2 = link.get(i * 2 + (1 - e));
+      if (!l2 || used[ends[l2.to].i]) break;
+      i = ends[l2.to].i; e = ends[l2.to].e; gap = l2.dist;
+    }
+    return parts;
+  };
+  // from a free end first, so a chain is walked whole; then any rings
+  const order = [...lines.keys()].sort((a, b) => (link.has(a * 2) && link.has(a * 2 + 1)) - (link.has(b * 2) && link.has(b * 2 + 1)));
+  order.forEach((i) => {
+    if (used[i]) return;
+    const start = !link.has(i * 2) ? 0 : !link.has(i * 2 + 1) ? 1 : 0;
+    const parts = chain(i, start);
+    if (parts.length === 1) { out.push(parts[0].l); return; }
+    const points = parts.flatMap((p) => (p.rev ? [...p.l.points].reverse() : p.l.points));
+    const length = parts.reduce((t, p) => t + p.l.length + p.gap, 0);
+    const dashedLen = parts.reduce((t, p) => t + (p.l.dashed ? p.l.length : 0), 0);
+    const dashed = dashedLen >= length / 2;
+    out.push({
+      teeth: parts.find((p) => p.l.teeth)?.l.teeth || null,
+      points,
+      length: Math.round(length),
+      width: median(parts.map((p) => p.l.width)),
+      dashed,
+      dash: dashed ? parts.filter((p) => p.l.dashed).sort((a, b) => b.l.length - a.l.length)[0].l.dash : null,
+      pieces: parts.reduce((t, p) => t + p.l.pieces, 0),
+    });
+  });
+  return out;
 }
 
 // A blob's centre, its long axis (from the second moments), its extent
@@ -915,8 +1011,9 @@ export function detectMarks(image, sets, options = {}) {
   const { data, width: w, height: h } = image;
   const lab = labImage(data, w * h);
   return sets.map((set) => {
-    const mask = colourMask(image, lab, set.samples || [], set.tolerance ?? o.tolerance, o.region);
-    return set.kind === 'point' ? { points: tracePoints(mask, w, h, o) } : { lines: traceLines(mask, w, h, o) };
+    const tolerance = set.tolerance ?? o.tolerance;
+    const { m, d } = colourMask(image, lab, set.samples || [], tolerance, o.region);
+    return set.kind === 'point' ? { points: tracePoints(m, w, h, o) } : { lines: traceLines(m, w, h, { ...o, tolerance }, d) };
   });
 }
 

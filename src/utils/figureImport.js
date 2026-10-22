@@ -73,13 +73,26 @@ function pixelsOf(img, w, h) {
 /**
  * The figure's pixels at the tracer's working size. `frameWidth` is the width
  * the fit's pixel coordinates are measured in (the picture as first loaded),
- * so `scale` takes a working pixel back to them.
+ * so `scale` takes a working pixel back to them. With the `original` upload
+ * (a File or data URL) its colours are used, under the kept picture's
+ * transparency: the kept picture is compressed, which blurs thin lines and
+ * the gaps of a dashed one into their surroundings.
  */
-export async function figurePixels(dataUri, frameWidth, maxEdge = TRACE_MAX_EDGE) {
+export async function figurePixels(dataUri, frameWidth, maxEdge = TRACE_MAX_EDGE, original = null) {
   const img = await loadImageEl(dataUri);
   const s = Math.min(1, maxEdge / Math.max(img.naturalWidth, img.naturalHeight));
   const w = Math.round(img.naturalWidth * s), h = Math.round(img.naturalHeight * s);
   const { data } = pixelsOf(img, w, h).px;
+  if (original) {
+    const url = typeof original === 'string' ? original : URL.createObjectURL(original);
+    try {
+      const o = pixelsOf(await loadImageEl(url), w, h).px.data;
+      // transparent in the upload: white, as the kept picture has it
+      for (let i = 0; i < data.length; i += 4) for (let k = 0; k < 3; k += 1) data[i + k] = o[i + 3] < 128 ? 255 : o[i + k];
+    } catch { /* the kept picture's own colours */ } finally {
+      if (typeof original !== 'string') URL.revokeObjectURL(url);
+    }
+  }
   return { data, width: w, height: h, scale: (frameWidth || img.naturalWidth) / w };
 }
 
@@ -287,7 +300,7 @@ export function markLayer({ id, set, features, figure }) {
   const thrust = line && styleKey === 'thrust';
   const style = line
     ? { stroke: colour, strokeWidth: Math.max(1.5, Math.min(4, set.width || 2)), ...(styleKey === 'dashed' ? { dashArray: '8 5' } : {}) }
-    : { markerShape: styleKey, markerFill: colour, markerColor: darker(colour, 0.45), markerSize: Math.max(8, Math.min(22, Math.round(set.size || 14))) };
+    : { markerShape: styleKey, markerFill: colour, markerColor: darker(colour, 0.45), markerSize: set.size || (styleKey === 'star' ? 16 : 10) };
   return {
     id,
     name,

@@ -40,6 +40,8 @@ export default function FigureImport({ source, existing, map: editorMap, setProj
   const [scan, setScan] = useState({ margin: false, hide: false, crop: g?.crop || null });
   const [cropPick, setCropPick] = useState(null); // null | 'first' | { x, y }
   const [kept, setKept] = useState(null);
+  // The upload itself, for tracing from its own (not recompressed) colours.
+  const [original, setOriginal] = useState(null);
   const [error, setError] = useState('');
   const [tab, setTab] = useState('place');
   const [crs, setCrs] = useState(g?.crs || { kind: 'utm', zone: utmZoneOf(centre.lng), hemisphere: centre.lat < 0 ? 'S' : 'N', datum: 'NAD83' });
@@ -82,7 +84,7 @@ export default function FigureImport({ source, existing, map: editorMap, setProj
     if (!source || er) return undefined;
     let live = true;
     loadFigureImage(source.dataUri || source, source.name || 'Figure')
-      .then((img) => { if (live) setImage(img); })
+      .then((img) => { if (live) { setImage(img); setOriginal(source.dataUri || source); } })
       .catch((err) => { if (live) setError(err.message || 'Could not read the image.'); });
     return () => { live = false; };
   }, [source, er]);
@@ -225,7 +227,7 @@ export default function FigureImport({ source, existing, map: editorMap, setProj
 
   // ── the figure pane ───────────────────────────────────────────────────
   const getPixels = async () => {
-    if (!pixelsRef.current) pixelsRef.current = await figurePixels(shown.dataUri, image.width);
+    if (!pixelsRef.current) pixelsRef.current = await figurePixels(shown.dataUri, image.width, undefined, original);
     return pixelsRef.current;
   };
 
@@ -310,15 +312,6 @@ export default function FigureImport({ source, existing, map: editorMap, setProj
         const tag = (list) => list?.map((f, j) => ({ ...f, id: `${ready[i].id}:${j}` }));
         return { lines: tag(r.lines), points: tag(r.points) };
       });
-      // Each colour's style follows its finds until the person picks one.
-      setMarks((prev) => prev.map((m) => {
-        const i = ready.findIndex((r) => r.id === m.id);
-        if (i < 0 || !m.styleAuto) return m;
-        const finds = (m.kind === 'line' ? results[i].lines : results[i].points) || [];
-        const style = suggestStyle(m.kind, finds);
-        const teeth = finds.find((f) => f.teeth)?.teeth;
-        return { ...m, style, ...(teeth ? { teeth } : {}) };
-      }));
       setDetection({ sets: ready.map(({ id, kind }) => ({ id, kind })), results, scale: px.scale });
       setReview({});
       if (!fig.subject && !trace) setFig((f) => ({ ...f, subject: 'Structure (simplified)' }));
@@ -328,6 +321,27 @@ export default function FigureImport({ source, existing, map: editorMap, setProj
       setDetecting(false);
     }
   };
+  // Each colour's style follows its finds (the accepted ones, once there are
+  // any) until the person picks one.
+  useEffect(() => {
+    if (!detection) return;
+    setMarks((prev) => {
+      let changed = false;
+      const next = prev.map((m) => {
+        const i = detection.sets.findIndex((d) => d.id === m.id);
+        if (i < 0 || !m.styleAuto) return m;
+        const finds = (m.kind === 'line' ? detection.results[i].lines : detection.results[i].points) || [];
+        const accepted = finds.filter((f) => review[f.id] === 'accepted');
+        const basis = accepted.length ? accepted : finds;
+        const style = suggestStyle(m.kind, basis);
+        const teeth = basis.find((f) => f.teeth)?.teeth || m.teeth;
+        if (style === m.style && teeth === m.teeth) return m;
+        changed = true;
+        return { ...m, style, teeth };
+      });
+      return changed ? next : prev;
+    });
+  }, [detection, review]);
   const toggleFind = (id) => setReview((rv) => ({ ...rv, [id]: rv[id] === 'accepted' ? 'rejected' : 'accepted' }));
   // Finds of the colours still listed that were neither accepted nor rejected.
   const pendingFinds = detection ? detection.sets.reduce((n, s, i) => (marks.some((m) => m.id === s.id)
@@ -416,7 +430,7 @@ export default function FigureImport({ source, existing, map: editorMap, setProj
               Choose a PNG or JPG figure…
               <input type="file" accept=".png,.jpg,.jpeg,.webp" hidden onChange={(e) => {
                 const f = e.target.files?.[0];
-                if (f) loadFigureImage(f).then(setImage).catch((err) => setError(err.message));
+                if (f) loadFigureImage(f).then((img) => { setImage(img); setOriginal(f); }).catch((err) => setError(err.message));
               }} />
             </label>
             <p className="small-note">Kept with the map at up to {FIGURE_MAX_EDGE} px and about 1.2 MB.</p>

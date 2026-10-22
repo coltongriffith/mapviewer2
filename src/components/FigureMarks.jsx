@@ -45,15 +45,19 @@ export function MarksOverlay({ detection, marks, review, zoom, onToggle }) {
       return (
         <g {...common}>
           <polyline points={pts} fill="none" stroke="transparent" strokeWidth={14 / zoom} />
-          <polyline points={pts} fill="none" stroke="#ffffff" strokeOpacity="0.8" strokeWidth={6 / zoom} strokeLinecap="round" strokeLinejoin="round" />
-          <polyline points={pts} fill="none" stroke={colour} strokeWidth={3 / zoom} strokeDasharray={dash} strokeLinecap="round" strokeLinejoin="round" />
+          <polyline points={pts} fill="none" stroke="#ffffff" strokeOpacity="0.8" strokeWidth={6 / zoom} strokeLinecap="round" strokeLinejoin="round" pointerEvents="none" />
+          <polyline points={pts} fill="none" stroke={colour} strokeWidth={3 / zoom} strokeDasharray={dash} strokeLinecap="round" strokeLinejoin="round" pointerEvents="none" />
         </g>
       );
     }
+    // A ring round the symbol; only the symbol itself takes the click, so
+    // finds side by side can each be clicked.
+    const r = (f.size * s) / 2 + 3 / zoom;
     return (
       <g {...common}>
-        <circle cx={f.x * s} cy={f.y * s} r={(f.size * s) / 2 + 5 / zoom} fill="transparent" stroke="#ffffff" strokeOpacity="0.8" strokeWidth={5 / zoom} />
-        <circle cx={f.x * s} cy={f.y * s} r={(f.size * s) / 2 + 5 / zoom} fill="transparent" stroke={colour} strokeWidth={2.5 / zoom} strokeDasharray={dash} />
+        <circle cx={f.x * s} cy={f.y * s} r={r} fill="none" stroke="#ffffff" strokeOpacity="0.8" strokeWidth={5 / zoom} pointerEvents="none" />
+        <circle cx={f.x * s} cy={f.y * s} r={r} fill="none" stroke={colour} strokeWidth={2.5 / zoom} strokeDasharray={dash} pointerEvents="none" />
+        <circle cx={f.x * s} cy={f.y * s} r={Math.max((f.size * s) / 2, 5 / zoom)} fill="transparent" />
       </g>
     );
   }));
@@ -72,6 +76,7 @@ export function MarksControls({
         Pick a colour: &ldquo;+ Lines&rdquo; or &ldquo;+ Points&rdquo;, then click a fault, a trend or a symbol on the figure (add samples where it looks different).
         Detect, then review each find: click it on the figure, or below, to accept or reject it. Only accepted finds are added to the map.
         Lettering and other colours are left out; &ldquo;Limit to an area&rdquo; leaves out the legend and title too.
+        A colour drawn both solid and dashed can be picked twice, keeping only the solid finds in one and the dashed in the other.
       </p>
       {marks.map((m) => {
         const finds = bySet.get(m.id);
@@ -108,6 +113,15 @@ export function MarksControls({
                     <button type="button" className="fig-chip" onClick={() => setAll(finds, 'rejected')}>Reject all</button>
                   </>
                 )}
+                {/* One colour drawn both ways (a defined zone solid, its inferred trend dashed): one layer each. */}
+                {m.kind === 'line' && finds.some((f) => f.dashed) && finds.some((f) => !f.dashed) && ['dashed', 'solid'].map((k) => (
+                  <button key={k} type="button" className="fig-chip" onClick={() => {
+                    setReview((rv) => ({ ...rv, ...Object.fromEntries(finds.map((f) => [f.id, f.dashed === (k === 'dashed') ? 'accepted' : 'rejected'])) }));
+                    update(m.id, { style: k, styleAuto: false });
+                  }}>
+                    Only {k}
+                  </button>
+                ))}
                 {finds.map((f, k) => {
                   const st = review[f.id] || 'pending';
                   return (
