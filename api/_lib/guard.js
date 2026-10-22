@@ -50,14 +50,16 @@ export function queryTooLong(req, max = 2048) {
   }
 }
 
-const MAX_TERM_LENGTH = 120;
+export const MAX_TERM_LENGTH = 120;
 
 /** Company/claim-number search term validation. → {ok, term?|error?} */
-export function validateTerm(raw) {
+// `max` is raised only for a claim-number search, whose box may hold a pasted
+// list of numbers (see shared/claimNumbers.js); every other search keeps 120.
+export function validateTerm(raw, { max = MAX_TERM_LENGTH } = {}) {
   if (!raw || typeof raw !== 'string') return { ok: false, error: 'q param required (min 2 chars)' };
   const term = raw.trim();
   if (term.length < 2) return { ok: false, error: 'q param required (min 2 chars)' };
-  if (term.length > MAX_TERM_LENGTH) return { ok: false, error: `Search term too long (max ${MAX_TERM_LENGTH} characters).` };
+  if (term.length > max) return { ok: false, error: `Search term too long (max ${max} characters).` };
   return { ok: true, term };
 }
 

@@ -660,6 +660,12 @@ const REGION_TO_PROVINCE = {
   ...(US_CLAIMS_ENABLED ? US_REGION_SLUGS : {}),
 };
 
+// Where an area deep link with no point opens the map, so the visitor can pick one.
+const PROVINCE_VIEWS = {
+  bc: [[54.5, -125], 5], on: [[49.5, -85], 5], qc: [[50.5, -73], 5], sk: [[55, -106], 5],
+  mb: [[55, -97.5], 5], nl: [[53.5, -60], 5], yt: [[63.5, -135.5], 5],
+};
+
 export default function App({ initialAction = null }) {
   const mapContainerRef = useRef(null);
   const mapViewportRef = useRef(null);
@@ -759,6 +765,10 @@ export default function App({ initialAction = null }) {
   const [addClaimsProvince, setAddClaimsProvince] = useState(null);
   const [addClaimsQuery, setAddClaimsQuery] = useState('');
   const [addClaimsAutoSearch, setAddClaimsAutoSearch] = useState(false);
+  // ?mode=company|number from a deep link: which registry tab the search runs in.
+  const [addClaimsMode, setAddClaimsMode] = useState(null);
+  // ?mode=area: the point (or just the province) to open the Nearby Claims search at.
+  const [areaDeepLink, setAreaDeepLink] = useState(null);
   const [hasExported, setHasExported] = useState(false);
   // ── Inspector ─────────────────────────────────────────────────────────────
   // Every editing control lives in one of five groups. The tab is only a view
@@ -2667,6 +2677,18 @@ export default function App({ initialAction = null }) {
     };
   }, [mapReady, areaClaims]);
 
+  // ?mode=area: frame the point (or the province) once the map exists, and run
+  // the 25 km search when a point was given.
+  useEffect(() => {
+    if (!areaDeepLink || !mapReady || !leafletMapRef.current) return;
+    const { point, province } = areaDeepLink;
+    const view = point ? [[point.lat, point.lng], 10] : PROVINCE_VIEWS[province];
+    if (view) leafletMapRef.current.setView(...view);
+    if (point) loadAreaClaims(25);
+    setAreaDeepLink(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [areaDeepLink, mapReady]);
+
   // Pick-on-map mode for the nearby claims search origin
   useEffect(() => {
     if (!areaClaimsPicking || !mapReady || !leafletMapRef.current) return;
@@ -3478,6 +3500,8 @@ export default function App({ initialAction = null }) {
   // editor instead of a blank one:
   //   /?intent=claims&region=british-columbia → editor + registry search with
   //     the region's province pre-selected (7 supported registries)
+  //   …&q=2351771&mode=company|number           → that registry tab, pre-filled and run
+  //   …&mode=area[&q=49.9,-74.4]                → Nearby Claims around the point (or pick one)
   //   /?intent=drill-results                  → editor, CSV upload prompt
   //   /?demo=aurora_demo                      → loads the styled demo map
   // UTM params are captured by the page_views effect before we strip the query.
@@ -3493,7 +3517,22 @@ export default function App({ initialAction = null }) {
     }
     setScreen('editor');
     if (intent !== 'resume') leaveSavedMap();
-    if (intent === 'claims') {
+    const linkMode = params.get('mode');
+    const linkQ = params.get('q')?.trim();
+    if (intent === 'claims' && linkMode === 'area' && REGION_TO_PROVINCE[(params.get('region') || '').toLowerCase()]) {
+      // An area search is the Nearby Claims tool, not the registry dialog.
+      const province = REGION_TO_PROVINCE[params.get('region').toLowerCase()];
+      const [lat, lng] = (linkQ || '').split(/[\s,;]+/).map(Number);
+      const point = Math.abs(lat) <= 90 && Math.abs(lng) <= 180 && lat && lng ? { lat, lng } : null;
+      setAreaClaimsProvince(province);
+      setCollapsedSections((s) => ({ ...s, areaClaims: false }));
+      if (point) setAreaClaimsPickCenter(point);
+      else setAreaClaimsPicking(true);
+      setAreaDeepLink({ province, point });
+      setUploadStatus({ type: 'info', message: point
+        ? 'Showing claims within 25 km of your point. Change the radius under Nearby Claims.'
+        : 'Click the map where you want to see claims, then press Load Claims under Nearby Claims.' });
+    } else if (intent === 'claims') {
       const province = REGION_TO_PROVINCE[(params.get('region') || '').toLowerCase()] || null;
       // No live registry for this region → open the upload path instead of the
       // registry search silently defaulting to BC.
@@ -3503,8 +3542,9 @@ export default function App({ initialAction = null }) {
         setAddClaimsProvince(province);
         setAddClaimsModalPath('registry');
       }
-      const query = params.get('query')?.trim();
+      const query = params.get('query')?.trim() || linkQ;
       if (query) { setAddClaimsQuery(query); setAddClaimsAutoSearch(true); }
+      if (linkQ && (linkMode === 'company' || linkMode === 'number')) setAddClaimsMode(linkMode);
       setShowAddClaimsModal(true);
     } else if (intent === 'claims-upload') {
       setAddClaimsModalPath('upload');
@@ -8145,7 +8185,8 @@ export default function App({ initialAction = null }) {
             initialProvince={addClaimsProvince}
             initialQuery={addClaimsQuery}
             autoSearch={addClaimsAutoSearch}
-            onClose={() => { setShowAddClaimsModal(false); setAddClaimsModalPath(null); setAddClaimsProvince(null); setAddClaimsQuery(''); setAddClaimsAutoSearch(false); }}
+            initialMode={addClaimsMode}
+            onClose={() => { setShowAddClaimsModal(false); setAddClaimsModalPath(null); setAddClaimsProvince(null); setAddClaimsQuery(''); setAddClaimsAutoSearch(false); setAddClaimsMode(null); }}
             onCSVFile={(file) => {
               setShowAddClaimsModal(false);
               setAddClaimsModalPath(null);

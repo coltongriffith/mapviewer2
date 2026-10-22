@@ -410,15 +410,21 @@ describe('a provincial company search that used to dead-end', () => {
 describe('the Quebec store, whose exact numbers we measured', () => {
   const QC_ROWS = { exact: 0, prefix: 12, contains: 15 };
 
+  // The store is now asked with indexed filters only (see searchQc): exact is
+  // `tag_number=in.(…)` and a prefix is a `gte`/`lt` range in tag order. The
+  // mock answers those shapes with the measured counts; an `ilike` on the tag
+  // column is answered as production answered it — a statement timeout.
   function installQcMock() {
     queryUrls = [];
     vi.stubGlobal('fetch', vi.fn(async (url) => {
       const u = decodeURIComponent(String(url));
       queryUrls.push(u);
-      const filter = /tag_number=ilike\.([^&]*)/.exec(u)?.[1] ?? '';
+      if (/tag_number=ilike/.test(u)) {
+        const body = '{"code":"57014","message":"canceling statement due to statement timeout"}';
+        return { ok: false, status: 500, headers: new Map(), json: async () => JSON.parse(body), text: async () => body };
+      }
       let n = QC_ROWS.exact;
-      if (/^\*.*\*$/.test(filter)) n = QC_ROWS.contains;
-      else if (/\*$/.test(filter)) n = QC_ROWS.prefix;
+      if (/tag_number=gte\./.test(u)) n = QC_ROWS.prefix;
       const rows = Array.from({ length: n }, (_, i) => ({
         tag_number: `26543${String(i).padStart(2, '0')}`,
         owner_name: 'HOLDER INC', status: 'Actif', good_to_date: null,
@@ -452,7 +458,46 @@ describe('the Quebec store, whose exact numbers we measured', () => {
 
   it('tries the exact number first and only widens after it misses', async () => {
     await runQc({ q: '26543', type: 'number', province: 'qc' });
-    expect(queryUrls[0]).toMatch(/tag_number=ilike\.26543(&|$)/);
-    expect(queryUrls[1]).toMatch(/tag_number=ilike\.26543\*/);
+    expect(queryUrls[0]).toMatch(/tag_number=in\.\(26543\)(&|$)/);
+    // "starts with 26543" as an index range: [26543, 26544), closest first.
+    expect(queryUrls[1]).toMatch(/tag_number=gte\.26543&tag_number=lt\.26544&order=tag_number\.asc/);
+  });
+
+  // Regression, Oct 2026: every QC number NOT in the store came back as an
+  // error. The ladder's `ilike` rungs could not use the tag index, the prefix
+  // scan hit the anon 3 s statement timeout, and the 500 reached the user.
+  it('answers a number the store does not hold as empty, never as an error', async () => {
+    QC_ROWS.prefix = 0;
+    try {
+      const res = await runQc({ q: '4527312', type: 'number', province: 'qc' });
+      expect(res.statusCode).toBe(200);
+      expect(res.body.features).toEqual([]);
+      expect(queryUrls.some((u) => /ilike/.test(u))).toBe(false);
+      expect(queryUrls.some((u) => /\*4527312\*/.test(u))).toBe(false);   // no contains scan
+    } finally {
+      QC_ROWS.prefix = 12;
+    }
+  });
+
+  it('reads "#4527312" as the number 4527312', async () => {
+    await runQc({ q: '#4527312', type: 'number', province: 'qc' });
+    expect(queryUrls[0]).toMatch(/tag_number=in\.\(4527312\)/);
+  });
+
+  it('answers a pasted list with one indexed query and says which numbers were found', async () => {
+    const list = Array.from({ length: 30 }, (_, i) => String(2351771 + i)).join(' ');
+    const res = await runQc({ q: list, type: 'number', province: 'qc' });
+    expect(res.statusCode).toBe(200);
+    expect(queryUrls).toHaveLength(1);
+    expect(queryUrls[0]).toMatch(/tag_number=in\.\(2351771,2351772,.*2351800\)/);
+    expect(res.body.meta.numberList).toMatchObject({ requested: 30, total: 30, truncated: false });
+    expect(res.body.meta.numberList.missing).toHaveLength(30);   // the mock holds none of them
+  });
+
+  it('searches company names typed into the Claim # tab as a company', async () => {
+    const res = await runQc({ q: 'big ridge gold corp', type: 'number', province: 'qc' });
+    expect(res.statusCode).toBe(200);
+    expect(queryUrls[0]).toMatch(/owner_name_norm=ilike/);
+    expect(res.body.meta.searchedAs).toBe('company');
   });
 });

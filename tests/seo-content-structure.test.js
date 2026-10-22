@@ -49,6 +49,49 @@ describe('registry article journeys', () => {
     expect(actions.some(u=>u.searchParams.get('intent')==='claims-upload')).toBe(true);
     expect(actions.some(u=>u.searchParams.get('intent')==='claims' && u.searchParams.get('utm_content').startsWith('section-'))).toBe(true);
   });
+  it.each([
+    ['quebec', 'how-to-search-quebec-mining-claims', 'GESTIM'],
+    ['ontario', 'how-to-search-ontario-mining-claims', 'MLAS'],
+  ])('leads the %s guide with a plain search form onto the editor deep link', (region, slug, registry) => {
+    const html = pages.get(`/blog/${slug}/`);
+    const form = /<form class="claim-search" action="\/" method="get"[^>]*>([\s\S]*?)<\/form>/.exec(html);
+    expect(form, 'no search form').toBeTruthy();
+    // Before every section heading: the first thing a searcher can act on.
+    expect(html.indexOf('<form class="claim-search"')).toBeLessThan(html.indexOf('<h2>'));
+    const hidden = Object.fromEntries([...form[1].matchAll(/<input type="hidden" name="([^"]+)" value="([^"]*)">/g)].map(m => [m[1], m[2]]));
+    expect(hidden).toEqual({ intent: 'claims', region, utm_source: 'blog', utm_medium: 'cta', utm_campaign: slug, utm_content: 'search-box' });
+    expect([...form[1].matchAll(/<option value="([^"]+)"/g)].map(m => m[1])).toEqual(['company', 'number', 'area']);
+    expect(form[1]).toMatch(/<input id="claim-search-q" name="q" type="search"/);
+    expect(form[1]).toMatch(/<label class="claim-search-label" for="claim-search-q">/);
+    expect(form[1]).toContain(`Free · no login · public registry data (`);
+    expect(form[1]).toContain(`verify in ${registry}`);
+    // No script: the CSP forbids inline script and the page stays as light as it was.
+    expect(form[1]).not.toMatch(/<script|onsubmit|onclick/i);
+    // The nav action names what the reader came for.
+    expect(html).toMatch(/class="nav-cta" href="[^"]*intent=claims[^"]*">Search claims →<\/a>/);
+    // Only these pages carry the form's styles.
+    expect(html).toContain('.claim-search{');
+  });
+
+  it('keeps the search-box styles off every other page', () => {
+    for (const [path, html] of pages) {
+      if (/how-to-search-(quebec|ontario)-mining-claims/.test(path)) continue;
+      expect(html.includes('.claim-search{'), path).toBe(false);
+    }
+  });
+
+  it('keeps registry-guide images lazy, sized and described', () => {
+    for (const slug of ['how-to-search-quebec-mining-claims', 'how-to-search-ontario-mining-claims']) {
+      const imgs = [...pages.get(`/blog/${slug}/`).matchAll(/<img [^>]+>/g)].map(m => m[0]);
+      expect(imgs.length).toBeGreaterThan(0);
+      for (const tag of imgs) {
+        expect(tag).toContain('loading="lazy"');
+        expect(tag).toMatch(/alt="[^"]{10,}"/);
+        expect(tag).toMatch(/width="\d+" height="\d+"/);
+      }
+    }
+  });
+
   it('opens all seven jurisdictions directly from the registry hub', () => {
     const html=pages.get('/blog/canadian-mineral-claim-registries/');
     for(const region of ['british-columbia','ontario','quebec','saskatchewan','manitoba','newfoundland-labrador','yukon']) expect(html).toContain(`intent=claims&amp;region=${region}&amp;`);
@@ -327,13 +370,24 @@ describe('structured data', () => {
     }
   });
 
-  it('emits no FAQPage markup', () => {
-    // Removed deliberately: Google restricted FAQ rich results to authoritative
-    // government and health sites in August 2023, so on a commercial site the
-    // markup earns nothing and is a second copy of the visible content to keep
-    // in sync. The visible FAQ blocks remain.
+  it('emits FAQPage markup only where a post opts in, and only as a copy of its visible FAQ', () => {
+    // Removed site-wide deliberately: Google restricted FAQ rich results to
+    // authoritative government and health sites in August 2023, so on a
+    // commercial site the markup earns no rich result. The two registry-search
+    // guides opt back in (post.faqSchema) at the owner's request; the risk the
+    // removal named — a second copy drifting from the visible content — is
+    // what the comparison below pins.
+    const posts = JSON.parse(readFileSync(join(ROOT, 'scripts/blog-data/how-to-posts.json'), 'utf8'));
+    const optedIn = new Set(posts.filter(p => p.faqSchema).map(p => `/blog/${p.slug}/`));
+    expect([...optedIn].sort()).toEqual(['/blog/how-to-search-ontario-mining-claims/', '/blog/how-to-search-quebec-mining-claims/']);
     for (const [path, html] of pages) {
-      expect(html.includes('"FAQPage"'), `${path} emits FAQPage markup`).toBe(false);
+      expect(html.includes('"FAQPage"'), `${path} FAQPage markup`).toBe(optedIn.has(path));
+      if (!optedIn.has(path)) continue;
+      const graph = JSON.parse(/<script type="application\/ld\+json">(.*?)<\/script>/s.exec(html)[1])['@graph'];
+      const faq = graph.find(x => x['@type'] === 'FAQPage');
+      const visible = [...html.matchAll(/<div class="faq-q">(.*?)<\/div>\s*<div class="faq-a">(.*?)<\/div>/gs)]
+        .map(m => [m[1], m[2]].map(t => t.replaceAll('&amp;', '&').replaceAll('&quot;', '"').replaceAll('&lt;', '<').replaceAll('&gt;', '>')));
+      expect(faq.mainEntity.map(q => [q.name, q.acceptedAnswer.text])).toEqual(visible);
     }
   });
 
