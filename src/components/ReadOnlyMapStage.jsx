@@ -12,6 +12,7 @@ import { buildLegendItems, resolveTemplateZones } from '../templates/technicalRe
 import { resolveNI43101Zones } from '../templates/technicalReportTemplate';
 import { resolveSidePanelZones } from '../templates/sidePanelTemplate';
 import { getThemeTokens } from '../utils/themeTokens';
+import { studioOn } from '../utils/studioLayout.js';
 import { applyLegendCustomization, groupLegendItems, noteInLegend } from '../utils/legendCustomization.js';
 import { getMapFrame, scaleBarHeight } from '../utils/coordinateFrame.js';
 import CoordinateFrameOverlay from './CoordinateFrameOverlay.jsx';
@@ -19,6 +20,7 @@ import { fitProjectToTemplate } from '../utils/frameMapForTemplate';
 import { projectStageSize, savedViewFor, zoomForSize } from '../utils/savedView';
 
 const MapCanvas = lazyGuarded(() => import('./MapCanvas'));
+const StudioCard = lazyGuarded(() => import('./StudioCard'));
 
 // ── Helpers (mirrored from App.jsx) ──────────────────────────────────────────
 
@@ -198,6 +200,9 @@ export default function ReadOnlyMapStage({ project, onExportReady }) {
   }, [map, onExportReady, project, legendItems]);
 
   const layout = project.layout || {};
+  // The Studio look's cards (components/StudioCard.jsx), drawn as the editor and the exports draw them.
+  const studio = studioOn(layout);
+  const sc = (kind) => <React.Suspense fallback={null}><StudioCard kind={kind} layout={layout} zones={resolvedZones} map={map} layers={project.layers} /></React.Suspense>;
 
   // NI 43-101 strip values
   const STRIP_H = 72;
@@ -272,6 +277,7 @@ export default function ReadOnlyMapStage({ project, onExportReady }) {
       <ShadeOverlay map={map} ellipses={project.ellipses || []} polygons={project.polygons || []} />
 
       <CoordinateFrameOverlay map={map} frame={getMapFrame(layout, mapSize, { sidebarFrac: template?.sidebarFrac })} stage={mapSize} />
+      {(layout.themeId === 'studio' || layout.labelHalo) && sc('style')}
 
       {/* NI 43-101 template */}
       {layout.templateId === 'ni_43101_technical' && (() => {
@@ -325,14 +331,14 @@ export default function ReadOnlyMapStage({ project, onExportReady }) {
       {/* Title card */}
       {layout.templateId !== 'ni_43101_technical' && layout.showTitle !== false && (
         <div className="template-zone" style={{ ...zoneStyle(resolvedZones.title), zIndex: 410 }}>
-          <div className={`template-card title-card${layout.titleTransparent ? ' panel--transparent' : ''}`}>
+          {studio ? sc('title') : <div className={`template-card title-card${layout.titleTransparent ? ' panel--transparent' : ''}`}>
             <h2 style={{ fontSize: Math.round(22 * (layout.titleFontScale ?? 1)) + 'px' }}>{layout.title}</h2>
             <p style={{ fontSize: Math.round(12 * (layout.titleFontScale ?? 1)) + 'px' }}>{layout.subtitle}</p>
             {(() => {
               const meta = [layout.mapDate, layout.projectNumber, layout.mapScaleNote].filter(Boolean);
               return meta.length ? <div className="title-meta-row" style={{ fontSize: Math.round(10 * (layout.titleFontScale ?? 1)) + 'px' }}>{meta.join('  ·  ')}</div> : null;
             })()}
-          </div>
+          </div>}
         </div>
       )}
 
@@ -376,14 +382,14 @@ export default function ReadOnlyMapStage({ project, onExportReady }) {
       {/* North arrow */}
       {layout.showNorthArrow !== false && resolvedZones.northArrow?.width > 0 && (
         <div className={`template-zone${layout.northArrowTransparent ? ' panel--transparent' : ''}`} style={zoneStyle(resolvedZones.northArrow)}>
-          <NorthArrow scale={layout.northArrowHeightPx ?? 100} style={layout.northArrowStyle || 'classic'} />
+          {studio ? sc('north') : <NorthArrow scale={layout.northArrowHeightPx ?? 100} style={layout.northArrowStyle || 'classic'} />}
         </div>
       )}
 
       {/* Locator inset */}
       {layout.insetEnabled !== false && resolvedZones.inset?.width ? (
         <div className="template-zone" style={zoneStyle(resolvedZones.inset)}>
-          <LocatorInset
+          {studio ? sc('inset') : <LocatorInset
             layers={project.layers}
             insetMode={layout.insetMode}
             insetBasemap={layout.insetBasemap}
@@ -397,14 +403,14 @@ export default function ReadOnlyMapStage({ project, onExportReady }) {
             regionStroke={layout.insetRegionStroke}
             bgFill={layout.insetBgFill}
             markerColor={layout.insetMarkerColor}
-          />
+          />}
         </div>
       ) : null}
 
       {/* Scale bar */}
-      {layout.showScaleBar !== false && (
+      {layout.showScaleBar !== false && resolvedZones.scaleBar?.height > 0 && (
         <div className={`template-zone${layout.scaleBarTransparent ? ' panel--transparent' : ''}`} style={{ ...zoneStyle(resolvedZones.scaleBar), width: layout.scaleBarWidthPx || resolvedZones.scaleBar?.width }}>
-          <ScaleBar map={map} height={scaleBarHeight(layout)} projection={!!layout.showProjectionLabel} projectionName={layout.projectionName} />
+          {studio ? sc('scale') : <ScaleBar map={map} height={scaleBarHeight(layout)} projection={!!layout.showProjectionLabel} projectionName={layout.projectionName} />}
         </div>
       )}
 

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { northArrowShapes } from '../src/utils/northArrowGeometry.js';
 
-const STYLES = ['classic', 'arrow', 'decorative', 'surveyor'];
+const STYLES = ['classic', 'arrow', 'decorative', 'surveyor', 'rose', 'split'];
 const W = 90, H = 100;
 
 /** Bounding box of the ink, treating a letter as its cap box. */
@@ -62,7 +62,7 @@ describe('north arrow geometry', () => {
   });
 
   it('puts the cardinal letter in the same place in every single-label style', () => {
-    const baselines = ['classic', 'arrow', 'surveyor'].map((style) => {
+    const baselines = ['classic', 'arrow', 'surveyor', 'rose', 'split'].map((style) => {
       const [n] = labels(northArrowShapes(style, W, H));
       return n.y;
     });
@@ -75,8 +75,8 @@ describe('north arrow geometry', () => {
       return Math.round(b.maxY - b.minY);
     });
     // Decorative rings its rose with letters, so its artwork is deliberately
-    // smaller; the other three share one outer extent.
-    const single = spans.slice(0, 2).concat(spans[3]);
+    // smaller; the others (Studio's rose and split arrow too) share one outer extent.
+    const single = spans.filter((_, i) => STYLES[i] !== 'decorative');
     expect(Math.max(...single) - Math.min(...single)).toBeLessThanOrEqual(3);
   });
 

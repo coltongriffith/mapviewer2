@@ -3,7 +3,7 @@
 // first time a figure has an overlay or an overlay file. Areas are painted into the terrain image (so the relief
 // hides them where it should); outlines, lines, points and their labels are drawn on the figure, sampled along
 // the surface and broken where a ridge hides them, so they stay crisp at any export size.
-// S.overlays: [{ id, name, file | data, crs, kind, color, dash, width, opacity, label, labelField, show, inset }].
+// S.overlays: [{ id, name, file | data, crs, kind, color, dash, width, opacity, label, labelField, show, inset, role, group, credit }].
 // inset: outlined in the inset too; unset, an area (fill) overlay is on a figure of design version 5. An
 // overlay from a file (role "overlay") keeps the file's name, the file being saved with the figure; one added
 // as data keeps its features. crs: null (the figure's own metres), "EPSG:4326" or another system's name.
@@ -162,6 +162,8 @@ function patch(o, x, feats) {
   }
   if (x.show !== undefined) o.show = !!x.show;
   if (x.inset !== undefined) o.inset = !!x.inset;
+  // Claims found in a registry (claims.js): role "claims", group "project" or "neighbours", and the source credit.
+  ['role', 'group', 'credit'].forEach((k) => { if (x[k] === null || x[k] === '') delete o[k]; else if (x[k] !== undefined) o[k] = String(x[k]).slice(0, 120); });
 }
 const fieldsOf = (feats) => [...new Set(feats.slice(0, 200).flatMap((f) => Object.keys(f.p || {})))];
 const mix = (h, t) => `#${[1, 3, 5].map((i) => Math.round(parseInt(h.slice(i, i + 2), 16) * (1 - t) + 255 * t).toString(16).padStart(2, '0')).join('')}`;
@@ -313,6 +315,14 @@ export function inset(ctx, P, u, [x, y, w, h]) {
   });
   ctx.restore();
 }
+// The claim map inset's areas (tags.js): of the area overlays shown in the inset (inInset: not set inset: false),
+// the registry claims (role "claims"), else all of them; each { o, feats } in the figure's metres.
+export function claimShapes() {
+  const fills = S.overlays.filter((o) => o.kind === 'fill' && inInset(o)), claims = fills.filter((o) => o.role === 'claims');
+  return (claims.length ? claims : fills).map((o) => ({ o, feats: placed(o) || [] })).filter((x) => x.feats.length);
+}
+// The sources of the overlays shown ("Claims: BC Mineral Titles Online, retrieved 2026-10-21"), for the footer.
+export const credits = () => [...new Set(S.overlays.filter((o) => o.show !== false && o.credit).map((o) => o.credit))];
 // Legend rows, each with a swatch the shape of its mark (a filled box, a line, a dot).
 const swatch = (o) => (ctx, x, cy, u) => {
   const w = Math.min(o.width, o.kind === 'points' ? 10 : 4) * u; ctx.save(); ctx.lineJoin = 'round'; if (o.kind !== 'fill') ctx.globalAlpha = Math.max(0.3, o.opacity);

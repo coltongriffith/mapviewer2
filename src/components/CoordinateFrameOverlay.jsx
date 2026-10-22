@@ -26,7 +26,7 @@ export default function CoordinateFrameOverlay({ map, frame, stage }) {
   const W = stage.width, H = stage.height;
   const { left, top, right, bottom, area } = frame;
   const t = FRAME_TICK_PX;
-  const text = { fontFamily: FRAME_FONT, fontSize: FRAME_FONT_PX, fill: '#000' };
+  const text = { fontFamily: frame.font || FRAME_FONT, fontSize: FRAME_FONT_PX, fill: '#000' };
 
   return (
     <svg
@@ -41,22 +41,20 @@ export default function CoordinateFrameOverlay({ map, frame, stage }) {
       <rect x={area.left} y={top} width={left - area.left} height={bottom - top} fill="#fff" />
       <rect x={right} y={top} width={area.right - right} height={bottom - top} fill="#fff" />
       <rect x={left} y={top} width={right - left} height={bottom - top} fill="none" stroke="#000" strokeWidth={1.5} />
-      {ticks.x.map(({ px, label }) => (
-        <g key={`x${label}`}>
-          <line x1={px} y1={top} x2={px} y2={top - t} stroke="#000" strokeWidth={1} />
-          <line x1={px} y1={bottom} x2={px} y2={bottom + t} stroke="#000" strokeWidth={1} />
-          <text x={px} y={top - t - 2} textAnchor="middle" {...text}>{label}</text>
-          <text x={px} y={bottom + t + 2} textAnchor="middle" dominantBaseline="hanging" {...text}>{label}</text>
+      {/* Each edge has its own crossings: grid lines converge, so a grid
+          line's top and bottom ticks are not at the same x. */}
+      {[[ticks.top, top, -1], [ticks.bottom, bottom, 1]].map(([list, y, d]) => list.map(({ px, label }) => (
+        <g key={`${d}x${label}`}>
+          <line x1={px} y1={y} x2={px} y2={y + d * t} stroke="#000" strokeWidth={1} />
+          <text x={px} y={y + d * (t + 2)} textAnchor="middle" dominantBaseline={d > 0 ? 'hanging' : undefined} {...text}>{label}</text>
         </g>
-      ))}
-      {ticks.y.map(({ py, label }) => (
-        <g key={`y${label}`}>
-          <line x1={left} y1={py} x2={left - t} y2={py} stroke="#000" strokeWidth={1} />
-          <line x1={right} y1={py} x2={right + t} y2={py} stroke="#000" strokeWidth={1} />
-          <text textAnchor="middle" transform={`translate(${left - t - 2},${py}) rotate(-90)`} {...text}>{label}</text>
-          <text textAnchor="middle" transform={`translate(${right + t + 2},${py}) rotate(90)`} {...text}>{label}</text>
+      )))}
+      {[[ticks.left, left, -1], [ticks.right, right, 1]].map(([list, x, d]) => list.map(({ py, label }) => (
+        <g key={`${d}y${label}`}>
+          <line x1={x} y1={py} x2={x + d * t} y2={py} stroke="#000" strokeWidth={1} />
+          <text textAnchor="middle" transform={`translate(${x + d * (t + 2)},${py}) rotate(${d * 90})`} {...text}>{label}</text>
         </g>
-      ))}
+      )))}
     </svg>
   );
 }

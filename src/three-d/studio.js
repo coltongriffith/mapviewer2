@@ -319,7 +319,9 @@ function applyEq(lists, cols, warnings) {
 }
 const noteCol = (header) => header.map(norm).findIndex((h) => /(^|_)(status|notes?|comments?|remarks?)$/.test(h));
 // "ASSAYS PENDING": the collar status or notes say so, or (when asked) the hole has no assays yet.
-const isPending = (h) => /pending/i.test(h.note || '') || (S.pendingNoAssays && !h.ints.length);
+// holeOn: the hole is drawn (S.holesShown, block.js: null for every hole). A hidden hole has no trace, ID, bars or callout.
+const holeOn = (h) => !S.holesShown || S.holesShown.includes(h.id);
+const isPending = (h) => holeOn(h) && (/pending/i.test(h.note || '') || (S.pendingNoAssays && !h.ints.length));
 // Provisional position: the collar status or flags say so, unless set by hand (S.provisional).
 const PROV_RE = /provisional|projected|approximate|unverified|unsurveyed|hand-?held|flagged|uncertain/i;
 const isProvisional = (h) => (typeof S.provisional[h.id] === 'boolean' ? S.provisional[h.id] : PROV_RE.test(`${h.note || ''} ${h.c.flags || ''}`));
@@ -496,7 +498,7 @@ function rebuildScene(keepCam) {
   const traceSeg = [[], [], [], []]; // EXT hook: [2] planned, [3] faded previously released
   holes.forEach((h) => { h.planned = isPlanned(h); }); // EXT hook: before extFade reads the statuses
   computeCallouts(); // the key holes (EXT hook: emphasis) include the callout holes
-  holes.forEach((h) => { h.prov = isProvisional(h); for (let i = 0; i + 1 < h.path.length; i++) traceSeg[h.planned ? 2 : h.prov ? 1 : extFade(h) ? 3 : 0].push(V(h.path[i].x, h.path[i].y, h.path[i].z), V(h.path[i + 1].x, h.path[i + 1].y, h.path[i + 1].z)); });
+  holes.forEach((h) => { h.prov = isProvisional(h); if (holeOn(h)) for (let i = 0; i + 1 < h.path.length; i++) traceSeg[h.planned ? 2 : h.prov ? 1 : extFade(h) ? 3 : 0].push(V(h.path[i].x, h.path[i].y, h.path[i].z), V(h.path[i + 1].x, h.path[i + 1].y, h.path[i + 1].z)); });
   root.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(traceSeg[0]), new THREE.LineBasicMaterial({ color: '#59646a' })));
   if (traceSeg[1].length) { const dl = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(traceSeg[1]), new THREE.LineDashedMaterial({ color: '#59646a', dashSize: diag / 120, gapSize: diag / 180, transparent: true, opacity: 0.75 })); dl.computeLineDistances(); root.add(dl); }
   if (traceSeg[2].length) { const dl = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(traceSeg[2]), new THREE.LineDashedMaterial({ color: S.primary, dashSize: diag / 90, gapSize: diag / 150 })); dl.computeLineDistances(); root.add(dl); } // EXT hook
@@ -728,15 +730,16 @@ const faceGeom = (face) => {
 // The face most squarely toward the camera.
 const frontFace = () => { const d = camera.getWorldDirection(new THREE.Vector3()); return Object.keys(FACES).sort((p, q) => faceGeom(p).n.dot(d) - faceGeom(q).n.dot(d))[0]; };
 function wallLabelMesh(L) {
-  const title = L.size === 'title', lines = String(L.text).split('\n'), px = 96, c = document.createElement('canvas'), g = c.getContext('2d');
+  // A "heading" (a title over smaller subtitle lines) is drawn by block.js; until it loads, as a title.
+  const title = L.size === 'title' || L.size === 'heading', lines = String(L.text).split('\n'), px = 96, ink = unitInk(L.unit) || L.color || (title ? S.primary : '#4b585c'), hd = L.size === 'heading' && EXT.block?.headCanvas(L, SANS, ink), c = hd?.c || document.createElement('canvas'), g = c.getContext('2d');
   const fontOf = () => { g.font = `${title ? 700 : 600} ${px}px ${SANS}`; if ('letterSpacing' in g) g.letterSpacing = title ? `${px * 0.06}px` : '0px'; };
-  fontOf(); const shown = lines.map((t) => (title ? t.toUpperCase() : t)), tw = Math.max(...shown.map((t) => g.measureText(t).width)), lh = px * 1.15;
-  c.width = Math.ceil(tw + px * 0.4); c.height = Math.ceil(lh * lines.length + px * 0.3); fontOf();
-  g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = unitInk(L.unit) || L.color || (title ? S.primary : '#4b585c'); // unitInk: EXT hook
-  shown.forEach((t, i) => g.fillText(t, c.width / 2, px * 0.15 + lh * (i + 0.5)));
+  if (!hd) { fontOf(); const shown = lines.map((t) => (title ? t.toUpperCase() : t)), tw = Math.max(...shown.map((t) => g.measureText(t).width)), lh = px * 1.15;
+    c.width = Math.ceil(tw + px * 0.4); c.height = Math.ceil(lh * lines.length + px * 0.3); fontOf();
+    g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = ink; // unitInk: EXT hook
+    shown.forEach((t, i) => g.fillText(t, c.width / 2, px * 0.15 + lh * (i + 0.5))); }
   const tex = new THREE.CanvasTexture(c); tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
-  mesh.renderOrder = 7; mesh.matrixAutoUpdate = false; mesh.userData = { L, aspect: c.width / c.height, lines: lines.length }; placeWallLabel(mesh); return mesh;
+  mesh.renderOrder = 7; mesh.matrixAutoUpdate = false; mesh.userData = { L, aspect: c.width / c.height, lines: hd ? hd.lines : lines.length, hd: !!hd }; placeWallLabel(mesh); return mesh;
 }
 function placeWallLabel(mesh) {
   const { L, aspect, lines } = mesh.userData, { a, b, n } = faceGeom(L.face), x = a[0] + (b[0] - a[0]) * L.u, y = a[1] + (b[1] - a[1]) * L.u;
@@ -744,10 +747,10 @@ function placeWallLabel(mesh) {
   const right = new THREE.Vector3(b[0] - a[0], 0, -(b[1] - a[1])).normalize(), up = new THREE.Vector3(0, 1, 0), r = (L.rotation || 0) * Math.PI / 180;
   const R = right.clone().multiplyScalar(Math.cos(r)).addScaledVector(up, Math.sin(r)), U = up.clone().multiplyScalar(Math.cos(r)).addScaledVector(right, -Math.sin(r));
   // Letter height follows the face: about 7% of its width for a title, 4.5% for normal text.
-  const faceW = Math.hypot(b[0] - a[0], b[1] - a[1]), h = (L.size === 'title' ? 0.07 : 0.045) * Math.max(faceW, 0.4 * (G.zmax - G.B.z0)) * (L.scale || 1) * (lines * 1.15 + 0.3) / 1.45;
+  const big = L.size === 'title' || L.size === 'heading', faceW = Math.hypot(b[0] - a[0], b[1] - a[1]), h = (big ? 0.07 : 0.045) * Math.max(faceW, 0.4 * (G.zmax - G.B.z0)) * (L.scale || 1) * (lines * 1.15 + 0.3) / 1.45;
   // Never smaller than about 22 px a line at the export size (30 px for a title), however far the camera.
   camera.updateMatrixWorld(); const a2 = proj(pos), b2 = proj(pos.clone().addScaledVector(U, h)), k = FORMATS[S.format].w / W;
-  const linePx = Math.hypot(b2[0] - a2[0], b2[1] - a2[1]) * k * 1.45 / (lines * 1.15 + 0.3), minPx = L.size === 'title' ? 30 : 22;
+  const linePx = Math.hypot(b2[0] - a2[0], b2[1] - a2[1]) * k * 1.45 / (lines * 1.15 + 0.3), minPx = big ? 30 : 22;
   const hh = linePx > 0 && linePx < minPx ? h * minPx / linePx : h;
   mesh.matrix.makeBasis(R.multiplyScalar(hh * aspect), U.multiplyScalar(hh), n).setPosition(pos); mesh.updateMatrixWorld(true);
 }
@@ -767,7 +770,7 @@ function buildWallLabels() {
 function wallPatch(L, o) {
   if (o.text !== undefined) { const t = String(o.text).trim(); if (!t) throw new Error('A wall label needs some text.'); L.text = t.slice(0, 120); }
   if (o.face !== undefined) { const f = o.face === 'front' ? (G ? frontFace() : 'S') : String(o.face).toUpperCase(); if (!FACES[f]) throw new Error('face must be "N", "S", "E", "W" or "front".'); L.face = f; }
-  if (o.size !== undefined) { if (!['title', 'normal'].includes(o.size)) throw new Error('size must be "title" or "normal".'); L.size = o.size; }
+  if (o.size !== undefined) { if (!['title', 'normal', 'heading'].includes(o.size)) throw new Error('size must be "title", "normal" or "heading" (a title over smaller lines).'); L.size = o.size; }
   ['u', 'v'].forEach((k) => { if (o[k] !== undefined) L[k] = clamp01(o[k], L[k]); });
   if (o.scale !== undefined) L.scale = Math.max(0.4, Math.min(3, +o.scale || 1));
   if (o.rotation !== undefined) L.rotation = Math.max(-90, Math.min(90, +o.rotation || 0));
@@ -949,7 +952,7 @@ function restyle() {
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), col = new THREE.Color();
   const r = traceR(), n = [0, 0];
   project.holes.forEach((h) => h.ints.forEach((it) => {
-    const v = it.vals[S.valueCol], bi = intervalShown(it) ? binIndex(v) : -1, T = h.prov ? G.tubesP : G.tubes, k = n[+h.prov]++;
+    const v = it.vals[S.valueCol], bi = holeOn(h) && intervalShown(it) ? binIndex(v) : -1, T = h.prov ? G.tubesP : G.tubes, k = n[+h.prov]++;
     const a = h.posAt(it.from), b = h.posAt(it.to), va = G.V(a.x, a.y, a.z), vb = G.V(b.x, b.y, b.z), dir = vb.clone().sub(va), len = dir.length();
     q.setFromUnitVectors(up, dir.normalize());
     const rw = r * (EXT.tags?.weight(h) ?? 1); sc.set(bi < 0 ? 0.001 : rw, Math.max(0.01, len), bi < 0 ? 0.001 : rw); // EXT hook: key holes bold
@@ -967,7 +970,7 @@ function restyle() {
   const [A, Bp] = sectionEnds(), P = (p) => [(p.x - G.B.x0) / G.bw * G.topCanvas.width, (G.B.y1 - p.y) / G.bh * G.topCanvas.height];
   const lk = G.topCanvas.width / 768; EXT.overlays?.paint(ctx, P); // EXT hook: overlay areas on the terrain
   ctx.setLineDash([14 * lk, 9 * lk]); const dk = S.terrain === 'dark'; // a dark line would vanish on dark slate
-  ctx.lineWidth = 5 * lk; ctx.strokeStyle = dk ? '#fff' : S.primary; ctx.beginPath(); ctx.moveTo(...P(A)); ctx.lineTo(...P(Bp)); ctx.stroke();
+  ctx.lineWidth = 5 * lk; ctx.strokeStyle = dk ? '#fff' : S.primary; ctx.beginPath(); if (!S.block) { ctx.moveTo(...P(A)); ctx.lineTo(...P(Bp)); } ctx.stroke(); // none on a block section (block.js)
   ctx.lineWidth = 2 * lk; ctx.strokeStyle = dk ? S.accent : '#fff'; ctx.stroke(); ctx.setLineDash([]); EXT.sections?.paint(ctx, P, lk); G.topTex.needsUpdate = true; // EXT hook: fence lines
   placeRibbons(); extRestyle(); // EXT hook
   drawSectionView();
@@ -995,13 +998,14 @@ const prRead = () => PR.readAll(files, project?.holes);
 function computeCallouts() {
   callouts = calcCallouts = [];
   if (!G) return;
+  const hs = project.holes.filter(holeOn); // the holes shown (block.js)
   if (prWanted() && !PR) { prLoad(); if (S.calloutMode !== 'calculated') return; }
-  if (S.calloutMode === 'published') { callouts = PR.pubCallouts(prRead().results, project.holes, S.pubOverrides); return; }
+  if (S.calloutMode === 'published') { callouts = PR.pubCallouts(prRead().results, hs, S.pubOverrides); return; }
   if (!S.valueCol) return;
   const sampled = uses(S, 'sampledIntercepts');
-  project.holes.forEach((h) => { const ic = intercept(h.ints, S.valueCol, S.coCut, S.coIncl, S.coMin, sampled); if (ic) calcCallouts.push({ h, ic, key: h.id }); });
+  hs.forEach((h) => { const ic = intercept(h.ints, S.valueCol, S.coCut, S.coIncl, S.coMin, sampled); if (ic) calcCallouts.push({ h, ic, key: h.id }); });
   calcCallouts.sort((a, b) => b.ic.broad.len * b.ic.broad.avg - a.ic.broad.len * a.ic.broad.avg);
-  callouts = S.calloutMode === 'manual' ? PR.manualCallouts(calcCallouts, project.holes, S.coOverrides, (h, a, b) => avgOver(h.ints, S.valueCol, a, b, sampled)) : calcCallouts;
+  callouts = S.calloutMode === 'manual' ? PR.manualCallouts(calcCallouts, hs, S.coOverrides, (h, a, b) => avgOver(h.ints, S.valueCol, a, b, sampled)) : calcCallouts;
 }
 const inclsOf = (ic) => ic.incls || (ic.incl ? [ic.incl] : []);
 const icText = (x, h) => {
@@ -1263,7 +1267,8 @@ function legendSecs() {
   const holes = [{ label: 'Drill hole collar', draw: (ctx, x, cy, u) => { ctx.beginPath(); ctx.arc(x + 11 * u, cy, 5 * u, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 2.4 * u; ctx.strokeStyle = '#142126'; ctx.stroke(); } }];
   if (project.holes.some((h) => h.prov)) holes.push({ label: 'Provisional position', draw: swLine('#59646a', 2, 4) });
   holes.push(...extLegendRows()); // EXT hook: planned, new and previous rows
-  const assays = legendRows().map(([label, c]) => ({ label, mono: true, draw: (ctx, x, cy, u) => { ctx.fillStyle = c; roundRect(ctx, x, cy - 4 * u, 22 * u, 8 * u, 4 * u); ctx.fill(); } }));
+  // EXT hook: the block's bar palette (block.js) in place of the grade colours
+  const assays = (EXT.block?.assayRows() || legendRows()).map(([label, c]) => ({ label, mono: true, draw: (ctx, x, cy, u) => { ctx.fillStyle = c; roundRect(ctx, x, cy - 4 * u, 22 * u, 8 * u, 4 * u); ctx.fill(); } }));
   if (S.displayCutoff !== null) assays.push({ label: `< ${S.displayCutoff}: trace only`, mono: true, draw: swLine('#59646a', 1.5) });
   if (S.ribbons && callouts.length) [[ribLabel(), RIB_COLORS[0]], ...(callouts.some((c) => c.ic.incl) ? [['incl.', RIB_COLORS[1]]] : [])].forEach(([label, c], i) => assays.push({ label, sep: !i, draw: (ctx, x, cy, u) => { ctx.fillStyle = c; ctx.fillRect(x, cy - 3 * u, 22 * u, 6 * u); } }));
   const model = G.meshes.filter(({ name }) => S.meshes[name].show).map(({ name }) => [meshName(name), S.meshes[name].color]);
@@ -1468,7 +1473,8 @@ function drawOverlay(ctx, k, forExport) {
   const placed = wallLabelBoxes(), idBoxes = [], occ = [], hits = [];
   EXT.overlays?.draw(ctx, K, occ); // EXT hook: map overlays, under the collars
   const PV = EXT.plan?.begin(ctx, K); // EXT hook: a plan view's grid and interval bars (plan.js), under the collars
-  project.holes.forEach((h) => {
+  const BK = EXT.block?.begin(ctx, K); // EXT hook: the block section's traces, and what goes on the side face (block.js)
+  project.holes.filter(holeOn).forEach((h) => {
     const cr = EXT.crew?.collar(h); if (cr === false) return; // EXT hook: collars under the drill crew's pad give way; its own at the rod
     const [cx, cy] = cr || proj(G.V(h.c.x, h.c.y, h.c.z)), e = h.path[h.path.length - 1], [ex, ey] = proj(G.V(e.x, e.y, e.z));
     ctx.beginPath(); ctx.arc(cx, cy, 5 * u, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 2.4 * u; ctx.strokeStyle = EXT.tags?.highlightOf(h) || '#142126'; if (h.prov || h.planned) ctx.setLineDash([2.5 * u, 2 * u]); ctx.stroke(); ctx.setLineDash([]);
@@ -1498,17 +1504,18 @@ function drawOverlay(ctx, k, forExport) {
   // Section ends: above the terrain, nudged off the text labels; drawn after the pills, which keep their
   // leaders off them.
   const [A, Bp] = sectionEnds(), labBoxes = S.labels.map((L) => { const { bw, bh } = labelSize(ctx, K, L); setSpacing(ctx, 0); return [L.x * W - bw / 2, L.y * H - bh / 2, L.x * W + bw / 2, L.y * H + bh / 2]; });
-  const marks = [A, Bp].map((p, i) => { const t = secTags()[i];
+  const marks = (S.block ? [] : [A, Bp]).map((p, i) => { const t = secTags()[i];
     const [x0, y0] = proj(G.V(p.x, p.y, G.surf(p.x, p.y) + G.diag * 0.035)), at = ([dx, dy]) => [x0 + dx * u, y0 + dy * u];
     const [x, y] = (uses(S, 'clearLeaders') ? [[0, 0], [0, -34], [-40, -10], [40, -10], [0, -68]] : [[0, 0]]).map(at).find(([a, b]) => !labBoxes.some((l) => boxHits([a - 22 * u, b - 14 * u, a + 22 * u, b + 14 * u], l))) || [x0, y0];
     occ.push([x - 22 * u, y - 14 * u, x + 22 * u, y + 14 * u]); if (uses(S, 'clearLeaders')) return [t, x, y];
     tagLabel(ctx, K, t, x, y); return null; // figures before version 3: under the pills
   }).filter(Boolean);
   // Frame furniture
-  const logo = drawLogo(ctx, K, W, forExport);
-  const headBottom = drawHeader(ctx, K, W, S.title, S.subtitle, logo.w);
-  // EXT hook: a standalone map's credits and notes go in the legend (mapuse.js), not the footer.
-  const SA = EXT.mapuse?.on(), footTop = drawFooter(ctx, K, W, H, SA ? [] : terrainCredits(true), SA ? [] : autoNotes('3d'), SA ? '' : S.footnote);
+  const logo = BK?.logo ? { w: 0, bottom: m } : drawLogo(ctx, K, W, forExport);
+  const headBottom = BK?.head ? m : drawHeader(ctx, K, W, S.title, S.subtitle, logo.w);
+  // EXT hook: a standalone map's credits and notes go in the legend (mapuse.js), not the footer; a bare block section
+  // keeps its credits alone, small (block.js).
+  const SA = EXT.mapuse?.on(), footTop = BK?.foot && !SA ? BK.foot(terrainCredits(true)) : drawFooter(ctx, K, W, H, SA ? [] : terrainCredits(true), SA ? [] : autoNotes('3d'), SA ? '' : S.footnote);
   // The layout pass: everything below registers its box in occ; the text labels, placed by hand, first.
   occ.push(...idBoxes, [0, 0, W, headBottom], [0, footTop, W, H], ...labBoxes);
   const lay = makeLayout(W, H, 6 * u, occ);
@@ -1534,8 +1541,8 @@ function drawOverlay(ctx, k, forExport) {
   const hs = main.filter((s) => s.key === 'holes'), one = [...main.filter((s) => s.key !== 'holes'), ...ext, ...hs.map((s) => ({ ...s, title: 'Holes' }))];
   let merge = shouldMerge([...main, ...ext], LG.merge);
   if (merge && LG.merge === 'auto' && !LG.pos.main) { const [w, h] = cardSize(ctx, K, one); merge = lay.clear([W - m - w, footTop - 12 * u - h, W - m, footTop - 12 * u], soft) || lay.clear([W - m - w, trTop, W - m, trTop + h], soft); } // only where one card fits at the right
-  const cards = merge ? [['main', one]] : [['main', main], ...ext.map((s) => [s.key, [s]])], cardBoxes = [];
-  if (SA) cards[0][1] = [...EXT.mapuse.secs(ctx, K), ...cards[0][1]]; // EXT hook: a standalone map's details, atop the legend card
+  const cards = BK?.legend ? [] : merge ? [['main', one]] : [['main', main], ...ext.map((s) => [s.key, [s]])], cardBoxes = []; // EXT hook: the legend on a block's side face
+  if (SA) { const x = EXT.mapuse.secs(ctx, K); if (cards[0]) cards[0][1] = [...x, ...cards[0][1]]; else cards.push(['main', x]); } // EXT hook: a standalone map's details, atop the legend card
   let prev = null;
   const fixed = (k) => +(!!LG.pos[k] && LG.pos[k] !== 'auto'); // cards placed by hand go first
   cards.sort((a, b) => fixed(b[0]) - fixed(a[0])).forEach(([key, secs]) => {
@@ -1545,11 +1552,12 @@ function drawOverlay(ctx, k, forExport) {
     const box = p?.x !== undefined ? lay.add(at(Math.max(0, Math.min(W - w, p.x * W)), Math.max(0, Math.min(H - h, p.y * H)))) : corner[p] ? lay.add(corner[p]) : lay.place(cands, Infinity, null, soft) || lay.add(cands[0]);
     drawCard(ctx, K, box[0], box[1], w, h, secs); hits.push({ kind: 'legend', id: key, box }); cardBoxes.push(box); prev = box;
   });
-  drawScaleBar(ctx, K, footTop, lay); PV?.labels(ctx, K, lay); // after the legends, so it keeps clear of them; the grid's numbers clear of it
+  BK?.draw(lay); if (!BK?.scale) drawScaleBar(ctx, K, footTop, lay); PV?.labels(ctx, K, lay); // after the legends, so it keeps clear of them; the grid's numbers clear of it
   // Orientation, bottom left: north arrow plus view direction
   occ.push([0, footTop - 60 * u, m + 160 * u, footTop]);
   const cam = getCam(), ox = m + 22 * u, oy = footTop - 34 * u, T = controls.target, n0 = proj(T), n1 = proj(T.clone().add(new THREE.Vector3(0, 0, -G.diag * 0.1)));
   const ang = Math.atan2(n1[1] - n0[1], n1[0] - n0[0]);
+  if (!BK?.bare) { // EXT hook: none on a bare block section
   ctx.beginPath(); ctx.arc(ox, oy, 21 * u, 0, Math.PI * 2); ctx.fillStyle = paper(); ctx.fill(); ctx.strokeStyle = RULE; ctx.lineWidth = u; ctx.stroke();
   ctx.save(); ctx.translate(ox, oy); ctx.rotate(ang + Math.PI / 2);
   ctx.beginPath(); ctx.moveTo(0, -15 * u); ctx.lineTo(6 * u, 7 * u); ctx.lineTo(0, 3 * u); ctx.closePath(); ctx.fillStyle = pri(); ctx.fill();
@@ -1559,7 +1567,7 @@ function drawOverlay(ctx, k, forExport) {
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   const [t1, t2] = PV?.foot || [`Looking ${pad3(cam.azimuth)}°`, `plunge ${cam.plunge}°${S.vex !== 1 ? ` · VE ${S.vex}×` : ''}`];
   font(600, 13); ctx.fillStyle = INK; ctx.fillText(t1, ox + 36 * u, oy - 2 * u);
-  font(400, 12, true); ctx.fillStyle = MUTED; ctx.fillText(t2, ox + 36 * u, oy + 14 * u);
+  font(400, 12, true); ctx.fillStyle = MUTED; ctx.fillText(t2, ox + 36 * u, oy + 14 * u); }
   // Intercept callouts, left column between the title and the orientation box
   // Each box goes level with its hole where it can: stacked downward, then pulled up from the bottom.
   // Only if they still do not fit is the lowest-ranked callout dropped (ranking: metal in the interval).
@@ -1587,7 +1595,7 @@ function drawOverlay(ctx, k, forExport) {
   }
   // Placed after the callouts so a tick never hides under a callout box; the deferred items (scale bar,
   // ticks) are drawn now, those pushed out by something more important left out.
-  if (S.elevTicks) drawElevTicks(ctx, K, headBottom, footTop, lay, leaders);
+  if (S.elevTicks && !BK?.ticks) drawElevTicks(ctx, K, headBottom, footTop, lay, leaders);
   lay.flush();
   drawLabels(ctx, K, forExport, occ.filter((b) => b[2] - b[0] < W - 1 && (b[2] - b[0] > 18 * u || b[3] - b[1] > 18 * u)), [0, headBottom, W, footTop]);
   if (!forExport) { overlayOcc = occ.slice(); labelHits = labelHits.concat(hits); } // legends and callouts drag too
@@ -1604,7 +1612,7 @@ function drawSection(ctx, Wc, Hc, forExport) {
   const [A, Bp] = sectionEnds(), F = secFrame(A, Bp), L = F.L, pr = (p) => toSection(F, p), w = S.secW;
   // Chosen holes (S.section.holes) project whole onto the plane. Otherwise the holes within the width, cut at
   // the slab's edges (design version 3; an earlier figure keeps the 2 m points inside it).
-  const pick = S.section?.holes, chosen = pick && project.holes.filter((h) => pick.includes(h.id)), clean = !!chosen || uses(S, 'cleanSection'), inW = (p) => Math.abs(pr(p).off) <= w;
+  const pick = S.section?.holes, chosen = pick && project.holes.filter((h) => pick.includes(h.id) && holeOn(h)), clean = !!chosen || uses(S, 'cleanSection'), inW = (p) => Math.abs(pr(p).off) <= w;
   const cut = (pts) => (chosen ? [pts] : clean ? clipPath(F, pts, w) : pts.reduce((r, p, i) => { if (inW(p)) { if (i && inW(pts[i - 1])) r[r.length - 1].push(p); else r.push([p]); } return r; }, []));
   const lookAz = ((S.secAz - 90) % 360 + 360) % 360;
   const logo = drawLogo(ctx, K, Wc, forExport), head = S.title.split('·')[0].trim() || S.title;
@@ -1612,7 +1620,7 @@ function drawSection(ctx, Wc, Hc, forExport) {
   const footTop = drawFooter(ctx, K, Wc, Hc, terrainCredits(false), autoNotes('section'));
   const profile = []; let zMax = -Infinity;
   for (let i = 0; i <= 200; i++) { const t = i / 200 * L, z = G.surf(A.x + F.d.x * t, A.y + F.d.y * t); profile.push([t, z]); zMax = Math.max(zMax, z); }
-  const shown = (chosen || project.holes).map((h) => ({ h, runs: cut(h.path) })).filter(({ runs }) => runs.length);
+  const shown = (chosen || project.holes.filter(holeOn)).map((h) => ({ h, runs: cut(h.path) })).filter(({ runs }) => runs.length);
   let zMin = Infinity; shown.forEach(({ runs }) => runs.forEach((r) => r.forEach((p) => { zMin = Math.min(zMin, p.z); })));
   if (!Number.isFinite(zMin)) zMin = G.B.z0;
   const zTop = zMax + (zMax - zMin) * 0.12, zBot = zMin - (zMax - zMin) * 0.05;
@@ -1949,7 +1957,7 @@ function loadSample() {
 function resetDerived() {
   histReset(); // the history belongs to the old data
   S.eq = null; eqApplied = false; S.displayCutoff = null; S.provisional = {}; S.shell.cutoff = null; S.libRefs = {}; S.drillSource = null; S.section = S.sections = null; S.pubOverrides = {}; S.calloutMode = 'calculated'; callouts = calcCallouts = [];
-  S.tags.status = {}; S.tags.groups = []; S.geology.legend = []; // EXT hook: per-hole tags and codes belong to the old data
+  S.tags.status = {}; S.tags.groups = []; S.geology.legend = []; S.holesShown = null; // EXT hook: per-hole tags, codes and holes shown belong to the old data
   // The shell belongs to the old data: switch it off and stop any build still running.
   S.shell.enabled = false; shell.pending = null; shell.mesh = null; shell.field = null; syncShell();
 }
@@ -2302,15 +2310,16 @@ Object.assign(S, {
   geophys: { mode: 'off', lines: 'auto', ramp: 'geophys', log: null, min: null, max: null, opacity: 0.85, faces: 'far', search: null, width: null, property: null, label: null, unit: null, note: 'Geophysics: illustrative inversion model' },
   tags: { at: 'toe', style: 'dark', status: {}, fadePrevious: false, newLabel: '', prevLabel: 'Previously released', plannedLabel: 'Planned', groups: [], autoGroup: false, groupRadius: 140, emphasis: 'auto', highlight: {}, highlightNew: true, idMode: 'auto', showId: {}, showTag: {}, hideRows: [], pending: 'collar' },
   histograms: false, insetStyle: 'plan', overlays: [], shapes: [], // overlays.js, shapes.js
+  holesShown: null, block: null, // block.js: the holes drawn (null: all) and the block section's look
   crew: { on: false, at: 'auto', scale: 1, heading: null }, // the drill rig and crew at the pad (crew.js)
 });
-const EXT = {}, extLoading = {}, EXT_IMPORT = { geology: () => import('./geology.js'), geophys: () => import('./geophys.js'), tags: () => import('./tags.js'), look: () => import('./look.js'), section: () => import('./section.js'), type: () => import('./typography.js'), overlays: () => import('./overlays.js'), shapes: () => import('./shapes.js'), sections: () => import('./sections.js'), plan: () => import('./plan.js'), desurvey: () => import('./min-curvature.js'), mapuse: () => import('./mapuse.js'), crew: () => import('./crew.js') };
+const EXT = {}, extLoading = {}, EXT_IMPORT = { geology: () => import('./geology.js'), geophys: () => import('./geophys.js'), tags: () => import('./tags.js'), look: () => import('./look.js'), section: () => import('./section.js'), type: () => import('./typography.js'), overlays: () => import('./overlays.js'), shapes: () => import('./shapes.js'), sections: () => import('./sections.js'), plan: () => import('./plan.js'), desurvey: () => import('./min-curvature.js'), mapuse: () => import('./mapuse.js'), claims: () => import('./claims.js'), block: () => import('./block.js'), crew: () => import('./crew.js') };
 const hasRole = (r) => files.some((f) => f.role === r);
 // Holes from a property's drill database follow their surveys by minimum curvature (shared/desurvey.js).
 const mcWanted = () => !!S.drillSource && hasRole('survey'), mcPath = (h) => h.surveyed && mcWanted() && !!EXT.desurvey;
 function extWanted() {
   const gp = S.geophys.mode !== 'off' && hasRole('geophys'), t = S.tags;
-  return { look: S.shell.enabled || ortho() || S.scene.haze > 0 || (uses(S, 'clearLeaders') && S.labels.some((l) => l.arrow)), geology: (S.geology.enabled && hasRole('litho')) || Object.keys(S.geology.images || {}).length > 0 || gp, geophys: gp, section: !!(S.section || S.sections) || uses(S, 'padIds'), sections: !!S.sections, plan: uses(S, 'planView') || S.grid, mapuse: S.mapInfo.use === 'standalone', crew: !!S.crew?.on, overlays: S.overlays.length > 0 || hasRole('overlay'), shapes: S.shapes.length > 0, desurvey: mcWanted(),
+  return { look: S.shell.enabled || ortho() || S.scene.haze > 0 || (uses(S, 'clearLeaders') && S.labels.some((l) => l.arrow)), geology: (S.geology.enabled && hasRole('litho')) || Object.keys(S.geology.images || {}).length > 0 || gp, geophys: gp, section: !!(S.section || S.sections) || uses(S, 'padIds'), sections: !!S.sections, plan: uses(S, 'planView') || S.grid, mapuse: S.mapInfo.use === 'standalone', crew: !!S.crew?.on, overlays: S.overlays.length > 0 || hasRole('overlay'), shapes: S.shapes.length > 0, desurvey: mcWanted(), block: !!(S.block || S.holesShown) || S.wallLabels.some((l) => l.size === 'heading'),
     tags: t.at !== 'toe' || t.fadePrevious || t.idMode === 'key' || (t.idMode !== 'all' && (project?.holes?.length || 0) > 12) || Object.keys(t.showId).length > 0 || Object.keys(t.showTag || {}).length > 0 || t.emphasis === 'key' || Object.keys(t.highlight || {}).length > 0
       || S.coPlacement !== 'column' || Object.values(coMap()).some((o) => o.placement || o.x !== undefined) || (S.pendingLabels && t.pending === 'collar' && !!project?.holes?.some(isPending)) || t.autoGroup || t.groups.length > 0 || Object.keys(t.status).length > 0 || S.histograms || S.insetStyle !== 'plan' || S.labels.some((l) => l.kind === 'stat') };
 }
@@ -2328,6 +2337,7 @@ const host = () => (extHost ||= {
   metalCols, unitOf, setEquivalent, getChecks, setProvisional,
   step: () => currentStep, renderFiles, sectionChanged: () => { refresh.secSet = true; restyle(); renderStyle(); schedulePublish(); },
   fonts(s) { if (s) SANS = s; return SANS; }, buildWallLabels, tagLabel, intervalShown, terrainCredits, autoNotes, load: (k) => extLoad(k), ext: (k) => EXT[k],
+  holeOn, drawCard, cardSize, legendSecs, extSections, rebuild: rebuildScene, hasRole, // block.js
 });
 const extLoad = (k) => (extLoading[k] ||= EXT_IMPORT[k]().then((m) => { m.init(host()); EXT[k] = m; return m; }));
 async function extReady() {
@@ -2342,10 +2352,10 @@ async function extReady() {
 function extScene() {
   if (Object.entries(extWanted()).some(([k, v]) => v && !EXT[k])) { extReady().catch((e) => status(e.message)); return; }
   if (!G) return;
-  EXT.geophys?.syncCurtains(); faceWalls(); EXT.tags?.placeHistograms(); EXT.tags?.syncInset(); EXT.tags?.syncHoles(); EXT.overlays?.sync(); EXT.sections?.sync(); EXT.plan?.sync(); EXT.crew?.sync();
+  EXT.geophys?.syncCurtains(); faceWalls(); EXT.tags?.placeHistograms(); EXT.tags?.syncInset(); EXT.tags?.syncHoles(); EXT.overlays?.sync(); EXT.sections?.sync(); EXT.plan?.sync(); EXT.block?.sync(); EXT.crew?.sync();
 }
 const extView = () => { if (G) EXT.geology?.syncFaces(); };
-const extRestyle = () => { if (G) { EXT.geophys?.syncCurtains(); faceWalls(); EXT.tags?.syncHoles(); EXT.sections?.sync(); } };
+const extRestyle = () => { if (G) { EXT.geophys?.syncCurtains(); faceWalls(); EXT.tags?.syncHoles(); EXT.sections?.sync(); EXT.block?.sync(); } };
 const extPainted = () => new Set(EXT.geology ? Object.keys(EXT.geology.faceState()).filter((k) => k !== 'section') : []);
 const extFade = (h) => !!EXT.tags?.fade(h);
 // A wall label linked to a geology unit is written in a darker shade of the unit's legend colour.
@@ -2353,7 +2363,7 @@ const unitInk = (code) => { const e = code && S.geology.legend.find((x) => x.cod
 // Planned holes: a status of "planned" (collar column or set by hand) and no assays. Drawn dashed in the
 // brand colour, following the provisional-position pattern.
 const isPlanned = (h) => (S.tags.status[h.id] ? S.tags.status[h.id] === 'planned' : /\b(planned|proposed)\b/i.test(`${h.note || ''} ${h.c.raw ? Object.values(h.c.raw).join(' ') : ''}`) && !h.ints.length);
-const extCredits = () => EXT.tags?.insetCredits() || [];
+const extCredits = () => [...(EXT.tags?.insetCredits() || []), ...(EXT.overlays?.credits() || [])]; // and the claims' registry
 const extNotes = () => [EXT.geology?.note(), EXT.geophys?.note()].filter(Boolean);
 function extLegendRows() {
   const rows = project.holes.some((h) => h.planned) ? [{ label: S.tags.plannedLabel || 'Planned', draw: (ctx, x, cy, u) => { ctx.strokeStyle = pri(); ctx.lineWidth = 2 * u; ctx.setLineDash([5 * u, 3 * u]); ctx.beginPath(); ctx.moveTo(x, cy); ctx.lineTo(x + 22 * u, cy); ctx.stroke(); ctx.setLineDash([]); } }] : [];
@@ -2376,7 +2386,7 @@ function extAutoOn(arr) { // a lithology or geophysics file added by the user sw
 }
 function extStyle(o) {
   if (o.histograms !== undefined) S.histograms = !!o.histograms;
-  if (o.insetStyle !== undefined) { if (!['plan', 'satellite', 'topo'].includes(o.insetStyle)) throw new Error('insetStyle must be "plan" (plan of drilling), "satellite" or "topo" (a map around the property; needs the coordinate system).'); S.insetStyle = o.insetStyle; }
+  if (o.insetStyle !== undefined) { if (!['plan', 'satellite', 'topo', 'claims'].includes(o.insetStyle)) throw new Error('insetStyle must be "plan" (plan of drilling), "satellite" or "topo" (a map around the property; needs the coordinate system) or "claims" (the claim map).'); S.insetStyle = o.insetStyle; }
   if (o.histograms !== undefined || o.insetStyle !== undefined) extReady().catch((e) => status(e.message));
 }
 function extState() {
@@ -2385,7 +2395,7 @@ function extState() {
 }
 function renderExtUI() {
   document.querySelectorAll('[data-ext]').forEach((el) => { const [g, k] = el.dataset.ext.split('.'), v = g === 'style' || g === 'view' ? S[k] : S[g][k]; if (el.type === 'checkbox') el.checked = !!v; else el.value = v; });
-  [['geology', 'geo-ui'], ['geophys', 'gp-ui'], ['tags', 'tag-ui'], ['section', 'sec-holes'], ['overlays', 'ov-ui'], ['shapes', 'shape-ui'], ['sections', 'sec-tabs'], ['mapuse', 'mapinfo-ui'], ['crew', 'crew-ui']].forEach(([k, id]) => { if (EXT[k]) EXT[k].renderUI($(id)); });
+  [['geology', 'geo-ui'], ['geophys', 'gp-ui'], ['tags', 'tag-ui'], ['section', 'sec-holes'], ['overlays', 'ov-ui'], ['shapes', 'shape-ui'], ['sections', 'sec-tabs'], ['mapuse', 'mapinfo-ui'], ['block', 'block-ui'], ['crew', 'crew-ui']].forEach(([k, id]) => { if (EXT[k]) EXT[k].renderUI($(id)); });
   document.querySelectorAll('[data-secmode]').forEach((b) => b.setAttribute('aria-pressed', String((b.dataset.secmode === 'chosen') === !!S.section?.holes)));
 }
 document.querySelectorAll('[data-ext]').forEach((el) => el.addEventListener('change', () => {
@@ -2421,12 +2431,18 @@ const EXT_API = {
   layersReady: async () => { await extReady(); return getState(); },
   async setFigureStyle(style, meta) { await (await extLoad('type')).setFigureStyle(style, meta); return getState(); },
 };
+// The block section (block.js): applyPreset("blockSection"), setHolesShown, setBlock; [data-block] buttons in the Layout step.
+['applyPreset', 'setHolesShown', 'setBlock'].forEach((a) => { EXT_API[a] = async (...x) => { await (await extLoad('block'))[a](...x); await extReady(); return getState(); }; });
+document.querySelectorAll('[data-block]').forEach((b) => b.addEventListener('click', () => extLoad('block').then((m) => m.click(b.dataset.block)).catch((e) => status(e.message))));
 // Map overlays and shapes (overlays.js, shapes.js): addOverlay, updateOverlay, removeOverlay, and the same for shapes.
 // Named sections (sections.js): addSection, updateSection, removeSection, setActiveSection.
 [['overlays', 'Overlay'], ['shapes', 'Shape'], ['sections', 'Section']].forEach(([k, n]) => ['add', 'update', 'remove', 'setActive'].forEach((a) => { if (a !== 'setActive' || n === 'Section') EXT_API[a + n] = async (...x) => { const r = await (await extLoad(k))[a](...x); await extReady(); return r ?? getState(); }; }));
 // Each call is tracked until it settles, so exports can wait for it (settled, section 8).
 Object.entries(EXT_API).forEach(([k, f]) => { EXT_API[k] = (...a) => { const p = f(...a); if (p?.finally) { extPending.add(p); p.finally(() => extPending.delete(p)).catch(() => {}); } return p; }; });
 $('sec-add').addEventListener('click', () => EXT_API.addSection().catch((e) => status(e.message)));
+// Claims from the registries (claims.js): EM3D.findClaims and the Find claims panel.
+EXT_API.findClaims = async (o) => { const r = await (await extLoad('claims')).find(o); await extReady(); return r; };
+$('ov-claims').addEventListener('click', () => extLoad('claims').then((m) => m.renderUI($('ov-claims-ui'))).catch((e) => status(e.message)));
 $('ov-file').addEventListener('change', (e) => { if (e.target.files.length) readFileList(e.target.files); e.target.value = ''; });
 document.querySelectorAll('[data-shape]').forEach((b) => b.addEventListener('click', () => { showView('3d'); EXT_API.addShape({ type: b.dataset.shape }).catch((e) => status(e.message)); }));
 // The API notes for these layers are kept in the page (#ext-help), out of the script bundle.
@@ -2455,7 +2471,7 @@ function getState() {
       dem: realT.dem ? (realT.dem.ok ? `z${realT.dem.z}, ${realT.dem.tiles} tiles` : `failed: ${realT.dem.error}`) : null,
       imagery: realT.img ? (realT.img.ok ? `z${realT.img.z}, ${realT.img.tiles} tiles` : `failed: ${realT.img.error}`) : null, imageryShown: imageryShown(), note: G?.terrainNote || null, credits: G ? terrainCredits(true) : [] },
     camera: G ? getCam() : null, scene: { ...S.scene, projection: S.projection }, section: { secAz: S.secAz, secW: S.secW, lookingAz: ((S.secAz - 90) % 360 + 360) % 360, holes: S.section?.holes || null, ends: S.section?.a ? [S.section.a, S.section.b] : null },
-    labels: S.labels.map((l) => ({ ...l })), wallLabels: S.wallLabels.map((l) => ({ ...l })),
+    labels: S.labels.map((l) => ({ ...l })), wallLabels: S.wallLabels.map((l) => ({ ...l })), holesShown: S.holesShown && [...S.holesShown], block: structuredClone(S.block),
     display: { walls: S.walls, ids: S.ids, inset: S.inset, surface: S.surf, ribbons: S.ribbons, traceWidth: S.traceWidth, pendingLabels: S.pendingLabels, pendingNoAssays: S.pendingNoAssays, elevTicks: S.elevTicks, grid: S.grid, displayCutoff: S.displayCutoff, lockView: S.lockView, dropShadow: S.dropShadow, imagery: { ...S.imagery }, legend: structuredClone(S.legend), coPlacement: S.coPlacement, blockMargin: S.blockMargin, blockExtent: S.blockExtent && { ...S.blockExtent } }, meshes: S.meshes,
     shell: { ...S.shell, cutoff: shellCut(), cutoffAuto: S.shell.cutoff === null, column: S.valueCol, legend: `Grade shell ≥ ${shellCutText()}`, shown: shellShown(), status: shell.status, progress: shell.progress, message: shell.message || null,
       ...(shell.status === 'ready' || shell.status === 'empty' ? { cells: shell.mesh?.stats.cells ?? 0, triangles: shell.mesh?.stats.triangles ?? 0, holesUsed: shell.mesh?.stats.holesUsed ?? 0, collarGroups: shell.mesh?.stats.groups ?? 0, composites: shell.mesh?.stats.composites ?? 0, searchUsed: shell.mesh?.stats.search ?? null, cellUsed: shell.mesh?.stats.cell ?? null, grid: shell.mesh?.stats.grid ?? null, buildMs: shell.mesh?.stats.ms ?? null } : {}) },

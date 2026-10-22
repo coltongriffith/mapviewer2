@@ -52,7 +52,20 @@ const BUDGETS = {
   // 148.3 → 148.6 (Oct 2026, export options, measured 148.32 configured, ~+0.33 kB): legend height and note-in-legend
   // sizing must stay in App because the editor's live legend box uses the same template code as the exporter, plus
   // the lazy ExportBackground hook (owner-requested 2D transparent/standalone).
-  maxJsChunkGzipKb: 148.6,
+  // 148.6 → 148.9 (Oct 2026, 2D bugs B1–B4, measured 148.63 configured, +0.31 kB over main's 148.32): the UTM frame
+  // ticks solved per edge (coordinateFrame.js, drawn live by the editor's overlay, so not lazy; ~+0.1 kB), and the one
+  // map name (utils/mapName.js) in the header, saves and Duplicate, Save As's dialog hook (the dialog is a lazy
+  // NameDialog chunk) and the dashboard/home searches that start a new map (~+0.2 kB).
+  // 148.9 → 149.1 (review fix, measured 148.82): no UTM ticks on a frame wider than a zone (a world view produced
+  // ~140 000 crossings in ~1.6 s), the interval picked from each edge's projected range, and at most 50 crossings per
+  // edge (~+0.19 kB; the live overlay needs it, so not lazy).
+  // 149.1 → 150.6 (Oct 2026, 2D Studio style merged over B1–B4, measured 150.29 configured, +1.47 kB over 148.82): what the editor
+  // must know synchronously to place Studio's cards — their zone sizes (utils/studioLayout.js: the title card's rows,
+  // the scale-north card, ~0.55 kB), the Studio theme tokens and picker entry (~0.15 kB), the two new north arrow
+  // styles (rose, split; ~0.2 kB, offered in every theme's picker) — and the hand-off to the lazy StudioCard and
+  // StudioControls chunks in the stage and inspector (~0.35 kB), the frame ticks' Studio mono font and each
+  // callout's colour as a CSS variable for Studio's card opacity (~0.2 kB). The cards' layout and painting are lazy.
+  maxJsChunkGzipKb: 150.6,
   initialJsGzipKb: 75,
   initialAuthJsGzipKb: 135,
   // The former configured check omitted VITE_ADMIN_EMAIL, which pruned the
@@ -109,7 +122,15 @@ const BUDGETS = {
   // and the 2D export options: the footer note always exported (its wrapping and the free-strip fallback in the lazy
   // renderScene chunk), Standalone's note in the legend, the fitted legend for new maps, the blank-basemap transparent
   // toggle (a lazy ExportBackground chunk) and the Map use and Fit controls (the lazy LegendEditor chunk).
-  totalAuthJsGzipKb: 917.1,
+  // 917.1 → 918.3 (Oct 2026, 2D bugs B1–B4, measured 917.98, +1.2 kB): the App code in maxJsChunkGzipKb above, the
+  // lazy NameDialog chunk (0.65 kB: Save As and the legend's new heading, in place of window.prompt), and the
+  // dashboard's Duplicate naming and opening the copy and the legend editor's dialog hook (~0.07 kB each).
+  // 918.3 → 918.5 (measured 918.2): the tick bounds in maxJsChunkGzipKb above.
+  // 918.5 → 933.5 (Oct 2026, 2D Studio style merged over B1–B4, measured 933.1, +14.9 kB): utils/studioCards.js (the Studio cards as primitives
+  // and their canvas/SVG painters, a 6.5 kB chunk shared by the exporter and the stage), the lazy StudioCard (2.9 kB)
+  // and StudioControls (1.9 kB) chunks, the renderer's Studio branches, legend/callout shells, label halo and font
+  // weights (+1.5 kB in the lazy renderScene chunk), and App +1.47 kB as maxJsChunkGzipKb above.
+  totalAuthJsGzipKb: 933.5,
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
@@ -128,7 +149,10 @@ const BUDGETS = {
   // 847.2 → 847.4 (measured 847.05): the results review fixes, as totalAuthJsGzipKb above.
   // 847.4 → 848.5 (measured 848.21): hole-ID labels at their collar, as totalAuthJsGzipKb above.
   // 848.5 → 850.0 (measured 849.70): the export options, as totalAuthJsGzipKb above.
-  totalJsGzipKb: 850.0,
+  // 850.0 → 851.1 (measured 850.8): 2D bugs B1–B4, as totalAuthJsGzipKb above.
+  // 851.1 → 851.4 (measured 851.1): the tick bounds, as maxJsChunkGzipKb above.
+  // 851.4 → 866.3 (measured 865.9): the 2D Studio style, as totalAuthJsGzipKb above.
+  totalJsGzipKb: 866.3,
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the
   // totals above. /3d carries three.js (~109 kB gzip) and its editor.
@@ -200,7 +224,16 @@ const BUDGETS = {
   // setting and its export override, the Export step's Background select, exports that wait for the layers they
   // need (pending setMapUse and module loads), and the hooks for Map use (the footer's notes and credits moved out,
   // the details atop the legend card, EM3D.setMapUse, the saved settings). The standalone block is lazy (mapuse.js).
-  threeDJsGzipKb: 171.6,
+  // 171.6 → 171.7 (Oct 2026, claim map inset merged over export options, measured 171.40, configured 171.42, + ~0.3):
+  // the hooks for Find claims (the lazy import, EM3D.findClaims and the panel button), insetStyle "claims" and the
+  // claims' registry credit in the footer (+0.12 kB); the rest is lazy (claims.js, tags.js).
+  // 171.7 → 172.2 (Oct 2026, round 5E block section merged over the claim map inset, measured 171.92, configured 171.94, + ~0.3; +0.52 kB over the inset's 171.40): the block section's
+  // hooks (+0.48 kB on its own branch): the holes shown (holeOn on the traces, tubes, collars, callouts, pending tags and
+  // section), the block.js entry in drawOverlay (its traces; the logo, title block, legend cards, scale bar, elevation
+  // ticks, compass and footer it takes over on a bare block section), no section letters or line on a block section, the
+  // "heading" wall label handed to block.js, the bar palette's legend rows, the settings and the three EM3D methods. A
+  // standalone map on a block section keeps its details in a card of their own when the legend is on the side face.
+  threeDJsGzipKb: 172.2,
   // /3d's own modules fetched on first use (the geology, geophysics and tag layers, the account
   // client). They never load with the page or the app, so they sit outside the page and app totals.
   // 32 → 34 (Oct 2026, round 4): per-hole tags, grouped pending tags, callouts beside or bracketed on their
@@ -274,12 +307,27 @@ const BUDGETS = {
   // 114.6 → 115.7 (Oct 2026, export options, measured 115.19, configured 115.42, merged over figure versions 5A): mapuse.js (~1 kB: a standalone map's details, sources
   // and notes as the top section of the legend card), fetched only for a standalone figure; desk.js passes the
   // background to every layer.
-  // 115.7 → 121.5 (Oct 2026, drill crew, measured 120.96, configured 121.19, + 0.3): crew.js (~5.8 kB: a cartoon
-  // drill rig and crew of rounded boxes, capsules, balls and domes generated in the module (so three.js gains no
-  // classes), an ink outline and a contact shadow, on a levelled pad at the collar; "auto" choosing the collar with
-  // room on screen; collar rings under the pad giving way; the idle motion and EM3D.setCrew), fetched only for a
-  // figure that turns the crew on. The page gains the hooks (+0.21 kB, inside its budget); the totals are unchanged.
-  threeDLazyJsGzipKb: 121.5,
+  // 115.7 → 121.7 (Oct 2026, claim map inset merged over export options, measured 121.13, configured 121.36, + 0.3;
+  // +5.9 kB over export options' 115.42, as on its own branch where it took 104.5 → 110.5): claims.js (~4.45 kB with
+  // shared/claimSearch.js: "Find claims" by holder, numbers or name and "Claims around the model" through the 2D
+  // app's /api/claims and /api/bc-claims, added as area overlays with role "claims" and the registry's credit;
+  // fetched only on the first click on Find claims or EM3D.findClaims), tags.js +1.4 (insetStyle "claims": the claim
+  // map fitted to the block and the project's claims, tenure labels where they fit, the north arrow and scale bar
+  // shared with the location inset) and overlays.js +0.15 (role, group and credit; the footer credit). The page
+  // gains only the hooks (+0.12 kB, inside its budget).
+  // 121.7 → 133.7 (Oct 2026, round 5E block section merged over the claim map inset, measured 133.22, configured 133.44, + ~0.3;
+  // +12.1 kB over the inset's 121.13, as on its own branch): block.js (~7.6 kB: the preset, holes shown, the furniture drawn in the side face's perspective, the
+  // heading, the bare page and the hole picker), softer geology faces and names in capitals on the front face
+  // (geology.js +1.6), grade spikes or bars in the face's plane with the orange palette and plain brackets and IDs
+  // (tags.js +1.6), the thin arrow with text (shapes.js +0.35), and the plan view's sync keeping the tubes hidden. Fetched
+  // only for a figure with holes hidden, a block look or a heading on the block, or on "Block section".
+  // 133.7 → 139.7 (Oct 2026, drill crew merged over round 5E, measured 139.18, configured 139.39, + 0.3; +5.96 kB over
+  // 5E's 133.22): crew.js (~5.9 kB: a cartoon drill rig and crew of rounded boxes, capsules, balls and domes generated
+  // in the module, so three.js gains no classes; an ink outline and contact shadows; a cleared gravel pad ramping to
+  // the ground at the collar; "auto" choosing the collar with room on screen; collar rings under the pad giving way;
+  // the idle motion and EM3D.setCrew), fetched only for a figure that turns the crew on. The page gains the hooks
+  // (+0.18 kB, inside its budget); the totals are unchanged.
+  threeDLazyJsGzipKb: 139.7,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.
@@ -289,7 +337,10 @@ const BUDGETS = {
   adminJsGzipKb: 85,
   // 335 → 335.3 (Oct 2026, measured 334.98): the same ~0.07 kB in App, as maxJsChunkGzipKb above.
   // 335.3 → 335.6 (Oct 2026, export options, measured 335.30): the same App code as maxJsChunkGzipKb above.
-  editorAuthJsGzipKb: 335.6,
+  // 335.6 → 335.9 (Oct 2026, 2D bugs B1–B4, measured 335.6): the same App code as maxJsChunkGzipKb above.
+  // 335.9 → 336.1 (measured 335.8): the tick bounds, as maxJsChunkGzipKb above.
+  // 336.1 → 337.6 (Oct 2026, 2D Studio style merged over B1–B4, measured 337.3): the same App code as maxJsChunkGzipKb above.
+  editorAuthJsGzipKb: 337.6,
   editorJsGzipKb: 270,
   claimsAuthJsGzipKb: 355,
   claimsJsGzipKb: 290,

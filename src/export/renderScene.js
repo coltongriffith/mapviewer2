@@ -24,9 +24,10 @@ import { pickScaleBar } from '../utils/scaleBar.js';
 import { resolvePointSymbol, symbolPath } from '../utils/pointSymbol.js';
 import { screenScale } from '../utils/stageScale.js';
 import { tileLayerCredits } from '../utils/rasterOverlay.js';
-import { getMapFrame, scaleFrame, computeGridTicks, projectionLabel, FRAME_FONT, FRAME_FONT_PX } from '../utils/coordinateFrame.js';
+import { getMapFrame, scaleFrame, computeGridTicks, projectionLabel, frameFont, FRAME_FONT_PX } from '../utils/coordinateFrame.js';
 import { fillPatternSpec, hasFillPattern } from '../../shared/fillPattern.js';
 import { diagnostic } from '../../shared/figureDiagnostics.js';
+import { studioOn, studioScaleHome, studioCard, cardShell, titleCardPrims, scaleCardPrims, northCardPrims, insetCardPrims, insetArea, paintCanvas, paintSvg, studioMetresPerPx, labelHalo, studioFontFamilies, studioFontQuery, loadStudioFonts, STUDIO_WEIGHTS } from '../utils/studioCards.js';
 
 // One export's findings: the warning strings the export status line has always
 // shown, and the same findings as structured diagnostics (shared/
@@ -522,6 +523,7 @@ export function titleTextSizes(scene) {
 }
 function drawTitleBlockCanvas(ctx, scene, scale) {
   if (scene.project.layout?.showTitle === false) return;
+  if (studioOn(scene.project.layout)) { drawStudioCanvas(ctx, scene, scale, 'title'); return; }
   const theme = getTheme(scene);
   const layout = scene.project.layout || {};
   const { title } = getOverlayMetrics(scene);
@@ -702,18 +704,21 @@ export function legendLayoutReport(scene) {
 }
 async function drawLegendCanvas(ctx, scene, scale) {
   if (scene.project.layout?.showLegend === false) return;
-  const theme = getTheme(scene);
+  const st = studioLegend(scene), theme = st?.theme || getTheme(scene);
   const legendFont = `${scene.project.layout?.fonts?.legend || 'Inter'}, Arial, sans-serif`;
   const lfs = scene.project.layout?.legendFontScale ?? 1;
   const { legend } = getOverlayMetrics(scene); const items = scene.project.layout?.legendItems || []; if (!items.length || !legend?.width || !legend?.height) return;
   const x = legend.left * scale, y = legend.top * scale, w = legend.width * scale, h = legend.height * scale;
-  if (!scene.project.layout?.legendTransparent) drawPanelRect(ctx, x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.panelFill, theme.panelBorder, scale);
-  drawPanelAccentLeft(ctx, x, y, h, theme, scale);
+  if (st) paintCanvas(ctx, st.shell(legend), scale);
+  else {
+    if (!scene.project.layout?.legendTransparent) drawPanelRect(ctx, x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.panelFill, theme.panelBorder, scale);
+    drawPanelAccentLeft(ctx, x, y, h, theme, scale);
+  }
   const leftPad = theme.panelAccentLeft ? 20 : 16;
   // Clip legend content to zone bounds — matches CSS overflow:hidden in live preview
   ctx.save();
   ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
-  ctx.fillStyle = theme.panelTitle; ctx.font = `700 ${15 * scale * lfs}px ${legendFont}`; ctx.textBaseline = 'top'; ctx.fillText(scene.project.layout?.legendTitle || 'Legend', x + leftPad * scale, y + 14 * scale);
+  ctx.fillStyle = theme.panelTitle; ctx.font = `${st ? 650 : 700} ${15 * scale * lfs}px ${legendFont}`; ctx.textBaseline = 'top'; ctx.fillText(scene.project.layout?.legendTitle || 'Legend', x + leftPad * scale, y + 14 * scale);
   const lp = (theme.panelAccentLeft ? 20 : 16) * scale;
   // Uploaded icons are images and have to be loaded before they can be drawn;
   // the vector pass keeps its own cache, but the legend runs after it.
@@ -730,9 +735,11 @@ async function drawLegendCanvas(ctx, scene, scale) {
   rowsLaidOut.forEach(({ heading, item, y: rowY }) => {
     if (heading) {
       ctx.fillStyle = theme.mutedText || theme.bodyText;
-      ctx.font = `700 ${LEGEND_ROW.headingFont * scale * lfs}px ${legendFont}`;
+      ctx.font = `${st ? 600 : 700} ${LEGEND_ROW.headingFont * scale * lfs}px ${legendFont}`;
       ctx.textBaseline = 'middle';
+      if (st && 'letterSpacing' in ctx) ctx.letterSpacing = `${st.headingLs * scale * lfs}px`;
       ctx.fillText(String(heading).toUpperCase(), x + lp, rowY + (LEGEND_ROW.headingPitch / 2) * scale);
+      if (st && 'letterSpacing' in ctx) ctx.letterSpacing = '0px';
       return;
     }
     {
@@ -814,6 +821,7 @@ function legendNote(scene, bottom, scale) {
 
 function drawNorthArrowCanvas(ctx, scene, scale) {
   if (scene.project.layout?.showNorthArrow === false) return;
+  if (studioOn(scene.project.layout)) { drawStudioCanvas(ctx, scene, scale, 'north'); return; }
   const theme = getTheme(scene);
   const { northArrow } = getOverlayMetrics(scene);
   const x = northArrow.left * scale, y = northArrow.top * scale, w = northArrow.width * scale, h = northArrow.height * scale;
@@ -873,6 +881,7 @@ function pickScaleLabel(map) {
 }
 function drawScaleBarCanvas(ctx, scene, scale) {
   if (scene.project.layout?.showScaleBar === false) return;
+  if (studioOn(scene.project.layout)) { drawStudioCanvas(ctx, scene, scale, 'scale'); return; }
   const theme = getTheme(scene);
   const { scaleBar } = getOverlayMetrics(scene); const x = scaleBar.left * scale, y = scaleBar.top * scale, w = scaleBar.width * scale, h = scaleBar.height * scale, scaleState = pickScaleLabel(scene.map);
   // No plate by default. A scale bar is a mark on the map, not a card floating
@@ -1106,7 +1115,7 @@ export function serializeOverlaySvg(svg, width, height) {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(new XMLSerializer().serializeToString(clone))}`;
 }
 
-async function drawSatelliteInsetCanvas(ctx, x, y, w, h, scale, scene = null) {
+async function drawSatelliteInsetCanvas(ctx, x, y, w, h, scale, scene = null, radius = 8) {
   const container = document.querySelector(SATELLITE_INSET_SELECTOR);
   if (!container) return false;
   const rect = container.getBoundingClientRect();
@@ -1122,7 +1131,7 @@ async function drawSatelliteInsetCanvas(ctx, x, y, w, h, scale, scene = null) {
   const k = w / (rect.width / ss);
 
   ctx.save();
-  drawRoundedRect(ctx, x, y, w, h, 8 * scale);
+  drawRoundedRect(ctx, x, y, w, h, radius * scale);
   ctx.clip();
 
   let drew = 0;
@@ -1174,7 +1183,9 @@ async function drawSatelliteInsetCanvas(ctx, x, y, w, h, scale, scene = null) {
 }
 
 async function drawInsetCanvas(ctx, scene, scale) {
-  const zone = getOverlayMetrics(scene).inset; if (!zone || !zone.width || !zone.height) return; const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale;
+  const zone = getOverlayMetrics(scene).inset; if (!zone || !zone.width || !zone.height) return;
+  if (studioOn(scene.project.layout)) { await drawStudioCanvas(ctx, scene, scale, 'inset'); return; }
+  const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale;
   const theme = getTheme(scene);
   drawPanelRect(ctx, x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.insetFill, theme.insetBorder, scale);
   const { insetImage, insetMode, autoInsetRegion, insetTitle, insetLabel } = scene.project.layout || {};
@@ -1211,6 +1222,68 @@ async function drawInsetCanvas(ctx, scene, scale) {
   if (marker) { const mx = Math.max(innerX + 8 * scale, innerX + (marker.x / 100) * innerW), my = Math.max(innerY + 8 * scale, innerY + (marker.y / 100) * innerH), mw = Math.max(8 * scale, Math.max(10 * scale, (marker.w / 100) * innerW)), mh = Math.max(8 * scale, Math.max(10 * scale, (marker.h / 100) * innerH)); ctx.fillStyle = 'rgba(96,165,250,0.16)'; drawRoundedRect(ctx, mx, my, mw, mh, 2 * scale); ctx.fill(); ctx.strokeStyle = '#2563eb'; ctx.lineWidth = 1.5 * scale; ctx.stroke(); ctx.beginPath(); ctx.arc(Math.min(innerX + innerW - 8 * scale, Math.max(innerX + 8 * scale, mx + mw / 2)), Math.min(innerY + innerH - 8 * scale, Math.max(innerY + 8 * scale, my + mh / 2)), 3.2 * scale, 0, Math.PI * 2); ctx.fillStyle = '#0f2c56'; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.2 * scale; ctx.fill(); ctx.stroke(); }
   ctx.fillStyle = theme.insetMuted; ctx.font = `${11 * scale}px Arial`; ctx.textBaseline = 'alphabetic'; ctx.fillText(insetLabel || ref.label, x + 12 * scale, y + h - 10 * scale);
 }
+// ── Studio (utils/studioCards.js) ──────────────────────────────────────────────
+// The Studio look's title, scale, north and locator cards, laid out once as primitives and painted here as the
+// editor stage (components/StudioCard.jsx) draws them.
+const studioOpts = (scene) => ({ metresPerPx: studioMetresPerPx(scene.map), datum: projectionLabel(scene.project.layout || {}, scene.map) });
+// The satellite locator's marker where the inset placed it (SatelliteInset stamps it on its element), in the
+// card's picture area.
+function satelliteMarker(area) {
+  const el = typeof document !== 'undefined' ? document.querySelector(SATELLITE_INSET_SELECTOR) : null;
+  const [x, y] = String(el?.dataset?.marker || '').split(',').map(Number), r = el?.getBoundingClientRect?.();
+  if (!r?.width || !Number.isFinite(x) || !Number.isFinite(y)) return null;
+  const k = area.w / (r.width / screenScale(el));
+  return { x: x * k, y: y * k };
+}
+export function studioInsetOpts(layout, layers, zone) {
+  const visible = (layers || []).filter((l) => l.visible !== false && l.geojson);
+  const bounds = unionBounds(visible.map((l) => geojsonBounds(visibleGeojson(l))).filter(Boolean));
+  const mode = layout.insetMode === 'custom_image' ? (layout.insetImage ? 'image' : null) : layout.insetMode === 'satellite_locator' ? 'satellite' : 'region';
+  return { mode, image: layout.insetImage, region: layout.autoInsetRegion, bounds, marker: mode === 'satellite' ? satelliteMarker(insetArea(layout, zone)) : null };
+}
+export function studioPrims(scene, kind) {
+  const layout = scene.project.layout || {}, z = getOverlayMetrics(scene), home = studioScaleHome(layout);
+  const zone = z[{ title: 'title', scale: 'scaleBar', north: 'northArrow', inset: 'inset' }[kind]];
+  if (!zone?.width || !zone.height) return [];
+  const b = { x: zone.left, y: zone.top, w: zone.width, h: zone.height };
+  if (kind === 'title') return titleCardPrims(layout, b, studioOpts(scene));
+  if (kind === 'scale') return home === 'title' ? [] : scaleCardPrims(layout, b, studioOpts(scene));
+  if (kind === 'north') return home === 'apart' ? northCardPrims(layout, b) : [];
+  return insetCardPrims(layout, b, studioInsetOpts(layout, scene.project.layers, b));
+}
+// The label halo's SVG stroke (paint-order puts it under the fill), or nothing.
+const haloSvg = (halo, scale) => (halo ? ` stroke="${escapeXml(halo.color)}" stroke-opacity="${halo.opacity}" stroke-width="${halo.width * scale}" stroke-linejoin="round" paint-order="stroke"` : '');
+// Studio's legend: its card and the colours its text takes (the rows are the legend's own); null otherwise.
+function studioLegend(scene) {
+  const layout = scene.project.layout || {};
+  if (!studioOn(layout)) return null;
+  const c = studioCard(layout, 'legend');
+  return {
+    theme: { ...getTheme(scene), panelTitle: c.head, bodyText: c.ink, mutedText: c.muted, panelAccentLeft: c.accent === 'left' ? c.accentColor : null },
+    headingLs: LEGEND_ROW.headingFont * 0.08,
+    shell: (z) => cardShell(c, z.left, z.top, z.width, z.height),
+  };
+}
+// Studio's results cards (boxed and leader callouts): the card's radius, shadow and accent bar on the callout's
+// own colours, or dark paper with white text when the card is set dark. b is in export px.
+function studioCallout(scene) {
+  const layout = scene.project.layout || {};
+  if (!studioOn(layout)) return null;
+  const c = studioCard(layout, 'callout'), dark = c.tone === 'dark';
+  return { c, dark, shell: (b, fill, scale) => cardShell(dark ? c : { ...c, fill }, b.left / scale, b.top / scale, b.width / scale, b.height / scale) };
+}
+function drawStudioCanvas(ctx, scene, scale, kind) {
+  return paintCanvas(ctx, studioPrims(scene, kind), scale, {
+    loadImage: (src) => loadImage(src),
+    onMissing: () => warn(scene, 'asset-missing', 'inset image could not be embedded', '', { elementId: 'inset' }),
+    slot: (p) => drawSatelliteInsetCanvas(ctx, p.x * scale, p.y * scale, p.w * scale, p.h * scale, scale, scene, p.r),
+  });
+}
+function renderStudioSvg(scene, scale, svgDefs, kind, satelliteImage = null) {
+  const prims = studioPrims(scene, kind);
+  return prims.length ? `<g id="em-studio-${kind}" class="em-panel">${paintSvg(prims, scale, svgDefs, { slot: () => satelliteImage })}</g>` : '';
+}
+
 // The footer exactly as the editor shows it: hidden when switched off or on the
 // NI 43-101 template (whose title block carries the source), and at the height
 // the user dragged it to. Export used to check only that footer TEXT existed,
@@ -1357,9 +1430,10 @@ export async function drawCalloutsCanvas(ctx, scene, scale) {
     const img = await new Promise((resolve) => { const el = new Image(); el.onload = () => resolve(el); el.onerror = () => resolve(null); el.src = c.logo.image; });
     if (img) logoImgs.set(c.id, img); else warn(scene, 'asset-missing', 'a callout logo could not be embedded', '', { elementId: c.id });
   }));
+  const sc = studioCallout(scene), halo = labelHalo(scene.project.layout);
   placed.forEach((c) => {
     const theme = getTheme(scene);
-    const radius = Math.max(0, (theme.panelRadius ?? 10) - 4) * scale;
+    const radius = sc ? sc.c.radius * scale : Math.max(0, (theme.panelRadius ?? 10) - 4) * scale;
 
     if (c.type === 'badge') {
       const badgeEp = leaderEndpoint(c.anchorPx, c);
@@ -1400,7 +1474,8 @@ export async function drawCalloutsCanvas(ctx, scene, scale) {
     if (c.type !== 'plain') {
       if (needed > c.height) c.height = needed;
       ctx.restore(); ctx.save();
-      drawRoundedRect(ctx, c.left, c.top, c.width, c.height, radius); ctx.fillStyle = c.style?.background || theme.calloutFill; ctx.fill(); ctx.strokeStyle = c.style?.border || theme.calloutBorder; ctx.lineWidth = 1 * scale; ctx.stroke();
+      if (sc) paintCanvas(ctx, sc.shell(c, c.style?.background || theme.calloutFill, scale), scale);
+      else { drawRoundedRect(ctx, c.left, c.top, c.width, c.height, radius); ctx.fillStyle = c.style?.background || theme.calloutFill; ctx.fill(); ctx.strokeStyle = c.style?.border || theme.calloutBorder; ctx.lineWidth = 1 * scale; ctx.stroke(); }
       drawRoundedRect(ctx, c.left, c.top, c.width, c.height, radius); ctx.clip();
     }
     const contentTop = c.top + (c.type === 'plain' ? (c.style?.paddingY || 8) * scale : c.height / 2 - (logoBlockH + titleBlockH + subBlockH) / 2);
@@ -1414,13 +1489,19 @@ export async function drawCalloutsCanvas(ctx, scene, scale) {
     }
     const blockTop = contentTop + logoBlockH;
 
-    ctx.fillStyle = c.style?.textColor || theme.calloutText; ctx.font = `700 ${fontSize}px ${calloutFont}`; ctx.textBaseline = 'top'; ctx.textAlign = align;
-    titleLines.forEach((line, i) => { ctx.fillText(line, textX, blockTop + i * titleLineH); });
+    // A plain callout is text on the map: the label halo (layout.labelHalo) outlines it.
+    const fill = (line, tx, ty) => {
+      if (halo && c.type === 'plain') { ctx.save(); ctx.globalAlpha = halo.opacity; ctx.strokeStyle = halo.color; ctx.lineWidth = halo.width * scale; ctx.lineJoin = 'round'; ctx.strokeText(line, tx, ty); ctx.restore(); }
+      ctx.fillText(line, tx, ty);
+    };
+    const dark = sc?.dark && c.type !== 'plain';
+    ctx.fillStyle = dark ? '#ffffff' : c.style?.textColor || theme.calloutText; ctx.font = `700 ${fontSize}px ${calloutFont}`; ctx.textBaseline = 'top'; ctx.textAlign = align;
+    titleLines.forEach((line, i) => { fill(line, textX, blockTop + i * titleLineH); });
     if (subtextLines.length) {
-      ctx.fillStyle = c.style?.subtextColor || '#475569';
+      ctx.fillStyle = dark ? 'rgba(255,255,255,0.78)' : c.style?.subtextColor || '#475569';
       ctx.font = `${subtextSize}px ${calloutFont}`;
       const subTop = blockTop + titleBlockH + 4 * scale;
-      subtextLines.forEach((line, i) => { ctx.fillText(line, textX, subTop + i * subtextLineH); });
+      subtextLines.forEach((line, i) => { fill(line, textX, subTop + i * subtextLineH); });
     }
     ctx.restore();
     ctx.textAlign = 'left';
@@ -1481,6 +1562,7 @@ async function drawImageMarkerCanvas(ctx, marker, point, scale, scene = null) {
 }
 
 async function drawMarkersCanvas(ctx, scene, scale) {
+  const halo = labelHalo(scene.project.layout), studio = studioOn(scene.project.layout);
   for (const marker of (scene.project.markers || [])) {
     const point = clonePoint(scene.map.latLngToContainerPoint([marker.lat, marker.lng]), scale);
     const size = (marker.size || 18) * scale;
@@ -1494,12 +1576,19 @@ async function drawMarkersCanvas(ctx, scene, scale) {
       ctx.fillStyle = marker.color || '#1e293b';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
+      // Studio spaces the letters as the SVG and the editor do; the label halo outlines them.
+      if (studio && 'letterSpacing' in ctx) ctx.letterSpacing = `${(marker.tracking ?? 0.12) * (marker.size || 28) * scale}px`;
+      const text = (marker.label || '').toUpperCase();
+      const draw = (tx, ty) => {
+        if (halo) { ctx.save(); ctx.globalAlpha = halo.opacity; ctx.strokeStyle = halo.color; ctx.lineWidth = halo.width * scale; ctx.lineJoin = 'round'; ctx.strokeText(text, tx, ty); ctx.restore(); }
+        ctx.fillText(text, tx, ty);
+      };
       if (marker.rotation) {
         ctx.translate(point.x, point.y);
         ctx.rotate((marker.rotation * Math.PI) / 180);
-        ctx.fillText((marker.label || '').toUpperCase(), 0, 0);
+        draw(0, 0);
       } else {
-        ctx.fillText((marker.label || '').toUpperCase(), point.x, point.y);
+        draw(point.x, point.y);
       }
       ctx.restore();
       continue;
@@ -1549,6 +1638,8 @@ function drawEllipseLabelCanvas(ctx, scene, ellipse, center, width, height, rota
     ctx.font = `${fontWeight} ${labelFontSize}px ${labelFont}, Arial, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+    const halo = labelHalo(scene.project.layout);
+    if (halo) { ctx.save(); ctx.globalAlpha = halo.opacity; ctx.strokeStyle = halo.color; ctx.lineWidth = halo.width * scale; ctx.lineJoin = 'round'; ctx.strokeText(ellipse.label, 0, 0); ctx.restore(); }
     ctx.fillText(ellipse.label, 0, 0);
     ctx.restore();
     return;
@@ -1683,8 +1774,11 @@ function drawPolygonsCanvas(ctx, scene, scale) {
       if (g.arc) {
         ctx.translate(g.x, g.y);
         ctx.rotate(g.angle * Math.PI / 180);
-        ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 3 * scale; ctx.lineJoin = 'round';
+        const halo = labelHalo(scene.project.layout);
+        if (halo) { ctx.globalAlpha = halo.opacity; ctx.strokeStyle = halo.color; ctx.lineWidth = halo.width * scale; } else { ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 3 * scale; }
+        ctx.lineJoin = 'round';
         ctx.strokeText(poly.label, 0, 0);
+        ctx.globalAlpha = 1;
         ctx.fillStyle = g.color; ctx.fillText(poly.label, 0, 0);
       } else {
         const pw = ctx.measureText(poly.label).width + g.padX * 2;
@@ -1920,36 +2014,30 @@ function drawDistanceTicksCanvas(ctx, scene, scale) {
 
   const tickLen = 10 * scale;
   ctx.fillStyle = '#000000';
-  ctx.font = `${FRAME_FONT_PX * scale}px ${FRAME_FONT}`;
+  ctx.font = `${FRAME_FONT_PX * scale}px ${frameFont(scene.project.layout)}`;
   ctx.lineWidth = scale;
   ctx.strokeStyle = '#000000';
 
-  for (const { px, label } of ticks.x) {
-    ctx.beginPath(); ctx.moveTo(px, mapTop); ctx.lineTo(px, mapTop - tickLen); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(px, mapBottom); ctx.lineTo(px, mapBottom + tickLen); ctx.stroke();
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'bottom';
-    ctx.fillText(label, px, mapTop - tickLen - 2 * scale);
-    ctx.textBaseline = 'top';
-    ctx.fillText(label, px, mapBottom + tickLen + 2 * scale);
+  // Each edge has its own crossings (computeGridTicks): grid lines converge.
+  ctx.textAlign = 'center';
+  for (const [list, y, dir, base] of [[ticks.top, mapTop, -1, 'bottom'], [ticks.bottom, mapBottom, 1, 'top']]) {
+    for (const { px, label } of list) {
+      ctx.beginPath(); ctx.moveTo(px, y); ctx.lineTo(px, y + dir * tickLen); ctx.stroke();
+      ctx.textBaseline = base;
+      ctx.fillText(label, px, y + dir * (tickLen + 2 * scale));
+    }
   }
-  for (const { py, label } of ticks.y) {
-    ctx.beginPath(); ctx.moveTo(mapLeft, py); ctx.lineTo(mapLeft - tickLen, py); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(mapRight, py); ctx.lineTo(mapRight + tickLen, py); ctx.stroke();
-    ctx.save();
-    ctx.translate(mapLeft - tickLen - 2 * scale, py);
-    ctx.rotate(-Math.PI / 2);
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'bottom';
-    ctx.fillText(label, 0, 0);
-    ctx.restore();
-    ctx.save();
-    ctx.translate(mapRight + tickLen + 2 * scale, py);
-    ctx.rotate(Math.PI / 2);
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'bottom';
-    ctx.fillText(label, 0, 0);
-    ctx.restore();
+  for (const [list, x, dir] of [[ticks.left, mapLeft, -1], [ticks.right, mapRight, 1]]) {
+    for (const { py, label } of list) {
+      ctx.beginPath(); ctx.moveTo(x, py); ctx.lineTo(x + dir * tickLen, py); ctx.stroke();
+      ctx.save();
+      ctx.translate(x + dir * (tickLen + 2 * scale), py);
+      ctx.rotate(dir * Math.PI / 2);
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      ctx.fillText(label, 0, 0);
+      ctx.restore();
+    }
   }
   ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
@@ -1962,7 +2050,7 @@ function renderDistanceTicksSvg(scene, scale) {
   const ticks = computeGridTicks(scene.map, getMapFrame(scene.project.layout || {}, { width: scene.width, height: scene.height }, { sidebarFrac: scene.template?.sidebarFrac }), scale);
   if (!ticks) return '';
   const tickLen = 10 * scale;
-  const fontSize = FRAME_FONT_PX * scale;
+  const fontSize = FRAME_FONT_PX * scale, FRAME_FONT = frameFont(scene.project.layout);
   const t = (x, y, extra, label) => `<text x="${x}" y="${y}" text-anchor="middle" font-family="${FRAME_FONT}" font-size="${fontSize}" fill="#000"${extra}>${escapeXml(label)}</text>`;
   const parts = [
     `<rect x="${area.left}" y="${area.top}" width="${area.right - area.left}" height="${mapTop - area.top}" fill="#ffffff" />`,
@@ -1971,21 +2059,22 @@ function renderDistanceTicksSvg(scene, scale) {
     `<rect x="${mapRight}" y="${mapTop}" width="${area.right - mapRight}" height="${mapBottom - mapTop}" fill="#ffffff" />`,
     `<rect x="${mapLeft}" y="${mapTop}" width="${mapRight - mapLeft}" height="${mapBottom - mapTop}" fill="none" stroke="#000000" stroke-width="${1.5 * scale}" />`,
   ];
-  for (const { px, label } of ticks.x) {
-    parts.push(
-      `<line x1="${px}" y1="${mapTop}" x2="${px}" y2="${mapTop - tickLen}" stroke="#000" stroke-width="${scale}" />`,
-      `<line x1="${px}" y1="${mapBottom}" x2="${px}" y2="${mapBottom + tickLen}" stroke="#000" stroke-width="${scale}" />`,
-      t(px, mapTop - tickLen - 2 * scale, ' dominant-baseline="auto"', label),
-      t(px, mapBottom + tickLen + 2 * scale, ' dominant-baseline="hanging"', label),
-    );
+  // Each edge has its own crossings (computeGridTicks): grid lines converge.
+  for (const [list, y, dir, base] of [[ticks.top, mapTop, -1, 'auto'], [ticks.bottom, mapBottom, 1, 'hanging']]) {
+    for (const { px, label } of list) {
+      parts.push(
+        `<line x1="${px}" y1="${y}" x2="${px}" y2="${y + dir * tickLen}" stroke="#000" stroke-width="${scale}" />`,
+        t(px, y + dir * (tickLen + 2 * scale), ` dominant-baseline="${base}"`, label),
+      );
+    }
   }
-  for (const { py, label } of ticks.y) {
-    parts.push(
-      `<line x1="${mapLeft}" y1="${py}" x2="${mapLeft - tickLen}" y2="${py}" stroke="#000" stroke-width="${scale}" />`,
-      `<line x1="${mapRight}" y1="${py}" x2="${mapRight + tickLen}" y2="${py}" stroke="#000" stroke-width="${scale}" />`,
-      `<text text-anchor="middle" font-family="${FRAME_FONT}" font-size="${fontSize}" fill="#000" transform="translate(${mapLeft - tickLen - 2 * scale},${py}) rotate(-90)">${escapeXml(label)}</text>`,
-      `<text text-anchor="middle" font-family="${FRAME_FONT}" font-size="${fontSize}" fill="#000" transform="translate(${mapRight + tickLen + 2 * scale},${py}) rotate(90)">${escapeXml(label)}</text>`,
-    );
+  for (const [list, x, dir] of [[ticks.left, mapLeft, -1], [ticks.right, mapRight, 1]]) {
+    for (const { py, label } of list) {
+      parts.push(
+        `<line x1="${x}" y1="${py}" x2="${x + dir * tickLen}" y2="${py}" stroke="#000" stroke-width="${scale}" />`,
+        `<text text-anchor="middle" font-family="${FRAME_FONT}" font-size="${fontSize}" fill="#000" transform="translate(${x + dir * (tickLen + 2 * scale)},${py}) rotate(${dir * 90})">${escapeXml(label)}</text>`,
+      );
+    }
   }
   return `<g id="em-coordinate-frame">${parts.join('')}</g>`;
 }
@@ -2041,8 +2130,14 @@ function drawDistanceLinesCanvas(ctx, scene, scale) {
 export async function ensureExportFonts(scene, timeoutMs = 3000) {
   const fonts = typeof document !== 'undefined' ? document.fonts : null;
   if (!fonts?.load) return { timedOut: false, missing: [] };
-  const families = new Set(['Inter', ...Object.values(scene?.project?.layout?.fonts || {})].filter((f) => typeof f === 'string' && f));
-  const loads = [...families].flatMap((family) => ['400', '700'].map((w) => fonts.load(`${w} 12px "${family}"`).catch(() => null)));
+  // Studio sets its type in the brand family at 300 to 800 and its numerals in IBM Plex Mono: their
+  // stylesheets go on the page first (the editor's own loads its usual weights only).
+  const studio = studioOn(scene?.project?.layout);
+  const families = new Set(studio ? studioFontFamilies(scene.project.layout) : ['Inter', ...Object.values(scene?.project?.layout?.fonts || {})].filter((f) => typeof f === 'string' && f));
+  const sheets = studio && loadStudioFonts(scene.project.layout);
+  const loads = studio
+    ? STUDIO_WEIGHTS.flatMap((w) => [...families].map((family) => sheets.then(() => fonts.load(`${w} 12px "${family}"`)).catch(() => null)))
+    : [...families].flatMap((family) => ['400', '700'].map((w) => fonts.load(`${w} 12px "${family}"`).catch(() => null)));
   let timer;
   const timedOut = await Promise.race([Promise.all(loads).then(() => fonts.ready).then(() => false), new Promise((r) => { timer = setTimeout(() => r(true), timeoutMs); })]);
   clearTimeout(timer);
@@ -2062,7 +2157,8 @@ export async function ensureExportFonts(scene, timeoutMs = 3000) {
 const GOOGLE_FONTS = new Set(['Inter', 'Montserrat', 'Lato', 'Open Sans', 'Roboto', 'Source Sans 3', 'IBM Plex Mono']);
 async function embeddedFontCss(scene) {
   if (typeof globalThis.fetch !== 'function') return '';
-  const families = [...new Set(['Inter', ...Object.values(scene?.project?.layout?.fonts || {})])].filter((f) => GOOGLE_FONTS.has(f));
+  const studio = studioOn(scene?.project?.layout);
+  const families = [...new Set(studio ? studioFontFamilies(scene.project.layout) : ['Inter', ...Object.values(scene?.project?.layout?.fonts || {})])].filter((f) => GOOGLE_FONTS.has(f));
   // Bounded: a slow or blocked font host must not stall the export.
   const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
   const timer = setTimeout(() => ctrl?.abort(), 5000);
@@ -2084,7 +2180,9 @@ async function embeddedFontCss(scene) {
   const blocks = await Promise.all(families.map(async (family) => {
     try {
       const q = encodeURIComponent(family).replace(/%20/g, '+');
-      let res = await fetch(`https://fonts.googleapis.com/css2?family=${q}:wght@400;500;600;700&display=swap`);
+      // Studio embeds every weight it sets (300 to 800), else the editor's four.
+      let res = studio ? await fetch(`https://fonts.googleapis.com/css2?${studioFontQuery(family)}&display=swap`) : { ok: false };
+      if (!res.ok) res = await fetch(`https://fonts.googleapis.com/css2?family=${q}:wght@400;500;600;700&display=swap`);
       if (!res.ok) res = await fetch(`https://fonts.googleapis.com/css2?family=${q}:wght@400;700&display=swap`);
       if (!res.ok) throw new Error(String(res.status));
       const css = await res.text();
@@ -2448,6 +2546,7 @@ function renderMarkerLabelSvg(scene, marker, point, scale) {
   return `<g><rect x="${labelX}" y="${point.y - labelHeight / 2}" width="${estimatedWidth}" height="${labelHeight}" rx="${11 * scale}" fill="#ffffff" fill-opacity="0.96" stroke="#0f172a" stroke-opacity="0.12" stroke-width="${Math.max(1, scale * 0.8)}" /><text x="${labelX + 8 * scale}" y="${point.y}" dominant-baseline="middle" fill="#0f172a" font-family="${escapeXml(scene.project.layout?.fonts?.label || 'Inter')}, Arial, sans-serif" font-size="${fontSize}" font-weight="700">${escapeXml(marker.label)}</text></g>`;
 }
 function renderMarkersSvg(scene, scale) {
+  const halo = labelHalo(scene.project.layout);
   return (scene.project.markers || []).map((marker) => {
     const point = clonePoint(scene.map.latLngToContainerPoint([marker.lat, marker.lng]), scale);
     const size = (marker.size || 18) * scale;
@@ -2456,7 +2555,7 @@ function renderMarkersSvg(scene, scale) {
     if (marker.type === 'maplabel') {
       const labelFont = escapeXml(scene.project.layout?.fonts?.label || 'Inter');
       const rotate = marker.rotation ? ` transform="rotate(${marker.rotation}, ${point.x}, ${point.y})"` : '';
-      return `<text x="${point.x}" y="${point.y}" text-anchor="middle" dominant-baseline="middle" fill="${safeColor(marker.color, '#1e293b')}" fill-opacity="${marker.opacity ?? 0.35}" font-size="${(marker.size || 28) * scale}" font-weight="${marker.bold !== false ? '700' : '400'}" font-family="${labelFont}, Arial, sans-serif" letter-spacing="${(marker.tracking ?? 0.12)}em"${rotate}>${escapeXml((marker.label || '').toUpperCase())}</text>`;
+      return `<text x="${point.x}" y="${point.y}" text-anchor="middle" dominant-baseline="middle" fill="${safeColor(marker.color, '#1e293b')}" fill-opacity="${marker.opacity ?? 0.35}" font-size="${(marker.size || 28) * scale}" font-weight="${marker.bold !== false ? '700' : '400'}" font-family="${labelFont}, Arial, sans-serif" letter-spacing="${(marker.tracking ?? 0.12)}em"${rotate}${haloSvg(halo, scale)}>${escapeXml((marker.label || '').toUpperCase())}</text>`;
     }
 
     if (marker.type === 'image') {
@@ -2507,7 +2606,7 @@ function renderPolygonsSvg(scene, scale) {
       const lc = escapeXml(g.color);
       const font = `fill="${lc}" font-family="${escapeXml(g.fontFamily)}" font-size="${g.fontSize}" font-weight="${g.fontWeight}"`;
       if (g.arc) {
-        labelSvg = `<text x="${g.x.toFixed(1)}" y="${g.y.toFixed(1)}" text-anchor="middle" dominant-baseline="middle" ${font} stroke="#ffffff" stroke-opacity="0.85" stroke-width="${3 * scale}" stroke-linejoin="round" paint-order="stroke" transform="rotate(${g.angle.toFixed(2)} ${g.x.toFixed(1)} ${g.y.toFixed(1)})">${escapeXml(poly.label)}</text>`;
+        labelSvg = `<text x="${g.x.toFixed(1)}" y="${g.y.toFixed(1)}" text-anchor="middle" dominant-baseline="middle" ${font}${haloSvg(labelHalo(scene.project.layout), scale) || ` stroke="#ffffff" stroke-opacity="0.85" stroke-width="${3 * scale}" stroke-linejoin="round" paint-order="stroke"`} transform="rotate(${g.angle.toFixed(2)} ${g.x.toFixed(1)} ${g.y.toFixed(1)})">${escapeXml(poly.label)}</text>`;
       } else {
         const pw = poly.label.length * g.fontSize * 0.6 + g.padX * 2;
         labelSvg = `<rect x="${(g.x - pw / 2).toFixed(1)}" y="${(g.y - g.pillH / 2).toFixed(1)}" width="${pw.toFixed(1)}" height="${g.pillH.toFixed(1)}" rx="${(g.pillH / 2).toFixed(1)}" fill="#ffffff" fill-opacity="0.95" stroke="#142126" stroke-opacity="0.12" stroke-width="${scale}" /><text x="${g.x.toFixed(1)}" y="${g.y.toFixed(1)}" text-anchor="middle" dominant-baseline="middle" ${font}>${escapeXml(poly.label)}</text>`;
@@ -2573,7 +2672,7 @@ function renderEllipsesSvg(scene, scale, svgDefs) {
         const pid = `svg-arc-${safeId}`;
         if (svgDefs) svgDefs.push(`<path id="${pid}" d="${arcPath}" />`);
         const defsInline = svgDefs ? '' : `<defs><path id="${pid}" d="${arcPath}" /></defs>`;
-        label = `${defsInline}<text font-size="${labelFontSize}" font-weight="${fontWeight}" fill="${labelColor}" font-family="${labelFontFamily}, Arial, sans-serif"><textPath href="#${pid}" startOffset="${offset}" text-anchor="middle">${escapeXml(effectiveLabel)}</textPath></text>`;
+        label = `${defsInline}<text font-size="${labelFontSize}" font-weight="${fontWeight}" fill="${labelColor}" font-family="${labelFontFamily}, Arial, sans-serif"${haloSvg(labelHalo(scene.project.layout), scale)}><textPath href="#${pid}" startOffset="${offset}" text-anchor="middle">${escapeXml(effectiveLabel)}</textPath></text>`;
       } else {
         const pos = ellipseLabelPlacement(center, width, height, rotation, scale);
         const finalX = pos.labelX + (ellipse.labelOffsetX || 0) * scale;
@@ -2594,6 +2693,7 @@ function renderEllipsesSvg(scene, scale, svgDefs) {
 }
 function renderTitleSvg(scene, scale, svgDefs) {
   if (scene.project.layout?.showTitle === false) return '';
+  if (studioOn(scene.project.layout)) return renderStudioSvg(scene, scale, svgDefs, 'title');
   const theme = getTheme(scene);
   const layout = scene.project.layout || {};
   const { title } = getOverlayMetrics(scene);
@@ -2631,13 +2731,13 @@ export function renderLegendSvg(scene, scale, svgDefs) {
   if (scene.project.layout?.showLegend === false) return '';
   const { legend } = getOverlayMetrics(scene); const items = scene.project.layout?.legendItems || []; if (!items.length) return '';
   const x = legend.left * scale, y = legend.top * scale, w = legend.width * scale, h = legend.height * scale;
-  const theme = getTheme(scene);
+  const st = studioLegend(scene), theme = st?.theme || getTheme(scene);
   const legendFont = `${scene.project.layout?.fonts?.legend || 'Inter'}, Arial, sans-serif`;
   const lfs = scene.project.layout?.legendFontScale ?? 1;
   const lp = (theme.panelAccentLeft ? 20 : 16) * scale;
   const rows = legendRowLayout(items, scene.project.layout, y, scale).map(({ heading, item, y: rowY }, index) => {
     if (heading) {
-      return `<text class="em-legend-heading" x="${x + lp}" y="${rowY + (LEGEND_ROW.headingPitch / 2) * scale}" dominant-baseline="middle" fill="${theme.mutedText || theme.bodyText}" font-family="${legendFont}" font-size="${LEGEND_ROW.headingFont * scale * lfs}" font-weight="700">${escapeXml(String(heading).toUpperCase())}</text>`;
+      return `<text class="em-legend-heading" x="${x + lp}" y="${rowY + (LEGEND_ROW.headingPitch / 2) * scale}" dominant-baseline="middle" fill="${theme.mutedText || theme.bodyText}" font-family="${legendFont}" font-size="${LEGEND_ROW.headingFont * scale * lfs}" font-weight="${st ? `600" letter-spacing="${st.headingLs * scale * lfs}` : 700}">${escapeXml(String(heading).toUpperCase())}</text>`;
     }
     // Canvas centres the label on the row; matching that with the same y and an
     // explicit middle baseline keeps the two in step at any legendFontScale.
@@ -2650,10 +2750,14 @@ export function renderLegendSvg(scene, scale, svgDefs) {
     ? '' : svgRect(x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.panelFill, theme.panelBorder, scale);
   const titleSize = 15 * scale * lfs, noteSize = LEGEND_NOTE.font * scale;
   const note = legendNote(scene, y + h, scale).map(([t, ty]) => `<text class="em-legend-note" x="${x + lp}" y="${baselineFromTop(ty, noteSize)}" fill="${theme.mutedText || theme.bodyText}" font-family="${legendFont}" font-size="${noteSize}">${escapeXml(t)}</text>`).join('');
-  return `<g id="em-legend" class="em-panel" clip-path="url(#${clipId})">${panel}${svgPanelAccentLeft(x, y, h, theme, scale)}<text x="${x + lp}" y="${baselineFromTop(y + 14 * scale, titleSize)}" fill="${theme.panelTitle}" font-family="${legendFont}" font-size="${titleSize}" font-weight="700">${escapeXml(scene.project.layout?.legendTitle || 'Legend')}</text>${rows}${note}</g>`;
+  const content = `<text x="${x + lp}" y="${baselineFromTop(y + 14 * scale, titleSize)}" fill="${theme.panelTitle}" font-family="${legendFont}" font-size="${titleSize}" font-weight="${st ? 650 : 700}">${escapeXml(scene.project.layout?.legendTitle || 'Legend')}</text>${rows}${note}`;
+  // Studio's card is drawn outside the clip, which would cut its shadow off.
+  if (st) return `<g id="em-legend" class="em-panel">${paintSvg(st.shell(legend), scale, svgDefs)}<g clip-path="url(#${clipId})">${content}</g></g>`;
+  return `<g id="em-legend" class="em-panel" clip-path="url(#${clipId})">${panel}${svgPanelAccentLeft(x, y, h, theme, scale)}${content}</g>`;
 }
 function renderNorthArrowSvg(scene, scale, svgDefs) {
   if (scene.project.layout?.showNorthArrow === false) return '';
+  if (studioOn(scene.project.layout)) return renderStudioSvg(scene, scale, svgDefs, 'north');
   const theme = getTheme(scene);
   const { northArrow } = getOverlayMetrics(scene);
   const x = northArrow.left * scale, y = northArrow.top * scale, w = northArrow.width * scale, h = northArrow.height * scale;
@@ -2694,8 +2798,9 @@ function renderNorthArrowSvg(scene, scale, svgDefs) {
   const clipId = pushRoundedClip(svgDefs, x, y, w, h, (theme.panelRadius ?? 10) * scale);
   return `<g id="em-north-arrow" class="em-panel" clip-path="url(#${clipId})">${panel}<g transform="translate(${x} ${y})">${rose}</g></g>`;
 }
-function renderScaleBarSvg(scene, scale) {
+function renderScaleBarSvg(scene, scale, svgDefs) {
   if (scene.project.layout?.showScaleBar === false) return '';
+  if (studioOn(scene.project.layout)) return renderStudioSvg(scene, scale, svgDefs, 'scale');
   const theme = getTheme(scene); const { scaleBar } = getOverlayMetrics(scene); const x = scaleBar.left * scale, y = scaleBar.top * scale, w = scaleBar.width * scale, h = scaleBar.height * scale, scaleState = pickScaleLabel(scene.map);
   // Center bar + label inside the panel (mirrors the editor's flex layout)
   const barH = 6 * scale, gap = 4 * scale, textH = 11 * scale;
@@ -2753,14 +2858,16 @@ async function renderSatelliteInsetImageSvg(scene, scale) {
   if ((scene.project.layout || {}).insetMode !== 'satellite_locator') return null;
   const zone = getOverlayMetrics(scene).inset;
   if (!zone || !zone.width || !zone.height) return null;
-  const innerW = Math.round((zone.width - 20) * scale), innerH = Math.round((zone.height - 56) * scale);
+  // Studio's locator card has its own picture area (utils/studioCards.js insetArea).
+  const area = studioOn(scene.project.layout) ? insetArea(scene.project.layout, { x: zone.left, y: zone.top, w: zone.width, h: zone.height }) : null;
+  const innerW = Math.round((area ? area.w : zone.width - 20) * scale), innerH = Math.round((area ? area.h : zone.height - 56) * scale);
   if (innerW <= 0 || innerH <= 0) return null;
 
   const canvas = document.createElement('canvas');
   canvas.width = innerW; canvas.height = innerH;
   const ctx = canvas.getContext('2d');
   if (!ctx) return null;
-  const ok = await drawSatelliteInsetCanvas(ctx, 0, 0, innerW, innerH, scale, scene);
+  const ok = await drawSatelliteInsetCanvas(ctx, 0, 0, innerW, innerH, scale, scene, area ? Math.max(2, studioCard(scene.project.layout, 'inset').radius - 4) : 8);
   if (!ok) return null;
   try {
     return canvas.toDataURL('image/png');
@@ -2776,6 +2883,7 @@ async function renderSatelliteInsetImageSvg(scene, scale) {
 // life of the satellite locator.
 export function renderInsetSvg(scene, scale, svgDefs, satelliteImage = null) {
   const zone = getOverlayMetrics(scene).inset; if (!zone || !zone.width || !zone.height) return '';
+  if (studioOn(scene.project.layout)) return renderStudioSvg(scene, scale, svgDefs, 'inset', satelliteImage);
   const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale, innerX = x + 10 * scale, innerY = y + 30 * scale, innerW = w - 20 * scale, innerH = h - 56 * scale;
   const { insetImage, insetMode, autoInsetRegion, insetTitle, insetLabel } = scene.project.layout || {};
   const customInset = insetMode === 'custom_image' && insetImage;
@@ -2839,6 +2947,8 @@ export function calloutLeaderSvg(c, scale) {
 export function renderCalloutsSvg(scene, scale, svgDefs) {
   const calloutFont = `${scene.project.layout?.fonts?.callout || 'Inter'}, Arial, sans-serif`;
   const leaders = [];
+  const sc = studioCallout(scene), halo = labelHalo(scene.project.layout);
+  const haloAttrs = haloSvg(halo, scale);
   const cards = placeCallouts(scene, scale).map((c) => {
     const safeId = String(c.id || '').replace(/[^a-zA-Z0-9]/g, '');
     const leaderColor = c.style?.border || '#102640';
@@ -2863,10 +2973,11 @@ export function renderCalloutsSvg(scene, scale, svgDefs) {
     // Mirrors drawCalloutsCanvas line for line — same theme colours, corner
     // radius, measured wrapping and text tops — so PNG and SVG cards match.
     const theme = getTheme(scene);
-    const radius = Math.max(0, (theme.panelRadius ?? 10) - 4) * scale;
+    const radius = sc ? sc.c.radius * scale : Math.max(0, (theme.panelRadius ?? 10) - 4) * scale;
     const rawBoxFill = c.style?.background || theme.calloutFill || 'rgba(255,255,255,0.97)';
     const boxStroke = c.style?.border || theme.calloutBorder || '#17304f';
-    const textFill = c.style?.textColor || theme.calloutText || '#102640';
+    const dark = sc?.dark && c.type !== 'plain', plainHalo = c.type === 'plain' ? haloAttrs : '';
+    const textFill = dark ? '#ffffff' : c.style?.textColor || theme.calloutText || '#102640';
     const svgPadX = (c.style?.paddingX ?? Math.max(4, Math.min(10, (c.width || 160) * 0.06))) * scale;
     const svgAlign = c.style?.textAlign === 'center' ? 'center' : 'left';
     const textX = svgAlign === 'center' ? c.left + c.width / 2 : c.left + svgPadX;
@@ -2885,18 +2996,18 @@ export function renderCalloutsSvg(scene, scale, svgDefs) {
     const logo = c.logo?.image && /^data:image\//.test(c.logo.image) ? calloutLogoSize(c, wrapWidth / scale) : null;
     const logoBlockH = logo ? (logo.h + logo.gap) * scale : 0;
     if (c.type !== 'plain') c.height = Math.max(c.height, (c.style?.paddingY || 8) * scale * 2 + logoBlockH + titleBlockH + subBlockH);
-    const box = c.type !== 'plain' ? `<rect x="${c.left}" y="${c.top}" width="${c.width}" height="${c.height}" rx="${radius}" ${toSvgFill(rawBoxFill)} stroke="${boxStroke}" stroke-width="${scale}" />` : '';
+    const box = c.type === 'plain' ? '' : sc ? paintSvg(sc.shell(c, rawBoxFill, scale), scale, svgDefs) : `<rect x="${c.left}" y="${c.top}" width="${c.width}" height="${c.height}" rx="${radius}" ${toSvgFill(rawBoxFill)} stroke="${boxStroke}" stroke-width="${scale}" />`;
     const contentTop = c.top + (c.type === 'plain' ? (c.style?.paddingY || 8) * scale : c.height / 2 - (logoBlockH + titleBlockH + subBlockH) / 2);
     const logoEl = logo
       ? `<image x="${svgAlign === 'center' ? c.left + (c.width - logo.w * scale) / 2 : textX}" y="${contentTop}" width="${logo.w * scale}" height="${logo.h * scale}" preserveAspectRatio="xMidYMid meet" href="${escapeXml(c.logo.image)}" />`
       : '';
     const blockTop = contentTop + logoBlockH;
     const mainText = titleLines.map((tl, i) =>
-      `<text x="${textX}" y="${baselineFromTop(blockTop + i * titleLineH, svgFontSz)}" text-anchor="${textAnchor}" fill="${textFill}" font-family="${calloutFont}" font-size="${svgFontSz}" font-weight="700">${escapeXml(tl)}</text>`
+      `<text x="${textX}" y="${baselineFromTop(blockTop + i * titleLineH, svgFontSz)}" text-anchor="${textAnchor}" fill="${textFill}" font-family="${calloutFont}" font-size="${svgFontSz}" font-weight="700"${plainHalo}>${escapeXml(tl)}</text>`
     ).join('');
     const subTop = blockTop + titleBlockH + 4 * scale;
     const subtextEl = subtextLines.map((sl, i) =>
-      `<text x="${textX}" y="${baselineFromTop(subTop + i * subLineH, svgSubFontSz)}" text-anchor="${textAnchor}" fill="${c.style?.subtextColor || '#475569'}" font-family="${calloutFont}" font-size="${svgSubFontSz}">${escapeXml(sl)}</text>`
+      `<text x="${textX}" y="${baselineFromTop(subTop + i * subLineH, svgSubFontSz)}" text-anchor="${textAnchor}" fill="${dark ? '#ffffff" fill-opacity="0.78' : c.style?.subtextColor || '#475569'}" font-family="${calloutFont}" font-size="${svgSubFontSz}"${plainHalo}>${escapeXml(sl)}</text>`
     ).join('');
     const clipId = c.type !== 'plain' ? pushRoundedClip(svgDefs, c.left, c.top, c.width, c.height, radius) : null;
     const textGroup = clipId ? `<g clip-path="url(#${clipId})">${logoEl}${mainText}${subtextEl}</g>` : `${logoEl}${mainText}${subtextEl}`;
@@ -2941,8 +3052,8 @@ export async function renderSceneToSvg(sourceScene, options = {}) {
     ? (options.paidTier ? '' : `<text x="${wmX}" y="${wmY}" font-family="Arial,sans-serif" font-size="${6.5 * wmScale}" font-weight="600" fill="#94a3b8" fill-opacity="0.6" text-anchor="end" dominant-baseline="auto" paint-order="stroke" stroke="#ffffff" stroke-opacity="0.5" stroke-width="${2 * wmScale}" stroke-linejoin="round">explorationmaps.com</text>`)
     : `<text x="${wmX}" y="${wmY}" font-family="Arial,sans-serif" font-size="${9 * wmScale}" font-weight="bold" fill="#64748b" fill-opacity="0.72" text-anchor="end" dominant-baseline="auto" paint-order="stroke" stroke="#ffffff" stroke-opacity="0.55" stroke-width="2.5" stroke-linejoin="round">explorationmaps.com</text>`;
   const panels = isNI
-    ? `<g id="em-overlay-panels">${renderLegendSvg(scene, scale, svgDefs)}${renderNorthArrowSvg(scene, scale, svgDefs)}${renderInsetSvg(scene, scale, svgDefs, satelliteInset)}${renderLogoSvg(scene, scale)}${renderScaleBarSvg(scene, scale)}${renderDistanceTicksSvg(scene, scale)}${renderTitleStripSvg(scene, scale)}</g>`
-    : `<g id="em-overlay-panels">${renderSidebarPanelSvg(scene, scale)}${renderTitleSvg(scene, scale, svgDefs)}${renderLegendSvg(scene, scale, svgDefs)}${renderNorthArrowSvg(scene, scale, svgDefs)}${renderInsetSvg(scene, scale, svgDefs, satelliteInset)}${renderScaleBarSvg(scene, scale)}${renderFooterSvg(scene, scale)}${renderLogoSvg(scene, scale)}${renderDistanceTicksSvg(scene, scale)}</g>`;
+    ? `<g id="em-overlay-panels">${renderLegendSvg(scene, scale, svgDefs)}${renderNorthArrowSvg(scene, scale, svgDefs)}${renderInsetSvg(scene, scale, svgDefs, satelliteInset)}${renderLogoSvg(scene, scale)}${renderScaleBarSvg(scene, scale, svgDefs)}${renderDistanceTicksSvg(scene, scale)}${renderTitleStripSvg(scene, scale)}</g>`
+    : `<g id="em-overlay-panels">${renderSidebarPanelSvg(scene, scale)}${renderTitleSvg(scene, scale, svgDefs)}${renderLegendSvg(scene, scale, svgDefs)}${renderNorthArrowSvg(scene, scale, svgDefs)}${renderInsetSvg(scene, scale, svgDefs, satelliteInset)}${renderScaleBarSvg(scene, scale, svgDefs)}${renderFooterSvg(scene, scale)}${renderLogoSvg(scene, scale)}${renderDistanceTicksSvg(scene, scale)}</g>`;
   const mapContent = `${mapContentGroup}${panels}${renderSourceCreditSvg(scene, scale)}${watermark}`;
 
   const defsBlock = svgDefs.length ? `<defs>${svgDefs.join('')}</defs>` : '';
