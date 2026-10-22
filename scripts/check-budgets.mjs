@@ -539,7 +539,8 @@ const BUDGETS = {
   // Unchanged by the 2D export package (measured 273.2, 273.2 on main): as editorAuthJsGzipKb above.
   // 273.4 to 274.5 (Oct 2026): Same bridge and control names; measured 274.2 plain.
   editorJsGzipKb: 274.5,
-  claimsAuthJsGzipKb: 355,
+  // 355 to 355.3 (Oct 2026): claims shares the editor API bridge/control names; measured 355.0 in CI.
+  claimsAuthJsGzipKb: 355.3,
   claimsJsGzipKb: 290,
   // Stylesheet, gzipped. Today ~29 kB.
   maxCssGzipKb: 40,
