@@ -18,9 +18,11 @@ import { getMapFrame, scaleBarHeight } from '../utils/coordinateFrame.js';
 import CoordinateFrameOverlay from './CoordinateFrameOverlay.jsx';
 import { fitProjectToTemplate } from '../utils/frameMapForTemplate';
 import { projectStageSize, savedViewFor, zoomForSize } from '../utils/savedView';
+import { drillPlanLegendItems } from '../utils/drillPlanLegend.js';
 
 const MapCanvas = lazyGuarded(() => import('./MapCanvas'));
 const StudioCard = lazyGuarded(() => import('./StudioCard'));
+const DrillPlanOverlay = lazyGuarded(() => import('./DrillPlanOverlay'));
 
 // ── Helpers (mirrored from App.jsx) ──────────────────────────────────────────
 
@@ -81,8 +83,8 @@ export default function ReadOnlyMapStage({ project, onExportReady }) {
   // derivation — otherwise entries they renamed or removed reappear for the
   // reader.
   const legendItems = useMemo(
-    () => applyLegendCustomization(buildLegendItems(template, project.layers, project.layout), project.layout),
-    [template, project.layers, project.layout]
+    () => applyLegendCustomization([...buildLegendItems(template, project.layers, project.layout), ...drillPlanLegendItems(project.drillPlan)], project.layout),
+    [template, project.layers, project.layout, project.drillPlan]
   );
   const legendGroups = useMemo(() => groupLegendItems(legendItems, project.layout), [legendItems, project.layout]);
   const resolvedZones = useMemo(() => {
@@ -260,6 +262,11 @@ export default function ReadOnlyMapStage({ project, onExportReady }) {
             onSelectDistanceLine={null}
             onRemoveDistanceLine={null}
           />
+          {project.drillPlan && (
+            <React.Suspense fallback={null}>
+              <DrillPlanOverlay map={map} plan={project.drillPlan} zones={resolvedZones} layout={layout} />
+            </React.Suspense>
+          )}
           <CalloutsOverlay
             map={map}
             callouts={project.callouts || []}
