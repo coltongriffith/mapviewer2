@@ -614,7 +614,7 @@ html.em3d-version .share-bar .btn { padding: 6px 11px; }
           <label class="check"><input type="checkbox" id="opt-pending" data-ext="style.pendingLabels" checked>"Assays pending" from collar status</label>
           <label class="check"><input type="checkbox" id="opt-pending-none" data-ext="style.pendingNoAssays">Label holes without assays</label>
           <label class="check"><input type="checkbox" id="opt-crew" data-ext="crew.on" aria-label="Drill crew: a toy drill rig and its crew at the drill pad">Drill crew</label>
-          <span id="crew-ui" hidden><select id="crew-at" data-ext="crew.at" aria-label="Where the drill crew stands"><option value="auto">Auto (at the drill pad)</option></select> <select id="crew-size" data-ext="crew.scale" aria-label="Drill crew size"><option value="0.6">Small</option><option value="1">Medium</option><option value="1.6">Large</option></select> <label class="check"><input type="checkbox" id="crew-chatter" data-ext="crew.chatter" checked>Crew chatter</label></span>
+          <span id="crew-ui" hidden><select id="crew-at" data-ext="crew.at" aria-label="Where the drill crew stands"><option value="auto">Auto (at the drill pad)</option></select> <select id="crew-size" data-ext="crew.scale" aria-label="Drill crew size"><option value="0.6">Small</option><option value="1">Medium</option><option value="1.6">Large</option><option value="true">True scale</option></select> <button class="btn" type="button" id="crew-zoom" aria-label="Zoom to the drill crew">Zoom to crew</button> <label class="check"><input type="checkbox" id="crew-chatter" data-ext="crew.chatter" checked>Crew chatter</label> <small class="muted crew-hint" id="crew-hint" hidden>At true scale the rig is ~12 m tall — zoom in to see it.</small></span>
         </div>
         <div class="grid2" style="margin-top:8px">
           <label class="field"><span>Terrain</span><select id="terrain" data-ext="style.terrain">
@@ -1068,7 +1068,12 @@ Whole projects (to keep or move a figure):
                                   legend; it idles in the live view only. life (default true): in the live view and on
                                   share links the crew go about small routines; chatter (default true): now and then
                                   one says a short line in a bubble; pointing at or tapping one, they notice, wave and
-                                  say hello. Never in an export. getState().crew: where, hole, shown, screen
+                                  say hello. Never in an export. getState().crew: where, hole, shown, screen.
+                                  scale "true" (or size: "true"): real size, a 12 m mast on an 8 m skid, crew 1.8 m
+                                  tall, heights times the vertical exaggeration like the terrain; with a small leader
+                                  and label "Drill rig, true scale" (label: false leaves it out). getState().crew.metres
+  EM3D.zoomToCrew()               flies to a close oblique view of the drill pad (the zoom range reaches in while the
+                                  camera looks at a shown crew); a view preset goes back. Exported only if left framed
   EM3D.layersReady()              Promise; resolves once the layers, face images and inset have loaded
   EM3D.setFigureStyle(style, {brandKitId, brandRevision})   a shared figure style (version 1: colours
                                   {primary, accent, ...}, type {title, subtitle, label, note: {family, weight,
