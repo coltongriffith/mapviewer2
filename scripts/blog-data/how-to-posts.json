@@ -1502,27 +1502,124 @@
   {
     "slug": "how-to-search-ontario-mining-claims",
     "mapTypeId": "mining-claims-map",
-    "title": "How to Search Ontario Mining Claims and Map Them",
-    "metaDescription": "Search Ontario mining claims by company or claim number from public MLAS data, map and style them, and export an investor-ready figure.",
-    "directAnswer": "To search Ontario mining claims, open Exploration Maps, choose Add Claims → Search Claims Registry, select Ontario, type a company or claim-holder name (or a claim number), pick your claim groups, and click Add to map. Assign the Claims role, style, and export. Always confirm current holder, status, and boundaries in the official Ontario MLAS before relying on the map.",
+    "title": "Ontario Mining Claims Search: Find Claims by Holder, Number or Map",
+    "metaDescription": "Search Ontario mining claims by holder, claim number or area and see them on a map. Free, no login, searched live against public Ontario MLAS data.",
+    "directAnswer": "Search Ontario mining claims by holder, claim number or area below and see them on a map with holder, claim type and anniversary date. It is free, needs no account, and queries Ontario's public MLAS claim data live.",
     "publishedDate": "2026-06-14",
-    "ctaTop": {
-      "text": "Search a claimholder and create a map.",
-      "sub": "Pull an Ontario company's claims and style them in minutes.",
-      "label": "Search Ontario claims →"
+    "updatedDate": "2026-10-22",
+    "fullTitle": "Ontario Mining Claims Search & Map (MLAS Data) | Exploration Maps",
+    "actionLabel": "Search claims →",
+    "faqSchema": true,
+    "searchBox": {
+      "region": "ontario",
+      "label": "Search Ontario mining claims by company, claim number or area",
+      "placeholder": "e.g. Agnico Eagle, 627637, or 48.5, -81.3",
+      "note": "Free · no login · public registry data (live MLAS query, verify in MLAS)"
     },
     "ctaBottom": {
-      "text": "Turn your Ontario claims into a finished map.",
-      "sub": "Choose the investor layout, download a PNG, and save your map for the next update.",
+      "text": "Look up an Ontario claim now.",
+      "sub": "Search by holder or claim number, then add the claims to a map.",
       "label": "Search Ontario claims →"
     },
     "sections": [
       {
-        "h2": "What is the Ontario MLAS?",
-        "body": "The Ontario Mineral Lands Administration System (MLAS) is the provincial registry for mining claims, leases, and other mineral dispositions, administered by the Ontario Ministry of Mines. It covers the whole province, with active exploration concentrated in the Abitibi Greenstone Belt, Timmins–Kirkland Lake, and the Sudbury area. Exploration Maps uses public MLAS claim data so you can map tenure without downloading shapefiles."
+        "h2": "Look up an Ontario claim by number",
+        "body": "Choose Claim number(s) and enter the claim (tenure) number, for example 627637. You can paste a list — up to 100 numbers separated by spaces, commas or new lines — and you are told which were found and which were not. A pre-2018 legacy claim number still works: Ontario converted staked claims to grid cells in April 2018, and the search shows the current claims on that legacy claim’s ground."
       },
       {
-        "h2": "Already have your claim boundaries?",
+        "h3": "When a number is not found",
+        "body": "Check the number against your source, then look it up in the MLAS Map Viewer — the search links to it. A claim that has lapsed or been cancelled is no longer on the public claim layer."
+      },
+      {
+        "h2": "Look up Ontario claims by holder (company)",
+        "body": "Choose Company and type the holder name — for example Agnico Eagle or Alamos Gold. Word order does not matter, and if the full legal name finds nothing the search retries with the most distinctive words and tells you it did. If several holders match, pick the right one; their claims are then grouped into areas on the map, each with its claim count and range of anniversary dates.",
+        "image": {
+          "alt": "Claims registry search with Ontario — MLAS selected in the province dropdown",
+          "caption": "The registry search, with Ontario selected",
+          "src": "/blog-img/registry-on.png"
+        }
+      },
+      {
+        "body": "MLAS records the legal entity on title, which is often a project subsidiary rather than the parent company. An empty name match is not evidence that the ground is unheld; try one distinctive word or a claim number.",
+        "cta": {
+          "text": "Search an Ontario holder now.",
+          "sub": "Find an operator’s Ontario claims and add them to a map in one click.",
+          "label": "Search Ontario claims →"
+        }
+      },
+      {
+        "h2": "Find Ontario claims in an area on the map",
+        "body": "Choose Area and enter a latitude and longitude, for example 48.5, -81.3 near Timmins. The map opens on that point and loads every claim within 25 km, each holder in its own colour; you can change the radius to 10, 50 or 100 km. Leave the box empty and the map opens on Ontario: click the point you want, then Load Claims."
+      },
+      {
+        "h2": "What you see for each Ontario claim",
+        "table": {
+          "headers": [
+            "Field",
+            "What it is"
+          ],
+          "rows": [
+            [
+              "Claim number",
+              "The MLAS tenure number, e.g. 627637"
+            ],
+            [
+              "Holder",
+              "As MLAS records it, including the percentage share, e.g. \"(100) …\""
+            ],
+            [
+              "Claim type",
+              "e.g. single cell mining claim"
+            ],
+            [
+              "Anniversary date",
+              "Shown as the good-to date; assessment work is due by it"
+            ],
+            [
+              "Outline",
+              "The claim polygon, drawn on the map"
+            ]
+          ]
+        }
+      },
+      {
+        "html": "For status, due dates, work reports and the full record, open the claim in the <a href=\"https://www.lioapplications.lrc.gov.on.ca/MLAS/Index.html?viewer=MLAS.MLAS&amp;locale=en-CA\" rel=\"nofollow noopener\" target=\"_blank\">Ontario MLAS Map Viewer</a>."
+      },
+      {
+        "h2": "Check a claim in Ontario MLAS, the official registry",
+        "ordered": true,
+        "items": [
+          "Open the MLAS Map Viewer (no account is needed to view claims).",
+          "Search for the claim number, or zoom to the area and click a claim.",
+          "Read its holder, status and anniversary and due dates in the claim details.",
+          "Treat MLAS as the answer wherever it differs from a map: it is the registry of record."
+        ],
+        "box": {
+          "kind": "verify",
+          "title": "Verify in the official MLAS",
+          "html": "Always verify current claim holder, status, expiry and boundaries in the official <a href=\"https://www.lioapplications.lrc.gov.on.ca/MLAS/Index.html?viewer=MLAS.MLAS&amp;locale=en-CA\" rel=\"nofollow noopener\" target=\"_blank\">Ontario MLAS Map Viewer</a> before relying on the map. Claim status can change. Exploration Maps is not affiliated with the Government of Ontario and is not the registry of record."
+        }
+      },
+      {
+        "h2": "How current is the Ontario data?",
+        "body": "Each search queries the public MLAS claim layer published by the Ontario Ministry of Mines at the moment you search, so it is as current as that layer. Registering or changing a claim is still done in MLAS itself, which needs a prospector’s licence and an MLAS account.",
+        "box": {
+          "kind": "source",
+          "title": "Data source & disclaimer",
+          "html": "Some jurisdictions are queried live; others use refreshed public datasets. Ontario claim information comes from the Ontario Ministry of Mines’ MLAS and is queried live."
+        }
+      },
+      {
+        "h2": "Then: make a map, edit it or export it",
+        "body": "Click Add to map to bring the claims into the editor. There you can rename and restyle them, add your own files and neighbouring ground, choose a basemap, add a title block and logo, and export PNG for slides or PDF for reports. Free PNG exports keep a small Exploration Maps credit; Pro removes it for US$29/month or US$290/year. Tenure monitoring with good-to-date reminders covers British Columbia claims only for now.",
+        "cta": {
+          "text": "Search Ontario claims and map them.",
+          "sub": "Look up a holder or claim numbers, then style and export the map.",
+          "label": "Search Ontario claims →"
+        }
+      },
+      {
+        "h3": "Already have your claim boundaries?",
         "body": "Upload your GeoJSON, KML/KMZ or zipped shapefile instead of searching the registry again. Add separate files for your project and neighbouring ground, then give each layer a clear name.",
         "checklist": [
           "Upload your claim file and choose the Claims role.",
@@ -1538,12 +1635,10 @@
         }
       },
       {
-        "h2": "From a claim file to a presentation layout",
-        "body": "These screenshots show an illustrative boundary imported into the actual editor, followed by the investor layout. The example geometry is for the walkthrough and is not an official claim record.",
         "image": {
           "src": "/blog-img/ontario-upload-before.png",
           "alt": "An illustrative Ontario boundary after file upload, with the first-map checklist ready for layout selection",
-          "caption": "Before: an uploaded boundary with the Claims role assigned."
+          "caption": "Before: an uploaded boundary with the Claims role assigned. The example geometry is illustrative, not an official claim record."
         }
       },
       {
@@ -1554,88 +1649,42 @@
         }
       },
       {
-        "h2": "Step 1: Open the claims registry search for Ontario",
-        "body": "From the landing page choose Add Claims → Search Claims Registry, or open '+ Add Claims' in the editor sidebar. Select Ontario — MLAS from the province dropdown.",
-        "image": {
-          "alt": "Add Claims panel with Ontario — MLAS selected in the province dropdown",
-          "caption": "Selecting Ontario in the claims registry search",
-          "src": "/blog-img/registry-on.png"
-        }
-      },
-      {
-        "h2": "Step 2: Search by company name or claim number",
-        "body": "Type a company or individual holder name — e.g. 'Alamos Gold' or 'Agnico Eagle' — in the Company tab and press Enter, or switch to the Claim # tab for a specific Ontario claim number. Results are grouped by geographic cluster (Kirkland Lake, Timmins, Thunder Bay) so you can pick the right tenure package quickly.",
-        "cta": {
-          "text": "Search a claimholder and create a map.",
-          "sub": "Find an operator's Ontario ground and add it in one click.",
-          "label": "Search Ontario claims →"
-        }
-      },
-      {
-        "h2": "Step 3: Add the claims and assign the Claims role",
-        "body": "Check the groups you want — the summary shows total claim count and area in hectares — then click Add to map. The claims load as a polygon layer, and assigning the Claims role applies the standard blue styling used in NI 43-101 figures. Rename layers if you're showing more than one operator."
-      },
-      {
-        "h2": "Step 4: Style, add context, and export",
-        "body": "Adjust colour, opacity, and border weight in the layer card, enable roads and reference labels for context, choose a basemap, add your title block and logo, then export PNG for slides or PDF for reports. Free PNG exports retain a small Exploration Maps credit. Pro removes that credit for US$29/month or US$290/year."
-      },
-      {
-        "h2": "Example: mapping an operator's Abitibi ground",
-        "body": "To brief your team on a competitor's position in the Abitibi, search the company name, select Ontario, add the Timmins and Kirkland Lake groups, assign the Claims role, switch to Satellite to show the greenstone terrain, add a title block and date, and export Landscape 16:9 — a clean competitive-position map in a few minutes."
-      },
-      {
-        "h2": "If an Ontario owner search is empty",
-        "body": "Try one distinctive word from the holder name, or the subsidiary listed on the claim. If you have a claim number, use Claim # instead. Verify the record in MLAS; an empty name match is not evidence that the ground is unheld."
-      },
-      {
-        "h2": "Verify in Ontario MLAS",
-        "box": {
-          "kind": "verify",
-          "title": "Verify in the official MLAS",
-          "html": "Always verify current claim holder, status, expiry, and boundaries in the official <a href=\"https://www.lioapplications.lrc.gov.on.ca/MLAS/Index.html?viewer=MLAS.MLAS&amp;locale=en-CA\" rel=\"nofollow noopener\" target=\"_blank\">Ontario MLAS</a> before relying on the map. Claim status can change."
-        }
-      },
-      {
-        "h2": "Where the data comes from",
-        "box": {
-          "kind": "source",
-          "title": "Data source & disclaimer",
-          "html": "Pulls from public registry data where available. Some jurisdictions are queried live; others use refreshed public datasets. Ontario claim information originates with the Ontario Ministry of Mines' MLAS. Exploration Maps is not affiliated with the Government of Ontario and is not the official registry of record."
-        }
-      },
-      {
-        "h2": "What the app can and can't verify",
+        "h2": "What the app can and can’t verify",
         "box": {
           "kind": "capability",
           "title": "Can and cannot verify",
-          "html": "<strong>Can:</strong> map claim polygons and attributes from public MLAS data, style and label them, and combine them with your own files.<br><strong>Cannot:</strong> confirm legal ownership, good-standing, assessment-work compliance, or survey-grade boundaries. Confirm specifics in MLAS."
+          "html": "<strong>Can:</strong> find and map claims from public MLAS data by holder, number or area, style and label them, and combine them with your own files.<br><strong>Cannot:</strong> confirm legal ownership, good standing, assessment-work compliance or survey-grade boundaries. Confirm specifics in MLAS."
         }
       },
       {
         "h2": "Related guides",
-        "html": "See the broad <a href=\"/blog/how-to-make-a-mining-claims-map/\">mining claims map guide</a>, compare with <a href=\"/blog/how-to-map-bc-mineral-claims-live-registry/\">British Columbia</a> or <a href=\"/blog/how-to-search-quebec-mining-claims/\">Quebec</a>, import your own files with the <a href=\"/blog/how-to-import-geojson-mining-map/\">GeoJSON / Shapefile guide</a>, and finish with the <a href=\"/blog/how-to-make-a-professional-exploration-map/\">professional map guide</a>. For worked examples, browse the <a href=\"/companies/ontario/\">Ontario company claim maps</a>."
+        "html": "Compare with <a href=\"/blog/how-to-map-bc-mineral-claims-live-registry/\">British Columbia</a> or <a href=\"/blog/how-to-search-quebec-mining-claims/\">Quebec</a>, see every province in the <a href=\"/blog/canadian-mineral-claim-registries/\">Canadian claim registries guide</a>, import your own files with the <a href=\"/blog/how-to-import-geojson-mining-map/\">GeoJSON / Shapefile guide</a>, and finish with the <a href=\"/blog/how-to-make-a-professional-exploration-map/\">professional map guide</a>. For worked examples, browse the <a href=\"/companies/ontario/\">Ontario company claim maps</a>."
       }
     ],
     "faqs": [
       {
-        "q": "Where does Exploration Maps get Ontario claim data?",
-        "a": "From public Ontario MLAS claim data. Some jurisdictions are queried live and others use refreshed public datasets, so always confirm the current state against the official MLAS. Exploration Maps is a visualization tool, not the registry of record."
+        "q": "How do I look up an Ontario mining claim by number?",
+        "a": "Choose Claim number(s) in the search box at the top of this page, type the claim number (for example 627637) and press Search claims. You can paste up to 100 numbers at once, and a pre-2018 legacy claim number shows the current claims on its ground."
       },
       {
-        "q": "Can I search Ontario claims by claim number?",
-        "a": "Yes. In the claims registry search, switch to the Claim # tab and enter the claim ID to retrieve that single claim with its holder, area, type, and expiry. Verify details in MLAS."
+        "q": "Can I see who owns an Ontario mining claim?",
+        "a": "Yes. Each result shows the holder as MLAS records it, including the percentage share, with the claim type and anniversary date. Confirm ownership and status in the MLAS Map Viewer."
       },
       {
-        "q": "Can I search by company name?",
-        "a": "Yes — use the Company tab and type the holder name. Matching Ontario claims are grouped by geographic cluster so you can add the right package to your map."
+        "q": "How do I find all the claims a company holds in Ontario?",
+        "a": "Choose Company and type the holder name. Pick the matching holder and its claims are grouped by area with claim counts. Claims are often held by a subsidiary, so try that name too."
+      },
+      {
+        "q": "Is the Ontario MLAS free to use?",
+        "a": "Viewing claims in the MLAS Map Viewer is free and needs no account. Registering claims and filing work is done in MLAS with a prospector’s licence and an MLAS account."
+      },
+      {
+        "q": "How current is this data?",
+        "a": "Each search queries the public MLAS claim layer live, so it is as current as that layer. Claim status changes, so verify anything you rely on in MLAS, the registry of record."
       },
       {
         "q": "Is Exploration Maps the official Ontario claims registry?",
-        "a": "No. The official registry of record is the Ontario MLAS, administered by the Ontario Ministry of Mines under the Mining Act. Use Exploration Maps to build and export maps, and verify ownership, status, and boundaries in MLAS."
-      },
-      {
-        "q": "How current is the Ontario claim data?",
-        "a": "It reflects public registry data, which may be queried live or drawn from refreshed public datasets. Claim status can change, so verify current status and expiry in MLAS before relying on the map."
+        "a": "No. The registry of record is Ontario MLAS, administered by the Ontario Ministry of Mines under the Mining Act. Use Exploration Maps to find claims and build maps, and verify ownership, status and boundaries in MLAS."
       }
     ],
     "relatedSlugs": [
@@ -1643,9 +1692,7 @@
       "how-to-make-a-mining-claims-map",
       "how-to-map-bc-mineral-claims-live-registry"
     ],
-    "category": "mineral-claims",
-    "fullTitle": "Ontario Mining Claims Search (MLAS) | Exploration Maps",
-    "updatedDate": "2026-09-15"
+    "category": "mineral-claims"
   },
   {
     "slug": "how-to-search-saskatchewan-mineral-claims",
@@ -1909,102 +1956,168 @@
   {
     "slug": "how-to-search-quebec-mining-claims",
     "mapTypeId": "mining-claims-map",
-    "title": "How to Search Quebec Mining Claims (GESTIM) and Map Them",
-    "metaDescription": "How to search Quebec mining claims in GESTIM: find titles by owner or area, check expiry dates, and export claims to a map.",
-    "directAnswer": "To map Quebec mining claims, open Exploration Maps, choose Add Claims → Search Claims Registry, select Quebec, and type a titleholder (company) name or claim number. The results come from Quebec's public GESTIM titres miniers dataset, which is a refreshed public extract (not a live query), so it can lag the official registry. Always verify current title status and boundaries in GESTIM before relying on the map.",
+    "title": "Quebec Mining Claims Search: Find Claims by Owner, Number or Map",
+    "metaDescription": "Search Quebec mining claims by company, claim number or area and see them on a map. Free, no login, from Quebec's public GESTIM active-titles file.",
+    "directAnswer": "Search Quebec mining titles by titleholder, claim number or area below and see them on a map with holder, status, expiry date and area. It is free, needs no account, and uses Quebec's public GESTIM active-titles file, loaded weekly.",
     "publishedDate": "2026-06-25",
-    "ctaTop": {
-      "text": "Search a claimholder and create a map.",
-      "sub": "Pull a titleholder's Quebec claims and map them in minutes."
+    "updatedDate": "2026-10-22",
+    "fullTitle": "Quebec Mining Claims Search & Map (GESTIM Data) | Exploration Maps",
+    "actionLabel": "Search claims →",
+    "faqSchema": true,
+    "searchBox": {
+      "region": "quebec",
+      "label": "Search Quebec mining claims by company, claim number or area",
+      "placeholder": "e.g. Azimut, 2654321, or 49.9, -74.4",
+      "note": "Free · no login · public registry data (refreshed extract, verify in GESTIM)"
     },
     "ctaBottom": {
-      "text": "Turn public claim data into a clean map.",
-      "sub": "Open the editor, add Quebec titres, and export a PNG or PDF."
+      "text": "Look up a Quebec claim now.",
+      "sub": "Search by titleholder or claim number, then add the claims to a map."
     },
     "sections": [
       {
-        "h2": "Quebec mineral tenure overview",
-        "body": "Quebec mining claims (titres miniers) are administered by the Ministère des Ressources naturelles et des Forêts (MRNF) through GESTIM Plus. Quebec is a tier-one jurisdiction: the Abitibi greenstone belt hosts world-class gold and base-metal deposits such as Canadian Malartic and LaRonde, and the James Bay region is Canada's fastest-growing lithium and critical-minerals district. The map-designation claim (claim désigné sur carte) is the dominant exploration tenure."
+        "h2": "Look up a Quebec claim by number",
+        "body": "Choose Claim number(s) and enter the title number, for example 2654321. You can paste a whole list from a claim schedule — up to 100 numbers separated by spaces, commas or new lines — and a leading \"#\" or \"CDC\" is ignored. Each number is matched exactly; for a list you are told which numbers were found and which were not. If a single number is not found, you get the titles whose numbers start with what you typed, labelled as near matches rather than presented as yours."
       },
       {
-        "h2": "Important: Quebec uses a refreshed dataset, not a live query",
-        "body": "Quebec is handled differently from provinces queried live. GESTIM's portal is login-gated and SIGÉOM serves map images only, but Quebec publishes its complete active-titles dataset as a public file. Exploration Maps loads that refreshed public extract and searches it by company or claim number — no login required. Because it's a periodic refresh, it can lag very recent staking or expiries, so treat it as a planning aid and confirm specifics in GESTIM.",
-        "box": {
-          "kind": "source",
-          "title": "Data source & refresh note",
-          "html": "Pulls from public registry data where available. Some jurisdictions are queried live; others use refreshed public datasets. Quebec uses a refreshed public GESTIM titres-miniers extract, so it can be slightly behind the official registry. Exploration Maps is not affiliated with the MRNF and is not the official registry of record."
-        }
+        "h3": "When a number is not found",
+        "body": "Our file holds active titles only — including suspended titles and those pending renewal — so an expired, abandoned or revoked title will not be in it, and nor will a title registered since the last weekly refresh. The search says so and links to GESTIM, where you can check the number in the registry of record."
       },
       {
-        "h2": "Step 1: Select Quebec in registry search",
-        "body": "Choose Add Claims → Search Claims Registry and select Quebec — GESTIM. Two tabs are available: Company (titleholder / titulaire name) and Claim # (an exact title number such as 2654321).",
+        "h2": "Look up Quebec claims by owner (titleholder)",
+        "body": "Choose Company and type the titleholder name. Accents are optional and word order does not matter, so \"Azimut Exploration\" finds \"Exploration Azimut inc.\". If several holders match, pick the right one; their claims are then grouped by area with the claim count, total hectares and the range of expiry dates. If the full name finds nothing, the search retries with the most distinctive words and tells you it did.",
         "image": {
-          "alt": "Add Claims panel with Quebec — GESTIM selected",
-          "caption": "Selecting Quebec in the claims registry search",
+          "alt": "Claims registry search with Quebec — GESTIM selected and the Company and Claim # tabs",
+          "caption": "The registry search, with Quebec selected",
           "src": "/blog-img/registry-qc.png"
         }
       },
       {
-        "h2": "Step 2: Search by titleholder or claim number",
-        "body": "Type a company name such as 'Osisko', 'Patriot Battery Metals', or 'Les métaux Niobay' — accented French names are supported. The Company tab matches the registered titleholder; the Claim # tab looks up an exact title number. Results cover active titles across Abitibi, James Bay, Nunavik, and the Laurentides.",
-        "cta": {
-          "text": "Turn public claim data into a clean map.",
-          "sub": "Add a titleholder's Quebec claims to your map in one click."
+        "body": "GESTIM records the legal name on title, often in French and often a project subsidiary rather than the parent company. If a holder seems to have nothing, try the French form of the name or one distinctive word before concluding the ground is unheld."
+      },
+      {
+        "h2": "Find Quebec claims in an area on the map",
+        "body": "Choose Area and enter a latitude and longitude, for example 49.9, -74.4. The map opens on that point and loads every claim within 25 km, each holder in its own colour; you can change the radius to 10, 50 or 100 km. Leave the box empty and the map opens on Quebec: click the point you want, then Load Claims."
+      },
+      {
+        "h2": "What you see for each Quebec claim",
+        "table": {
+          "headers": [
+            "Field",
+            "What it is"
+          ],
+          "rows": [
+            [
+              "Title number",
+              "The GESTIM title number, e.g. 2654321"
+            ],
+            [
+              "Titleholder",
+              "The holder as recorded on title"
+            ],
+            [
+              "Status",
+              "Active, Suspended or Renewal Pending"
+            ],
+            [
+              "Expiry date",
+              "The date the title expires unless it is renewed"
+            ],
+            [
+              "Area",
+              "In hectares"
+            ],
+            [
+              "Title type",
+              "e.g. CDC, a map-designated claim"
+            ],
+            [
+              "Outline",
+              "The title polygon, drawn on the map"
+            ]
+          ]
         }
       },
       {
-        "h2": "Step 3: Add claims and assign the Claims role",
-        "body": "Select the geographic groups that match your project and click Add to map. The polygons load reprojected to WGS84 and styled for presentations; assign the Claims role for the standard convention and rename layers if you're comparing operators."
+        "html": "For anything else — work credits, renewal history, the full holder record — open the title in <a href=\"https://gestim.mines.gouv.qc.ca/\" rel=\"nofollow noopener\" target=\"_blank\">GESTIM</a>."
       },
       {
-        "h2": "Step 4: Add context and export",
-        "body": "Choose a basemap (Terrain suits Abitibi-belt ground), enable Context and Reference Labels, add your title block and logo, and export PNG for slides or PDF for reports. A 2–3× PDF export meets typical figure standards. Free PNG exports retain a small Exploration Maps credit. Pro removes that credit for US$29/month or US$290/year."
-      },
-      {
-        "h2": "Example: a James Bay lithium land position",
-        "body": "To show a peer's James Bay lithium position, search their titleholder name, select Quebec, add the James Bay group, assign the Claims role, switch to Satellite, add a title block and date, and export Landscape 16:9. Because Quebec is a refreshed dataset, double-check any very recent claims against GESTIM before you publish."
-      },
-      {
-        "h2": "Verify in GESTIM",
+        "h2": "Check a claim in GESTIM, the official registry",
+        "ordered": true,
+        "items": [
+          "Open GESTIM at gestim.mines.gouv.qc.ca.",
+          "Use its title search to look up the title number or the titleholder.",
+          "Open the title to read its current status, holder, expiry date and history.",
+          "Treat GESTIM as the answer wherever it differs from a map: it is the registry of record."
+        ],
         "box": {
           "kind": "verify",
           "title": "Verify in the official GESTIM",
-          "html": "Always verify current title holder, status, expiry, and boundaries in the official <a href=\"https://gestim.mines.gouv.qc.ca/\" rel=\"nofollow noopener\" target=\"_blank\">GESTIM</a> before relying on the map — especially given the refreshed-dataset lag."
+          "html": "Always verify current titleholder, status, expiry and boundaries in the official <a href=\"https://gestim.mines.gouv.qc.ca/\" rel=\"nofollow noopener\" target=\"_blank\">GESTIM</a> before relying on the map. Exploration Maps is not affiliated with the MRNF and is not the registry of record."
         }
       },
       {
-        "h2": "What the app can and can't verify",
+        "h2": "How current is the Quebec data?",
+        "body": "Quebec publishes its active mining titles as a public file, refreshed every Monday. Exploration Maps loads that file once a week and searches it, because Quebec offers no public service we can query live. A title registered, renewed or lapsed since the last load can therefore differ from GESTIM.",
+        "box": {
+          "kind": "source",
+          "title": "Data source & refresh note",
+          "html": "Some jurisdictions are queried live; others use refreshed public datasets. Quebec uses the public file of active GESTIM titles, loaded weekly, so it can be a few days behind the official registry."
+        }
+      },
+      {
+        "h2": "Then: make a map, edit it or export it",
+        "body": "Click Add to map to bring the claims into the editor. There you can rename and restyle them, add your own files and other holders’ ground, choose a basemap, add a title block and logo, and export PNG for slides or PDF for reports. Free PNG exports keep a small Exploration Maps credit; Pro removes it for US$29/month or US$290/year. Tenure monitoring with good-to-date reminders covers British Columbia claims only for now.",
+        "cta": {
+          "text": "Search Quebec claims and map them.",
+          "sub": "Find a titleholder’s claims and add them to a map in one click."
+        }
+      },
+      {
+        "h3": "Example: a James Bay lithium land position",
+        "body": "Search the titleholder's name, pick the James Bay group, add it to the map, switch to Satellite, add a title block and date, and export Landscape 16:9. Because Quebec is a weekly extract, check any very recent claims in GESTIM before you publish."
+      },
+      {
+        "h2": "What the app can and can’t verify",
         "box": {
           "kind": "capability",
           "title": "Can and cannot verify",
-          "html": "<strong>Can:</strong> map title polygons and attributes from the refreshed public GESTIM extract, style and label them, and combine them with your own files.<br><strong>Cannot:</strong> reflect changes since the last refresh, or confirm legal ownership, good-standing, or survey-grade boundaries. Confirm specifics in GESTIM."
+          "html": "<strong>Can:</strong> find and map active titles from the public GESTIM file by holder, number or area, style and label them, and combine them with your own files.<br><strong>Cannot:</strong> reflect changes since the last weekly load, or confirm legal ownership, good standing or survey-grade boundaries. Confirm specifics in GESTIM."
         }
       },
       {
         "h2": "Related guides",
-        "html": "See the broad <a href=\"/blog/how-to-make-a-mining-claims-map/\">mining claims map guide</a>, compare with <a href=\"/blog/how-to-search-ontario-mining-claims/\">Ontario</a> or <a href=\"/blog/how-to-map-bc-mineral-claims-live-registry/\">British Columbia</a>, import your own files with the <a href=\"/blog/how-to-import-geojson-mining-map/\">GeoJSON / Shapefile guide</a>, and finish with the <a href=\"/blog/how-to-make-a-professional-exploration-map/\">professional map guide</a>. Once the titres are on the map, the <a href=\"/mining-map-software/\">mining map software</a> handles layout and export, and the <a href=\"/drill-results-map/\">drill results map</a> adds collars and intercepts for a news release. For BC and Ontario issuers, browse the <a href=\"/companies/\">claim maps by company</a>."
+        "html": "Compare with <a href=\"/blog/how-to-search-ontario-mining-claims/\">Ontario</a> or <a href=\"/blog/how-to-map-bc-mineral-claims-live-registry/\">British Columbia</a>, see every province in the <a href=\"/blog/canadian-mineral-claim-registries/\">Canadian claim registries guide</a>, import your own files with the <a href=\"/blog/how-to-import-geojson-mining-map/\">GeoJSON / Shapefile guide</a>, and finish with the <a href=\"/blog/how-to-make-a-professional-exploration-map/\">professional map guide</a>. Once the titles are on the map, the <a href=\"/mining-map-software/\">mining map software</a> handles layout and export."
       }
     ],
     "faqs": [
       {
-        "q": "How current is Quebec claim data in Exploration Maps?",
-        "a": "Quebec uses a refreshed public GESTIM titres-miniers extract rather than a live query, so it can lag very recent staking or expiries. Use it for planning and competitive context, and confirm current status and boundaries in the official GESTIM before relying on the map."
+        "q": "How do I look up a Quebec claim by number?",
+        "a": "Choose Claim number(s) in the search box at the top of this page, type the title number (for example 2654321) and press Search claims. You can paste up to 100 numbers at once. If a number is not in our weekly extract of active titles, the search says so and links to GESTIM."
       },
       {
-        "q": "Why is Quebec searched differently from other provinces?",
-        "a": "Provinces like Ontario and BC expose public claim data that can be queried directly; Quebec's GESTIM portal is login-gated and SIGÉOM serves images only. Quebec does publish its complete active-titles dataset publicly, so Exploration Maps loads that refreshed extract and searches it by company or claim number with no login."
+        "q": "Can I see who owns a Quebec mining claim?",
+        "a": "Yes. Each result shows the titleholder as recorded on title, with the status, expiry date and area. The holder is often a subsidiary and often recorded in French, so confirm ownership details in GESTIM."
       },
       {
-        "q": "Can I search Quebec claims by company name?",
-        "a": "Yes. Use the Company tab and type the titleholder name (accented French names are supported). Matching active titles are returned for you to add to the map. Confirm details in GESTIM."
+        "q": "How do I find all the claims a company holds in Quebec?",
+        "a": "Choose Company and type the titleholder name. Accents and word order do not matter. Pick the matching holder and its claims are grouped by area with claim counts, hectares and expiry dates."
+      },
+      {
+        "q": "Is GESTIM free?",
+        "a": "Consulting mining titles in GESTIM costs nothing. Staking a claim (map designation), renewing it and other transactions are done through a GESTIM account and carry the fees set by regulation. Searching here is also free, with no account."
+      },
+      {
+        "q": "How current is this data?",
+        "a": "Quebec publishes its active titles as a public file refreshed every Monday, and we load it once a week. A title registered, renewed or lapsed since then can differ from GESTIM, which is the registry of record."
+      },
+      {
+        "q": "Can I search Quebec claims on a map by area?",
+        "a": "Yes. Choose Area and enter a latitude and longitude; the map opens there with every claim within 25 km, and you can widen the radius to 50 or 100 km. Or leave the box empty and click a point on the map."
       },
       {
         "q": "Who regulates mining claims in Quebec?",
-        "a": "The Ministère des Ressources naturelles et des Forêts (MRNF) administers mineral titles under the Mining Act (Loi sur les mines). GESTIM Plus is the official registration and management system for titres miniers, and the registry of record."
-      },
-      {
-        "q": "Can I search for claims near a specific point in Quebec?",
-        "a": "Yes — the Nearby Claims tool runs a radius search around a pinned location or your uploaded claims layer, and Quebec is supported using the refreshed titles dataset. As always, verify any results in GESTIM."
+        "a": "The Ministère des Ressources naturelles et des Forêts (MRNF) administers mining titles under the Mining Act. GESTIM is its system for registering and managing titles, and the registry of record."
       }
     ],
     "relatedSlugs": [
@@ -2012,9 +2125,7 @@
       "how-to-make-a-mining-claims-map",
       "how-to-search-ontario-mining-claims"
     ],
-    "category": "mineral-claims",
-    "fullTitle": "Quebec Mining Claims Search (GESTIM) | Exploration Maps",
-    "updatedDate": "2026-09-05"
+    "category": "mineral-claims"
   },
   {
     "slug": "how-to-search-yukon-quartz-claims",

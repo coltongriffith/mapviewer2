@@ -255,7 +255,7 @@ article strong{color:#142126}
 
 // ─── Page shell ───────────────────────────────────────────────────────────────
 
-function pageShell({ title, description, canonical, schema, body, noindex = false, fullTitle = null, ogType = 'article', ogImage = OG_IMAGE, action = contentAction({ slug: canonical.split('/').filter(Boolean).at(-1) }) }) {
+function pageShell({ title, description, canonical, schema, body, noindex = false, fullTitle = null, ogType = 'article', ogImage = OG_IMAGE, action = contentAction({ slug: canonical.split('/').filter(Boolean).at(-1) }), extraCss = '' }) {
   // fullTitle overrides the default "<title> | SITE_NAME" pattern, used by
   // landing pages whose exact title tag is specified verbatim.
   const titleTag = fullTitle || `${title} | ${SITE_NAME}`;
@@ -283,7 +283,7 @@ ${schema ? `<script type="application/ld+json">${JSON.stringify(schema, null, 0)
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Source+Sans+3:wght@300;400;600;700&display=swap" rel="stylesheet">
-<style>${CSS}</style>
+<style>${CSS}${extraCss}</style>
 <!-- Google tag (gtag.js) — the config lives in /gtag-init.js rather than inline
      because our CSP is script-src 'self' with no 'unsafe-inline'. -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=AW-18358773663"></script>
@@ -414,7 +414,8 @@ function appLink({ intent = null, region = null, demo = null, campaign = '' } = 
 }
 
 // Keep navigation, article and landing-page actions aligned with search intent.
-function contentAction({ slug = '', mapTypeId, product } = {}) {
+function contentAction(post = {}) {
+  const { slug = '', mapTypeId, product } = post;
   const utm = `utm_source=blog&utm_medium=cta&utm_campaign=${encodeURIComponent(slug)}`;
   if (product === '3d') return { monitor: false, product, href: `/3d?${utm}`, label: 'Open Exploration Maps 3D →' };
   if (product === 'teams') return { monitor: false, product, href: `/teams/?${utm}#enquire`, label: 'Discuss your project →' };
@@ -422,9 +423,12 @@ function contentAction({ slug = '', mapTypeId, product } = {}) {
   if (monitor) return { monitor, href: `/tenure-monitor?utm_source=blog&utm_medium=cta&utm_campaign=${encodeURIComponent(slug)}`, label: 'Monitor my claims →' };
   const region = (slug.match(/search-([a-z-]+?)-(?:mining|mineral|quartz)-claims/) || [])[1]
     || (/\bbc\b/.test(slug) ? 'british-columbia' : null);
+  // A post may name its own action ("Search Quebec claims →") when the generic
+  // "Create my map" is not what its readers came for.
+  const label = (fallback) => post.actionLabel || fallback;
   const files = ['shapefile-to-map', 'how-to-import-geojson-mining-map', 'exploration-mapping-file-types-shapefile-kml-geojson-csv'].includes(slug);
   const drill = mapTypeId === 'drill-results-map' || ['drill-results-map', 'how-to-make-a-drill-results-map', 'how-to-import-csv-data-mining-map'].includes(slug);
-  return { monitor: false, href: appLink({ intent: files ? 'claims-upload' : drill ? 'drill-results' : 'claims', region, campaign: slug }), label: files || drill ? 'Upload my data →' : 'Create my map →' };
+  return { monitor: false, href: appLink({ intent: files ? 'claims-upload' : drill ? 'drill-results' : 'claims', region, campaign: slug }), label: label(files || drill ? 'Upload my data →' : 'Create my map →') };
 }
 
 function inlineCta({ text, sub = '', href = '/', label = 'Open Exploration Maps →', position } = {}) {
@@ -519,7 +523,8 @@ function renderSections(sections, action) {
     const bodyP = s.body ? `<p>${esc(s.body)}</p>` : '';
     const htmlP = s.html ? `<p>${s.html}</p>` : '';
     const body = `${bodyP}${htmlP}`;
-    const items = s.items ? `<ul>${s.items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>` : '';
+    const list = s.ordered ? 'ol' : 'ul';
+    const items = s.items ? `<${list}>${s.items.map(i => `<li>${esc(i)}</li>`).join('')}</${list}>` : '';
     const checklist = s.checklist ? checklistBlock(s.checklist) : '';
     const table = s.table ? tableBlock(s.table) : '';
     const image = s.image ? figureBlock(s.image) : '';
@@ -562,10 +567,57 @@ function formatDate(isoDate) {
   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' });
 }
 
-// faqSchema was removed deliberately. Google restricted FAQ rich results to
-// authoritative government and health sites in August 2023, so FAQPage markup
-// on a commercial site earns no treatment and is simply a second copy of the
-// visible content to keep in sync. The visible FAQ blocks remain.
+// FAQPage markup is opt-in per post (post.faqSchema). It was removed site-wide
+// because Google restricted FAQ rich results to authoritative government and
+// health sites in August 2023, so on a commercial site it earns no rich result.
+// The registry-search guides opt back in at the owner's request: the questions
+// are the ones searchers type, and the markup still states them to other
+// engines and answer tools. It is built from post.faqs — the same array the
+// visible FAQ block renders — so the two cannot drift apart.
+function faqSchema(faqs) {
+  return {
+    '@type': 'FAQPage',
+    mainEntity: faqs.map(f => ({ '@type': 'Question', name: f.q, acceptedAnswer: { '@type': 'Answer', text: f.a } })),
+  };
+}
+
+// ─── Registry search box (plain HTML form, no script) ─────────────────────────
+
+// The first thing on a registry-search guide: a form that GETs the editor's
+// deep link (/?intent=claims&region=…&mode=…&q=…, read in src/App.jsx), so a
+// searcher who came to look a claim up can do it from the page. No JavaScript —
+// the CSP allows no inline script and the page should not get heavier.
+const SEARCH_BOX_CSS = `
+.claim-search{background:#f6f8f7;border:1px solid #c6cecf;border-radius:12px;padding:18px 20px;margin:0 0 28px}
+.claim-search-label{display:block;font-weight:700;color:#142126;font-size:1.02rem;margin-bottom:10px}
+.claim-search-row{display:flex;gap:8px;flex-wrap:wrap}
+.claim-search select,.claim-search input{font:inherit;font-size:16px;border:1px solid #c6cecf;border-radius:8px;padding:10px 12px;background:#fff;color:#142126;min-height:44px}
+.claim-search input{flex:1 1 220px;min-width:0}
+.claim-search button{font:inherit;font-weight:700;font-size:15px;background:#142126;color:#fff;border:0;border-radius:8px;padding:10px 18px;min-height:44px;cursor:pointer}
+.claim-search button:hover{background:#2c3d42}
+.claim-search-note{margin:10px 0 0 !important;font-size:13px;color:#5f6e72;line-height:1.5}
+@media(max-width:600px){.claim-search input{order:-1;flex-basis:100%}.claim-search select,.claim-search button{flex:1 1 40%;min-width:0}.claim-search{padding:14px;margin-bottom:22px}.claim-search-label{font-size:.95rem;margin-bottom:8px}.direct-answer{font-size:.98rem;line-height:1.55;padding:10px 14px;margin-bottom:16px}.breadcrumb{margin-bottom:12px}}
+`;
+
+function searchBoxBlock(post) {
+  const b = post.searchBox;
+  if (!b) return '';
+  const hidden = { intent: 'claims', region: b.region, utm_source: 'blog', utm_medium: 'cta', utm_campaign: post.slug, utm_content: 'search-box' };
+  return `<form class="claim-search" action="/" method="get" role="search" aria-label="${esc(b.label)}">
+  ${Object.entries(hidden).map(([k, v]) => `<input type="hidden" name="${k}" value="${esc(v)}">`).join('\n  ')}
+  <label class="claim-search-label" for="claim-search-q">${esc(b.label)}</label>
+  <div class="claim-search-row">
+    <select name="mode" aria-label="Search by">
+      <option value="company">${esc(b.companyLabel || 'Company')}</option>
+      <option value="number">Claim number(s)</option>
+      <option value="area">Area (latitude, longitude)</option>
+    </select>
+    <input id="claim-search-q" name="q" type="search" autocomplete="off" enterkeyhint="search" placeholder="${esc(b.placeholder)}">
+    <button type="submit">Search claims</button>
+  </div>
+  <p class="claim-search-note">${esc(b.note)}</p>
+</form>`;
+}
 
 function breadcrumbSchema(title, url) {
   return {
@@ -596,6 +648,7 @@ function buildHowToPage(post, allPosts) {
       articleSchema(post.title, post.metaDescription, url, post.publishedDate, post.updatedDate),
       // Explainers (a formula, a method) are not procedures; they set howTo:false
       // so they carry Article markup only rather than a HowTo of their headings.
+      post.faqSchema && post.faqs?.length && faqSchema(post.faqs),
       post.howTo !== false && {
         '@type': 'HowTo',
         name: post.title,
@@ -608,7 +661,7 @@ function buildHowToPage(post, allPosts) {
           .map(({ s, text }, i) => ({
             '@type': 'HowToStep',
             position: i + 1,
-            name: s.h2 || `Step ${i + 1}`,
+            name: s.h2 || s.h3 || `Step ${i + 1}`,
             text,
           })),
       },
@@ -626,7 +679,8 @@ function buildHowToPage(post, allPosts) {
   // guides open the upload prompt; claims guides open registry search.
   const action = contentAction(post);
   const postApp = action.href;
-  const topCta = inlineCta({ ...action, ...(post.ctaTop || { text: 'Turn public claim data into a clean map.', sub: 'No GIS experience needed — import, style, and export in minutes.' }), position: 'top' });
+  // A post with a search box leads with it; the box is the top call to action.
+  const topCta = post.searchBox ? '' : inlineCta({ ...action, ...(post.ctaTop || { text: 'Turn public claim data into a clean map.', sub: 'No GIS experience needed — import, style, and export in minutes.' }), position: 'top' });
   const bottomCta = inlineCta({ ...action, ...(post.ctaBottom || { text: 'Import your file and export an investor-ready map.', sub: 'Open the editor and have a shareable map in minutes.' }), position: 'bottom' });
 
   const body = `
@@ -635,7 +689,7 @@ function buildHowToPage(post, allPosts) {
     <article>
       <p class="breadcrumb"><a href="/">Home</a><span>›</span><a href="/blog/">Blog</a><span>›</span><a href="/blog/how-to/">How-to Guides</a><span>›</span>${esc(post.title)} ${pubDate}</p>
       <h1>${esc(post.title)}</h1>
-      <p class="direct-answer">${esc(post.directAnswer)}</p>
+      <p class="direct-answer">${esc(post.directAnswer)}</p>${post.searchBox ? `\n      ${searchBoxBlock(post)}` : ''}
       ${heroFigureForPost(post)}
       ${topCta}
       ${renderSections(post.sections || [], action)}
@@ -649,6 +703,7 @@ function buildHowToPage(post, allPosts) {
   return pageShell({
     title: post.title, fullTitle: post.fullTitle, description: post.metaDescription,
     canonical: url, schema, body, action, ...(post.ogImage ? { ogImage: `${SITE}${post.ogImage}` } : {}),
+    ...(post.searchBox ? { extraCss: SEARCH_BOX_CSS } : {}),
   });
 }
 
