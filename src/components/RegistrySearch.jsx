@@ -7,7 +7,8 @@ import {
   US_CLAIM_TYPES, isUsJurisdiction,
 } from '../utils/jurisdictions';
 import { bestJurisdictionHit, autoAdoptionNotice } from '../utils/claimRanking';
-import { scopingWarning, emptyResultMessage } from '../utils/scopingNotice';
+import { scopingWarning, emptyResultMessage, officialRegistry } from '../utils/scopingNotice';
+import { parseClaimNumbers, MAX_CLAIM_NUMBERS } from '../../shared/claimNumbers.js';
 import { relaxationNotice } from '../utils/relaxationNotice';
 import { claimNamePrefix, sourceCredit, CLAIM_NAME_CAVEAT } from '../utils/claimProvenance';
 import { claimNotices } from '../utils/claimNotices';
@@ -170,6 +171,8 @@ function autoDetectMode(q, allowedModes) {
   if (/^\d+$/.test(t) && allowedModes.includes('number')) return 'number';
   // US MLRS serials: two-letter state prefix + digits (NV105331298, "nv 105331298")
   if (/^[A-Za-z]{2}[\s-]?\d{4,}$/.test(t) && allowedModes.includes('number')) return 'number';
+  // "#4527312", or a pasted list of claim numbers ("2351771 2351772, 2351773").
+  if (allowedModes.includes('number') && /\d/.test(t) && parseClaimNumbers(t).kind === 'numbers') return 'number';
   return fallback;
 }
 
@@ -177,7 +180,32 @@ function autoDetectMode(q, allowedModes) {
 
 const LAST_PROVINCE_KEY = 'em_last_province';
 
-export default function RegistrySearch({ onImport, onBack, initialProvince, initialQuery = '', autoSearch = false }) {
+// A claim-number search for text that is plainly not a number: what to do
+// instead. Exported for tests.
+//   → { mode: 'company', query, notice }   search it as the company it is
+//   → { blocked: notice }                   no company search here (Manitoba)
+//   → { mode: 'number', query, notice? }    one number, or a capped list
+export function planNumberSearch(raw, cfg) {
+  const read = parseClaimNumbers(raw);
+  if (read.kind === 'text' && !isUsJurisdiction(cfg.value)) {
+    if (cfg.modes.includes('company')) {
+      return { mode: 'company', query: raw.trim(), notice: `"${raw.trim()}" isn't a claim number, so we searched it as a company name.` };
+    }
+    return { blocked: `Claim numbers contain digits (e.g. ${(cfg.placeholders.number || '').replace(/^e\.g\.\s*/, '')}). ${cfg.label} doesn't publish owner names, so it can't be searched by company.` };
+  }
+  if (read.kind === 'numbers' && read.total > 1) {
+    return {
+      mode: 'number',
+      query: read.numbers.join(' '),
+      notice: read.truncated
+        ? `Searched the first ${MAX_CLAIM_NUMBERS} of ${read.total} numbers. Paste the rest in a second search.`
+        : null,
+    };
+  }
+  return { mode: 'number', query: raw.trim(), notice: null };
+}
+
+export default function RegistrySearch({ onImport, onBack, initialProvince, initialQuery = '', autoSearch = false, initialMode = null }) {
   // Default to a deep-link province, else the last province this browser used,
   // else BC — so a repeat visitor isn't reset to BC every time.
   const [province, setProvince] = useState(() => {
@@ -188,8 +216,17 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
     try { localStorage.setItem(LAST_PROVINCE_KEY, province); } catch { /* ignore */ }
   }, [province]);
   const [query, setQuery] = useState(initialQuery);
-  const [mode, setMode] = useState('company');
-  const [manualMode, setManualMode] = useState(false);
+  // A deep link may name the tab (?mode=number). Only a mode the jurisdiction
+  // offers is honoured; without one the tab follows the query as before.
+  const [linkedMode] = useState(() => {
+    const cfg = ALL_JURISDICTIONS.find((p) => p.value === (initialProvince || province));
+    return initialMode && cfg?.modes.includes(initialMode) ? initialMode : null;
+  });
+  const [mode, setMode] = useState(linkedMode || 'company');
+  const [manualMode, setManualMode] = useState(Boolean(linkedMode));
+  // Why the search that ran is not quite the one typed (a company name in the
+  // Claim # box, a list over the cap) — or why nothing ran.
+  const [searchNotice, setSearchNotice] = useState(null);
   const [selectedOwner, setSelectedOwner] = useState(null);
   const [selectedGroups, setSelectedGroups] = useState(new Set());
   const [showSearchHelp, setShowSearchHelp] = useState(false);
@@ -241,12 +278,12 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
     // supported mode (claim name) instead of firing a request the server
     // rejects with 400.
     const cfg = ALL_JURISDICTIONS.find((p) => p.value === province) || ALL_JURISDICTIONS[0];
-    const autoMode = cfg.modes.includes('company') ? 'company' : autoDetectMode(q, cfg.modes);
+    // A deep link that names the tab searches that tab; one that does not
+    // keeps the company search it has always run.
+    const autoMode = linkedMode || (cfg.modes.includes('company') ? 'company' : autoDetectMode(q, cfg.modes));
     // auto: true → a zero-result outcome may adopt a cross-province hit
     // automatically (the visitor didn't choose this province, a deep link did).
-    pendingSearchRef.current = { province, mode: autoMode, query: q, auto: true };
-    setSubmitted({ province, mode: autoMode, query: q });
-    search(q, autoMode, province);
+    runSearch(q, autoMode, { auto: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -502,13 +539,47 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
     setAdoptionNotice(null);
   }
 
+  // Every search goes through here. A Claim # search is read first
+  // (planNumberSearch): a company name typed into that tab is searched as a
+  // company, and a pasted list is sent as a capped list.
+  function runSearch(raw, searchMode, { auto = false } = {}) {
+    let q = raw.trim();
+    let m = searchMode;
+    let notice = null;
+    if (m === 'number') {
+      const plan = planNumberSearch(q, provinceCfg);
+      if (plan.blocked) {
+        reset();
+        setSearchNotice(plan.blocked);
+        return;
+      }
+      ({ query: q, mode: m, notice } = plan);
+      if (m !== searchMode) { setMode(m); setManualMode(true); }
+    }
+    setSearchNotice(notice);
+    clearSelections();
+    pendingSearchRef.current = { province, mode: m, query: q, ...(auto ? { auto: true } : {}) };
+    setSubmitted({ province, mode: m, query: q });
+    search(q, m, province);
+  }
+
   function handleSearch(e) {
     e.preventDefault();
     if (query.trim().length < 2) return;
-    clearSelections();
-    pendingSearchRef.current = { province, mode, query: query.trim() };
-    setSubmitted({ province, mode, query: query.trim() });
-    search(query.trim(), mode, province);
+    runSearch(query, mode);
+  }
+
+  // Pasting a column of numbers into a one-line box would run them together
+  // ("2351771\n2351772" becomes "23517712351772"), so line breaks become spaces.
+  function handlePaste(e) {
+    const text = e.clipboardData?.getData('text');
+    if (!text || !/[\r\n\t]/.test(text)) return;
+    e.preventDefault();
+    const el = e.currentTarget;
+    const flat = text.replace(/[\r\n\t]+/g, ' ').trim();
+    const start = el.selectionStart ?? query.length;
+    const end = el.selectionEnd ?? query.length;
+    handleQueryChange(query.slice(0, start) + flat + query.slice(end));
   }
 
   // The same search again, after a dropped connection.
@@ -521,6 +592,7 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
 
   function handleQueryChange(val) {
     setQuery(val);
+    setSearchNotice(null);
     if (results || error) {
       reset();
       clearSelections();
@@ -529,6 +601,7 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
 
   function handleProvinceChange(val) {
     setProvince(val);
+    setSearchNotice(null);
     setManualMode(false);
     // ALL_JURISDICTIONS, not PROVINCES: a US state must resolve its own modes
     // (name/number), never fall back to BC's (company/number/map).
@@ -541,6 +614,7 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
   function handleModeChange(newMode) {
     setMode(newMode);
     setManualMode(true);
+    setSearchNotice(null);
     if (results || error) {
       reset();
       clearSelections();
@@ -626,6 +700,7 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
         : features[0]?.properties?.CLAIM_NAME || query;
       return `${usName} Claims (BLM)`;
     }
+    if (mode === 'number' && results?.meta?.numberList) return `${provinceCfg.label} claims (${features.length})`;
     if (mode === 'number') return `Claim ${query}`;
     return groupLabel ? `${holder} – ${groupLabel}` : `${holder} Claims`;
   }
@@ -750,6 +825,7 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
             placeholder={provinceCfg.placeholders[mode] || provinceCfg.placeholders.company}
             value={query}
             onChange={e => handleQueryChange(e.target.value)}
+            onPaste={handlePaste}
             autoFocus
           />
           <button
@@ -762,6 +838,8 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
           </button>
         </div>
       </form>
+
+      {searchNotice && <p className="claims-relaxed" role="status">{searchNotice}</p>}
 
       {error && <p className="claims-error">⚠ {error}{error === NETWORK_ERROR && submitted?.query && (
         <> <button type="button" className="claims-error-retry" disabled={loading}
@@ -841,6 +919,11 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
             {emptyMessage.headline}
             {emptyMessage.detail ? <><br /><span className="claims-empty-detail">{emptyMessage.detail}</span></> : null}
             {emptyMessage.hint ? <><br /><span className="claims-empty-hint">{emptyMessage.hint}</span></> : null}
+            {recoverySearch.mode === 'number' && officialRegistry(recoverySearch.province) ? (
+              <><br /><a href={officialRegistry(recoverySearch.province).url} target="_blank" rel="noopener noreferrer"
+                onClick={() => trackEvent('search_recovery_clicked', { province: recoverySearch.province, mode: 'number', action: 'official_registry' })}>
+                Look it up in {officialRegistry(recoverySearch.province).name} ↗</a></>
+            ) : null}
           </p>
           <ClaimRequestForm query={recoverySearch.query} province={recoverySearch.province}
             provinceLabel={recoveryCfg.label} mode={recoverySearch.mode} />
@@ -1024,6 +1107,25 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
             </>
           )}
         </>
+      )}
+
+      {/* A pasted list: which numbers came back, and which did not. */}
+      {results?.meta?.numberList && (
+        <p className="claims-relaxed" role="status">
+          Found {results.meta.numberList.found.length} of {results.meta.numberList.requested} claim numbers.
+          {results.meta.numberList.missing.length > 0 && (
+            <>
+              <br />
+              <span className="claims-empty-hint">
+                Not in our {recoveryCfg.label} data: {results.meta.numberList.missing.slice(0, 20).join(', ')}
+                {results.meta.numberList.missing.length > 20 ? ` and ${results.meta.numberList.missing.length - 20} more` : ''}.
+                {officialRegistry(recoverySearch.province) ? (
+                  <> Check them in <a href={officialRegistry(recoverySearch.province).url} target="_blank" rel="noopener noreferrer">{officialRegistry(recoverySearch.province).name} ↗</a>.</>
+                ) : ' Check them in the official registry.'}
+              </span>
+            </>
+          )}
+        </p>
       )}
 
       {/* Flat list for claim # and map sheet searches */}
