@@ -349,7 +349,9 @@ const BUDGETS = {
   // browser's graphics limit) and the watermark band's lazy import for exportPNG, exportLayers and the Export step's
   // controls; setLogo's removeBackground and the Brand step's offer (logo-bg.js); setFaceImage's fit and fitFaceImage;
   // the block's side title in place of the title block, and its heading label hidden under it (~0.9 kB in all).
-  threeDJsGzipKb: 174.6,
+  // 174.6 -> 174.9: the anonymous unsaved-figure indicator and unload guard must run before
+  // account features load. Configured build measures 174.7 kB; Supabase remains lazy.
+  threeDJsGzipKb: 174.9,
   // /3d's own modules fetched on first use (the geology, geophysics and tag layers, the account
   // client). They never load with the page or the app, so they sit outside the page and app totals.
   // 32 → 34 (Oct 2026, round 4): per-hole tags, grouped pending tags, callouts beside or bracketed on their
