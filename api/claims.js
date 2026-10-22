@@ -934,6 +934,12 @@ function normalizeUsClaimType(text) {
 
 const ACRES_PER_HECTARE = 2.47105;
 
+// BLM render-field candidates (normalizeProps), also used to build the US
+// outFields projection so a renamed column is still fetched.
+const US_TYPE_FIELDS = ['BLM_PROD', 'CSE_TYPE_TXT', 'CASETYPE_TXT', 'CSE_TYPE', 'CASE_TYPE', 'CASE_TYPE_TXT'];
+const US_DISP_FIELDS = ['CSE_DISP', 'CSE_DISP_TXT', 'DISP_TXT', 'CASE_DISP', 'DISPOSITION'];
+const US_ACRES_FIELDS = ['RCRD_ACRS', 'ACRES', 'RECORD_ACRES', 'RCRD_ACRES'];
+
 function normalizeProps(props, cfg = null) {
   if (!props) return {};
   const keys = Object.keys(props);
@@ -959,9 +965,9 @@ function normalizeProps(props, cfg = null) {
     // BLM_PROD ("BLM Product", e.g. lode/placer claim wording) and CSE_DISP
     // ("Case Disposition") are the names on the live layer; the rest are
     // drift tolerance.
-    const typeText = pick(['BLM_PROD', 'CSE_TYPE_TXT', 'CASETYPE_TXT', 'CSE_TYPE', 'CASE_TYPE', 'CASE_TYPE_TXT']);
-    const disp = pick(['CSE_DISP', 'CSE_DISP_TXT', 'DISP_TXT', 'CASE_DISP', 'DISPOSITION']);
-    const acres = pick(['RCRD_ACRS', 'ACRES', 'RECORD_ACRES', 'RCRD_ACRES']);
+    const typeText = pick(US_TYPE_FIELDS);
+    const disp = pick(US_DISP_FIELDS);
+    const acres = pick(US_ACRES_FIELDS);
     const stateVal = pick([...(cfg.geoStateFields || []), ...(cfg.adminStateFields || [])]);
     const recordDate = pick(cfg.recordDateFields);
 
@@ -1186,8 +1192,23 @@ function resolveUsRowScoping(cfg, fields) {
     where = likeClause(legacy.name, prefixes.legacyOffice, { prefix: true, storedUpper });
   }
 
-  const names = new Set(fields.map((f) => f.name.toUpperCase()));
-  const outFields = (cfg.outFields || []).filter((n) => names.has(n.toUpperCase()));
+  // The projection is the fixed allowlist PLUS whatever each candidate list
+  // actually resolved to, so a layer that publishes an alias (STATE_GEO,
+  // LGCY_CSE_NR, CLAIM_NAME …) still returns the column that scoping and
+  // normalizeProps read. Deduplicated, case-insensitively, against the layer.
+  const byUpper = new Map(fields.map((f) => [f.name.toUpperCase(), f.name]));
+  const resolvedNames = [
+    ...(cfg.outFields || []),
+    fields.find((f) => f.type === 'esriFieldTypeOID')?.name,
+    geo?.name, legal?.name, serial?.name, legacy?.name,
+    ...[cfg.nameFields, cfg.ownerFields, cfg.adminStateFields, cfg.recordDateFields,
+      US_TYPE_FIELDS, US_DISP_FIELDS, US_ACRES_FIELDS]
+      .map((list) => pickField(list || [], fields)?.name),
+  ];
+  const outFields = [...new Set(resolvedNames
+    .filter(Boolean)
+    .map((n) => byUpper.get(String(n).toUpperCase()))
+    .filter((n) => n && /^[A-Za-z0-9_.]+$/.test(n)))];
 
   return {
     perRow: true,

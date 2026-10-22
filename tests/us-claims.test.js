@@ -108,7 +108,14 @@ function installBlmMock(fields = BLM_FIELDS) {
       if (params.get('objectIds')) {
         rowFetchUrls.push(decoded);
         const ids = params.get('objectIds').split(',').map(Number);
-        return jsonResponse({ type: 'FeatureCollection', features: ids.map((id) => store.get(id)).filter(Boolean) });
+        // Honour the projection like the live server: a column left out of
+        // outFields does not come back.
+        const out = params.get('outFields');
+        const project = (f) => (!out || out === '*' ? f : {
+          ...f,
+          properties: Object.fromEntries(out.split(',').filter((k) => k in f.properties).map((k) => [k, f.properties[k]])),
+        });
+        return jsonResponse({ type: 'FeatureCollection', features: ids.map((id) => store.get(id)).filter(Boolean).map(project) });
       }
       queryUrls.push(decoded);
       if (params.get('returnCountOnly')) return jsonResponse({ count: 42 });
@@ -458,6 +465,33 @@ describe('US state scoping (per row)', () => {
     expect(res.body.features).toHaveLength(1);
     expect(res.body.meta.scopingMethod).toBe('legal_description');
     expect(res.body.meta.scopingDegraded).toBe(false);
+  });
+
+  it('fetches the columns that candidate aliases resolved to (STATE_GEO, LGCY_CSE_NR, CLAIM_NAME)', async () => {
+    // A layer that publishes the alias spellings and no CSE_META. If the
+    // projection held only the fixed allowlist, STATE_GEO would never come back
+    // and this Washington claim would be dropped as unlocated.
+    vi.resetModules();
+    installBlmMock([
+      ...withoutFields(/GEO_STATE|CSE_META|LEG_CSE_NR|CSE_NAME/),
+      { name: 'STATE_GEO', type: 'esriFieldTypeString' },
+      { name: 'LGCY_CSE_NR', type: 'esriFieldTypeString' },
+      { name: 'CLAIM_NAME', type: 'esriFieldTypeString' },
+    ]);
+    fixtureRows = [claim(1, { CSE_NR: 'OR105000001', STATE_GEO: 'WA', LGCY_CSE_NR: 'ORMC123', CLAIM_NAME: 'GOLDIE #1' })];
+    const { default: h } = await import('../api/claims.js');
+    const res = mockRes();
+    await h(req({ q: 'goldie', type: 'name', province: 'us-wa' }), res);
+    expect(res.statusCode).toBe(200);
+    expect(rowFetchUrls[0]).toMatch(/outFields=[^&]*STATE_GEO/);
+    expect(rowFetchUrls[0]).toMatch(/outFields=[^&]*LGCY_CSE_NR/);
+    expect(rowFetchUrls[0]).toMatch(/outFields=[^&]*CLAIM_NAME/);
+    expect(res.body.features).toHaveLength(1);
+    const p = res.body.features[0].properties;
+    expect(p.US_STATE).toBe('WA');
+    expect(p.LEGACY_NR).toBe('ORMC123');
+    expect(p.CLAIM_NAME).toBe('GOLDIE #1');
+    expect(res.body.meta.scopingMethod).toBe('geo_state');
   });
 
   it('legalDescriptionStates reads every aliquot, and ignores junk', async () => {
