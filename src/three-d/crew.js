@@ -4,28 +4,53 @@
 // balls and domes made here, so three.js gains no classes), in the brand orange and ink with cream accents,
 // smooth-lit with a thin ink outline.
 //
-// S.crew: { on, at: "auto" | a hole ID | [easting, northing], scale (0.25-4, times the default size), heading
-// (degrees from north the rig faces; null: along the hole, else 135), pick (set here: the collar "auto" chose) }.
+// S.crew: { on, at: "auto" | a hole ID | [easting, northing], scale (0.25-4, times the default size; or "true": real
+// size, a 12 m mast on an 8 m skid and crew 1.8 m tall), heading (degrees from north the rig faces; null: along the
+// hole, else 135), pick (set here: the collar "auto" chose), label (true scale only: false leaves out its leader and
+// label) }.
 // "auto" stands at the one hole chosen for the section, else at the chosen holes' or every visible hole's common
 // pad, else at the visible collar with the most clear space around it on screen, nearer the camera preferred. That
 // choice is kept (pick) so the figure reopens as it was; turning the crew on or setting at chooses again. The mast
 // follows the dip and azimuth of a single hole and is otherwise upright. A spot outside the block hides it. Collar
 // rings under the pad, and callout dots over the rig, give way to it (collar, covers). The live view idles (the
-// head turns, a hand waves); exports, and a viewer who prefers reduced motion, see one fixed pose.
+// head turns, a hand waves); exports, and a viewer who prefers reduced motion, see one fixed pose. At true scale the
+// rig is a few pixels tall on a block's default view: a leader and label find it, and "Zoom to crew" (zoomTo) flies
+// to it, the camera's zoom range reaching in while it looks at the crew (reach).
 import * as THREE from 'three';
 
 let H = null, S = null, grp = null, anim = null, last = null, life = null, lifeP = null;
 export function init(host) { H = host; S = host.S; }
 export const CREW = { on: false, at: 'auto', scale: 1, heading: null, chatter: true, life: true };
 export const crewOf = (c) => ({ ...CREW, ...(c && typeof c === 'object' ? c : {}) });
-const PAD = 5, RAD = Math.PI / 180;
+const PAD = 5, RAD = Math.PI / 180, TRUE = 'true';
+const num = (s) => (s === TRUE ? 1 : s); // the true-scale rig picks its collar as Medium does
+const SIZE = { small: 0.6, medium: 1, large: 1.6, true: TRUE };
+
+// ---------- true scale ----------
+// The model (rig units, the skid's foot at 0): the skid's length, the mast's top, a person's height (to the hat).
+export const MODEL = { length: 10.2, width: 3.2, mast: 12.8, person: 2.56 };
+// A diamond-drill rig on skids and its crew, in metres.
+export const REAL = { length: 8, mast: 12, person: 1.8 };
+// The group's scale for scale "true" (scene units per rig unit: plan, up) and each person's own scale inside it.
+// mh, mv: scene units per metre across and up (studio.js G.V: 1 and the vertical exaggeration). Heights take the
+// exaggeration as the terrain does, so the mast stands as tall as 12 m of hillside; plan sizes read true against the
+// scale bar. The plan follows the skid's length and the height the mast's, so the cartoon rig stands a little taller
+// than it is long; the crew are scaled on their own to 1.8 m.
+export function trueScale(mh = 1, mv = 1) {
+  const up = REAL.mast / MODEL.mast;
+  return { plan: REAL.length / MODEL.length * mh, up: up * mv, person: REAL.person / MODEL.person / up };
+}
+// The mast's lean in rig units, for a lean t in the scene: with the group stretched up (sy) against the plan (sx),
+// the drawn mast still lines up with the hole's trace.
+export const tiltIn = (t, sx, sy) => (sx === sy ? t : Math.atan(Math.tan(t) * sy / sx));
 
 // ---------- the settings ----------
 export function patch(c, o, holes) {
   if (!o || typeof o !== 'object' || Array.isArray(o)) throw new Error('setCrew takes { on, at, scale, heading }.');
+  if (o.size !== undefined) { const v = SIZE[String(o.size).toLowerCase()]; if (v === undefined) throw new Error('size: "small", "medium", "large" or "true".'); o = { ...o, scale: v }; }
   const x = crewOf(c);
   if (typeof x.pick !== 'string' || o.on !== undefined || o.at !== undefined) delete x.pick; // chosen again
-  ['on', 'chatter', 'life'].forEach((k) => { if (o[k] !== undefined) x[k] = !!o[k]; });
+  ['on', 'chatter', 'life', 'label'].forEach((k) => { if (o[k] !== undefined) x[k] = !!o[k]; });
   if (o.at !== undefined) {
     const a = o.at;
     if (a === null || a === 'auto') x.at = 'auto';
@@ -39,7 +64,8 @@ export function patch(c, o, holes) {
       x.at = id;
     }
   }
-  if (o.scale !== undefined) { const v = o.scale === null ? 1 : +o.scale; if (!Number.isFinite(v) || v <= 0) throw new Error('scale must be a number, 0.25-4.'); x.scale = Math.max(0.25, Math.min(4, v)); }
+  if (o.scale === TRUE || o.scale === true) x.scale = TRUE;
+  else if (o.scale !== undefined) { const v = o.scale === null ? 1 : +o.scale; if (!Number.isFinite(v) || v <= 0) throw new Error('scale must be a number, 0.25-4, or "true".'); x.scale = Math.max(0.25, Math.min(4, v)); }
   if (o.heading !== undefined) {
     if (o.heading === null) x.heading = null;
     else { const v = +o.heading; if (o.heading === '' || !Number.isFinite(v)) throw new Error('heading must be degrees from north, or null.'); x.heading = ((v % 360) + 360) % 360; }
@@ -67,7 +93,7 @@ export function spot(c, holes, { chosen = null, shown = null, B = null, view = n
   if (P.length) {
     // Of the collars with room for the rig on screen (to the nearest collar off its pad), the nearest the camera, so
     // it stands in the open and in front; without room anywhere, the most room. Ties by ID.
-    const [W, Hh] = view.frame || [1, 1], need = 0.03 * W * (c.scale || 1);
+    const [W, Hh] = view.frame || [1, 1], need = 0.03 * W * (num(c.scale) || 1);
     const R = P.map((o) => ({ ...o, room: Math.min(...P.filter((k) => !near(k.h, o.h)).map((k) => Math.hypot((k.s[0] - o.s[0]) * W, (k.s[1] - o.s[1]) * Hh)), 1e9) }));
     const ok = R.filter((o) => o.room >= need), by = ok.length ? (a, b) => a.s[2] - b.s[2] : (a, b) => b.room - a.room;
     const best = (ok.length ? ok : R).sort((a, b) => by(a, b) || (a.h.id < b.h.id ? -1 : 1))[0];
@@ -216,8 +242,9 @@ function drop() {
   if (!grp) return;
   life?.detach(); grp.parent?.remove(grp); grp.traverse((o) => { if (o.material?.vertexColors) { o.geometry.dispose(); o.material.dispose(); } }); anim?.dispose(); grp = null; anim = null;
 }
-// The rig and crew, rebuilt whenever the scene is (studio.js extScene).
-export function sync() {
+// The rig and crew, rebuilt whenever the scene is (studio.js extScene); then how close the camera may come.
+export function sync() { build(); limit(); }
+function build() {
   drop(); last = null;
   let c; try { c = patch(null, crewOf(S.crew)); if (typeof S.crew?.pick === 'string') c.pick = S.crew.pick; } catch { c = { ...CREW, on: !!S.crew?.on }; } // a saved figure's settings, checked
   const G = H.G;
@@ -229,21 +256,24 @@ export function sync() {
   if (at?.pick && S.crew.pick !== at.pick) S.crew.pick = at.pick; // kept, so the figure reopens as it was
   last = { at, shown: !!at && inside(G.B, at.x, at.y) };
   if (!last.shown) return;
-  const L = at.hole ? lean(at.hole, S.vex) : null, tilt = L ? L.tilt : 0, heading = c.heading ?? (L && L.tilt > 0.02 ? L.az : 135);
+  const L = at.hole ? lean(at.hole, S.vex) : null, heading = c.heading ?? (L && L.tilt > 0.02 ? L.az : 135);
   // Read at the default view: about a thirtieth of the block's plan across, never past a twentieth of its short side.
-  const u = Math.min(G.diagH * 0.0054, Math.min(G.bw, G.bh) * 0.036) * c.scale, K = kit(), R = rig(K, tilt);
+  // True scale: real size (trueScale), in the scene's metres across (u) and up (uy, with the vertical exaggeration).
+  const real = c.scale === TRUE, o0 = G.V(0, 0, 0), mh = G.V(1, 0, 0).x - o0.x, mv = G.V(0, 0, 1).y - o0.y, T = real ? trueScale(mh, mv) : null;
+  const u = T ? T.plan : Math.min(G.diagH * 0.0054, Math.min(G.bw, G.bh) * 0.036) * c.scale, uy = T ? T.up : u;
+  const tilt = L ? tiltIn(L.tilt, u, uy) : 0, K = kit(), R = rig(K, tilt);
   grp = new THREE.Group(); grp.add(R.g, shade([5.9, 2.4], [-0.1, 0]), ...CREW_AT.map((q) => shade([0.62, 0.5], [q.at[0], q.at[2]])));
-  const people = CREW_AT.map((p) => { const f = person(K, p); f.g.position.set(...p.at); f.g.rotation.y = p.turn; grp.add(f.g); return f; });
+  const people = CREW_AT.map((p) => { const f = person(K, p); f.g.position.set(...p.at); f.g.rotation.y = p.turn; if (T) f.g.scale.setScalar(T.person); grp.add(f.g); return f; });
   const rot = (90 - heading) * RAD, cs = Math.cos(rot), sn = Math.sin(rot);
   const toWorld = (lx, lz) => [lx * cs + lz * sn, lx * sn - lz * cs]; // rig units → east, north (before the scale)
   const hole = 3.7 + 1.0 * Math.tan(tilt), [ox, oy] = toWorld(hole * u, 0), cx = at.x - ox, cy = at.y - oy; // the rod meets the ground at the collar
   // The pad is level at the median ground under the skid and the crew (nothing sunk past the lip), and ramps to the
   // ground at its rim (pad, below).
   const gy = (x, y) => G.V(x, y, G.surf(x, y)).y, at2 = (lx, lz) => { const [ex, ey] = toWorld(lx * u, lz * u); return gy(cx + ex, cy + ey); };
-  const ys = [[0, 0], [5.2, 1.6], [5.2, -1.6], [-5.2, 1.6], [-5.2, -1.6], [2.6, 0], [-2.6, 0], ...CREW_AT.map((q) => [q.at[0], q.at[2]])].map(([lx, lz]) => at2(lx, lz)).sort((a, b) => a - b), top = Math.max(ys[ys.length >> 1], ys[ys.length - 1] - LIP * u); // nothing sunk past the lip
-  grp.add(pad((lx, lz) => (at2(lx, lz) - top) / u));
+  const ys = [[0, 0], [5.2, 1.6], [5.2, -1.6], [-5.2, 1.6], [-5.2, -1.6], [2.6, 0], [-2.6, 0], ...CREW_AT.map((q) => [q.at[0], q.at[2]])].map(([lx, lz]) => at2(lx, lz)).sort((a, b) => a - b), top = Math.max(ys[ys.length >> 1], ys[ys.length - 1] - LIP * uy); // nothing sunk past the lip
+  grp.add(pad((lx, lz) => (at2(lx, lz) - top) / uy));
   const p = G.V(cx, cy, 0);
-  grp.position.set(p.x, top, p.z); grp.rotation.y = rot; grp.scale.setScalar(u);
+  grp.position.set(p.x, top, p.z); grp.rotation.y = rot; grp.scale.set(u, uy, u);
   grp.traverse((o) => { o.frustumCulled = false; });
   H.root.add(grp);
   // What the overlay keeps clear: the collars on the pad (plan), and the rig's place on screen (covers).
@@ -252,7 +282,9 @@ export function sync() {
   const under = new Set(H.project.holes.filter((h) => !ownAt(h) && onPad(...toLocal(h.c.x, h.c.y), 1.05)).map((h) => h.id));
   const box = []; for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; [0, 3.6].forEach((y) => box.push([PADC[0] + Math.cos(a) * PADR[0], y, PADC[1] + Math.sin(a) * PADR[1]])); }
   box.push([3.7 - 11.6 * Math.sin(tilt), 1 + 11.6 * Math.cos(tilt), 0]); // the mast's top
-  anim = { head: R.head, people, dispose: K.dispose, under, ownAt, foot: new THREE.Vector3(3.7, 1.0, 0), box, K, grp, props: [], at: CREW_AT, c };
+  // For the camera (reach, zoomTo): the rig's size in the scene (its length or height), and a point amid it.
+  const size = Math.max(MODEL.length * u, MODEL.mast * uy);
+  anim = { head: R.head, people, dispose: K.dispose, under, ownAt, foot: new THREE.Vector3(3.7, 1.0, 0), box, K, grp, props: [], at: CREW_AT, c, u, uy, mh, mv, real, size, top: new THREE.Vector3(...box[box.length - 1]), mid: new THREE.Vector3(0, 0.45 * MODEL.mast, 0) };
   // Every transform the motion touches, as built: put back before the export's fixed pose.
   anim.base = [R.head, ...people.flatMap((f) => [f.g, f.body, ...f.arms, f.head, ...f.legs.flat()])].map((o) => [o, o.position.clone(), o.rotation.clone()]);
   pose(0);
@@ -294,6 +326,59 @@ export function covers([x, y]) {
   return x >= Math.min(...X) && x <= Math.max(...X) && y >= Math.min(...Y) && y <= Math.max(...Y);
 }
 
+// The label at true scale, where the rig may be a few pixels tall: a short leader from the mast's top to "Drill rig,
+// true scale" (label false: none), up and to whichever side first keeps the words off the callouts' leaders and what
+// is drawn (occ). On the overlay after the callouts, so exports have it too; its box joins occ.
+export function draw(ctx, K, occ = [], leaders = []) {
+  if (!anim?.real || anim.c.label === false) return;
+  grp.updateMatrixWorld();
+  const [x, y, z] = H.proj(anim.top.clone().applyMatrix4(grp.matrixWorld)); if (!(z < 1)) return;
+  const { u, font } = K, [W, Hf] = H.frame(), t = 'Drill rig, true scale'; font(600, 12); const w = ctx.measureText(t).width;
+  const at = ([s, dx, dy]) => { const ex = x + s * dx * u, ey = y + dy * u, tx = ex + s * 10 * u, x0 = s > 0 ? tx : tx - w; return { s, ex, ey, tx, box: [x0 - 3 * u, ey - 9 * u, x0 + w + 3 * u, ey + 9 * u] }; };
+  const hit = (b, p, q = p) => !(Math.max(p[0], q[0]) < b[0] || Math.min(p[0], q[0]) > b[2] || Math.max(p[1], q[1]) < b[1] || Math.min(p[1], q[1]) > b[3]);
+  const bad = ({ box: b }) => b[0] < 4 * u || b[2] > W - 4 * u || b[1] < 4 * u || b[3] > Hf - 4 * u ? 99
+    : occ.filter((o) => hit(b, [o[0], o[1]], [o[2], o[3]])).length + leaders.filter(([x0, y0, x1, y1]) => { const n = Math.ceil(Math.hypot(x1 - x0, y1 - y0) / (3 * u)); for (let i = 0; i <= n; i++) if (hit(b, [x0 + (x1 - x0) * i / n, y0 + (y1 - y0) * i / n])) return true; return false; }).length;
+  const C = [[1, 22, -30], [-1, 22, -30], [1, 34, -52], [-1, 34, -52], [1, 22, 30], [-1, 22, 30]].map(at), L = C.find((c) => !bad(c)) || C.reduce((a, c) => (bad(c) < bad(a) ? c : a));
+  const { s, ex, ey, tx } = L;
+  ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  const leader = () => { ctx.beginPath(); ctx.moveTo(x, y + Math.sign(ey - y) * 2 * u); ctx.lineTo(ex, ey); ctx.lineTo(ex + s * 6 * u, ey); ctx.stroke(); };
+  ctx.strokeStyle = H.paper(0.85); ctx.lineWidth = 3.4 * u; leader(); ctx.strokeStyle = H.INK; ctx.lineWidth = 1.2 * u; leader();
+  ctx.textBaseline = 'middle'; ctx.textAlign = s > 0 ? 'left' : 'right'; ctx.lineWidth = 3 * u; ctx.strokeStyle = H.paper(0.9);
+  ctx.strokeText(t, tx, ey); ctx.fillStyle = H.INK; ctx.fillText(t, tx, ey); ctx.restore();
+  occ.push(L.box);
+}
+
+// ---------- the camera ----------
+// How close the camera may come (scene units, reach) while it looks at the shown crew (T: its target, within the rig's
+// size of its middle), else null: the figure's own limit (studio.js setCamera). So a figure without the crew, or
+// framed on the block, keeps its zoom range.
+export function reach(T) {
+  if (!anim || !T) return null;
+  grp.updateMatrixWorld();
+  return T.distanceTo(anim.mid.clone().applyMatrix4(grp.matrixWorld)) <= anim.size ? 0.6 * anim.size : null;
+}
+// The live dolly limit, after the crew is built, moved or turned off (setCamera keeps the figure's own in min0).
+function limit() {
+  const C = H.controls; if (C?.min0 === undefined) return;
+  const n = reach(C.target); C.minDistance = n ? Math.min(C.min0, n) : C.min0;
+}
+// EM3D.zoomToCrew: flies to a close oblique view of the pad, from the crew's side and a little toward the mast, the
+// rig filling about half the frame's height. A view preset ("Facing the section" ...) goes back. Saved and exported
+// like any other view.
+export function zoomTo() {
+  if (!anim) throw new Error(S.crew?.on ? 'The drill crew is outside the block shown.' : 'Turn the drill crew on first.');
+  const C = H.controls, cam = H.camera, from = cam.position.clone(), fromT = C.target.clone();
+  grp.updateMatrixWorld();
+  const mid = anim.mid.clone().applyMatrix4(grp.matrixWorld), side = new THREE.Vector3(0.5, 0, 0.87).applyQuaternion(grp.quaternion);
+  const azimuth = Math.round(((Math.atan2(-side.x, side.z) / RAD) % 360 + 360) % 360) % 360, plunge = 18, D = 3.2 * anim.size;
+  // The block's framing at this azimuth and plunge: its target (to pan from) and its distance at 100%.
+  H.setCamera({ azimuth, plunge, zoom: 100, pan: null }, true);
+  const b = cam.position.distanceTo(C.target), pan = mid.sub(C.target);
+  cam.position.copy(from); C.target.copy(fromT);
+  H.setCamera({ azimuth, plunge, zoom: Math.round(b * 100 / D), pan: pan.toArray().map((v) => Math.round(v * 10) / 10) }, false); // as it is saved
+  return H.getCam();
+}
+
 // ---------- the API and the panel ----------
 export function set(o = {}) {
   S.crew = patch(S.crew, o, H.project?.holes);
@@ -306,14 +391,18 @@ export function state() {
     H.camera.updateMatrixWorld(); grp.updateMatrixWorld(); const [W, Hh] = H.frame(), fr = (v) => { const [x, y] = H.proj(v); return [x / W, y / Hh]; };
     out.screen = fr(G.V(at.x, at.y, G.surf(at.x, at.y)));
     out.people = anim.people.map((f) => fr(f.body.localToWorld(new THREE.Vector3(0, 1.2, 0)))); // each one's chest, where they are now
+    // Its size in metres (the scene's metres across, and up without the vertical exaggeration).
+    if (anim.real) { const { u, uy, mh, mv } = anim, k = uy / mv; out.metres = { mast: MODEL.mast * k, length: MODEL.length * u / mh, width: MODEL.width * u / mh, person: MODEL.person * anim.people[0].g.scale.y * k, ve: mv / mh }; }
   }
   return out;
 }
-const SIZES = [['0.6', 'Small'], ['1', 'Medium'], ['1.6', 'Large']];
+const SIZES = [['0.6', 'Small'], ['1', 'Medium'], ['1.6', 'Large'], [TRUE, 'True scale']];
 export function renderUI(el) {
   if (!el) return;
   const c = crewOf(S.crew), [sel, size] = el.querySelectorAll('select'); el.hidden = !c.on;
   const chat = el.querySelector('input[type=checkbox]'); if (chat) chat.checked = c.chatter;
+  const hint = el.querySelector('.crew-hint'), zoom = el.querySelector('button'); if (hint) hint.hidden = c.scale !== TRUE;
+  if (zoom && !zoom.onclick) zoom.onclick = () => H.api.zoomToCrew().catch((e) => H.status(e.message));
   if (!sel) return;
   const ids = (H.project?.holes || []).map((h) => h.id).slice(0, 300), want = ['auto', ...ids].join('\n');
   if (sel.dataset.ids !== want) { sel.dataset.ids = want; sel.replaceChildren(...['auto', ...ids].map((v) => new Option(v === 'auto' ? 'Auto (at the drill pad)' : `At ${v}`, v))); }

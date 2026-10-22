@@ -160,3 +160,74 @@ test('the Layout step: a "Drill crew" toggle and where it stands', async ({ page
   await expect.poll(async () => (await page.evaluate(() => window.EM3D.getState())).crew.on).toBe(false);
   await expect(page.locator('#crew-ui')).toBeHidden();
 });
+
+// True scale: the rig and crew at real size (a 12 m mast on an 8 m skid, crew 1.8 m tall), heights times the vertical
+// exaggeration. An option, not the default: the presets and the default are unchanged (sha256 checked separately).
+test('true scale: real size, labelled, still alive in the live view, one fixed pose in exports', async ({ page }) => {
+  await open3d(page);
+  const r = await page.evaluate(async () => {
+    const E = window.EM3D, medium = (await E.setCrew({ on: true })).crew, mFig = E.exportPNG({ view: '3d' });
+    const texts = (fn) => { const out = [], P = CanvasRenderingContext2D.prototype, f = P.fillText; P.fillText = function (t, ...a) { out.push(String(t)); return f.call(this, t, ...a); }; try { fn(); } finally { P.fillText = f; } return out; };
+    const mTexts = texts(() => E.exportPNG({ view: '3d' }));
+    const st = (await E.setCrew({ size: 'true' })).crew, fig = E.exportPNG({ view: '3d' }), tTexts = texts(() => E.exportPNG({ view: '3d' }));
+    const p0 = E.getState().crew.people; await new Promise((ok) => setTimeout(ok, 2500)); const p1 = E.getState().crew.people; // the routines run
+    const again = E.exportPNG({ view: '3d' });
+    await E.setStyle({ verticalExaggeration: 2 }); await E.layersReady(); const ve = E.getState().crew;
+    await E.setStyle({ verticalExaggeration: 1 }); await E.layersReady();
+    await E.setCrew({ label: false }); const bare = texts(() => E.exportPNG({ view: '3d' })); await E.setCrew({ label: true });
+    return { medium, mFig, mTexts, st, fig, tTexts, again, p0, p1, ve, bare };
+  });
+  expect(r.st).toMatchObject({ on: true, scale: 'true', shown: true, hole: r.medium.hole }); // the same collar as Medium
+  expect(r.st.metres.mast).toBeCloseTo(12, 6); expect(r.st.metres.length).toBeCloseTo(8, 6); expect(r.st.metres.person).toBeCloseTo(1.8, 6); expect(r.st.metres.ve).toBe(1);
+  expect(r.ve.metres).toMatchObject({ ve: 2 }); expect(r.ve.metres.mast).toBeCloseTo(12, 6); // still 12 m, drawn 24 scene units up like the terrain
+  expect(r.tTexts.filter((t) => !r.mTexts.includes(t))).toEqual(['Drill rig, true scale']); // the leader's label, nothing else
+  expect(r.bare.filter((t) => !r.mTexts.includes(t))).toEqual([]);
+  expect(r.p0.some((p, i) => Math.hypot(p[0] - r.p1[i][0], p[1] - r.p1[i][1]) > 1e-5)).toBe(true); // crew life still runs
+  expect(r.again === r.fig).toBe(true); // byte-stable after the crew moved
+  expect(r.fig === r.mFig).toBe(false);
+  keep('crew-default-medium.png', r.mFig); keep('crew-true-scale.png', r.fig);
+});
+
+test('Zoom to crew: a close oblique view of the true-scale pad, saved and exported as framed; a preset goes back', async ({ page }) => {
+  await open3d(page);
+  await page.evaluate(() => window.EM3D.showStep('layout'));
+  const r0 = await page.evaluate(async () => {
+    const E = window.EM3D;
+    E.setCamera({ zoom: 1000 }); const offZoom = E.getState().camera.zoom; // without the crew: the old range
+    await E.setCrew({ on: true, scale: 'true' });
+    E.setCamera({ zoom: 1000 }); const blockZoom = E.getState().camera.zoom; // looking at the block, not the crew: the old range
+    E.setCamera({ view: 'a' }); const before = E.exportPNG({ view: '3d' });
+    await E.setCrew({ on: false }); const noCrew = await E.zoomToCrew().then(() => null, (e) => e.message);
+    return { offZoom, blockZoom, before, noCrew };
+  });
+  expect(r0.offZoom).toBe(250); expect(r0.blockZoom).toBe(250);
+  expect(r0.noCrew).toMatch(/Turn the drill crew on/);
+  await page.getByRole('checkbox', { name: /Drill crew/ }).check();
+  await page.getByRole('combobox', { name: 'Drill crew size' }).selectOption({ label: 'True scale' });
+  await expect(page.locator('#crew-hint')).toBeVisible();
+  await expect(page.locator('#crew-hint')).toHaveText('At true scale the rig is ~12 m tall — zoom in to see it.');
+  await expect.poll(async () => (await page.evaluate(() => window.EM3D.getState())).crew.scale).toBe('true');
+  await page.getByRole('button', { name: 'Zoom to the drill crew' }).click();
+  await page.waitForTimeout(1500); // the flight
+  const r = await page.evaluate(async () => {
+    const E = window.EM3D, flown = E.exportPNG({ view: '3d' }); E.setCamera(E.getState().camera); // as saved: whole degrees, pan to 10 cm
+    const s = E.getState(), close = E.exportPNG({ view: '3d' }), p = E.getProject();
+    const span = (q) => Math.max(...q.map((a) => Math.max(...q.map((b) => Math.hypot(a[0] - b[0], a[1] - b[1])))));
+    E.setCamera({ zoom: s.camera.zoom * 1.6 }); const closer = E.getState().camera.zoom, closerFig = E.exportPNG({ view: '3d' }); E.setCamera({ zoom: s.camera.zoom });
+    await E.setCrew({ on: false }); E.setCamera({ view: 'a' }); const reset = E.getState().camera;
+    await E.loadProject(p); await E.layersReady(); const back = E.getState(), again = E.exportPNG({ view: '3d' });
+    E.setCamera({ view: 'a' }); const preset = E.getState().camera;
+    return { cam: s.camera, crew: s.crew, span: span(s.crew.people), flown, close, closer, closerFig, reset, backCam: back.camera, same: again === close, preset };
+  });
+  expect(r.cam.zoom).toBeGreaterThan(1000); // far past the old 250% limit
+  expect(r.cam.pan).toBeTruthy();
+  expect(r.crew.screen.every((v) => v > 0.25 && v < 0.85)).toBe(true); // the pad in the middle of the frame
+  expect(r.span).toBeGreaterThan(0.12); // the crew spread across a good part of the frame
+  expect(r.closer).toBeGreaterThan(r.cam.zoom * 1.5); // and the wheel's range reaches in further
+  expect(r.close === r0.before).toBe(false);
+  expect(r.reset.zoom).toBeLessThanOrEqual(250); expect(r.reset.pan).toBeUndefined();
+  expect(r.backCam).toMatchObject({ zoom: r.cam.zoom, pan: r.cam.pan }); // reopened as framed
+  expect(r.same).toBe(true);
+  expect(r.preset).toMatchObject({ zoom: 100 }); expect(r.preset.pan).toBeUndefined();
+  keep('crew-true-zoom-to-crew.png', r.flown); keep('crew-true-zoom-closer.png', r.closerFig);
+});

@@ -1091,9 +1091,10 @@ function setCamera(o = {}, instant = true) {
   if (!G) return;
   const cur = getCam(), pick = (v, d) => (v !== undefined && v !== null && Number.isFinite(+v) ? +v : d);
   if (Array.isArray(o.pan) && o.pan.length === 3 && o.pan.every((v) => Number.isFinite(+v))) aim.fromArray(o.pan.map(Number)); else if (o.pan === null) aim.set(0, 0, 0);
-  const az = ((pick(o.azimuth, cur.azimuth) % 360) + 360) % 360, pl = Math.max(3, Math.min(89, pick(o.plunge, cur.plunge))), zoom = Math.max(40, Math.min(250, pick(o.zoom, cur.zoom)));
-  const T = camTarget(), to = T.clone().sub(lookVec(az, pl).multiplyScalar(baseDist(pl) * 100 / zoom));
-  controls.minDistance = baseDist(pl) * 0.39; controls.maxDistance = baseDist(pl) * 2.6;
+  // EXT hook: closer while looking at a shown drill crew (nd: crew.js reach); min0 keeps the figure's own limit.
+  const az = ((pick(o.azimuth, cur.azimuth) % 360) + 360) % 360, pl = Math.max(3, Math.min(89, pick(o.plunge, cur.plunge))), T = camTarget(), b = baseDist(pl), nd = EXT.crew?.reach(T), zoom = Math.max(40, Math.min(nd ? Math.max(250, b * 100 / nd) : 250, pick(o.zoom, cur.zoom)));
+  const to = T.clone().sub(lookVec(az, pl).multiplyScalar(b * 100 / zoom));
+  controls.min0 = b * 0.39; controls.minDistance = Math.min(controls.min0, nd || Infinity); controls.maxDistance = b * 2.6;
   if (instant || matchMedia('(prefers-reduced-motion: reduce)').matches) { tween = null; camera.position.copy(to); controls.target.copy(T); controls.update(); camera.updateProjectionMatrix(); }
   else tween = { from: camera.position.clone(), fromT: controls.target.clone(), to, toT: T, t0: performance.now() };
 }
@@ -1610,6 +1611,7 @@ function drawOverlay(ctx, k, forExport) {
   const leaders = [];
   items.forEach((it) => { const { c, s, M, y } = it; if (it.group) EXT.tags.drawGroup(ctx, K, m, y, it); else { drawCallout(ctx, K, m, y, c, M, s); hits.push({ kind: 'callout', id: c.key, box: [m, y, m + M.bw, y + M.bh] }); } boxes.push([m, y, m + M.bw, y + M.bh + tag]); leaders.push(...M.leader); });
   occ.push(...boxes.map((b) => [b[0], b[1], b[2] + 10 * u, b[3]]));
+  EXT.crew?.draw(ctx, K, occ, leaders); // EXT hook: the true-scale drill rig's label, clear of the callouts and their leaders
   // Callouts beside or bracketed on their hole: placed clear of the column and of its leaders.
   if (free.length) {
     // ...and of the text labels' arrows, so a box set beside its hole never sits on one.
@@ -2488,6 +2490,7 @@ const EXT_API = {
   },
   async setMapUse(o = {}) { await (await extLoad('mapuse')).set(o); await extReady(); return getState(); },
   async setCrew(o = {}) { (await extLoad('crew')).set(o); await extReady(); return getState(); },
+  async zoomToCrew() { const m = await extLoad('crew'); await extReady(); showView('3d'); m.zoomTo(); return getState(); },
   layersReady: async () => { await extReady(); return getState(); },
   async setFigureStyle(style, meta) { await (await extLoad('type')).setFigureStyle(style, meta); return getState(); },
 };
@@ -2632,6 +2635,7 @@ async function settle(cam) {
   applyTheme(); syncBrandUI(); renderSizes(); layoutFrame(); restyle(); showView(S.view === 'section' ? 'section' : '3d');
   if (cam && G) setCamera(cam, true);
   await extReady(); // EXT hook: layers, face images and the map inset
+  if (cam?.zoom > 250 && G) setCamera(cam, true); // EXT hook: a close view of the drill crew, once it stands
   lastCamKey = ''; syncCamUI(); drawSectionView(); schedulePublish();
 }
 // History (history.js, loaded on the first change): snapshots of S, settings only (no files, no logo image),
