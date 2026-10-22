@@ -100,6 +100,10 @@ const CASES = {
 const PROPERTIES = [
   // ~160 lode claims, Pershing/Lander counties, ~56 km SSW of Battle Mountain.
   { state: 'nv', name: 'GATOR', expect: [-117.25, 40.2], km: 45 },
+  // The block matching Gator's "~160 claims / ~3,306 acres" on the BLM layer
+  // (Oct 2026): 161 CHIVO claims, 3,326 acres, near 40.36 N 116.96 W —
+  // unconfirmed against the company's serials.
+  { state: 'nv', name: 'CHIVO', expect: [-116.96, 40.36], km: 20 },
   // Lincoln County, ~40 km NE of Pioche (Eastern Calderas).
   { state: 'nv', name: 'JERICHO', expect: [-114.15, 38.2], km: 45 },
 ];
@@ -117,6 +121,8 @@ function record(state, kind, query, r, extra = {}) {
     totalKnown: r.body?.meta?.totalKnown ?? null,
     truncated: r.body?.meta?.truncated ?? null,
     scoping: r.body?.meta?.scopingMethod ? `${r.body.meta.scopingMethod}${r.body.meta.scopingDegraded ? ' (degraded)' : ''}` : null,
+    // 'mirror' (weekly Supabase copy) or 'live' (BLM) — see docs/us-claims.md.
+    source: r.body?.meta?.source || null,
     error: r.status === 200 ? null : (r.body?.error || null),
     ...extra,
   };
@@ -126,7 +132,7 @@ function record(state, kind, query, r, extra = {}) {
   if (!JSON_OUT) {
     const flag = !row.ok ? '✗' : row.fast ? '✓' : '~';
     console.log(`${flag} ${state.toUpperCase()} ${kind.padEnd(8)} ${String(row.status).padEnd(5)} ${String(r.ms).padStart(6)} ms  `
-      + `${String(row.rows).padStart(5)} rows  ${row.scoping || ''}  ${row.query}${row.error ? `  — ${row.error}` : ''}`
+      + `${String(row.rows).padStart(5)} rows  ${row.source || '-'} ${row.scoping || ''}  ${row.query}${row.error ? `  — ${row.error}` : ''}`
       + `${extra.note ? `  [${extra.note}]` : ''}`);
   }
   return row;

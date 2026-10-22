@@ -31,6 +31,9 @@ import { applyCors, handleMethods, queryTooLong, validateTerm, MAX_TERM_LENGTH, 
 import { esriGeometryToGeoJSON } from './_lib/esri.js';
 import { resolveUsCompanyTiers, matchesCompany } from './_lib/us-aliases.js';
 import { parseClaimNumbers, cleanSingleNumber, MAX_CLAIM_NUMBERS, MAX_NUMBER_LIST_LENGTH } from '../shared/claimNumbers.js';
+import { US_STATE_CODES, US_SERIAL_PREFIXES, legalDescriptionStates } from '../shared/usClaimStates.js';
+
+export { legalDescriptionStates };
 
 const ARCGIS_PROVINCES = {
   on: {
@@ -125,7 +128,6 @@ const BLM_MLRS_LAYER_ID = /^\d+$/.test(String(process.env.BLM_MLRS_LAYER_ID ?? '
   ? Number(process.env.BLM_MLRS_LAYER_ID)
   : 1;
 
-const US_STATE_CODES = ['NV', 'AZ', 'UT', 'ID', 'MT', 'WY', 'CO', 'NM', 'CA', 'OR', 'WA'];
 
 // ── Serial-prefix scoping table (degraded fallback only) ─────────────────────
 // MLRS case serials and BLM legacy (LR2000) serials both carry a state-scoped
@@ -158,19 +160,8 @@ const US_STATE_CODES = ['NV', 'AZ', 'UT', 'ID', 'MT', 'WY', 'CO', 'NM', 'CA', 'O
 // legal description (see usRowState), and a claim with neither is left out
 // rather than guessed. A wrong-but-plausible claim set is the worst outcome
 // this product can produce, so it is not on the menu.
-const US_SERIAL_PREFIXES = {
-  NV: { mlrs: 'NV', legacyOffice: 'NMC' },
-  AZ: { mlrs: 'AZ', legacyOffice: 'AMC' },
-  UT: { mlrs: 'UT', legacyOffice: 'UMC' },
-  ID: { mlrs: 'ID', legacyOffice: 'IMC' },
-  MT: { mlrs: 'MT', legacyOffice: 'MMC' },
-  WY: { mlrs: 'WY', legacyOffice: 'WMC' },
-  CO: { mlrs: 'CO', legacyOffice: 'CMC' },
-  NM: { mlrs: 'NM', legacyOffice: 'NMMC' },
-  CA: { mlrs: 'CA', legacyOffice: 'CAMC' },
-  OR: { mlrs: 'OR', legacyOffice: 'ORMC', sharedOffice: true },
-  WA: { mlrs: 'OR', legacyOffice: 'ORMC', sharedOffice: true },
-};
+// The prefix table itself lives in shared/usClaimStates.js (US_SERIAL_PREFIXES),
+// shared with the mirror loader.
 
 const US_JURISDICTIONS = Object.fromEntries(US_STATE_CODES.map((code) => [
   `us-${code.toLowerCase()}`,
@@ -1133,19 +1124,6 @@ function resolveUsScoping(cfg, fields) {
 }
 
 /**
- * The states a PLSS legal description places a claim in.
- * "NV 21 0330N 0510E 033 A SE|NV 21 0320N 0510E 004 A NE" → ['NV'].
- * A claim straddling a state line lists both states and belongs to both.
- */
-export function legalDescriptionStates(text) {
-  if (text == null) return [];
-  return [...new Set(String(text).split('|')
-    .map((part) => part.trim().slice(0, 3))
-    .filter((head) => /^[A-Za-z]{2}(\s|$)/.test(head))
-    .map((head) => head.slice(0, 2).toUpperCase()))];
-}
-
-/**
  * Where one row is, as far as the layer can say, and how we know.
  * Returns { in: boolean|null, via } — `in: null` means nothing on the row
  * locates it (the caller then decides between a serial prefix and leaving it out).
@@ -1598,6 +1576,250 @@ async function searchUsCompany(cfg, company, res, { layerUrl, fields, scoping })
       tiersAttempted: attempted,
     },
   });
+}
+
+// ── US claims mirror (public.us_claims, loaded weekly) ──────────────────────
+// scripts/update-us-claims.mjs copies BLM's Active Mining Claims into Supabase
+// every week (supabase/migrations/20261031100000_us_claims_mirror.sql). When
+// that copy is populated and fresh, US searches are answered from it — indexed
+// Postgres, independent of BLM's uptime and of its 13-20 s name scans — and
+// every response says so (meta.source = 'mirror', with the copy's date). When
+// it is empty, stale, unconfigured or failing, the live BLM path below answers
+// instead (meta.source = 'live'). The mirror never makes a search fail.
+//
+// Rows carry the states each claim is in and how that was known, computed at
+// load time by the same shared/usClaimStates.js the live path uses, so both
+// paths place a claim identically and declare scoping the same way.
+
+const US_MIRROR_MAX_AGE_DAYS = Number(process.env.US_CLAIMS_MAX_AGE_DAYS) > 0 ? Number(process.env.US_CLAIMS_MAX_AGE_DAYS) : 10;
+const US_MIRROR_SELECT = 'id,serial,legacy_serial,claim_name,states,state_source,claim_type,disposition,case_type_nr,acres,location_date,geometry';
+
+/**
+ * The mirror's freshness, or null when it should not be used. Cached per
+ * process: ten minutes when it answered, one when it did not.
+ */
+async function usMirrorStatus() {
+  if (process.env.US_CLAIMS_MIRROR === 'off') return null;
+  const cached = cacheGet('us-mirror-status');
+  if (cached !== undefined) return cached?.usable ? cached : null;
+  const creds = qcSupabaseCreds();
+  if (!creds) return null;
+  let status;
+  try {
+    const r = await fetch(`${creds.base}/rest/v1/us_claims?select=source_updated_at&limit=1`, {
+      headers: { apikey: creds.key, Authorization: `Bearer ${creds.key}`, Accept: 'application/json' },
+      signal: AbortSignal.timeout(5000),
+    });
+    // 404 = migration not applied yet: simply "no mirror".
+    const rows = r.ok ? await r.json() : [];
+    const date = rows?.[0]?.source_updated_at || null;
+    const ageDays = date ? Math.floor((Date.now() - Date.parse(`${date}T00:00:00Z`)) / 86400000) : null;
+    status = {
+      usable: Boolean(date) && ageDays != null && ageDays <= US_MIRROR_MAX_AGE_DAYS,
+      retrievedAt: date,
+      ageDays,
+      reason: !r.ok ? `store ${r.status}` : !date ? 'empty' : ageDays > US_MIRROR_MAX_AGE_DAYS ? `stale (${ageDays} days)` : null,
+    };
+  } catch (e) {
+    status = { usable: false, reason: String(e?.message || e).slice(0, 120) };
+  }
+  cacheSet('us-mirror-status', status, status.usable ? META_TTL_MS : META_DEGRADED_TTL_MS);
+  return status.usable ? status : null;
+}
+
+function usMirrorMeta(status) {
+  return { source: 'mirror', mirrorRetrievedAt: status.retrievedAt, mirrorAgeDays: status.ageDays };
+}
+
+/** A mirror row as the raw BLM attributes normalizeProps already knows. */
+function usMirrorRowToFeature(row, cfg) {
+  return {
+    type: 'Feature',
+    geometry: row.geometry,
+    properties: normalizeProps({
+      OBJECTID: row.id,
+      CSE_NR: row.serial,
+      LEG_CSE_NR: row.legacy_serial,
+      CSE_NAME: row.claim_name,
+      BLM_PROD: row.claim_type,
+      CSE_DISP: row.disposition,
+      CSE_TYPE_NR: row.case_type_nr,
+      RCRD_ACRS: row.acres == null ? null : Number(row.acres),
+      LOC_DT: row.location_date,
+      US_STATE_SOURCE: row.state_source,
+    }, cfg),
+  };
+}
+
+// Scoping as withScopingMeta expects it, counted from how each row was placed.
+function usMirrorScoping(cfg) {
+  return {
+    perRow: true,
+    method: 'legal_description',
+    field: 'us_claims.states',
+    prefixes: US_SERIAL_PREFIXES[String(cfg.usState).toUpperCase()] || null,
+    geoField: null,
+  };
+}
+
+function usMirrorScopeCounts(rows) {
+  const counts = { geo_state: 0, legal_description: 0, serial_prefix: 0, unplaced: 0, otherState: 0 };
+  for (const r of rows) if (counts[r.state_source] != null) counts[r.state_source] += 1;
+  return counts;
+}
+
+// PostgREST filter values: identifiers are capitals and digits only; free text
+// loses every character PostgREST's or=() grammar or ilike gives meaning to.
+const mirrorIdent = (v) => String(v ?? '').toUpperCase().replace(/[\s-]/g, '');
+const mirrorText = (v) => String(v ?? '').replace(/[*%,()"\\]/g, ' ').replace(/\s+/g, ' ').trim();
+
+/** Every page of a us_claims filter (state-scoped), as rows. */
+async function usMirrorRows(cfg, filter, { maxTotal } = {}) {
+  const { base, key } = qcSupabaseCreds();
+  const st = encodeURIComponent(`{${String(cfg.usState).toUpperCase()}}`);
+  const rows = [];
+  const { meta } = await fetchAllPages({
+    provider: 'us-mirror',
+    pageSize: Math.min(1000, maxTotal || 1000),
+    ...(maxTotal ? { maxTotal } : {}),
+    idField: 'OBJECTID',
+    fetchPage: async (offset, count) => {
+      const url = `${base}/rest/v1/us_claims?select=${US_MIRROR_SELECT}&states=cs.${st}&${filter}&order=id&limit=${count}&offset=${offset}`;
+      const r = await fetch(url, {
+        headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' },
+        signal: AbortSignal.timeout(20000),
+      });
+      if (!r.ok) throw new Error(`US claims mirror ${r.status}: ${(await r.text().catch(() => '')).slice(0, 200)}`);
+      const page = await r.json();
+      rows.push(...page);
+      return { features: page.map((row) => ({ properties: { OBJECTID: row.id } })) };
+    },
+  });
+  return { rows, meta };
+}
+
+function usMirrorResponse(res, cfg, rows, meta, extraMeta = {}, extra = {}) {
+  const scoping = usMirrorScoping(cfg);
+  return res.status(200).json({
+    type: 'FeatureCollection',
+    features: rows.map((row) => usMirrorRowToFeature(row, cfg)),
+    meta: {
+      ...withScopingMeta({ ...meta, provider: cfg.provider, returned: rows.length, usScope: usMirrorScopeCounts(rows) }, scoping),
+      ...extraMeta,
+    },
+    ...extra,
+  });
+}
+
+async function searchUsMirror(cfg, term, type, res, { numberList = null } = {}) {
+  const st = String(cfg.usState).toUpperCase();
+  const pre = US_SERIAL_PREFIXES[st] || {};
+  const inList = (vals) => `(${vals.map((v) => `"${v}"`).join(',')})`;
+  const serialIn = (vals) => `or=${encodeURIComponent(`(serial.in.${inList(vals)},legacy_serial.in.${inList(vals)})`)}`;
+
+  if (type === 'number' && numberList) {
+    const tokens = [...new Set(numberList.numbers.map(mirrorIdent).filter((t) => /^[A-Z0-9]+$/.test(t)))];
+    const { rows, meta } = tokens.length ? await usMirrorRows(cfg, serialIn(tokens)) : { rows: [], meta: {} };
+    const features = rows.map((row) => ({ properties: { TAG_NUMBER: row.serial, LEGACY_NR: row.legacy_serial } }));
+    return usMirrorResponse(res, cfg, rows, meta, {
+      numberList: numberListMeta({ ...numberList, numbers: numberList.numbers.map(mirrorIdent) }, features,
+        (f) => [f.properties.TAG_NUMBER, f.properties.LEGACY_NR]),
+    });
+  }
+
+  if (type === 'number') {
+    const t = mirrorIdent(term);
+    if (!/^[A-Z0-9]+$/.test(t)) return res.status(400).json({ error: 'Enter a BLM serial number (letters and digits), e.g. NV105222372.' });
+    // As typed first, then (bare digits) the state's own prefixed forms.
+    const forms = [t, ...(/^\d{5,}$/.test(t) ? [pre.mlrs, pre.legacyOffice].filter(Boolean).map((p) => `${p}${t}`) : [])];
+    for (const form of forms) {
+      const { rows, meta } = await usMirrorRows(cfg, serialIn([form]));
+      if (rows.length) {
+        return usMirrorResponse(res, cfg, rows, meta,
+          form === t ? {} : relaxationMeta({ kind: 'number', match: 'exact', from: term, to: form }) || {});
+      }
+    }
+    // Not in the copy. It may be a claim BLM has not mapped yet (the mirror
+    // only stores claims with geometry — ~2.4% are not), or one recorded since
+    // the last load. Live BLM answers a serial in about half a second and runs
+    // the full near-miss ladder, so the caller asks it instead.
+    return null;
+  }
+
+  if (type === 'name') {
+    const steps = claimNameFallbacks(term).map((set) => (set.length ? set.join(' ') : term));
+    for (let i = 0; i < steps.length; i += 1) {
+      const needle = mirrorText(steps[i]);
+      if (needle.length < 2) continue;
+      const { rows, meta } = await usMirrorRows(cfg, `claim_name=ilike.${encodeURIComponent(`*${needle}*`)}`);
+      if (rows.length || i === steps.length - 1) {
+        return usMirrorResponse(res, cfg, rows, meta,
+          i > 0 ? relaxationMeta({ kind: 'name', match: 'tokens', from: term, to: steps[i] }) || {} : {});
+      }
+    }
+    return usMirrorResponse(res, cfg, [], { totalKnown: 0, truncated: false, pagesFetched: 0 });
+  }
+
+  // Company: ownership from the claimant store when it holds a match, else the
+  // subsidiary alias ladder against claim names — exactly as searchUsCompany.
+  const province = `us-${st.toLowerCase()}`;
+  const ladder = resolveUsCompanyTiers(term, province);
+  const claimantHit = await resolveClaimantSerials(cfg, term, ladder).catch(() => null);
+  if (claimantHit?.serials.length) {
+    const serials = claimantHit.serials.map(mirrorIdent).filter((s) => /^[A-Z0-9]+$/.test(s)).slice(0, 5000);
+    const rows = [];
+    let truncated = false;
+    for (let i = 0; i < serials.length; i += 150) {
+      const r = await usMirrorRows(cfg, serialIn(serials.slice(i, i + 150)));
+      rows.push(...r.rows);
+      truncated = truncated || r.meta?.truncated;
+    }
+    return usMirrorResponse(res, cfg, rows, { totalKnown: rows.length, truncated, pagesFetched: Math.ceil(serials.length / 150) }, {}, {
+      resolution: {
+        status: 'resolved',
+        company: term,
+        method: claimantHit.method,
+        resolvedAgainst: 'claimant',
+        claimants: claimantHit.claimants,
+        claimantRoles: claimantHit.roles,
+        serialsMatched: claimantHit.serials.length,
+        snapshotDate: claimantHit.snapshotDate,
+        claimantSources: claimantHit.sources,
+      },
+    });
+  }
+  const attempted = [];
+  for (const tier of ladder) {
+    const terms = tier.terms.map(mirrorText).filter((t) => t.length >= 2);
+    if (!terms.length) continue;
+    attempted.push({ method: tier.method, terms: terms.length });
+    const or = `or=${encodeURIComponent(`(${terms.map((t) => `claim_name.ilike."*${t}*"`).join(',')})`)}`;
+    const { rows, meta } = await usMirrorRows(cfg, or);
+    const kept = tier.scored ? rows.filter((r) => matchesCompany(term, r.claim_name, province)) : rows;
+    if (!kept.length) continue;
+    return usMirrorResponse(res, cfg, kept, { ...meta, returned: kept.length }, {}, {
+      resolution: { status: 'resolved', company: term, method: tier.method, resolvedAgainst: 'claim_name', field: 'CSE_NAME', tiersAttempted: attempted },
+    });
+  }
+  return usMirrorResponse(res, cfg, [], { totalKnown: 0, truncated: false, pagesFetched: attempted.length }, {}, {
+    resolution: {
+      status: 'unresolved', reason: 'no_claim_name_match', company: term, resolvedAgainst: 'claim_name', field: 'CSE_NAME', method: null, tiersAttempted: attempted,
+    },
+  });
+}
+
+async function searchUsMirrorBbox(cfg, minLng, minLat, maxLng, maxLat, res) {
+  const { base, key } = qcSupabaseCreds();
+  const r = await fetch(`${base}/rest/v1/rpc/us_claims_in_bbox`, {
+    method: 'POST',
+    headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ min_lng: minLng, min_lat: minLat, max_lng: maxLng, max_lat: maxLat, p_state: String(cfg.usState).toUpperCase(), p_limit: MAX_TOTAL_FEATURES }),
+    signal: AbortSignal.timeout(20000),
+  });
+  if (!r.ok) throw new Error(`US claims mirror bbox ${r.status}: ${(await r.text().catch(() => '')).slice(0, 200)}`);
+  const rows = await r.json();
+  const truncated = rows.length >= MAX_TOTAL_FEATURES;
+  return usMirrorResponse(res, cfg, rows, { totalKnown: truncated ? null : rows.length, truncated, pagesFetched: 1 });
 }
 
 async function searchArcgis(cfg, term, type, res, { numberList = null } = {}) {
@@ -2880,6 +3102,17 @@ export default async function handler(req, res) {
     if (!cfg) {
       return res.status(400).json({ error: `Province '${province}' is not supported.` });
     }
+    // US: the weekly mirror answers when it is fresh; live BLM otherwise.
+    if (cfg.provider === 'blm-mlrs') {
+      const mirror = await usMirrorStatus();
+      if (mirror) {
+        try {
+          return await searchUsMirrorBbox(cfg, minLng, minLat, maxLng, maxLat, withExtraMeta(res, usMirrorMeta(mirror)));
+        } catch (e) {
+          console.warn('[claims] US mirror bbox failed, answering from live BLM:', e?.message);
+        }
+      }
+    }
     try {
       // 'number' resolves for every jurisdiction (US has no owner fields);
       // the bbox path only needs a valid layer URL + field list.
@@ -2912,7 +3145,7 @@ export default async function handler(req, res) {
         features: features.map((f) => ({ ...f, properties: normalizeProps(f.properties || {}, cfg) })),
         // The nearby-claims overlay is a claim set like any other — it declares
         // its scoping too, so a degraded scope can't slip onto the map here.
-        meta: withScopingMeta(meta, scoping),
+        meta: { ...withScopingMeta(meta, scoping), ...(cfg.provider === 'blm-mlrs' ? { source: 'live' } : {}) },
       });
     } catch (e) {
       return upstreamErrorResponse(res, e, 'Failed to reach the provincial registry.');
@@ -3001,6 +3234,8 @@ export default async function handler(req, res) {
           layerId: cfg.layerId ?? null,
           layerUrl: numberResolved.layerUrl,
           layerName: numberResolved.layerName,
+          // Whether searches are being answered from the weekly copy, and why not.
+          mirror: await usMirrorStatus().then(() => cacheGet('us-mirror-status') || { usable: false, reason: process.env.US_CLAIMS_MIRROR === 'off' ? 'disabled (US_CLAIMS_MIRROR=off)' : 'not configured' }),
           serviceFromEnv: Boolean(process.env.BLM_MLRS_SERVICE_URL),
           layerFromEnv: Boolean(process.env.BLM_MLRS_LAYER_ID),
           scoping: (() => {
@@ -3073,7 +3308,24 @@ export default async function handler(req, res) {
   try {
     if (province === 'bc') return await searchBc(term, type, out, { numberList });
     if (province === 'qc') return await searchQc(term, type, out, { numberList });
-    return await searchArcgis(getArcgisJurisdiction(province), term, type, out, { numberList });
+    const cfg = getArcgisJurisdiction(province);
+    if (cfg.provider === 'blm-mlrs') {
+      // The weekly mirror answers when it is fresh; a mirror failure falls
+      // through to live BLM rather than failing the search.
+      const mirror = await usMirrorStatus();
+      if (mirror) {
+        try {
+          // null = the mirror has no answer it should give (a serial it does
+          // not hold); live BLM is asked instead.
+          const answered = await searchUsMirror(cfg, term, type, withExtraMeta(out, usMirrorMeta(mirror)), { numberList });
+          if (answered !== null) return answered;
+        } catch (e) {
+          console.warn('[claims] US mirror search failed, answering from live BLM:', e?.message);
+        }
+      }
+      return await searchArcgis(cfg, term, type, withExtraMeta(out, { source: 'live' }), { numberList });
+    }
+    return await searchArcgis(cfg, term, type, out, { numberList });
   } catch (e) {
     if (process.env.NODE_ENV !== 'production') console.warn('[claims]', e?.message);
     return upstreamErrorResponse(res, e, 'Failed to reach the provincial registry.');
