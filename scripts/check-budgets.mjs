@@ -339,7 +339,12 @@ const BUDGETS = {
   // the ground at the collar; "auto" choosing the collar with room on screen; collar rings under the pad giving way;
   // the idle motion and EM3D.setCrew), fetched only for a figure that turns the crew on. The page gains the hooks
   // (+0.18 kB, inside its budget); the totals are unchanged.
-  threeDLazyJsGzipKb: 139.7,
+  // 139.7 → 143.8 (Oct 2026, drill crew life, measured 143.22, configured 143.44, + 0.3; +3.95 kB over main's 139.27):
+  // crew-life.js (~3.4 kB: the crew's routines on the pad with walking legs and arms, the rod and mug, speech bubbles
+  // as page elements over the figure, the line pools and noticing a viewer who points or taps), loaded by crew.js only
+  // when the crew is on with life or chatter; crew.js +0.5 kB (putting every part back before an export, chatter and
+  // life settings, each one's place for the bubbles). The page and the totals are unchanged.
+  threeDLazyJsGzipKb: 143.8,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.

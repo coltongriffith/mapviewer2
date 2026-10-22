@@ -129,7 +129,7 @@ test('saved with the figure: it opens again where it was; an older figure opens 
     await E.loadProject(old); await E.layersReady();
     return { id: ids[4], saved: p.settings.crew, back, same: again === before, auto, autoBack, old: E.getState().crew };
   });
-  expect(r.saved).toEqual({ on: true, at: r.id, scale: 1.4, heading: 200 });
+  expect(r.saved).toEqual({ on: true, at: r.id, scale: 1.4, heading: 200, chatter: true, life: true });
   expect(r.auto.pick).toBeTruthy();
   expect(r.autoBack).toMatchObject({ at: 'auto', pick: r.auto.pick, hole: r.auto.hole }); // reopened at the collar it chose, whatever the view
   expect(r.back).toMatchObject({ on: true, at: r.id, scale: 1.4, heading: 200, shown: true });

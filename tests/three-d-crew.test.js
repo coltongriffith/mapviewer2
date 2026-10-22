@@ -19,7 +19,7 @@ const hole = (id, x, y, { az = 0, dip = -90, z = 100 } = {}) => {
 describe('settings and saved figures', () => {
   it('is off by default, with no design version or legacy default', () => {
     expect(studio).toMatch(/crew: \{ on: false, at: 'auto', scale: 1, heading: null \}/);
-    expect(crew.CREW).toEqual({ on: false, at: 'auto', scale: 1, heading: null });
+    expect(crew.CREW).toEqual({ on: false, at: 'auto', scale: 1, heading: null, chatter: true, life: true }); // life and chatter on whenever the crew is
     expect(DESIGN_VERSION).toBe(5);
     for (const T of [LEGACY_V1, LEGACY_V2, LEGACY_V4]) expect(T).not.toHaveProperty('crew');
   });
@@ -48,7 +48,8 @@ describe('option validation (patch)', () => {
   it('fills defaults and keeps what is not given', () => {
     expect(crew.patch(null, {})).toEqual(crew.CREW);
     const c = crew.patch(null, { on: 1, scale: 2 });
-    expect(c).toEqual({ on: true, at: 'auto', scale: 2, heading: null });
+    expect(c).toEqual({ on: true, at: 'auto', scale: 2, heading: null, chatter: true, life: true });
+    expect(crew.patch(c, { chatter: 0, life: false })).toMatchObject({ chatter: false, life: false });
     expect(crew.patch(c, { heading: 90 })).toEqual({ ...c, heading: 90 });
   });
   it('takes "auto", a known hole ID or a point', () => {

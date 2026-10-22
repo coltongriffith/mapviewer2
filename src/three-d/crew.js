@@ -14,9 +14,9 @@
 // head turns, a hand waves); exports, and a viewer who prefers reduced motion, see one fixed pose.
 import * as THREE from 'three';
 
-let H = null, S = null, grp = null, anim = null, last = null;
+let H = null, S = null, grp = null, anim = null, last = null, life = null, lifeP = null;
 export function init(host) { H = host; S = host.S; }
-export const CREW = { on: false, at: 'auto', scale: 1, heading: null };
+export const CREW = { on: false, at: 'auto', scale: 1, heading: null, chatter: true, life: true };
 export const crewOf = (c) => ({ ...CREW, ...(c && typeof c === 'object' ? c : {}) });
 const PAD = 5, RAD = Math.PI / 180;
 
@@ -25,7 +25,7 @@ export function patch(c, o, holes) {
   if (!o || typeof o !== 'object' || Array.isArray(o)) throw new Error('setCrew takes { on, at, scale, heading }.');
   const x = crewOf(c);
   if (typeof x.pick !== 'string' || o.on !== undefined || o.at !== undefined) delete x.pick; // chosen again
-  if (o.on !== undefined) x.on = !!o.on;
+  ['on', 'chatter', 'life'].forEach((k) => { if (o[k] !== undefined) x[k] = !!o[k]; });
   if (o.at !== undefined) {
     const a = o.at;
     if (a === null || a === 'auto') x.at = 'auto';
@@ -130,7 +130,7 @@ function kit() {
 // A crew member, about 2.6 tall, facing +z: chunky and friendly (a big round head, short limbs, a soft taper).
 function person(K, { suit, skin, hat, vest }) {
   const P = K.part, g = new THREE.Group(), body = new THREE.Group(); g.add(body);
-  [-0.19, 0.19].forEach((x) => { P(body, 'cyl', COL.ink, [0.17, 0.36, 0.17], 0.17, [x, 0.42, 0]); P(body, 'ball', '#2b2f31', [0.2, 0.12, 0.27], 0, [x, 0.1, 0.06]); });
+  const legs = [-0.19, 0.19].map((x) => [P(body, 'cyl', COL.ink, [0.17, 0.36, 0.17], 0.17, [x, 0.42, 0]), P(body, 'ball', '#2b2f31', [0.2, 0.12, 0.27], 0, [x, 0.1, 0.06])]);
   P(body, 'cyl', suit, [0.44, 0.48, 0.34], 0.22, [0, 1.16, 0], { taper: 0.12 });
   if (vest) P(body, 'cyl', vest, [0.46, 0.27, 0.36], 0.14, [0, 1.3, 0], { taper: 0.12, outline: false });
   P(body, 'cyl', COL.cream, [0.47, 0.055, 0.37], 0.05, [0, 1.1, 0], { outline: false }); // hi-vis stripe
@@ -141,7 +141,7 @@ function person(K, { suit, skin, hat, vest }) {
   P(head, 'cyl', hat, [0.52, 0.04, 0.56], 0.04, [0, 0.58, 0.05]); // the soft brim
   P(head, 'dome', hat, [0.44, 0.36, 0.44], 0, [0, 0.58, 0]);
   P(head, 'cyl', COL.cream, [0.06, 0.04, 0.4], 0.04, [0, 0.9, 0], { rx: 0, outline: false }); // the ridge
-  return { g, body, arms, head };
+  return { g, body, arms, head, legs };
 }
 function rig(K, tilt) {
   const P = K.part, g = new THREE.Group(), B = (c, h, r, p, o) => P(g, 'box', c, h, r, p, o);
@@ -214,7 +214,7 @@ function pad(ground) {
 
 function drop() {
   if (!grp) return;
-  grp.parent?.remove(grp); grp.traverse((o) => { if (o.material?.vertexColors) { o.geometry.dispose(); o.material.dispose(); } }); anim?.dispose(); grp = null; anim = null;
+  life?.detach(); grp.parent?.remove(grp); grp.traverse((o) => { if (o.material?.vertexColors) { o.geometry.dispose(); o.material.dispose(); } }); anim?.dispose(); grp = null; anim = null;
 }
 // The rig and crew, rebuilt whenever the scene is (studio.js extScene).
 export function sync() {
@@ -252,8 +252,12 @@ export function sync() {
   const under = new Set(H.project.holes.filter((h) => !ownAt(h) && onPad(...toLocal(h.c.x, h.c.y), 1.05)).map((h) => h.id));
   const box = []; for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; [0, 3.6].forEach((y) => box.push([PADC[0] + Math.cos(a) * PADR[0], y, PADC[1] + Math.sin(a) * PADR[1]])); }
   box.push([3.7 - 11.6 * Math.sin(tilt), 1 + 11.6 * Math.cos(tilt), 0]); // the mast's top
-  anim = { head: R.head, people, dispose: K.dispose, under, ownAt, foot: new THREE.Vector3(3.7, 1.0, 0), box };
+  anim = { head: R.head, people, dispose: K.dispose, under, ownAt, foot: new THREE.Vector3(3.7, 1.0, 0), box, K, grp, props: [], at: CREW_AT, c };
+  // Every transform the motion touches, as built: put back before the export's fixed pose.
+  anim.base = [R.head, ...people.flatMap((f) => [f.g, f.body, ...f.arms, f.head, ...f.legs.flat()])].map((o) => [o, o.position.clone(), o.rotation.clone()]);
   pose(0);
+  // Their routines, chatter and noticing a viewer (crew-life.js), loaded once for the live view.
+  if (c.life || c.chatter) (lifeP ||= import('./crew-life.js')).then((m) => { life = m; if (anim) m.attach(H, anim); }).catch(() => {});
 }
 // The idle motion at time t (seconds); t = 0 is the pose every export shows.
 function pose(t) {
@@ -267,7 +271,12 @@ function pose(t) {
 }
 const still = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
 // Called by studio.js each frame of the live view (now: ms) and with no time before an export renders.
-export function tick(now) { if (anim) pose(now && !still?.matches ? now / 1000 : 0); }
+// The live view hands its time to the crew's routines when they run; an export puts every part back first.
+export function tick(now) {
+  if (!anim) return;
+  anim.base.forEach(([o, p, r]) => { o.position.copy(p); o.rotation.copy(r); }); anim.props.forEach((m) => { m.visible = false; });
+  if (!now || !life?.tick(now / 1000, !!still?.matches)) pose(now && !still?.matches ? now / 1000 : 0);
+}
 
 // ---------- the overlay's hooks (studio.js drawOverlay, drawCallout) ----------
 // A collar's ring: false under the pad (hidden), its screen spot at the rod's foot (where the rod meets the deck,
@@ -293,13 +302,18 @@ export function set(o = {}) {
 }
 export function state() {
   const c = crewOf(S.crew), G = H.G, at = last?.at, out = { ...c, at: Array.isArray(c.at) ? [...c.at] : c.at, shown: !!(c.on && last?.shown && grp), where: at ? [at.x, at.y] : null, hole: at?.hole?.id || null, screen: null };
-  if (out.shown && G) { H.camera.updateMatrixWorld(); const [W, Hh] = H.frame(), [x, y] = H.proj(G.V(at.x, at.y, G.surf(at.x, at.y))); out.screen = [x / W, y / Hh]; }
+  if (out.shown && G) {
+    H.camera.updateMatrixWorld(); grp.updateMatrixWorld(); const [W, Hh] = H.frame(), fr = (v) => { const [x, y] = H.proj(v); return [x / W, y / Hh]; };
+    out.screen = fr(G.V(at.x, at.y, G.surf(at.x, at.y)));
+    out.people = anim.people.map((f) => fr(f.body.localToWorld(new THREE.Vector3(0, 1.2, 0)))); // each one's chest, where they are now
+  }
   return out;
 }
 const SIZES = [['0.6', 'Small'], ['1', 'Medium'], ['1.6', 'Large']];
 export function renderUI(el) {
   if (!el) return;
   const c = crewOf(S.crew), [sel, size] = el.querySelectorAll('select'); el.hidden = !c.on;
+  const chat = el.querySelector('input[type=checkbox]'); if (chat) chat.checked = c.chatter;
   if (!sel) return;
   const ids = (H.project?.holes || []).map((h) => h.id).slice(0, 300), want = ['auto', ...ids].join('\n');
   if (sel.dataset.ids !== want) { sel.dataset.ids = want; sel.replaceChildren(...['auto', ...ids].map((v) => new Option(v === 'auto' ? 'Auto (at the drill pad)' : `At ${v}`, v))); }
