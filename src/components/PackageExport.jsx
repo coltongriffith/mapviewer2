@@ -76,9 +76,10 @@ export default function PackageExport({ projects, onClose }) {
       const out = {};
       figs.forEach((f, i) => { out[figureFileName(meta, i + 1, f.name)] = [f.bytes, { level: 0 }]; });
       if (pdfOk) {
-        const [{ jsPDF }, { PDF_SIZES, pdfPage }] = await Promise.all([import('jspdf'), import('../export/exportPDF')]);
+        const [{ jsPDF }, { PDF_SIZES, pdfPage, onWhite }] = await Promise.all([import('jspdf'), import('../export/exportPDF')]);
         const size = PDF_SIZES.letter_landscape, pdf = new jsPDF({ orientation: 'landscape', unit: 'in', format: [size.w, size.h] });
-        figs.forEach((f, i) => { if (i) pdf.addPage([size.w, size.h], 'landscape'); pdfPage(pdf, f.canvas, size); });
+        // On white for the PDF only (its pages are JPEG); the PNGs above keep their transparency.
+        figs.forEach((f, i) => { if (i) pdf.addPage([size.w, size.h], 'landscape'); pdfPage(pdf, onWhite(f.canvas), size); });
         out[packageFileName(meta, 'pdf')] = new Uint8Array(pdf.output('arraybuffer'));
       }
       const zipName = packageFileName(meta, 'zip');
@@ -143,7 +144,7 @@ export default function PackageExport({ projects, onClose }) {
       </Dialog>
       {stage && (
         <div className="pkg-stage" aria-hidden="true">
-          <Suspense fallback={null}><ReadOnlyMapStage key={stage.key} project={stage.project} onExportReady={stage.onReady} /></Suspense>
+          <Suspense fallback={null}><ReadOnlyMapStage key={stage.key} project={stage.project} onExportReady={stage.onReady} nearbyClaims /></Suspense>
         </div>
       )}
     </>

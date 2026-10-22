@@ -21,29 +21,41 @@ const token = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: uid, role: 'aut
 const session = { user, access_token: token, refresh_token: 'synthetic-refresh', expires_in: 86400, expires_at: Math.floor(Date.now() / 1000) + 86400, token_type: 'bearer' };
 const RENDERS = process.env.E2E_RENDER_DIR || null;
 
-// A small RGB PNG, standing in for a figure exported from /3d.
+// A small RGBA PNG, standing in for a figure exported from /3d: its left half is transparent.
 function png(w, h) {
-  const raw = Buffer.alloc((w * 3 + 1) * h);
-  for (let y = 0; y < h; y += 1) for (let x = 0; x < w; x += 1) { const o = y * (w * 3 + 1) + 1 + x * 3; raw[o] = 30 + (x % 200); raw[o + 1] = 90; raw[o + 2] = 120 + (y % 100); }
+  const raw = Buffer.alloc((w * 4 + 1) * h);
+  for (let y = 0; y < h; y += 1) for (let x = 0; x < w; x += 1) { const o = y * (w * 4 + 1) + 1 + x * 4; raw[o] = 30 + (x % 200); raw[o + 1] = 90; raw[o + 2] = 120 + (y % 100); raw[o + 3] = x < w / 2 ? 0 : 255; }
   const chunk = (type, data) => { const len = Buffer.alloc(4); len.writeUInt32BE(data.length); const td = Buffer.concat([Buffer.from(type), data]); const crc = Buffer.alloc(4); crc.writeUInt32BE(crc32(td)); return Buffer.concat([len, td, crc]); };
-  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 2;
+  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 6;
   return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
 }
 
 // Two fictional maps on a blank basemap.
 const ring = (pts) => [[...pts, pts[0]]];
-function payload(title, colour, demo = false) {
+function payload(title, colour, { demo = false, transparent = false } = {}) {
   const p = createInitialProjectState();
-  p.layout = { ...p.layout, basemap: 'blank', title, subtitle: 'Illustrative sample data', insetEnabled: false, footerEnabled: false, exportSettings: { ...p.layout.exportSettings, pixelRatio: 1 } };
+  p.layout = { ...p.layout, basemap: 'blank', title, subtitle: 'Illustrative sample data', insetEnabled: false, footerEnabled: false, exportSettings: { ...p.layout.exportSettings, pixelRatio: 1, ...(transparent && { background: 'transparent' }) } };
   p.mapView = { center: { lat: 55.05, lng: -129.95 }, zoom: 12 };
   p.layers = [{ id: 'claims', name: 'Claims', sourceName: 'claims.geojson', dataSource: demo ? 'demo' : 'upload', displayName: 'Claims', type: 'polygons', visible: true, role: 'claims', userStyled: true,
     geojson: { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: ring([[-130.0, 55.0], [-129.9, 55.0], [-129.9, 55.1], [-130.0, 55.1]]) } }] },
     style: { fill: colour, fillOpacity: 0.35, stroke: colour, strokeWidth: 2 }, legend: { enabled: true, label: 'Claims' } }];
   return p;
 }
+// The claims map shows a neighbour's claims (Nearby Claims, project.areaClaims), in the legend too, as the editor
+// exports them. The drill plan map is exported on a transparent background.
+const NEIGHBOUR = '#7c3aed';
+const claimsMap = payload('Rails Copper-Gold: claims', '#c65322');
+claimsMap.areaClaims = {
+  visible: true, showInLegend: true, dissolve: false, fillOpacity: 0.22, ownerField: 'OWNER',
+  ownerColors: { 'Rival Metals': NEIGHBOUR, 'Hidden Co': '#16a34a' }, ownerLabels: { 'Rival Metals': 'Rival Metals Corp.' }, hiddenOwners: ['Hidden Co'],
+  features: [
+    { type: 'Feature', properties: { OWNER: 'Rival Metals' }, geometry: { type: 'Polygon', coordinates: ring([[-129.88, 55.0], [-129.84, 55.0], [-129.84, 55.06], [-129.88, 55.06]]) } },
+    { type: 'Feature', properties: { OWNER: 'Hidden Co' }, geometry: { type: 'Polygon', coordinates: ring([[-130.06, 55.0], [-130.02, 55.0], [-130.02, 55.04], [-130.06, 55.04]]) } },
+  ],
+};
 const MAPS = [
-  { id: '00000000-0000-4000-8000-0000000004a1', name: 'Rails claims', updated_at: '2026-10-20T00:00:00Z', payload: payload('Rails Copper-Gold: claims', '#c65322') },
-  { id: '00000000-0000-4000-8000-0000000004a2', name: 'Rails drill plan', updated_at: '2026-10-19T00:00:00Z', payload: payload('Rails Copper-Gold: drill plan', '#2563eb') },
+  { id: '00000000-0000-4000-8000-0000000004a1', name: 'Rails claims', updated_at: '2026-10-20T00:00:00Z', payload: claimsMap },
+  { id: '00000000-0000-4000-8000-0000000004a2', name: 'Rails drill plan', updated_at: '2026-10-19T00:00:00Z', payload: payload('Rails Copper-Gold: drill plan', '#2563eb', { transparent: true }) },
 ];
 
 async function fakeSupabase(page, plan) {
@@ -63,17 +75,33 @@ async function fakeSupabase(page, plan) {
     return single ? json({ code: 'PGRST116', message: 'no rows' }, 406) : json([]);
   });
   await page.addInitScript(([s, id]) => {
+    // Every text the canvases draw.
+    const P = CanvasRenderingContext2D.prototype, f = P.fillText; window.__texts = [];
+    P.fillText = function (t, ...a) { window.__texts.push(String(t)); return f.call(this, t, ...a); };
     localStorage.setItem('sb-example-auth-token', JSON.stringify(s));
     localStorage.setItem(`em_migration_v2_${id}`, JSON.stringify({ done: true, projects: {} }));
   }, [session, uid]);
 }
 
-// Width, height and the bottom-right pixel of a PNG, decoded by the browser.
-const inspect = (page, bytes) => page.evaluate(async (u) => {
+// Width, height, the bottom-right and top-left pixels of an image, and whether a colour (±6) is in it.
+const inspect = (page, bytes, type = 'image/png', colour = null) => page.evaluate(async ([u, rgb]) => {
   const img = new Image(); img.src = u; await img.decode();
   const c = document.createElement('canvas'); c.width = img.width; c.height = img.height; const g = c.getContext('2d'); g.drawImage(img, 0, 0);
-  return { w: img.width, h: img.height, corner: [...g.getImageData(img.width - 4, img.height - 3, 1, 1).data].slice(0, 3) };
-}, `data:image/png;base64,${Buffer.from(bytes).toString('base64')}`);
+  const d = g.getImageData(0, 0, img.width, img.height).data, at = (x, y) => [...d.slice((y * img.width + x) * 4, (y * img.width + x) * 4 + 4)];
+  let found = false;
+  if (rgb) for (let i = 0; i < d.length && !found; i += 4) found = d[i + 3] === 255 && Math.abs(d[i] - rgb[0]) <= 6 && Math.abs(d[i + 1] - rgb[1]) <= 6 && Math.abs(d[i + 2] - rgb[2]) <= 6;
+  return { w: img.width, h: img.height, corner: at(img.width - 4, img.height - 3).slice(0, 3), topLeft: at(2, 2), found };
+}, [`data:${type};base64,${Buffer.from(bytes).toString('base64')}`, colour]);
+const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+// The page images of a PDF from jsPDF: one JPEG (DCTDecode) stream per page, in page order.
+function pdfJpegs(pdf) {
+  const out = [], text = pdf.toString('latin1');
+  for (const m of text.matchAll(/\/Filter \/DCTDecode[^]*?stream\r?\n/g)) {
+    const start = m.index + m[0].length, end = text.indexOf('endstream', start);
+    out.push(pdf.subarray(start, end));
+  }
+  return out;
+}
 
 async function openPackage(page) {
   await page.goto('/dashboard');
@@ -116,13 +144,27 @@ test('Pro: two maps and a 3D figure become one PDF and three named PNGs, the map
     'Star-Copper-Corp_Rails_2026-10-15_Fig3_Rails-block-model_v2.png',
     'Star-Copper-Corp_Rails_2026-10-15_Package_v2.pdf',
   ]);
-  const [fig1, fig2] = await Promise.all(Object.values(files).slice(0, 2).map((b) => inspect(page, b)));
+  const [fig1, fig2] = await Promise.all([inspect(page, Object.values(files)[0]), inspect(page, Object.values(files)[1], 'image/png', hex(NEIGHBOUR).map((v) => Math.round(255 + (v - 255) * 0.22)))]);
   expect(fig1.corner).toEqual([252, 251, 247]); // the band's cream under each map
   expect(fig2.corner).toEqual([252, 251, 247]);
-  expect(Buffer.from(Object.values(files)[2]).equals(png(320, 200))).toBe(true); // the 3D figure as it came
-  const pdf = Buffer.from(files['Star-Copper-Corp_Rails_2026-10-15_Package_v2.pdf']).toString('latin1');
+  expect(fig1.topLeft[3]).toBe(0); // the drill plan's transparent background kept in its PNG
+  // The claims map's nearby claims, as the editor exports them: the neighbour's fill (22 % over the white page) and
+  // its legend row; the hidden owner neither.
+  expect(fig2.found).toBe(true);
+  const texts = await page.evaluate(() => window.__texts);
+  expect(texts).toContain('Rival Metals Corp.');
+  expect(texts).not.toContain('Hidden Co');
+  expect(Buffer.from(Object.values(files)[2]).equals(png(320, 200))).toBe(true); // the 3D figure as it came, alpha and all
+  const pdfBytes = Buffer.from(files['Star-Copper-Corp_Rails_2026-10-15_Package_v2.pdf']), pdf = pdfBytes.toString('latin1');
   expect(pdf.startsWith('%PDF')).toBe(true);
   expect(pdf.match(/\/Type \/Page\b/g)).toHaveLength(3); // a page per figure
+  // The PDF's pages are JPEG: the transparent drill plan and the half-transparent 3D PNG sit on white, not black.
+  const pages = pdfJpegs(pdfBytes);
+  expect(pages).toHaveLength(3);
+  for (const i of [0, 2]) {
+    const { topLeft } = await inspect(page, pages[i], 'image/jpeg');
+    topLeft.slice(0, 3).forEach((v) => expect(v).toBeGreaterThan(240));
+  }
   testInfo.attach('package.zip', { body: zip, contentType: 'application/zip' });
 });
 
