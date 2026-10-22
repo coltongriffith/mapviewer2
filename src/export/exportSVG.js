@@ -8,7 +8,13 @@ export async function exportSVG(scene, options = {}) {
   }
 
   const baseName = options.filename || scene.project.layout?.exportSettings?.filename || "exploration-maps-export";
-  const svg = await renderSceneToSvg(scene, options);
+  let svg = await renderSceneToSvg(scene, options);
+  // The Exploration Maps band under the figure, when asked for (export/watermarkBand.js, loaded only then).
+  if (options.watermarkBand) {
+    const band = await import('./watermarkBand.js');
+    await band.bandFontsReady();
+    svg = band.withWatermarkBandSvg(svg, options.watermarkBand);
+  }
 
   if (options.illustratorMode) {
     // Extract the basemap data URI so Illustrator can link it as an external image

@@ -182,22 +182,32 @@ export default function ReadOnlyMapStage({ project, onExportReady }) {
   // viewer's plan sets the credit and the largest size).
   useEffect(() => {
     if (!map || !onExportReady) return;
+    const prepare = async (entitlements) => {
+      const container = containerRef.current;
+      await tilesSettled(container);
+      const [{ buildScene }, png, { clampExportSize }] = await Promise.all([
+        import('../export/buildScene'), import('../export/exportPNG'), import('../utils/entitlements'),
+      ]);
+      const opts = { ...(project.layout?.exportSettings || {}), noWatermark: true, paidTier: Boolean(entitlements?.clean_export) };
+      const baseW = opts.customWidth > 0 ? opts.customWidth : (container?.offsetWidth || 1600);
+      const baseH = opts.customHeight > 0 ? opts.customHeight : (container?.offsetHeight || 1000);
+      const ratio = opts.customWidth > 0 ? 1 : (Number(opts.pixelRatio) || 1);
+      const fit = clampExportSize(entitlements, baseW * ratio, baseH * ratio);
+      if (fit.clamped) Object.assign(opts, { customWidth: fit.width, customHeight: fit.height, pixelRatio: 1 });
+      const scene = buildScene(container, { ...project, layout: { ...project.layout, legendItems } }, map);
+      return { png, opts, scene, fit };
+    };
     onExportReady({
       downloadPng: async (entitlements) => {
-        const container = containerRef.current;
-        await tilesSettled(container);
-        const [{ buildScene }, { exportPNG }, { clampExportSize }] = await Promise.all([
-          import('../export/buildScene'), import('../export/exportPNG'), import('../utils/entitlements'),
-        ]);
-        const opts = { ...(project.layout?.exportSettings || {}), noWatermark: true, paidTier: Boolean(entitlements?.clean_export) };
-        const baseW = opts.customWidth > 0 ? opts.customWidth : (container?.offsetWidth || 1600);
-        const baseH = opts.customHeight > 0 ? opts.customHeight : (container?.offsetHeight || 1000);
-        const ratio = opts.customWidth > 0 ? 1 : (Number(opts.pixelRatio) || 1);
-        const fit = clampExportSize(entitlements, baseW * ratio, baseH * ratio);
-        if (fit.clamped) Object.assign(opts, { customWidth: fit.width, customHeight: fit.height, pixelRatio: 1 });
-        const scene = buildScene(container, { ...project, layout: { ...project.layout, legendItems } }, map);
-        await exportPNG(scene, opts);
+        const { png, opts, scene, fit } = await prepare(entitlements);
+        await png.exportPNG(scene, opts);
         return { clamped: fit.clamped };
+      },
+      // The figure as a canvas, under the same plan rules, for the dashboard's package export. extra: more export
+      // options (watermarkBand).
+      renderCanvas: async (entitlements, extra = {}) => {
+        const { png, opts, scene } = await prepare(entitlements);
+        return png.figureCanvas(scene, { ...opts, ...extra });
       },
     });
   }, [map, onExportReady, project, legendItems]);

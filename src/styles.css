@@ -3699,3 +3699,14 @@ button.admx-ladder-seg { border: 0; font: inherit; padding: 0; }
 .oauth-consent-actions { display: flex; gap: 8px; }
 .oauth-consent-actions .btn, .oauth-consent-actions .secondary-btn { flex: 1; padding: 10px 12px; }
 .oauth-consent-switch { margin: 14px 0 0; font-size: 13px; color: var(--ui-text-muted); }
+
+/* The dashboard's package export (components/PackageExport.jsx). The stage that draws each map sits off screen. */
+.pkg-dialog { max-width: 560px; }
+.pkg-maps { border: 1px solid var(--ui-border, #d7dee8); border-radius: 8px; padding: 8px 12px; max-height: 260px; overflow: auto; display: grid; gap: 6px; margin: 0; }
+.pkg-maps legend { font-weight: 600; font-size: 13px; padding: 0 4px; }
+.pkg-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; align-items: center; font-size: 14px; }
+.pkg-row .auth-input { margin: 0; padding: 4px 8px; }
+.pkg-add { cursor: pointer; font-size: 13px; }
+.pkg-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 12px; }
+.pkg-stage { position: fixed; left: -20000px; top: 0; width: 1600px; height: 1000px; pointer-events: none; }
+.ins-export-layers { display: grid; gap: 6px; margin-top: 4px; }

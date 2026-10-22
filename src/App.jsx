@@ -47,6 +47,8 @@ const UpgradeModal = lazyGuarded(() => import('./components/UpgradeModal'));
 const FullResOfferModal = lazyGuarded(() => import('./components/FullResOfferModal'));
 const PublicationCheck = lazyGuarded(() => import('./components/PublicationCheck'));
 const ExportBackground = lazyGuarded(() => import('./components/ExportBackground'));
+// The watermark band toggle and the designer layers ZIP, in the Export step.
+const ExportExtras = lazyGuarded(() => import('./components/ExportExtras'));
 const StudioCard = lazyGuarded(() => import('./components/StudioCard'));
 const StudioControls = lazyGuarded(() => import('./components/StudioControls'));
 const GeoStyleControls = lazyGuarded(() => import('./components/GeoStyleControls'));
@@ -757,6 +759,8 @@ export default function App({ initialAction = null }) {
   const [fullResLink, setFullResLink] = useState(null);
   // Opt-in publication check (export/preflight.js): off unless ticked, per session.
   const [pubCheck, setPubCheck] = useState(false);
+  // The watermark band (item 38) is on unless switched off for the free plan and sample maps, off otherwise.
+  const bandDefault = !entitlements.clean_export || project.layers.some((l) => l.dataSource === 'demo');
   const [preflight, setPreflight] = useState(null);
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
@@ -4661,6 +4665,8 @@ export default function App({ initialAction = null }) {
       // This export's own warnings: a thumbnail render started meanwhile has its own.
       const exportContext = createExportContext();
       const opts = { ...baseSettings, ...exportOptions, paidTier: entitlements.clean_export, exportContext };
+      if (opts.band ?? bandDefault) opts.watermarkBand = { client: opts.bandClient || project.layout.companyName };
+      if (format === 'layers') opts.svg = opts.layersSvg && canExportFormat(entitlements, 'svg');
       // The account's one free full-resolution export lifts the pixel cap for
       // this PNG only; the corner credit stays.
       const spendingCredit = Boolean(fullResCredit) && format === 'png' && Boolean(user)
@@ -4668,7 +4674,7 @@ export default function App({ initialAction = null }) {
       const pixelPlan = spendingCredit ? { ...entitlements, max_export_pixels: PRO_MAX_EXPORT_PIXELS } : entitlements;
       let resolutionClamped = false;
       let requestedPx = 0;
-      if (format === 'png') {
+      if (format === 'png' || format === 'layers') {
         const frame = mapContainerRef.current;
         const baseW = (opts.customWidth || 0) > 0 ? opts.customWidth : (frame?.clientWidth || viewportSize.width || 1600);
         const baseH = (opts.customHeight || 0) > 0 ? opts.customHeight : (frame?.clientHeight || viewportSize.height || 1000);
@@ -4705,6 +4711,9 @@ export default function App({ initialAction = null }) {
       } else if (format === 'pdf') {
         const { exportPDF } = await import('./export/exportPDF');
         await exportPDF(scene, opts);
+      } else if (format === 'layers') {
+        const { exportLayers } = await import('./export/exportLayers');
+        await exportLayers(scene, opts);
       }
       const warnings = exportContext.warnings;
       // Free and not yet spent: offer the full-resolution export in place of
@@ -4790,7 +4799,7 @@ export default function App({ initialAction = null }) {
     // every tier's allowed list, so export is never fully blocked — but SVG /
     // Illustrator / PDF now require a resolved Pro entitlement (or the
     // confirmed-Pro grace window), rather than merely an unresolved plan.
-    if (!canExportFormat(entitlements, format)) {
+    if (!canExportFormat(entitlements, format === 'layers' ? 'png' : format)) {
       trackEvent('pro_gate_shown', { feature: 'export_format', format, tier, signedIn: Boolean(user) }, user?.id);
       setUpgradeReason('export');
       try { sessionStorage.setItem('em_pro_gate_export_format', format); } catch { /* noop */ }
@@ -7496,6 +7505,7 @@ export default function App({ initialAction = null }) {
                 <input type="checkbox" checked={pubCheck} onChange={(e) => setPubCheck(e.target.checked)} />
                 <span>Publication check before download</span>
               </label>
+              <React.Suspense fallback={null}><ExportExtras layout={project.layout} updateLayout={updateLayout} bandDefault={bandDefault} svgAllowed={canExportFormat(entitlements, 'svg')} disabled={!mapReady || exporting} onLayers={() => handleExportClick('layers')} /></React.Suspense>
               {project.layout.basemap === 'blank' && <React.Suspense fallback={null}><ExportBackground layout={project.layout} updateLayout={updateLayout} /></React.Suspense>}
               {exportError && <div className="export-error-msg">{exportError}</div>}
             </div>

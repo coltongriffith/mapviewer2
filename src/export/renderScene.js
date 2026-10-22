@@ -2264,18 +2264,29 @@ export async function renderSceneToCanvas(sourceScene, options = {}) {
   const mapBg = scene.project.layout?.basemap === 'blank' ? (scene.project.layout?.blankBg || '#ffffff') : '#ffffff';
   // options.background "transparent" (a PNG over a blank basemap): no page fill, so the map's own layers and
   // panels sit on transparency. Tile basemaps cover the frame anyway; the PDF always passes an opaque page.
-  if (options.background !== 'transparent') { ctx.fillStyle = mapBg; ctx.fillRect(0, 0, canvas.width, canvas.height); }
+  // options.layer (the designer layers ZIP, export/exportLayers.js): "map" draws the basemap and the data layers
+  // only, "annotations" everything else (labels, annotations, cards and panels) on transparency. Unset: the figure.
+  const layer = options.layer, mapOn = layer !== 'annotations', notesOn = layer !== 'map';
+  if (options.background !== 'transparent' && mapOn) { ctx.fillStyle = mapBg; ctx.fillRect(0, 0, canvas.width, canvas.height); }
   const isNI = scene.template?.id === 'ni_43101_technical';
   const isSP = scene.template?.id === 'side_panel';
   const plan = await drillPlanFor(scene);
   const fx = scene.fx = await fxFor(scene);
-  await drawTilesCanvas(ctx, scene, scale);
-  if (fx) fx.mod.paintFxCanvas(ctx, fx.wash, scale);
-  await drawRastersCanvas(ctx, scene, scale); drawRegionHighlightsCanvas(ctx, scene, scale);
-  if (fx) fx.mod.paintFxCanvas(ctx, fx.band, scale);
-  await drawVectorsCanvas(ctx, scene, scale);
-  if (fx) fx.mod.paintFxCanvas(ctx, fx.labels, scale);
-  if (plan) await paintCanvas(ctx, plan.base, scale);
+  if (mapOn) {
+    await drawTilesCanvas(ctx, scene, scale);
+    if (fx) fx.mod.paintFxCanvas(ctx, fx.wash, scale);
+    await drawRastersCanvas(ctx, scene, scale); drawRegionHighlightsCanvas(ctx, scene, scale);
+    if (fx) fx.mod.paintFxCanvas(ctx, fx.band, scale);
+    await drawVectorsCanvas(ctx, scene, scale);
+  }
+  if (fx && notesOn) fx.mod.paintFxCanvas(ctx, fx.labels, scale);
+  if (plan && mapOn) await paintCanvas(ctx, plan.base, scale);
+  if (notesOn) await drawNotesCanvas(ctx, scene, scale, plan, isNI, isSP);
+  // The corner credit goes on the map layer, so the two layers stacked carry it once.
+  if (mapOn) drawCornerCredit(ctx, scene, scale, options, canvas);
+  return canvas;
+}
+async function drawNotesCanvas(ctx, scene, scale, plan, isNI, isSP) {
   drawEllipsesCanvas(ctx, scene, scale); drawPolygonsCanvas(ctx, scene, scale); await drawMarkersCanvas(ctx, scene, scale);
   if (plan) await paintCanvas(ctx, plan.over, scale);
   await drawCalloutsCanvas(ctx, scene, scale); drawDistanceLinesCanvas(ctx, scene, scale);
@@ -2285,17 +2296,18 @@ export async function renderSceneToCanvas(sourceScene, options = {}) {
   await drawLegendCanvas(ctx, scene, scale); drawNorthArrowCanvas(ctx, scene, scale); await drawInsetCanvas(ctx, scene, scale); await drawLogoCanvas(ctx, scene, scale);
   drawDistanceTicksCanvas(ctx, scene, scale);
   if (isNI) drawTitleStripCanvas(ctx, scene, scale);
+  drawSourceCreditCanvas(ctx, scene, scale);
+}
+function drawCornerCredit(ctx, scene, scale, options, canvas) {
   const niFrame = exportFrame(scene, scale);
   const wmX = niFrame ? niFrame.mapRight - 8 * scale : canvas.width - 8 * scale;
   const wmY = niFrame ? niFrame.mapBottom - 5 * scale : canvas.height - 5 * scale;
-  drawSourceCreditCanvas(ctx, scene, scale);
   const watermark = options.noWatermark
     ? (options.paidTier ? null : { text: 'explorationmaps.com', font: `${6.5 * scale}px Arial, sans-serif`, fill: 'rgba(148,163,184,0.6)', shadow: 'rgba(255,255,255,0.5)' })
     : { text: 'explorationmaps.com', font: `bold ${9 * scale}px Arial, sans-serif`, fill: 'rgba(100,116,139,0.72)', shadow: 'rgba(255,255,255,0.6)' };
   if (watermark) {
     ctx.save(); ctx.font = watermark.font; ctx.fillStyle = watermark.fill; ctx.textAlign = 'right'; ctx.textBaseline = 'bottom'; ctx.shadowColor = watermark.shadow; ctx.shadowBlur = 3 * scale; ctx.fillText(watermark.text, wmX, wmY); ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.restore();
   }
-  return canvas;
 }
 
 // ── Source credit (permanent, rendered INTO the export) ─────────────────────
@@ -3101,7 +3113,9 @@ export async function renderSceneToSvg(sourceScene, options = {}) {
   await ensureExportFonts(scene);
   const scale = resolveExportScale(scene, options); const width = Math.round(scene.width * scale), height = Math.round(scene.height * scale);
   const isNI = scene.template?.id === 'ni_43101_technical';
-  const basemapImage = await renderBasemapImageSvg(scene, scale);
+  // options.layer "annotations" (the layers ZIP's annotations.svg): no basemap, data layers or corner credit.
+  const notesOnly = options.layer === 'annotations';
+  const basemapImage = notesOnly ? '' : await renderBasemapImageSvg(scene, scale);
   // Rasterised up front: renderInsetSvg is synchronous and threaded through two
   // template branches, so the await belongs here rather than in either of them.
   const satelliteInset = await renderSatelliteInsetImageSvg(scene, scale);
@@ -3113,7 +3127,8 @@ export async function renderSceneToSvg(sourceScene, options = {}) {
   const plan = await drillPlanFor(scene);
   const planSvg = (layer) => (plan ? `<g id="em-drill-plan-${layer}">${paintSvg(plan[layer], scale, svgDefs)}</g>` : '');
   const fx = scene.fx = await fxFor(scene);
-  const mapLayers = `${basemapImage}${fxSvg(scene, fx?.wash, 'em-fx-wash', scale, svgDefs)}${renderRastersSvg(scene, scale)}${renderRegionHighlightsSvg(scene, scale)}${fxSvg(scene, fx?.band, 'em-fx-layers', scale, svgDefs)}${renderVectorsSvg(scene, scale)}${fxSvg(scene, fx?.labels, 'em-fx-labels', scale, svgDefs)}${planSvg('base')}${renderEllipsesSvg(scene, scale, svgDefs)}${renderPolygonsSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${planSvg('over')}${renderCalloutsSvg(scene, scale, svgDefs)}${renderDistanceLinesSvg(scene, scale)}`;
+  const dataLayers = notesOnly ? '' : `${basemapImage}${fxSvg(scene, fx?.wash, 'em-fx-wash', scale, svgDefs)}${renderRastersSvg(scene, scale)}${renderRegionHighlightsSvg(scene, scale)}${fxSvg(scene, fx?.band, 'em-fx-layers', scale, svgDefs)}${renderVectorsSvg(scene, scale)}`;
+  const mapLayers = `${dataLayers}${fxSvg(scene, fx?.labels, 'em-fx-labels', scale, svgDefs)}${notesOnly ? '' : planSvg('base')}${renderEllipsesSvg(scene, scale, svgDefs)}${renderPolygonsSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${planSvg('over')}${renderCalloutsSvg(scene, scale, svgDefs)}${renderDistanceLinesSvg(scene, scale)}`;
   let mapContentGroup;
   if (frame) {
     const clipId = 'em-mapframe-clip';
@@ -3129,7 +3144,7 @@ export async function renderSceneToSvg(sourceScene, options = {}) {
   // Attribution: pre-email shows the removable watermark; after email
   // (noWatermark) a smaller persistent mark stays on all free exports; a
   // future paid tier (options.paidTier) is the only thing that removes it.
-  const watermark = options.noWatermark
+  const watermark = notesOnly ? '' : options.noWatermark
     ? (options.paidTier ? '' : `<text x="${wmX}" y="${wmY}" font-family="Arial,sans-serif" font-size="${6.5 * wmScale}" font-weight="600" fill="#94a3b8" fill-opacity="0.6" text-anchor="end" dominant-baseline="auto" paint-order="stroke" stroke="#ffffff" stroke-opacity="0.5" stroke-width="${2 * wmScale}" stroke-linejoin="round">explorationmaps.com</text>`)
     : `<text x="${wmX}" y="${wmY}" font-family="Arial,sans-serif" font-size="${9 * wmScale}" font-weight="bold" fill="#64748b" fill-opacity="0.72" text-anchor="end" dominant-baseline="auto" paint-order="stroke" stroke="#ffffff" stroke-opacity="0.55" stroke-width="2.5" stroke-linejoin="round">explorationmaps.com</text>`;
   const panels = isNI
@@ -3138,7 +3153,7 @@ export async function renderSceneToSvg(sourceScene, options = {}) {
   const mapContent = `${mapContentGroup}${panels}${renderSourceCreditSvg(scene, scale)}${watermark}`;
 
   const defsBlock = svgDefs.length ? `<defs>${svgDefs.join('')}</defs>` : '';
-  return `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${defsBlock}${options.background === 'transparent' ? '' : `<rect width="100%" height="100%" fill="${scene.project.layout?.basemap === 'blank' ? (scene.project.layout?.blankBg || '#ffffff') : '#ffffff'}" />`}${mapContent}</svg>`;
+  return `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${defsBlock}${options.background === 'transparent' || notesOnly ? '' : `<rect width="100%" height="100%" fill="${scene.project.layout?.basemap === 'blank' ? (scene.project.layout?.blankBg || '#ffffff') : '#ffffff'}" />`}${mapContent}</svg>`;
 }
 export function downloadCanvas(filename, canvas) {
   canvas.toBlob((blob) => {

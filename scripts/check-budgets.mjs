@@ -89,7 +89,11 @@ const BUDGETS = {
   // GeoStyleControls and WashControls chunks), the stage's zones and legend rows passed to the map for label
   // placement, and each legend row's style (lazy FxSwatch chunk for a styled row). The styling, its layout and its
   // painting are lazy.
-  maxJsChunkGzipKb: 152.7,
+  // 152.7 → 153.1 (Oct 2026, 2D export package, Tower v3 items 38/40/42, measured 152.81 configured, +0.30 kB over
+  // main's 152.51): the editor's hand-offs only: the watermark band's default (on for the free plan and sample maps)
+  // and its options passed to the exporters, the "layers" export (format gate, pixel cap, lazy exportLayers import)
+  // and the lazy ExportExtras chunk in the Export step. The band, the layers and the package are lazy.
+  maxJsChunkGzipKb: 153.1,
   initialJsGzipKb: 75,
   initialAuthJsGzipKb: 135,
   // The former configured check omitted VITE_ADMIN_EMAIL, which pruned the
@@ -214,7 +218,14 @@ const BUDGETS = {
   // advisories GHSA-p98j-92pf-mc4p and related; the fixed release is ~0.3 kB larger.
   // 993.2 → 1009.4 (measured 1009.1): 2D labels and geology styling (above, measured 1008.4) merged over the dompurify
   // update.
-  totalAuthJsGzipKb: 1009.4,
+  // 1009.4 → 1016.8 (Oct 2026, 2D export package, measured 1016.5, 1009.1 on main): all lazy. PackageExport (3.3 kB:
+  // the dashboard's package dialog, drawing each saved map off screen, the PDF and the ZIP), exportLayers (1.2 kB: the
+  // designer layers ZIP), the band as SVG and its font wait in the shared watermarkBand chunk (+1.2 kB), ExportExtras
+  // (0.6 kB: the band toggle, "Prepared for" and the layers button), utils/svg split into its own 0.26 kB chunk (now
+  // shared by three lazy exporters), renderScene's map / annotations layers (+0.1 kB), exportPNG/SVG/PDF's band hooks
+  // and the PDF page helper (+0.27 kB), ReadOnlyMapStage's renderCanvas (+0.1 kB), the dashboard's button (+0.11 kB)
+  // and App as maxJsChunkGzipKb above.
+  totalAuthJsGzipKb: 1016.8,
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
@@ -251,7 +262,8 @@ const BUDGETS = {
   // 924.4 → 924.9 (measured 924.6): dompurify 3.4.17 security update, as totalAuthJsGzipKb above.
   // 924.9 → 940.9 (measured 940.6): 2D labels and geology styling (above, measured 940.0) merged over the dompurify
   // update.
-  totalJsGzipKb: 940.9,
+  // 940.9 → 948.4 (measured 948.1, 940.6 on main): 2D export package, as totalAuthJsGzipKb above.
+  totalJsGzipKb: 948.4,
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the
   // totals above. /3d carries three.js (~109 kB gzip) and its editor.
@@ -509,14 +521,16 @@ const BUDGETS = {
   // 340.9 → 341.5 (Oct 2026, 2D labels and geology styling merged over claim-search intent, measured 341.2, 340.6 on main;
   // on its own branch 340.2 → 340.9, measured 340.6 over 339.9): App as maxJsChunkGzipKb above
   // and MapCanvas +0.31 kB (a styled layer's paths kept unseen for clicks, and the lazy hook to its canvases).
-  editorAuthJsGzipKb: 341.5,
+  // 341.5 → 341.9 (Oct 2026, 2D export package, measured 341.6, 341.3 on main): App as maxJsChunkGzipKb above.
+  editorAuthJsGzipKb: 341.9,
   // 270 → 271.0 (Oct 2026, production errors, measured 270.7, 269.6 on main): the same as editorAuthJsGzipKb above.
   // 271.0 → 271.7 (Oct 2026, 2D drill plan, measured 271.4, 270.8 on main): the same as editorAuthJsGzipKb above.
   // 271.7 → 272.2 (measured 271.9, 271.4 on main): import a company figure, as editorAuthJsGzipKb above.
   // 272.2 → 272.8 (measured 272.5, 271.9 on main): claim-search intent, as editorAuthJsGzipKb above.
   // 272.8 → 273.4 (measured 273.1, 272.5 on main; on its own branch 272.2 → 272.8, measured 272.5 over 271.9): 2D labels
   // and geology styling, as editorAuthJsGzipKb above.
-  editorJsGzipKb: 273.4,
+  // 273.4 → 273.8 (measured 273.5, 273.2 on main): 2D export package, as editorAuthJsGzipKb above.
+  editorJsGzipKb: 273.8,
   claimsAuthJsGzipKb: 355,
   claimsJsGzipKb: 290,
   // Stylesheet, gzipped. Today ~29 kB.

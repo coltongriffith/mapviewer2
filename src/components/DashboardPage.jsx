@@ -16,6 +16,8 @@ import { lazyGuarded } from '../utils/preloadGuard';
 
 // The 3D figures section (list, rename, duplicate, move, delete) is its own chunk.
 const FiguresSection = lazyGuarded(() => import('./FiguresSection'));
+// Several maps as one ZIP (a PDF and the PNGs), its own chunk, loaded when asked for.
+const PackageExport = lazyGuarded(() => import('./PackageExport'));
 
 // The signed-in home.
 //
@@ -267,6 +269,7 @@ export default function DashboardPage({
   const [error, setError] = useState(null);
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState('recent');
+  const [packing, setPacking] = useState(false);
 
   useEffect(() => {
     if (!user) return undefined;
@@ -349,6 +352,7 @@ export default function DashboardPage({
           <section className="dash-projects">
             <div className="dash-panel-head">
               <h2>Your maps {projects.length > 0 && <span className="dash-count">{projects.length}</span>}</h2>
+              {projects.length > 0 && <button className="dash-link" type="button" onClick={() => setPacking(true)}>Export a package…</button>}
               {projects.length > 1 && (
                 <div className="dash-project-tools">
                   <label className="dash-sr-only" htmlFor="dash-search">Search your maps</label>
@@ -401,6 +405,7 @@ export default function DashboardPage({
               </div>
             )}
           </section>
+          {packing && <Suspense fallback={null}><PackageExport projects={visible} onClose={() => setPacking(false)} /></Suspense>}
           <Suspense fallback={<p className="dash-muted" style={{ marginTop: 28 }}>Loading your 3D figures…</p>}>
             <FiguresSection onError={setError} />
           </Suspense>
