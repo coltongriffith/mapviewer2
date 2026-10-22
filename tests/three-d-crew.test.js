@@ -140,11 +140,16 @@ describe('the model in the scene (sync, tick, state)', () => {
     crew.set({ on: true, at: 'EX-001' }); crew.sync();
     expect(H.root.children.length).toBe(1);
     const g = H.root.children[0], b = box(), size = b.getSize(new THREE.Vector3());
-    // The pad's top is level with the highest ground under it and its embankment reaches below the lowest.
-    const r = 7.5 * g.scale.x, ground = [];
-    for (let i = 0; i < 16; i++) { const a = i * Math.PI / 8, x = 10 + Math.cos(a) * r, y = 20 + Math.sin(a) * r; ground.push(slope(x, y) - 100); }
-    expect(g.position.y).toBeGreaterThanOrEqual(slope(10, 20) - 100);
-    expect(b.min.y).toBeLessThan(Math.min(...ground));
+    // The pad is level under the rig, at the ground's middle height there (never more than a lip below its highest),
+    // and its gravel ramps down or up to meet the ground at its rim: no wall, no gap.
+    const u = g.scale.x, under = [];
+    for (let i = 0; i < 16; i++) { const a = i * Math.PI / 8; under.push(slope(g.position.x + Math.cos(a) * 4 * u, -g.position.z + Math.sin(a) * 4 * u) - 100); } // round the rig's middle
+    expect(g.position.y).toBeGreaterThan(Math.min(...under));
+    expect(g.position.y).toBeLessThan(Math.max(...under));
+    expect(Math.max(...under) - g.position.y).toBeLessThanOrEqual(0.27 * u + 1e-6);
+    g.updateMatrixWorld(true);
+    const pad = g.children.find((o) => o.material?.vertexColors && o.material.type === 'MeshLambertMaterial'), P = pad.geometry.attributes.position, v = new THREE.Vector3();
+    for (let i = P.count - 24; i < P.count; i++) { v.fromBufferAttribute(P, i).applyMatrix4(pad.matrixWorld); expect(Math.abs(v.y - (slope(v.x, -v.z) - 100))).toBeLessThan(0.05 * u); }
     expect(size.y).toBeGreaterThan(0.04 * H.G.diagH); // readable at the default view
     expect(Math.max(size.x, size.z)).toBeLessThan(0.2 * H.G.diagH); // never dominating the block
     const st = crew.state();

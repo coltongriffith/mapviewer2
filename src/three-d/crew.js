@@ -112,7 +112,7 @@ function surface(kind, [hx, hy, hz], rr = 0, taper = 0) {
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3)); g.setIndex(idx);
   return g;
 }
-const COL = { orange: '#c65322', ink: '#142126', cream: '#fcfbf7', pad: '#a09272', rim: '#45412b', steel: '#8c979b', yellow: '#f4c22b', hat: '#ff8b21', glass: '#9fd0e0' };
+const COL = { orange: '#c65322', ink: '#142126', cream: '#fcfbf7', pad: '#7d7868', rim: '#6b6c52', steel: '#8c979b', yellow: '#f4c22b', hat: '#ff8b21', glass: '#9fd0e0' };
 const LINE = 0.05; // the ink outline, rig units
 function kit() {
   const mats = {}, geos = [], line = new THREE.MeshBasicMaterial({ color: COL.ink, side: THREE.BackSide });
@@ -185,7 +185,7 @@ const CREW_AT = [
   { at: [-3.4, 0, 2.5], turn: 0.15, suit: COL.ink, vest: COL.hat, hat: COL.yellow, skin: '#7b4c30' },
 ];
 // The pad: an ellipse hugging the skid and the crew (rig units: centre, radii).
-const PADC = [0, 0.35], PADR = [6.3, 4.3];
+const PADC = [0, 0.35], PADR = [6.3, 4.3], LIP = 0.27; // the lip: about 0.3 of the skid's height
 const onPad = (lx, lz, k = 1) => ((lx - PADC[0]) / (PADR[0] * k)) ** 2 + ((lz - PADC[1]) / (PADR[1] * k)) ** 2 <= 1;
 // A soft contact shadow: a disc of ink fading to clear at its rim.
 function shade([sx, sz], [x, z]) {
@@ -195,6 +195,21 @@ function shade([sx, sz], [x, z]) {
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 4)); g.setIndex(idx);
   const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
   m.scale.set(sx, 1, sz); m.position.set(x, 0.05, z); return m;
+}
+
+// The cleared drill pad: level where the rig and crew stand (to 0.96 of its ellipse), then a gravel ramp out to the
+// ground at 1.2 (ground(x, z): its height there, rig units), fading to the terrain's tone at the rim: a shallow cut on
+// the high side, a fill on the low side, and no wall.
+const RING = [0, 0.5, 0.75, 0.96, 1.04, 1.12, 1.2];
+function pad(ground) {
+  const pos = [], col = [], idx = [], n = 24, a = new THREE.Color(COL.pad), b = new THREE.Color(COL.rim);
+  RING.forEach((r) => { for (let j = 0; j < n; j++) {
+    const t = j / n * 2 * Math.PI, x = PADC[0] + Math.cos(t) * PADR[0] * r, z = PADC[1] + Math.sin(t) * PADR[1] * r, k = Math.min(1, Math.max(0, (r - 0.96) / 0.24)), e = k * k * (3 - 2 * k);
+    pos.push(x, 0.04 + (k ? (ground(x, z) - 0.01) * e : 0), z); const c = a.clone().lerp(b, e); col.push(c.r, c.g, c.b);
+  } });
+  for (let i = 0; i + 1 < RING.length; i++) for (let j = 0; j < n; j++) { const p = i * n + j, q = i * n + (j + 1) % n; idx.push(p, q, p + n, q, q + n, p + n); }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx); g.computeVertexNormals();
+  return new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true }));
 }
 
 function drop() {
@@ -222,14 +237,11 @@ export function sync() {
   const rot = (90 - heading) * RAD, cs = Math.cos(rot), sn = Math.sin(rot);
   const toWorld = (lx, lz) => [lx * cs + lz * sn, lx * sn - lz * cs]; // rig units → east, north (before the scale)
   const hole = 3.7 + 1.0 * Math.tan(tilt), [ox, oy] = toWorld(hole * u, 0), cx = at.x - ox, cy = at.y - oy; // the rod meets the ground at the collar
-  // The pad's top is level with the highest ground under the skid and the crew; an embankment runs down from it
-  // past the lowest ground around, so nothing floats or sinks on a slope.
+  // The pad is level at the median ground under the skid and the crew (nothing sunk past the lip), and ramps to the
+  // ground at its rim (pad, below).
   const gy = (x, y) => G.V(x, y, G.surf(x, y)).y, at2 = (lx, lz) => { const [ex, ey] = toWorld(lx * u, lz * u); return gy(cx + ex, cy + ey); };
-  const top = Math.max(...[[0, 0], [5.2, 1.6], [5.2, -1.6], [-5.2, 1.6], [-5.2, -1.6], ...CREW_AT.map((q) => [q.at[0], q.at[2]])].map(([lx, lz]) => at2(lx, lz)));
-  let low = top; for (let i = 0; i < 16; i++) low = Math.min(low, at2(PADC[0] + Math.cos(i * Math.PI / 8) * PADR[0] * 1.25, PADC[1] + Math.sin(i * Math.PI / 8) * PADR[1] * 1.25));
-  const deep = (top - low) / u + 0.3, grow = deep * 0.35, t = grow / 2 / (PADR[0] + grow / 2);
-  K.part(grp, 'cyl', COL.pad, [PADR[0], 0.12, PADR[1]], [0.3, 0.05], [PADC[0], -0.08, PADC[1]], { outline: false });
-  K.part(grp, 'cyl', COL.rim, [PADR[0] / (1 - t), deep / 2, PADR[1] / (1 - t)], 0.05, [PADC[0], -deep / 2 - 0.12, PADC[1]], { taper: t, outline: false });
+  const ys = [[0, 0], [5.2, 1.6], [5.2, -1.6], [-5.2, 1.6], [-5.2, -1.6], [2.6, 0], [-2.6, 0], ...CREW_AT.map((q) => [q.at[0], q.at[2]])].map(([lx, lz]) => at2(lx, lz)).sort((a, b) => a - b), top = Math.max(ys[ys.length >> 1], ys[ys.length - 1] - LIP * u); // nothing sunk past the lip
+  grp.add(pad((lx, lz) => (at2(lx, lz) - top) / u));
   const p = G.V(cx, cy, 0);
   grp.position.set(p.x, top, p.z); grp.rotation.y = rot; grp.scale.setScalar(u);
   grp.traverse((o) => { o.frustumCulled = false; });
@@ -240,7 +252,7 @@ export function sync() {
   const under = new Set(H.project.holes.filter((h) => !ownAt(h) && onPad(...toLocal(h.c.x, h.c.y), 1.05)).map((h) => h.id));
   const box = []; for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; [0, 3.6].forEach((y) => box.push([PADC[0] + Math.cos(a) * PADR[0], y, PADC[1] + Math.sin(a) * PADR[1]])); }
   box.push([3.7 - 11.6 * Math.sin(tilt), 1 + 11.6 * Math.cos(tilt), 0]); // the mast's top
-  anim = { head: R.head, people, dispose: K.dispose, under, ownAt, foot: G.V(at.x, at.y, 0).setY(top), box };
+  anim = { head: R.head, people, dispose: K.dispose, under, ownAt, foot: new THREE.Vector3(3.7, 1.0, 0), box };
   pose(0);
 }
 // The idle motion at time t (seconds); t = 0 is the pose every export shows.
@@ -258,12 +270,13 @@ const still = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-mo
 export function tick(now) { if (anim) pose(now && !still?.matches ? now / 1000 : 0); }
 
 // ---------- the overlay's hooks (studio.js drawOverlay, drawCallout) ----------
-// A collar's ring: false under the pad (hidden), its screen spot at the rod's foot for the rig's own collar, else
-// undefined (as drawn).
+// A collar's ring: false under the pad (hidden), its screen spot at the rod's foot (where the rod meets the deck,
+// under the mast) for the rig's own collar, else undefined (as drawn).
 export function collar(h) {
   if (!anim) return undefined;
   if (anim.under.has(h.id)) return false;
-  return anim.ownAt(h) ? H.proj(anim.foot).slice(0, 2) : undefined;
+  if (!anim.ownAt(h)) return undefined;
+  grp.updateMatrixWorld(); return H.proj(anim.foot.clone().applyMatrix4(grp.matrixWorld)).slice(0, 2);
 }
 // Whether a point on the frame lies over the rig: inside the box on screen round its pad, doghouse roof and mast top.
 export function covers([x, y]) {
