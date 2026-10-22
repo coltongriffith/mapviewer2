@@ -67,9 +67,10 @@ function pathStyle(template, layer, feature, geomType) {
     color: style.stroke || '#54a6ff',
     weight: style.strokeWidth ?? 2,
     fillColor: style.fill || '#54a6ff',
-    fillOpacity: geomType === 'line' ? 0 : (style.fillOpacity ?? 0.22) * lo,
+    // A layer with geology styling (layer.fx) is painted by utils/fxLayers.js; its paths stay, unseen, to be clicked.
+    fillOpacity: geomType === 'line' || layer.fx ? 0 : (style.fillOpacity ?? 0.22) * lo,
     dashArray: style.dashArray || '',
-    opacity: (style.opacity ?? 1) * lo,
+    opacity: layer.fx ? 0 : (style.opacity ?? 1) * lo,
   };
 }
 
@@ -90,7 +91,7 @@ function detectGeomType(geojson) {
   return 'polygon';
 }
 
-export default function MapCanvas({ onReady, project, template, onFeatureClick, onMapClick, annotationToolRef, trimLayerId = null, featureStyleLayerId = null, onOverlayError }) {
+export default function MapCanvas({ onReady, project, template, onFeatureClick, onMapClick, annotationToolRef, trimLayerId = null, featureStyleLayerId = null, onOverlayError, zones = null, legendItems = null }) {
   const mapRef = useRef(null);
   // Pattern ids are document-wide; two maps on one page must not share them.
   const idPrefix = patternIdPart(useId());
@@ -111,6 +112,7 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
   const svgRendererRefs = useRef([]);
   const prevLayersRef = useRef([]);
   const leafletLayerRefsMap = useRef(new Map());
+  const fxRef = useRef(null);
 
   useEffect(() => { onMapClickRef.current = onMapClick; }, [onMapClick]);
   useEffect(() => { onFeatureClickRef.current = onFeatureClick; }, [onFeatureClick]);
@@ -386,7 +388,7 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
                // A pattern's colour and spacing live in its <pattern> tile,
                // which only a rebuild redraws; setStyle would leave it stale.
                (!hasFillPattern(nl.style) || nl.style === ol.style) &&
-               !!nl.style?.dissolve === !!ol.style?.dissolve;
+               !!nl.style?.dissolve === !!ol.style?.dissolve && !nl.fx === !ol.fx;
       });
 
     if (isStyleOnly) {
@@ -417,7 +419,7 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
       const isDrillholes = POINT_ROLES.has(layer.role) || layer.type === 'points';
 
       const lo = style.layerOpacity ?? 1;
-      const hasPattern = hasFillPattern(style) && geomType !== 'line';
+      const hasPattern = hasFillPattern(style) && geomType !== 'line' && !layer.fx;
       const svgRenderer = hasPattern ? L.svg({ padding: 0.1 }) : undefined;
       if (svgRenderer) svgRendererRefs.current.push(svgRenderer);
 
@@ -571,6 +573,18 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
     });
     prevLayersRef.current = newLayers;
   }, [project?.layers, template, trimLayerId, featureStyleLayerId, annotationToolRef, idPrefix]);
+
+  // Geology and label styling (layer.fx) and the basemap wash (layout.wash), lazy: a map without them loads nothing.
+  const layers = project?.layers, layout = project?.layout;
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || (!fxRef.current && !layout?.wash && !layers?.some((l) => l.fx))) return undefined;
+    let live = true;
+    import('../utils/fxLayers.js').then(({ syncFx }) => {
+      if (live && mapRef.current === map) fxRef.current = syncFx(map, fxRef.current, { project: { layers, layout }, template, zones, legendItems, geometry: geometryCache.current, trimLayerId, featureStyleLayerId });
+    }).catch(() => reportError('Geology styling could not load', { kind: 'asset_load' }));
+    return () => { live = false; };
+  }, [layers, layout, template, zones, legendItems, trimLayerId, featureStyleLayerId]);
 
   return <div ref={mapElRef} className="leaflet-map-canvas" />;
 }

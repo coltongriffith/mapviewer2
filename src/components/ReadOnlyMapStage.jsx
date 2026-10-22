@@ -233,6 +233,8 @@ export default function ReadOnlyMapStage({ project, onExportReady }) {
           onFeatureClick={null}
           onMapClick={null}
           annotationToolRef={{ current: null }}
+          zones={resolvedZones}
+          legendItems={legendItems}
         />
       </React.Suspense>
 
@@ -364,9 +366,9 @@ export default function ReadOnlyMapStage({ project, onExportReady }) {
                       {item.type === 'points' ? (
                         <LegendPointSwatch style={item.style} size={item.swatchSize || 14} />
                       ) : item.type === 'line' ? (
-                        <LegendLineSwatch style={item.style} />
+                        <LegendLineSwatch style={item.style} fx={item.fx} />
                       ) : (
-                        <LegendAreaSwatch style={item.style} />
+                        <LegendAreaSwatch style={item.style} fx={item.fx} />
                       )}
                       <span>{item.label}</span>
                     </div>

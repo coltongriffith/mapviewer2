@@ -49,6 +49,8 @@ const PublicationCheck = lazyGuarded(() => import('./components/PublicationCheck
 const ExportBackground = lazyGuarded(() => import('./components/ExportBackground'));
 const StudioCard = lazyGuarded(() => import('./components/StudioCard'));
 const StudioControls = lazyGuarded(() => import('./components/StudioControls'));
+const GeoStyleControls = lazyGuarded(() => import('./components/GeoStyleControls'));
+const WashControls = lazyGuarded(() => import('./components/WashControls'));
 const DrillPlanOverlay = lazyGuarded(() => import('./components/DrillPlanOverlay'));
 const DrillPlanControls = lazyGuarded(() => import('./components/DrillPlanControls'));
 import { useLazyDrillLegend } from './utils/useDrillLegend.js';
@@ -5919,6 +5921,7 @@ export default function App({ initialAction = null }) {
                 </button>
               ))}
             </div>
+            {project.layout.basemap !== 'blank' && <React.Suspense fallback={null}><WashControls layout={project.layout} updateLayout={updateLayout} /></React.Suspense>}
             {(project.layout.basemap === 'blank') && (
               <div className="control-row inline-2" style={{ marginTop: 8 }}>
                 <label htmlFor="f-background-color-4216">Background Color</label>
@@ -6776,6 +6779,9 @@ export default function App({ initialAction = null }) {
                 <React.Suspense fallback={null}>
                   <ClassificationPanel layer={selectedLayer} isPoint={isPointStyledLayer(selectedLayer)} updateLayer={updateLayer} brandColors={brandColors} />
                 </React.Suspense>
+                {selectedLayer.geojson && !isPointStyledLayer(selectedLayer) && (
+                  <React.Suspense fallback={null}><GeoStyleControls layer={selectedLayer} setProject={setProject} map={leafletMapRef.current} /></React.Suspense>
+                )}
               </div>
             ) : <p className="small-note">Select a layer to edit its display label, role, order, and colors.</p>}
             {selectedLayer?.figure ? (
@@ -7579,7 +7585,7 @@ export default function App({ initialAction = null }) {
             style={mapStageStyle}
           >
         <React.Suspense fallback={null}>
-          <MapCanvas onReady={onMapReady} project={project} template={template} onFeatureClick={handleFeatureClick} onMapClick={handleMapClick} annotationToolRef={annotationToolRef} trimLayerId={trimLayerId} featureStyleLayerId={featureStyleLayerId} onOverlayError={handleOverlayError} />
+          <MapCanvas onReady={onMapReady} project={project} template={template} onFeatureClick={handleFeatureClick} onMapClick={handleMapClick} annotationToolRef={annotationToolRef} trimLayerId={trimLayerId} featureStyleLayerId={featureStyleLayerId} onOverlayError={handleOverlayError} zones={resolvedZones} legendItems={allLegendItems} />
         </React.Suspense>
         {mapReady && (
           <>
@@ -7769,9 +7775,9 @@ export default function App({ initialAction = null }) {
                         {item.type === 'points' ? (
                           <LegendPointSwatch style={item.style} size={item.swatchSize || 14} />
                         ) : item.type === 'line' ? (
-                          <LegendLineSwatch style={item.style} />
+                          <LegendLineSwatch style={item.style} fx={item.fx} />
                         ) : (
-                          <LegendAreaSwatch style={item.style} />
+                          <LegendAreaSwatch style={item.style} fx={item.fx} />
                         )}
                         <LegendLabelEditable label={item.label} onSave={(val) => setDisplayLabel(item.id, val)} />
                       </div>

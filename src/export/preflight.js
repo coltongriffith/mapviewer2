@@ -16,8 +16,9 @@
 import { diagnostic, mergeDiagnostics, unionBounds, needsReview } from '../../shared/figureDiagnostics.js';
 import {
   createExportContext, ensureExportFonts, getTileImages, loadImage, placeCallouts, calloutCardMetrics,
-  legendLayoutReport, exportFrame, getTheme, fitText, titleTextSizes,
+  legendLayoutReport, exportFrame, getTheme, fitText, titleTextSizes, getOverlayMetrics, mapLabelOverlaps,
 } from './renderScene.js';
+import { panelObstacles } from '../utils/calloutLayout';
 import { PDF_SIZES } from './exportPDF.js';
 import { hasVisibleFeatures } from '../utils/featureIdentity.js';
 import { legendEntryIds } from '../utils/legendCustomization.js';
@@ -238,6 +239,16 @@ function checkLegend(scene, measure, sizes, out) {
   missing.forEach((layer) => out.push(diagnostic({ code: 'legend-row-missing', elementId: layer.id, message: `“${layer.displayName || layer.legend?.label || layer.name || 'A layer'}” is on the map but not in the legend`, action: 'turn its legend row back on, or hide the layer' })));
 }
 
+// Panels laid over one another: the title, legend, locator, north arrow, scale bar and logo.
+function checkPanelOverlaps(scene, out) {
+  const boxes = panelObstacles(getOverlayMetrics(scene), scene.project.layout || {});
+  boxes.forEach((a, i) => boxes.slice(i + 1).forEach((b) => {
+    if (a.left < b.left + b.width && b.left < a.left + a.width && a.top < b.top + b.height && b.top < a.top + a.height) {
+      out.push(diagnostic({ code: 'panel-overlap', elementId: `${a.key}+${b.key}`, bounds: a, message: `the ${a.key} overlaps the ${b.key}`, action: 'drag one of them clear, or resize it' }));
+    }
+  }));
+}
+
 function checkTextSize(scene, options, sizes, out) {
   const ts = textScale(scene, options);
   const small = new Map();
@@ -280,6 +291,9 @@ export async function runPreflight(scene, options = {}) {
   checkCallouts(s, measure, sizes, out);
   checkMarkerLabels(s, measure, sizes, out);
   checkLegend(s, measure, sizes, out);
+  checkPanelOverlaps(s, out);
+  // Map labels (geology styling) over panels, results cards or each other: found as the export places them.
+  await mapLabelOverlaps(s);
   sizes.push(...titleTextSizes(s).map((t) => ({ ...t, id: 'title' })));
   checkTextSize(s, options, sizes, out);
   return mergeDiagnostics(out, context.diagnostics);

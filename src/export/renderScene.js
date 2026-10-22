@@ -618,6 +618,12 @@ const LEGEND_ROW = {
   // Pitch of an entry row and of a group heading row, in composition px.
   pitch: 24, headingPitch: 20, headingFont: 11,
 };
+// A legend row of a layer with geology styling: its swatch drawn in the layer's own glow, dash, feather or plume.
+function fxSwatch(scene, item, x, rowY) {
+  const { mod } = scene.fx, line = item.type === 'line';
+  const prims = mod.swatchPrims(item, x, rowY + (line ? LEGEND_ROW.lineY - 6 : LEGEND_ROW.swatchY), LEGEND_ROW.swatchW, line ? 12 : LEGEND_ROW.swatchH);
+  return { canvas: (ctx, scale) => mod.paintFxCanvas(ctx, prims, scale), svg: (scale, svgDefs) => mod.paintFxSvg(prims, scale, svgDefs, { prefix: 'em-fx-legend', W: scene.width, H: scene.height }) };
+}
 function legendDash(style, scale) {
   return String(style?.dashArray || '').split(/[ ,]+/).filter(Boolean)
     .map((d) => Number(d) * scale).filter((d) => Number.isFinite(d) && d > 0);
@@ -743,7 +749,9 @@ async function drawLegendCanvas(ctx, scene, scale) {
       return;
     }
     {
-      if (item.type === 'points') {
+      if (item.fx && scene.fx) {
+        fxSwatch(scene, item, (x + lp) / scale, rowY / scale).canvas(ctx, scale);
+      } else if (item.type === 'points') {
         const shape = item.markerShape || item.style?.markerShape || 'circle';
         const cx = x + lp + 8 * scale; const cy = rowY + LEGEND_ROW.markerCentreY * scale; const r = (item.swatchSize ? item.swatchSize / 2 : 5) * scale;
         const icon = icons.get(item.style?.customMarkerDataUri);
@@ -1294,6 +1302,41 @@ async function drillPlanFor(scene) {
   const { planLayout, mapView } = await import('../utils/drillPlan.js');
   return planLayout(plan, mapView(scene.map, scene.width, scene.height, getOverlayMetrics(scene), scene.project.layout || {}));
 }
+
+// ── Geology and label styling (utils/geoStyle.js) ────────────────────────────────────────────────────────
+// Layers with fx are drawn by the styling module, under the plain data layers (as the editor stacks them), their
+// labels over every data layer, the wash over the basemap; legend rows of such layers get swatches in their real
+// style. A map using none of it loads nothing and draws exactly as before.
+async function fxFor(scene) {
+  const layout = scene.project.layout || {};
+  const layers = (scene.project.layers || []).filter((l) => l.fx && l.visible !== false && l.geojson);
+  if (!layers.length && !layout.wash && !(layout.legendItems || []).some((i) => i.fx)) return null;
+  const mod = await import('../utils/geoStyle.js');
+  const out = { mod, wash: mod.washPrims(layout.wash, scene.width, scene.height), band: [], labels: [], overlaps: [] };
+  if (layers.length && scene.map) {
+    const view = mod.mapView(scene.map, scene.width, scene.height, {
+      obstacles: panelObstacles(getOverlayMetrics(scene), layout), family: layout.fonts?.label || 'Inter',
+      frame: getMapFrame(layout, { width: scene.width, height: scene.height }, { sidebarFrac: scene.template?.sidebarFrac }),
+    });
+    Object.assign(out, mod.fxScene(layers.map((layer) => ({ layer, features: featureCollectionFeatures(getLayerGeojson(layer)), styleOf: (f) => getFeatureStyle(scene.template, layer, f) })), view));
+    // Labels over a results card are reported too (the cards are placed as the export places them).
+    const cards = placeCallouts({ ...scene, exportContext: null }, 1).map((c) => ({ key: 'a callout', left: c.left, top: c.top, width: c.width, height: c.height }));
+    out.placed.forEach((p) => {
+      const over = cards.filter((c) => mod.boxesOverlap(p.box, c));
+      if (!over.length) return;
+      const o = out.overlaps.find((x) => x.label === p.text && x.box === p.box);
+      if (o) o.with.push('a callout'); else out.overlaps.push({ label: p.text, with: ['a callout'], box: p.box });
+    });
+    if (out.overlaps.length) {
+      const what = [...new Set(out.overlaps.flatMap((o) => o.with))].slice(0, 3).join(', ');
+      warn(scene, 'label-overlap', `${out.overlaps.length} map label${out.overlaps.length === 1 ? '' : 's'} overlap${out.overlaps.length === 1 ? 's' : ''} ${what}`, 'move the label along its line, turn it, or move the panel', out.overlaps.length === 1 ? { bounds: out.overlaps[0].box } : {});
+    }
+  }
+  return out;
+}
+/** For the publication check: lays the map labels out as the export would, which reports any overlap. */
+export async function mapLabelOverlaps(scene) { await fxFor(scene); }
+const fxSvg = (scene, prims, id, scale, svgDefs) => (scene.fx && prims?.length ? `<g id="${id}">${scene.fx.mod.paintFxSvg(prims, scale, svgDefs, { prefix: id, W: scene.width, H: scene.height })}</g>` : '');
 
 // The footer exactly as the editor shows it: hidden when switched off or on the
 // NI 43-101 template (whose title block carries the source), and at the height
@@ -2225,7 +2268,13 @@ export async function renderSceneToCanvas(sourceScene, options = {}) {
   const isNI = scene.template?.id === 'ni_43101_technical';
   const isSP = scene.template?.id === 'side_panel';
   const plan = await drillPlanFor(scene);
-  await drawTilesCanvas(ctx, scene, scale); await drawRastersCanvas(ctx, scene, scale); drawRegionHighlightsCanvas(ctx, scene, scale); await drawVectorsCanvas(ctx, scene, scale);
+  const fx = scene.fx = await fxFor(scene);
+  await drawTilesCanvas(ctx, scene, scale);
+  if (fx) fx.mod.paintFxCanvas(ctx, fx.wash, scale);
+  await drawRastersCanvas(ctx, scene, scale); drawRegionHighlightsCanvas(ctx, scene, scale);
+  if (fx) fx.mod.paintFxCanvas(ctx, fx.band, scale);
+  await drawVectorsCanvas(ctx, scene, scale);
+  if (fx) fx.mod.paintFxCanvas(ctx, fx.labels, scale);
   if (plan) await paintCanvas(ctx, plan.base, scale);
   drawEllipsesCanvas(ctx, scene, scale); drawPolygonsCanvas(ctx, scene, scale); await drawMarkersCanvas(ctx, scene, scale);
   if (plan) await paintCanvas(ctx, plan.over, scale);
@@ -2445,7 +2494,7 @@ async function drawVectorsCanvas(ctx, scene, scale) {
       iconCache.set(uri, await loadImage(uri).catch(() => null));
     }
   }
-  (scene.project.layers || []).filter((layer) => layer.visible !== false && layer.geojson).forEach((layer) => {
+  (scene.project.layers || []).filter((layer) => layer.visible !== false && layer.geojson && !layer.fx).forEach((layer) => {
     const lo = layer.style?.layerOpacity ?? 1;
     const customImg = iconCache.get(layer.style?.customMarkerDataUri) || null;
     ctx.save(); ctx.globalAlpha = lo;
@@ -2558,7 +2607,7 @@ export function getLayerGeojson(layer) {
 
 // Exported for test: the legend swatch must carry the tile this draws.
 export function renderVectorsSvg(scene, scale) {
-  return (scene.project.layers || []).filter((layer) => layer.visible !== false && layer.geojson).map((layer, i) => {
+  return (scene.project.layers || []).filter((layer) => layer.visible !== false && layer.geojson && !layer.fx).map((layer, i) => {
     const lo = layer.style?.layerOpacity ?? 1;
     const patterns = svgPatternRegistry(`em-pat-${i}`);
     const paths = featureCollectionFeatures(getLayerGeojson(layer)).map((feature) => geometryToSvg(scene.map, feature, getFeatureStyle(scene.template, layer, feature), scale, patterns)).join('\n');
@@ -2769,7 +2818,8 @@ export function renderLegendSvg(scene, scale, svgDefs) {
     }
     // Canvas centres the label on the row; matching that with the same y and an
     // explicit middle baseline keeps the two in step at any legendFontScale.
-    return `<g id="em-legend-item-${index}" class="em-legend-item">${legendSwatchSvg(item, x + lp, rowY, scale, svgDefs)}<text x="${x + lp + LEGEND_ROW.labelX * scale}" y="${rowY + LEGEND_ROW.labelCentreY * scale}" dominant-baseline="middle" fill="${theme.bodyText}" font-family="${legendFont}" font-size="${13 * scale * lfs}">${escapeXml(item.label || 'Layer')}</text></g>`;
+    const swatch = item.fx && scene.fx ? fxSwatch(scene, item, (x + lp) / scale, rowY / scale).svg(scale, svgDefs) : legendSwatchSvg(item, x + lp, rowY, scale, svgDefs);
+    return `<g id="em-legend-item-${index}" class="em-legend-item">${swatch}<text x="${x + lp + LEGEND_ROW.labelX * scale}" y="${rowY + LEGEND_ROW.labelCentreY * scale}" dominant-baseline="middle" fill="${theme.bodyText}" font-family="${legendFont}" font-size="${13 * scale * lfs}">${escapeXml(item.label || 'Layer')}</text></g>`;
   }).join('\n');
   const clipId = pushRoundedClip(svgDefs, x, y, w, h, (theme.panelRadius ?? 10) * scale);
   // The canvas honours legendTransparent; the SVG drew the panel regardless, so
@@ -3062,7 +3112,8 @@ export async function renderSceneToSvg(sourceScene, options = {}) {
   const frame = exportFrame(scene, scale);
   const plan = await drillPlanFor(scene);
   const planSvg = (layer) => (plan ? `<g id="em-drill-plan-${layer}">${paintSvg(plan[layer], scale, svgDefs)}</g>` : '');
-  const mapLayers = `${basemapImage}${renderRastersSvg(scene, scale)}${renderRegionHighlightsSvg(scene, scale)}${renderVectorsSvg(scene, scale)}${planSvg('base')}${renderEllipsesSvg(scene, scale, svgDefs)}${renderPolygonsSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${planSvg('over')}${renderCalloutsSvg(scene, scale, svgDefs)}${renderDistanceLinesSvg(scene, scale)}`;
+  const fx = scene.fx = await fxFor(scene);
+  const mapLayers = `${basemapImage}${fxSvg(scene, fx?.wash, 'em-fx-wash', scale, svgDefs)}${renderRastersSvg(scene, scale)}${renderRegionHighlightsSvg(scene, scale)}${fxSvg(scene, fx?.band, 'em-fx-layers', scale, svgDefs)}${renderVectorsSvg(scene, scale)}${fxSvg(scene, fx?.labels, 'em-fx-labels', scale, svgDefs)}${planSvg('base')}${renderEllipsesSvg(scene, scale, svgDefs)}${renderPolygonsSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${planSvg('over')}${renderCalloutsSvg(scene, scale, svgDefs)}${renderDistanceLinesSvg(scene, scale)}`;
   let mapContentGroup;
   if (frame) {
     const clipId = 'em-mapframe-clip';

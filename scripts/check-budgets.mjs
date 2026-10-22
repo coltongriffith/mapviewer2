@@ -79,7 +79,12 @@ const BUDGETS = {
   // inspector's credit row (lazy FigureImport and FigureLayerControls chunks), "georeference it by points instead" from
   // the image placement dialog, and no "Re-place image…" for a figure placed by its corners. The fit, the tracer and
   // the layers are lazy.
-  maxJsChunkGzipKb: 151.8,
+  // 151.8 → 152.1 (Oct 2026, 2D labels and geology styling, measured 151.77 configured, +0.32 kB over main's 151.45): the
+  // editor's hand-offs only: the inspector's "Geology & labels" section and the Style tab's basemap wash (lazy
+  // GeoStyleControls and WashControls chunks), the stage's zones and legend rows passed to the map for label
+  // placement, and each legend row's style (lazy FxSwatch chunk for a styled row). The styling, its layout and its
+  // painting are lazy.
+  maxJsChunkGzipKb: 152.1,
   initialJsGzipKb: 75,
   initialAuthJsGzipKb: 135,
   // The former configured check omitted VITE_ADMIN_EMAIL, which pruned the
@@ -188,7 +193,15 @@ const BUDGETS = {
   // row (0.7 kB) only for a layer made from one. App as maxJsChunkGzipKb above, MapCanvas +0.19 kB (the lazy overlay
   // hook), renderScene +0.17 kB (a figure drawn by its corners in PNG and SVG, its credit line) and
   // RasterPlacementModal +0.1 kB (the link to the points dialog).
-  totalAuthJsGzipKb: 990.8,
+  // 990.8 → 1006.9 (Oct 2026, 2D labels and geology styling, measured 1006.6, +16.1 kB over main's 990.5): all of it lazy and
+  // loaded only for a map that uses it. utils/geoStyle.js (9.1 kB: labels along lines and printed into units with the
+  // largest-box fit, feathered and plume fills, glow, casing and the line types, the wash, legend swatches, collisions
+  // and the canvas and SVG painters), utils/fxLayers.js (1.6 kB: the editor's three Leaflet canvases), the inspector
+  // controls (GeoStyleControls 2.6 kB, WashControls 0.7 kB) and the legend swatch (FxSwatch 0.4 kB). App as
+  // maxJsChunkGzipKb above, MapCanvas +0.31 kB (unseen paths for a styled layer, the lazy hook), renderScene +0.85 kB (the
+  // styled layers, labels, wash and swatches in PNG and SVG, label overlap warnings) and preflight +0.17 kB (panels over
+  // one another, label overlaps in the publication check).
+  totalAuthJsGzipKb: 1006.9,
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
@@ -219,7 +232,8 @@ const BUDGETS = {
   // 903.4 → 904.8 (measured 904.5, 903.1 on main; on its own branch 879.1 → 880.6): the shared watermark band, as
   // totalAuthJsGzipKb above.
   // 904.8 → 922.6 (measured 922.3, 904.5 on main): import a company figure, as totalAuthJsGzipKb above.
-  totalJsGzipKb: 922.6,
+  // 922.6 → 938.5 (measured 938.2, 922.3 on main): 2D labels and geology styling, as totalAuthJsGzipKb above.
+  totalJsGzipKb: 938.5,
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the
   // totals above. /3d carries three.js (~109 kB gzip) and its editor.
@@ -457,11 +471,14 @@ const BUDGETS = {
   // 339.0 → 339.7 (Oct 2026, 2D drill plan, measured 339.4, 338.8 on main): the App code as maxJsChunkGzipKb above.
   // 339.7 → 340.2 (Oct 2026, import a company figure merged over the drill plan, measured 339.9, 339.4 on main): App as
   // maxJsChunkGzipKb above and MapCanvas +0.19 kB (the lazy hook for a figure placed by its corners).
-  editorAuthJsGzipKb: 340.2,
+  // 340.2 → 340.9 (Oct 2026, 2D labels and geology styling, measured 340.6, 339.9 on main): App as maxJsChunkGzipKb above
+  // and MapCanvas +0.31 kB (a styled layer's paths kept unseen for clicks, and the lazy hook to its canvases).
+  editorAuthJsGzipKb: 340.9,
   // 270 → 271.0 (Oct 2026, production errors, measured 270.7, 269.6 on main): the same as editorAuthJsGzipKb above.
   // 271.0 → 271.7 (Oct 2026, 2D drill plan, measured 271.4, 270.8 on main): the same as editorAuthJsGzipKb above.
   // 271.7 → 272.2 (measured 271.9, 271.4 on main): import a company figure, as editorAuthJsGzipKb above.
-  editorJsGzipKb: 272.2,
+  // 272.2 → 272.8 (measured 272.5, 271.9 on main): 2D labels and geology styling, as editorAuthJsGzipKb above.
+  editorJsGzipKb: 272.8,
   claimsAuthJsGzipKb: 355,
   claimsJsGzipKb: 290,
   // Stylesheet, gzipped. Today ~29 kB.

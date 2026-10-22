@@ -337,8 +337,9 @@ export function buildLegendItems(template, layers, layout = {}) {
         style: { ...baseStyle, stroke: baseStyle.stroke || baseStyle.markerColor || '#1f2937', dashArray: '' },
       }] : [];
 
-      // Coloured by attribute: a row per class, not a row for the layer.
-      if (isClassified(layer)) return [...classLegendItems(layer, baseStyle, baseLabel, group, isPoint), ...traceRows];
+      // Coloured by attribute: a row per class, not a row for the layer. Rows of a layer with geology styling
+      // carry it, for swatches drawn in that style (utils/geoStyle.js).
+      if (isClassified(layer)) return [...classLegendItems(layer, baseStyle, baseLabel, group, isPoint).map((r) => (layer.fx && !isPoint ? { ...r, fx: layer.fx } : r)), ...traceRows];
 
       if (isPoint) {
         const shapes = distinctShapesForLayer(layer);
@@ -361,6 +362,7 @@ export function buildLegendItems(template, layers, layout = {}) {
         label: baseLabel,
         type: layerGeometryKind(layer) === 'line' ? 'line' : layer.type,
         style: baseStyle,
+        ...(layer.fx ? { fx: layer.fx } : {}),
       }];
     });
 
