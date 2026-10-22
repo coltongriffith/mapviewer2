@@ -1,4 +1,5 @@
 import { figureCanvas } from "./exportPNG";
+import { blobAs } from '../utils/svg';
 
 // Page size presets in inches [width, height]
 export const PDF_SIZES = {
@@ -25,6 +26,8 @@ export async function exportPDF(scene, options = {}) {
   const canvas = await figureCanvas(scene, { ...options, background: 'white' });
   pdfPage(pdf, canvas, size);
 
+  // options.as (window.EMAP): the PDF comes back instead of downloading.
+  if (options.as) return blobAs(pdf.output('blob'), options.as);
   const filename = options.filename || scene.project?.layout?.exportSettings?.filename || 'exploration-maps-export';
   pdf.save(`${filename}.pdf`);
 }

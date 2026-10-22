@@ -4106,6 +4106,7 @@ export default function App({ initialAction = null }) {
       };
     });
     setSelectedCalloutId(calloutId);
+    return calloutId;
   };
 
   // Published results (a release table the user picks): each approved result's text on its hole's collar,
@@ -4369,6 +4370,7 @@ export default function App({ initialAction = null }) {
     setSelectedMarkerId(id);
     setSelectedEllipseId(null);
     setSelectedCalloutId(null);
+    return id;
   };
 
   const addEllipseAt = (latlng) => {
@@ -4429,6 +4431,7 @@ export default function App({ initialAction = null }) {
     setSelectedMarkerId(id);
     setSelectedEllipseId(null);
     setSelectedCalloutId(null);
+    return id;
   };
 
   const addDistanceLine = (p1, p2) => {
@@ -4607,10 +4610,14 @@ export default function App({ initialAction = null }) {
     setSelectedCalloutId(null);
   };
 
+  // extraOptions.as ("blob", "dataUrl" or "text", from window.EMAP): the file comes back instead of downloading,
+  // a failure is thrown, and no upgrade or sign-up prompt opens.
   const handleExport = async (format, extraOptions = {}) => {
-    if (exporting) return;
+    const api = Boolean(extraOptions.as);
+    if (exporting) { if (api) throw new Error('An export is already running: wait for it to finish.'); return; }
     setExportError('');
     if (!leafletMapRef.current || !mapContainerRef.current) {
+      if (api) throw new Error('The map is not ready yet: await EMAP.ready(), then export.');
       setExportError('Map not ready — please wait a moment then try again.');
       return;
     }
@@ -4704,22 +4711,23 @@ export default function App({ initialAction = null }) {
         if (needsReview(diagnostics)) { setPreflight({ format, extraOptions, diagnostics }); return; }
         checked = true;
       }
+      let file;
       if (format === 'png') {
-        await exportPNG(scene, opts);
+        file = await exportPNG(scene, opts);
       } else if (format === 'svg' || format === 'svg_ai') {
-        await exportSVG(scene, { ...opts, illustratorMode: format === 'svg_ai' });
+        file = await exportSVG(scene, { ...opts, illustratorMode: format === 'svg_ai' });
       } else if (format === 'pdf') {
         const { exportPDF } = await import('./export/exportPDF');
-        await exportPDF(scene, opts);
+        file = await exportPDF(scene, opts);
       } else if (format === 'layers') {
         const { exportLayers } = await import('./export/exportLayers');
-        await exportLayers(scene, opts);
+        file = await exportLayers(scene, opts);
       }
       const warnings = exportContext.warnings;
       // Free and not yet spent: offer the full-resolution export in place of
       // the plain upgrade prompt. An anonymous exporter pays with an email.
       const offerFullRes = resolutionClamped && !entitlements.clean_export && !spendingCredit
-        && (!user || !fullResCreditUsed(user));
+        && (!user || !fullResCreditUsed(user)) && !api;
       if (spendingCredit) {
         clearFullResExport();
         markFullResCreditUsed().catch(() => {});
@@ -4735,7 +4743,7 @@ export default function App({ initialAction = null }) {
           type: 'info',
           message: `Exported at ${entitlements.max_export_pixels.toLocaleString()} px, the free plan's maximum.`,
         });
-      } else if (resolutionClamped) {
+      } else if (resolutionClamped && !api) {
         setUpgradeReason('export_resolution');
         setUploadStatus({
           type: 'info',
@@ -4777,7 +4785,7 @@ export default function App({ initialAction = null }) {
       setHasExported(true);
       // Anonymous exporter just got value — nudge them to save it to an account.
       // Once per session, and not while an auth modal is already up.
-      if (!user && !offerFullRes) {
+      if (!user && !offerFullRes && !api) {
         try {
           if (!sessionStorage.getItem('em_post_export_nudge')) {
             sessionStorage.setItem('em_post_export_nudge', '1');
@@ -4785,10 +4793,12 @@ export default function App({ initialAction = null }) {
           }
         } catch { setShowPostExportSignup(true); }
       }
+      if (api) return { file, clamped: resolutionClamped, warnings };
     } catch (err) {
       trackEvent('export_failed', { format, message: String(err?.message ?? err).slice(0, 120) });
       setExportError(`Export failed: ${err.message}`);
       setUploadStatus({ type: 'error', message: `Export failed: ${err.message}` });
+      if (api) throw err;
     } finally {
       setExporting(false);
     }
@@ -5303,6 +5313,25 @@ export default function App({ initialAction = null }) {
   // This is a one-time handoff from the lightweight marketing entry.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialAction]);
+
+  // window.EMAP (src/emap/api.js), loaded once the editor opens: it reads the map and changes it through the same
+  // state and actions as the controls, so undo and unsaved changes follow its edits as they follow a click.
+  const emap = useRef({});
+  Object.assign(emap.current, {
+    screen, project, setProject, projectId, projectName, isDirty, user, entitlements, bandDefault, recentProjects, mapReady,
+    map: leafletMapRef.current, legend: allLegendItems, zones: resolvedZones,
+    updateLayout, updateLayer, setDisplayLabel, changeLayerRole, removeLayer, moveLayer, setFramingLayer, autoFrameAll, pickMapStyle,
+    addLayer: addGeoJSONAsLayer, addCallout: addCalloutAtAnchor, updateCallout, removeCallout, arrangeCallouts: autoArrangeCallouts,
+    addMarker: addMarkerAt, addMapLabel: addMapLabelAt, updateMarker, removeMarker, updateDrillPlan, replaceDrillPlan,
+    exportFile: (format, o) => handleExport(format, { noWatermark: Boolean(user || getLastLeadEmail()), preflightOk: true, ...o }),
+    save: saveCurrentProject, saveAs: saveAsProject, duplicate: duplicateCurrentProject, open: openProjectFromRecent, newMap: startNewProject,
+    step: stepHistory,
+  });
+  useEffect(() => {
+    if (screen !== 'editor' || window.EMAP) return undefined;
+    const t = setTimeout(() => import('./emap/api.js').then((m) => m.install(() => emap.current), () => {}), 1000);
+    return () => clearTimeout(t);
+  }, [screen]);
 
   const referenceOverlays = project.layout.referenceOverlays || {};
 
