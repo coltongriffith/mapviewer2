@@ -65,7 +65,11 @@ const BUDGETS = {
   // styles (rose, split; ~0.2 kB, offered in every theme's picker) — and the hand-off to the lazy StudioCard and
   // StudioControls chunks in the stage and inspector (~0.35 kB), the frame ticks' Studio mono font and each
   // callout's colour as a CSS variable for Studio's card opacity (~0.2 kB). The cards' layout and painting are lazy.
-  maxJsChunkGzipKb: 150.6,
+  // 150.6 → 150.7 (Oct 2026, 3D figures in the account and maps from property data merged over Studio, measured
+  // 150.40 configured, +0.11 kB over main's 150.29): the editor takes a file handed over by a property page ("Start a map from a file", "Use in map")
+  // and imports it once the new property map is open. It has to run in App, where the import lives; the
+  // property page and the dashboard's 3D section are lazy chunks.
+  maxJsChunkGzipKb: 150.7,
   initialJsGzipKb: 75,
   initialAuthJsGzipKb: 135,
   // The former configured check omitted VITE_ADMIN_EMAIL, which pruned the
@@ -130,7 +134,14 @@ const BUDGETS = {
   // and their canvas/SVG painters, a 6.5 kB chunk shared by the exporter and the stage), the lazy StudioCard (2.9 kB)
   // and StudioControls (1.9 kB) chunks, the renderer's Studio branches, legend/callout shells, label halo and font
   // weights (+1.5 kB in the lazy renderScene chunk), and App +1.47 kB as maxJsChunkGzipKb above.
-  totalAuthJsGzipKb: 933.5,
+  // 933.5 → 938.8 (Oct 2026, 3D figures in the account merged over Studio and round 5E, measured 938.48, +5.4 kB
+  // over main's 933.1): all of it lazy. The dashboard's
+  // 3D figures section (FiguresSection.jsx, 2.8 kB: tiles, search and sort, rename dialog, duplicate, move to a
+  // property, delete) and its client (utils/figures.js, 1.7 kB: list, rename, soft delete, duplicate with the
+  // files copied, the editable properties) load with the dashboard, never with the editor; the account page's 3D
+  // count (+0.2 kB), the property page's "Start a map from a file" and "Use in map" (+0.2 kB), /3d's dashboard link
+  // and ?property= first save (+0.1 kB in the lazy account client) and the editor hand-off in App (+0.16 kB).
+  totalAuthJsGzipKb: 938.8,
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
@@ -152,7 +163,8 @@ const BUDGETS = {
   // 850.0 → 851.1 (measured 850.8): 2D bugs B1–B4, as totalAuthJsGzipKb above.
   // 851.1 → 851.4 (measured 851.1): the tick bounds, as maxJsChunkGzipKb above.
   // 851.4 → 866.3 (measured 865.9): the 2D Studio style, as totalAuthJsGzipKb above.
-  totalJsGzipKb: 866.3,
+  // 866.3 → 871.5 (measured 871.22): 3D figures in the account, as totalAuthJsGzipKb above.
+  totalJsGzipKb: 871.5,
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the
   // totals above. /3d carries three.js (~109 kB gzip) and its editor.
@@ -334,7 +346,8 @@ const BUDGETS = {
   // 335.6 → 335.9 (Oct 2026, 2D bugs B1–B4, measured 335.6): the same App code as maxJsChunkGzipKb above.
   // 335.9 → 336.1 (measured 335.8): the tick bounds, as maxJsChunkGzipKb above.
   // 336.1 → 337.6 (Oct 2026, 2D Studio style merged over B1–B4, measured 337.3): the same App code as maxJsChunkGzipKb above.
-  editorAuthJsGzipKb: 337.6,
+  // 337.6 → 337.7 (measured 337.39): the property file hand-off in App, as maxJsChunkGzipKb above.
+  editorAuthJsGzipKb: 337.7,
   editorJsGzipKb: 270,
   claimsAuthJsGzipKb: 355,
   claimsJsGzipKb: 290,

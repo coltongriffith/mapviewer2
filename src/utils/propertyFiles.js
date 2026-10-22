@@ -33,10 +33,19 @@ export function guessKind(name) {
   if (table && role) return { kind: 'drill', role };
   if (['xyz', 'grd', 'gdb'].includes(ext) || has(/^(mag|magnetics|ip|em|vtem|ztem|grav|gravity|geophys|geophysics|chargeability|resistivity)$/)) return { kind: 'geophysics', role: null };
   if (has(/^(claims?|tenures?|licen[cs]es?|mineral_titles)$/)) return { kind: 'claims', role: null };
-  if (['geojson', 'json', 'kml', 'kmz', 'shp', 'zip', 'gpkg'].includes(ext)) return { kind: 'layer', role: null };
+  if (['geojson', 'json', 'kml', 'kmz', 'shp', 'zip', 'gpkg', 'tif', 'tiff'].includes(ext)) return { kind: 'layer', role: null };
   if (['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xlsx', 'xls', 'md'].includes(ext)) return { kind: 'document', role: null };
   if (table) return { kind: 'drill', role: null };
   return { kind: 'other', role: null };
+}
+
+// What the 2D editor's import can open as a layer (src/utils/importers.js:
+// GeoJSON, KML/KMZ, a zipped shapefile, CSV points). "Use in map" offers these.
+export const MAP_IMPORT_EXTS = ['geojson', 'json', 'kml', 'kmz', 'zip', 'csv'];
+export const MAP_IMPORT_ACCEPT = MAP_IMPORT_EXTS.map((e) => `.${e}`).join(',');
+export function opensInMap(name) {
+  const n = String(name || '').toLowerCase();
+  return MAP_IMPORT_EXTS.some((e) => n.endsWith(`.${e}`));
 }
 
 export function formatBytes(n) {
@@ -140,6 +149,13 @@ export function library(sb) {
       const { data, error } = await store().createSignedUrl(path, expiresIn, { download: name || true });
       if (error || !data?.signedUrl) throw libraryError(error || 'NOT_FOUND');
       return data.signedUrl;
+    },
+
+    /** The version at `path` as a File called `name` (for the 2D editor's import). */
+    async file(path, name) {
+      const { data, error } = await store().download(path);
+      if (error || !data) throw libraryError(error || 'NOT_FOUND');
+      return new File([data], name || path.split('/').pop(), { type: data.type || 'application/octet-stream' });
     },
 
     async text(path) {

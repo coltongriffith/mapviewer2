@@ -7,7 +7,7 @@ import {
 } from '../../utils/workspace';
 import { listCloudProjects } from '../../utils/cloudStorage';
 import { supabase } from '../../lib/supabase';
-import { library, FILE_KINDS, guessKind, kindLabel, formatBytes } from '../../utils/propertyFiles';
+import { library, FILE_KINDS, guessKind, kindLabel, formatBytes, opensInMap, MAP_IMPORT_ACCEPT } from '../../utils/propertyFiles';
 import { createPortfolio } from '../../utils/tenureMonitor';
 import { jurisdictionLabel } from '../../utils/jurisdictions';
 import { lazyGuarded } from '../../utils/preloadGuard';
@@ -80,6 +80,17 @@ function MoveHere({ label, load, onMove }) {
   );
 }
 
+/** A button that opens a file picker; `onFile(file)` gets the choice. */
+function FileButton({ label, className = 'btn', disabled, onFile, ariaLabel, accept }) {
+  const ref = useRef(null);
+  return (
+    <>
+      <button type="button" className={className} disabled={disabled} aria-label={ariaLabel} onClick={() => ref.current?.click()}>{label}</button>
+      <input ref={ref} type="file" hidden accept={accept} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) onFile(f); }} />
+    </>
+  );
+}
+
 function MapsTab({ property, perms, onOpenMap, onNewMap }) {
   const [maps, setMaps] = useState(null);
   const [error, setError] = useState(null);
@@ -96,6 +107,13 @@ function MapsTab({ property, perms, onOpenMap, onNewMap }) {
             setBusy(true); setError(null);
             try { await onNewMap(property); } catch (e) { setError(e.message); setBusy(false); }
           }}>{busy ? 'Creating…' : '+ New map in this property'}</button>
+          {/* A new property map with the file as its first layer (the editor's own import). */}
+          <FileButton label="Start a map from a file" disabled={busy} accept={MAP_IMPORT_ACCEPT}
+            ariaLabel="Start a map from a file (GeoJSON, KML, KMZ, zipped shapefile or CSV)"
+            onFile={async (file) => {
+              setBusy(true); setError(null);
+              try { await onNewMap(property, { file }); } catch (e) { setError(e.message); setBusy(false); }
+            }} />
           <MoveHere label="Move one of my maps here" load={personalMaps}
             onMove={async (id) => { await moveToProperty('map', id, property.id); await load(); }} />
         </div>
@@ -132,12 +150,12 @@ function FiguresTab({ property, perms, userId }) {
       <ErrorNote error={error} onDismiss={() => setError(null)} />
       {perms.edit && (
         <div className="ws-row" style={{ marginBottom: 14 }}>
-          <a className="btn primary" href="/3d" style={{ width: 'auto', padding: '0 14px', height: 'var(--ctl-h)', textDecoration: 'none' }}>+ New 3D figure</a>
+          <a className="btn primary" href={`/3d?property=${encodeURIComponent(property.id)}`} style={{ width: 'auto', padding: '0 14px', height: 'var(--ctl-h)', textDecoration: 'none' }}>+ New 3D figure</a>
           <MoveHere label="Move one of my 3D figures here" load={personal}
             onMove={async (id) => { await moveFigureToProperty(id, property); await load(); }} />
         </div>
       )}
-      {perms.edit && <p className="dash-muted" style={{ marginBottom: 12 }}>In the 3D maker, use Save as new and choose this property to add a figure here.</p>}
+      {perms.edit && <p className="dash-muted" style={{ marginBottom: 12 }}>A new 3D figure started here saves to this property. From another figure, use Save to property… in My 3D maps.</p>}
       {figures === null ? <p className="dash-muted">Loading 3D figures…</p> : figures.length === 0 ? (
         <p className="dash-muted">No 3D figures in this property yet.</p>
       ) : (
@@ -233,20 +251,9 @@ function ClaimsTab({ property, perms, userId, onOpenTenureMonitor }) {
   );
 }
 
-/** A button that opens a file picker; `onFile(file)` gets the choice. */
-function FileButton({ label, className = 'btn', disabled, onFile, ariaLabel }) {
-  const ref = useRef(null);
-  return (
-    <>
-      <button type="button" className={className} disabled={disabled} aria-label={ariaLabel} onClick={() => ref.current?.click()}>{label}</button>
-      <input ref={ref} type="file" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) onFile(f); }} />
-    </>
-  );
-}
-
 // The property's shared data files. 3D figures in this property pick files
 // from here, and offer to update when a newer version is uploaded.
-function DataTab({ property, perms }) {
+function DataTab({ property, perms, onNewMap }) {
   const lib = useMemo(() => (supabase ? library(supabase) : null), []);
   const [files, setFiles] = useState(null);
   const [error, setError] = useState(null);
@@ -309,6 +316,10 @@ function DataTab({ property, perms }) {
                   <td>{f.by || '—'}</td>
                   <td>
                     <div className="ws-row" style={{ flexWrap: 'nowrap', justifyContent: 'flex-end', whiteSpace: 'nowrap' }}>
+                      {perms.edit && onNewMap && opensInMap(f.name) && (
+                        <button type="button" className="dash-link" aria-label={`Use ${f.name} in a new map`} disabled={!!busy}
+                          onClick={() => run(f.id, async () => { await onNewMap(property, { file: await lib.file(f.path, f.name) }); })}>Use in map</button>
+                      )}
                       <button type="button" className="dash-link" aria-label={`Download ${f.name}`} disabled={!!busy}
                         onClick={() => run(f.id, async () => { window.location.assign(await lib.downloadUrl(f.path, f.name)); })}>Download</button>
                       {perms.edit && <FileButton label={busy === f.id ? 'Uploading…' : 'New version'} className="dash-link" disabled={!!busy}
@@ -429,7 +440,7 @@ export default function PropertyPage({ orgSlug = null, slug, onExit, onOpenDashb
               ))}
               {tab === 'maps' && <MapsTab property={property} perms={perms} onOpenMap={onOpenMap} onNewMap={onNewMap} />}
               {tab === 'figures' && <FiguresTab property={property} perms={perms} userId={user?.id} />}
-              {tab === 'data' && <DataTab property={property} perms={perms} />}
+              {tab === 'data' && <DataTab property={property} perms={perms} onNewMap={onNewMap} />}
               {tab === 'drill' && <Suspense fallback={<p className="dash-muted">Loading the drill database…</p>}><DrillPanel property={property} perms={perms} /></Suspense>}
               {tab === 'claims' && <ClaimsTab property={property} perms={perms} userId={user?.id} onOpenTenureMonitor={onOpenTenureMonitor} />}
               {tab === 'activity' && <section className="dash-panel"><ActivityFeed orgId={property.org_id} propertyId={property.id} /></section>}
