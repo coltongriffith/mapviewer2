@@ -98,6 +98,14 @@ jobs:
           cache: npm
       - run: npm ci
       # Fail only on high/critical advisories in production dependencies —
-      # dev-only and low findings should not block a deploy.
+      # dev-only and low findings should not block a deploy. When npm's advisory
+      # endpoint itself is down (503, timeout), retry; a real finding fails at once.
       - name: Dependency policy
-        run: npm audit --omit=dev --audit-level=high
+        run: |
+          for attempt in 1 2 3; do
+            if npm audit --omit=dev --audit-level=high > audit.log 2>&1; then cat audit.log; exit 0; fi
+            cat audit.log
+            grep -q "audit endpoint returned an error" audit.log || exit 1
+            [ "$attempt" -lt 3 ] && echo "npm audit endpoint unavailable; retrying in $((attempt * 30))s" && sleep $((attempt * 30))
+          done
+          exit 1
