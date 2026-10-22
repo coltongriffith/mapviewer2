@@ -1,10 +1,12 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { trackLandingClick } from '../utils/track';
 import { US_CLAIMS_ENABLED } from '../utils/jurisdictions';
 import { PRICING, FREE_FEATURES, PRO_FEATURES } from '../utils/pricing';
 import { useAuth } from '../hooks/useAuth.jsx';
 import AuthModal from './AuthModal';
 import BrandMark from './BrandMark';
+
+const LandingNew = lazy(() => import('./LandingNew'));
 
 const SHOWCASE = [
   {
@@ -360,6 +362,19 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
             </div>
           </section>
         )}
+
+        {/* ── New: 3D figures, Studio, sharing, workspace ────────── */}
+        <section className="lm-section lm-reveal" id="new" data-section="new">
+          <div className="lm-section-inner">
+            <p className="lm-eyebrow"><span className="lm-eyebrow-tick" aria-hidden="true" />New in Exploration Maps</p>
+            <h2 className="lm-h2">3D figures, Studio maps and a workspace for the whole team.</h2>
+            <p className="lm-section-sub">Each figure here was made in the app from its sample projects, with illustrative data.</p>
+            {/* Figures and blurbs in their own chunk (LandingNew.jsx), so the homepage's first JS stays as it was. */}
+            <Suspense fallback={<div className="lm-new-placeholder" />}>
+              <LandingNew />
+            </Suspense>
+          </div>
+        </section>
 
         {/* ── Capabilities ───────────────────────────────────────── */}
         <section className="lm-section lm-reveal" id="features" data-section="features">

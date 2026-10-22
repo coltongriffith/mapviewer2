@@ -484,3 +484,15 @@
   .lm-map-preview-image { padding: 5px; }
   .lm-footer-inner { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ── New: 3D figures, Studio, sharing, workspace ─────────────────────────── */
+.lm-new-card { margin: 0; display: flex; flex-direction: column; }
+.lm-new-card .lm-show-img { aspect-ratio: 3 / 2; }
+.lm-new-card .lm-show-img img { height: 100%; object-fit: cover; }
+.lm-new-card a.lm-show-cta { text-decoration: none; }
+.lm-new-card a.lm-show-cta:hover { text-decoration: underline; text-underline-offset: 3px; }
+.lm-new-ws { margin-top: var(--sp-4); }
+.lm-new-ws h3 { margin: 0 0 4px; font-size: var(--fs-md); }
+.lm-new-ws p { margin: 0; font-size: var(--fs-body); color: var(--ui-text-muted); line-height: 1.6; max-width: 80ch; }
+.lm-new-ws a { color: var(--ui-text); font-weight: 600; text-underline-offset: 3px; white-space: nowrap; }
+.lm-new-placeholder { min-height: 420px; }

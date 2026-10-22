@@ -147,7 +147,11 @@ const BUDGETS = {
   // usage events (track.js, ~0.5 kB, lazy). The app's /api/track sender moved to utils/trackCore.js so /3d shares it
   // without supabase-js; as its own chunk it costs ~0.3 kB of chunk overhead in the homepage and editor routes (see
   // editorAuthJsGzipKb).
-  totalAuthJsGzipKb: 943.8,
+  // 943.8 → 945.2 (Oct 2026, marketing refresh, measured 944.9, +1.4 kB): the homepage's "New in Exploration Maps"
+  // section (3D figures, Studio, sharing, workspace) in its own lazy LandingNew chunk (~1.2 kB with its alt texts and
+  // copy), so the homepage's initial JS and its budget are unchanged (+0.2 kB measured for the section heading and
+  // the lazy hand-off); the editor route is unchanged.
+  totalAuthJsGzipKb: 945.2,
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
@@ -171,7 +175,8 @@ const BUDGETS = {
   // 851.4 → 866.3 (measured 865.9): the 2D Studio style, as totalAuthJsGzipKb above.
   // 866.3 → 871.5 (measured 871.22): 3D figures in the account, as totalAuthJsGzipKb above.
   // 871.5 → 876.5 (measured 876.14, +4.92 kB over main's 871.22): the admin 3D usage tab, as totalAuthJsGzipKb above.
-  totalJsGzipKb: 876.5,
+  // 876.5 → 877.8 (measured 877.5): the homepage's lazy LandingNew chunk, as totalAuthJsGzipKb above.
+  totalJsGzipKb: 877.8,
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the
   // totals above. /3d carries three.js (~109 kB gzip) and its editor.
