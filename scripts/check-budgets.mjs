@@ -451,7 +451,18 @@ const BUDGETS = {
   // dimensions in the scene's metres, heights with the vertical exaggeration, the mast's lean kept on the trace), its
   // leader and label placed clear of the callouts, Zoom to crew and the closer zoom range while the camera looks at the
   // crew. The page grows 0.04 kB (the setCamera, settle, overlay and zoomToCrew hooks) and stays inside threeDJsGzipKb.
-  threeDLazyJsGzipKb: 156.5,
+  // 154.9 → 159.2 on its own branch (Oct 2026, 3D round 5H merged over the 2D figure import (ca93dfcf), measured 158.7, configured 158.9,
+  // 154.4 and 154.6 on main, + 0.3): block.js +3.7 (the block section's opt-in release look: a colour per hole on its
+  // trace, a common pad's pill, the release legend card, elevation ticks on the block's edge, A and A′ at the section's
+  // ends, the flat scale bar with its note, getState().layout.block, their checks and Layout controls) and tags.js +0.6
+  // (thick bars in the release palette, the pad pill and hole colours on the collar IDs and callout chips, incl. lines
+  // without "from"). The /3d page gains only the hooks (+0.05 kB, within its limit).
+  // 159.2 → 159.6 (review fixes, measured 159.1, configured 159.3): thick bars one per run of assays in one class
+  // (tags.js classRuns) at a width set in figure px (hist.width and its slider), and colours for holes no longer in the
+  // data dropped rather than refused (+0.4 kB).
+  // 156.5 → 161.2 (round 5H merged over the true-scale crew (b55edc19), measured 160.7, configured 160.9, + 0.3):
+  // round 5H's +4.7 kB above on top of the crew's +1.6 kB; the two touch different chunks (block.js and tags.js; crew.js).
+  threeDLazyJsGzipKb: 161.2,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.
