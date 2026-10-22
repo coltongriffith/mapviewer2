@@ -327,8 +327,15 @@ export function bracketSides(items) {
 // halo beside the reported interval, and on a thin leader beside it, text only (no box, a white halo): the domain heading
 // (setCallout heading) with the hole-ID chip, the result in bold, and its "incl." line. side: -1 left, 1 right (past the
 // grade bars on the face); the text takes the first spot clear of everything placed, nearest its bracket. Returns its box.
+// Several "incl." results on one line, as on a release figure: "incl. 3.6 m @ 4.15 & 10.0 m @ 2.29 g/t Au" (the unit
+// once, at the end, where they share it). One result, or a second line typed by hand, is kept as it is.
+export function joinIncl(l2) {
+  const ps = String(l2 || '').split('; ').map((t) => t.replace(/^incl\.\s*/i, '')); if (ps.length < 2) return l2;
+  const unit = (t) => (/^[\d.,]+\s*m @ [\d.,]+ (.+)$/.exec(t) || [])[1], u = unit(ps[0]);
+  return `incl. ${(u && ps.every((t) => unit(t) === u) ? ps.map((t, i) => (i < ps.length - 1 ? t.slice(0, -u.length - 1) : t)) : ps).join(' & ')}`;
+}
 function calloutBracket(ctx, K, it, lay, side = -1) {
-  const { u, font } = K, c = it.c, b = c.ic.broad, L = H.calloutLines(c), head = String(H.coOv(c).heading || '').toUpperCase(), [W] = H.frame();
+  const { u, font } = K, c = it.c, b = c.ic.broad, L0 = H.calloutLines(c), L = H.coOv(c).line2 ? L0 : { ...L0, l2: joinIncl(L0.l2) }, head = String(H.coOv(c).heading || '').toUpperCase(), [W] = H.frame();
   const P = (d) => { const p = c.h.posAt(d); return H.proj(H.G.V(p.x, p.y, p.z)); }, a = P(b.from), e = P(b.from + b.len), mid = [(a[0] + e[0]) / 2, (a[1] + e[1]) / 2];
   let dx = e[0] - a[0], dy = e[1] - a[1]; const len = Math.hypot(dx, dy) || 1; dx /= len; dy /= len;
   // The text's rows: heading and chip, the result, the incl. line.

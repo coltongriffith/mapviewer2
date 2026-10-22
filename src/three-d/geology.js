@@ -440,7 +440,7 @@ function labelCanvas(hit, cols, size, len, ht, mirror, scr, font, wall = []) {
   if (H.S.block) {
     const bw = 0.06 * H.frame()[0];
     H.project.holes.filter(H.holeOn).forEach((h) => h.path.forEach((p, i) => { if (i % 2) return; const q = H.proj(H.G.V(p.x, p.y, p.z)); for (let t = 0; t <= 1; t += 0.25) pts.push([q[0] + bw * t, q[1]]); }));
-    (H.G.wallLabelMeshes || []).forEach((m) => { const ps = [[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]].map(([x, y]) => H.proj(v.set(x, y, 0).applyMatrix4(m.matrixWorld))); boxes.push([Math.min(...ps.map((q) => q[0])), Math.min(...ps.map((q) => q[1])), Math.max(...ps.map((q) => q[0])), Math.max(...ps.map((q) => q[1]))]); });
+    (H.G.wallLabelMeshes || []).filter((m) => m.visible).forEach((m) => { const ps = [[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]].map(([x, y]) => H.proj(v.set(x, y, 0).applyMatrix4(m.matrixWorld))); boxes.push([Math.min(...ps.map((q) => q[0])), Math.min(...ps.map((q) => q[1])), Math.max(...ps.map((q) => q[0])), Math.max(...ps.map((q) => q[1]))]); });
   }
   g.drawImage(hit.base, 0, 0); g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = `${caps ? 700 : 600} ${size * kx}px ${font}`; if (caps && 'letterSpacing' in g) g.letterSpacing = `${size * kx * 0.08}px`;
   labelSpots(hit.cls, nx, ny, len / nx, ht / ny).forEach(({ c: cl, spots }) => {
@@ -475,8 +475,31 @@ export function unitGrid(face, code) {
   return ci < 0 ? null : { ...hit, ci };
 }
 export const hasLogs = () => H.files().some((f) => f.role === 'litho') && logsNow().codes.length > 0;
-// Face images: a geologist's drawn section stretched over a face from its base to its highest point.
+// Face images: a geologist's drawn section stretched over a face from its base to its highest point, or (round 5G)
+// fitted to it by known points (cfg().fits[face]); "section" is the A–A′ plane.
 const images = {};
+const endsOf = (face) => { if (face !== 'section') return faceEnds(face); const [A, Bp] = H.sectionEnds(); return [[A.x, A.y], [Bp.x, Bp.y]]; };
+// Image x to the distance along the plane and image y to elevation, each a scale and an offset: { sx, ox, sz, oz, rms
+// (m, the points' misfit), n }. pts: [{ px: [x, y], d, z }]; least squares with three or more, so a section drawn with
+// vertical exaggeration fits too.
+export function fitAxes(pts) {
+  if (!Array.isArray(pts) || pts.length < 2) throw new Error('A fit needs two points or more: [{ px: [x, y], d, z }, ...].');
+  const line = (xs, ys) => { const n = xs.length, mx = xs.reduce((t, v) => t + v, 0) / n, my = ys.reduce((t, v) => t + v, 0) / n, sxx = xs.reduce((t, v) => t + (v - mx) ** 2, 0); if (sxx < 1e-6) return null; const k = xs.reduce((t, v, i) => t + (v - mx) * (ys[i] - my), 0) / sxx; return [k, my - k * mx]; };
+  const a = line(pts.map((p) => p.px[0]), pts.map((p) => p.d)), b = line(pts.map((p) => p.px[1]), pts.map((p) => p.z));
+  if (!a || !b || !a[0] || !b[0]) throw new Error('The points must be apart both across and up the image, at different distances and elevations.');
+  const rms = Math.sqrt(pts.reduce((t, p) => t + (a[1] + a[0] * p.px[0] - p.d) ** 2 + (b[1] + b[0] * p.px[1] - p.z) ** 2, 0) / pts.length);
+  return { sx: a[0], ox: a[1], sz: b[0], oz: b[1], rms, n: pts.length };
+}
+// A fit's points in metres on the plane: { px, d, z } as given, or { px, hole, depth } (0: the collar) projected onto it.
+function fitOn(face, fit) {
+  const [a, b] = endsOf(face), len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+  return fitAxes((fit.points || []).map((p, i) => {
+    if (!Array.isArray(p?.px) || p.px.length !== 2 || !p.px.every(Number.isFinite)) throw new Error(`Point ${i + 1} needs px: [x, y], its pixel on the image.`);
+    if (p.hole === undefined) { if (!Number.isFinite(p.d) || !Number.isFinite(p.z)) throw new Error(`Point ${i + 1} needs d (metres along the face from its left end, as seen from outside) and z (elevation), or a hole.`); return p; }
+    const h = H.project.holes.find((x) => x.id === String(p.hole)); if (!h) throw new Error(`Point ${i + 1}: hole "${p.hole}" is not in the data.`);
+    const q = h.posAt(Math.max(0, +p.depth || 0)); return { px: p.px, d: ((q.x - a[0]) * (b[0] - a[0]) + (q.y - a[1]) * (b[1] - a[1])) / len, z: q.z };
+  }));
+}
 function imageCanvas(face) {
   const src = cfg().images?.[face]; if (!src) return null;
   let e = images[face];
@@ -485,15 +508,36 @@ function imageCanvas(face) {
     e.ready = new Promise((res) => { const im = new Image(); im.onload = () => { e.img = im; res(); H.redraw(); }; im.onerror = () => { H.status(`The image for the ${face} face could not be read.`); res(); }; im.src = src; });
   }
   if (!e.img || !H.G) return null;
-  if (!e.canvas || e.G !== H.G) {
-    const G = H.G, [a, b] = faceEnds(face); let top = -Infinity; for (let i = 0; i <= 50; i++) top = Math.max(top, G.surf(a[0] + (b[0] - a[0]) * i / 50, a[1] + (b[1] - a[1]) * i / 50));
-    const c = document.createElement('canvas'); c.width = 1024; c.height = 1024; const g = c.getContext('2d'), f = (top - G.B.z0) / (G.zmax - G.B.z0);
-    g.drawImage(e.img, 0, c.height * (1 - f), c.width, c.height * f); e.canvas = c; e.G = G;
+  const fit = cfg().fits?.[face], [a, b] = endsOf(face), key = `${fit ? JSON.stringify(fit) : ''}|${a}|${b}`;
+  if (!e.canvas || e.G !== H.G || e.key !== key) {
+    const G = H.G, c = document.createElement('canvas'); c.width = 1024; c.height = 1024; const g = c.getContext('2d');
+    // A fit that no longer resolves (its hole gone from new data) leaves the image stretched; getState says why.
+    let F = null; if (fit) try { F = fitOn(face, fit); } catch { F = null; }
+    if (F) { // the canvas spans the plane's length and the block base to its top (planeMesh's uv)
+      const kx = c.width / (Math.hypot(b[0] - a[0], b[1] - a[1]) || 1), ky = c.height / (G.zmax - G.B.z0);
+      g.setTransform(kx * F.sx, 0, 0, -ky * F.sz, kx * F.ox, ky * (G.zmax - F.oz)); g.drawImage(e.img, 0, 0);
+    } else {
+      let top = -Infinity; for (let i = 0; i <= 50; i++) top = Math.max(top, G.surf(a[0] + (b[0] - a[0]) * i / 50, a[1] + (b[1] - a[1]) * i / 50));
+      const f = (top - G.B.z0) / (G.zmax - G.B.z0); g.drawImage(e.img, 0, c.height * (1 - f), c.width, c.height * f);
+    }
+    e.canvas = c; e.G = G; e.key = key;
   }
   return e.canvas;
 }
+// The fit as getState().layout.imageFits shows it, and the picker draws it: the plane, the scale, the misfit, and
+// the image's corners in metres.
+export function fitInfo(face) {
+  const fit = cfg().fits?.[face], e = images[face]; if (!fit || !H.G) return null;
+  let F; try { F = fitOn(face, fit); } catch (err) { return { points: structuredClone(fit.points), invalid: `${err.message} The image is stretched over the face until the fit is set again.` }; }
+  const [a, b] = endsOf(face), iw = e?.img?.naturalWidth, ih = e?.img?.naturalHeight, r = (v) => Math.round(v * 10) / 10;
+  return { points: structuredClone(fit.points), metresPerPixel: [+Math.abs(F.sx).toPrecision(3), +Math.abs(F.sz).toPrecision(3)], rms: r(F.rms), fit: F,
+    plane: { length: r(Math.hypot(b[0] - a[0], b[1] - a[1])), z: [r(H.G.B.z0), r(H.G.zmax)] },
+    image: iw ? { along: [r(F.ox), r(F.ox + F.sx * iw)], z: [r(F.oz + F.sz * ih), r(F.oz)] } : null };
+}
+// Every fit as fitInfo gives it, for getState().layout.imageFits: worked out from the figure, so kept out of its saved work.
+export const imageFits = () => Object.fromEntries(Object.keys(cfg().fits || {}).map((k) => [k, fitInfo(k)]));
 export const imagesReady = () => Promise.all(Object.keys(cfg().images || {}).map((f) => { imageCanvas(f); return images[f]?.ready; }));
-addPainter({ rank: 0, paint: (key) => { if (key === 'section') return null; const c = imageCanvas(key); return c ? { canvas: c, opacity: Math.max(cfg().opacity, 0.9), owner: 'image' } : null; } });
+addPainter({ rank: 0, paint: (key) => { const c = imageCanvas(key); return c ? { canvas: c, opacity: Math.max(cfg().opacity, 0.9), owner: 'image' } : null; } });
 addPainter({ rank: 2, paint: (key) => {
   const g = cfg(); if (!g.enabled || !hasLogs()) return null;
   legendNow();
@@ -564,13 +608,25 @@ export function set(o = {}) {
   }
   if (H.G && hasLogs()) legendNow();
 }
-export function setImage(face, src) {
-  const f = String(face).toUpperCase(); if (!FACE_KEYS.includes(f)) throw new Error('face must be "N", "S", "E" or "W".');
+const faceKey = (face) => { const f = /^section$/i.test(face) ? 'section' : String(face).toUpperCase(); if (!FACE_KEYS.includes(f) && f !== 'section') throw new Error('face must be "N", "S", "E", "W" or "section" (the A–A′ plane).'); return f; };
+// fit: { points } (fitImage) fitting the image by known points; without it the image is stretched over the face.
+export function setImage(face, src, fit) {
+  const f = faceKey(face);
   if (src !== null && (typeof src !== 'string' || !/^data:image\/(png|jpe?g|webp|gif|svg\+xml)[;,]/i.test(src))) throw new Error('The image must be a PNG, JPG or WebP data URL (data:image/png;base64,...), or null to remove it.');
+  if (fit) fitOn(f, fit); // checked before anything changes
   const g = cfg(); g.images = { ...(g.images || {}) }; if (src) g.images[f] = src; else delete g.images[f];
   if (!src) delete images[f];
+  if (g.fits?.[f] || fit) { g.fits = { ...g.fits }; if (src && fit) g.fits[f] = { points: structuredClone(fit.points) }; else delete g.fits[f]; }
   return imagesReady();
 }
+// Fits a face's image by known points (null: stretched over the face again).
+export function fitImage(face, points) {
+  const f = faceKey(face), g = cfg(); if (!g.images?.[f]) throw new Error(`No image on ${f === 'section' ? 'the A–A′ plane' : `the ${f} face`}: EM3D.setFaceImage first.`);
+  if (points) fitOn(f, { points });
+  g.fits = { ...g.fits }; if (points) g.fits[f] = { points: structuredClone(points) }; else delete g.fits[f];
+  return imagesReady();
+}
+export const imageOf = (face) => images[face]?.img || null;
 
 // ---------- panel controls (rendered into #geo-ui once loaded) ----------
 export function renderUI(el) {
@@ -606,9 +662,9 @@ export function renderUI(el) {
       <input type="checkbox" data-gs="${i}" ${e.show !== false ? 'checked' : ''} aria-label="Show ${esc(e.code)}"><input type="color" data-gc="${i}" value="${esc(e.color)}" aria-label="Colour of ${esc(e.code)}">
       <input type="text" data-gn="${i}" value="${esc(e.name)}" aria-label="Name of ${esc(e.code)}" title="Code ${esc(e.code)}">
       <span style="display:flex;gap:2px"><button class="btn" type="button" data-gu="${i}" aria-label="Move ${esc(e.code)} up" ${i ? '' : 'disabled'}>↑</button><button class="btn" type="button" data-gd="${i}" aria-label="Move ${esc(e.code)} down" ${i < legend.length - 1 ? '' : 'disabled'}>↓</button></span></div>`).join('')}</div>` : ''}
-    <div class="grid2" style="margin-top:8px"><label class="field"><span>Section image on a face</span><select id="geo-img-face">${FACE_KEYS.map((f) => `<option>${f}</option>`).join('')}</select></label>
+    <div class="grid2" style="margin-top:8px"><label class="field"><span>Section image on a face</span><select id="geo-img-face">${FACE_KEYS.map((f) => `<option>${f}</option>`).join('')}<option value="section">A–A′ plane</option></select></label>
       <span class="field"><span>Image (PNG or JPG)</span><input type="file" id="geo-img" accept="image/png,image/jpeg,image/webp"></span></div>
-    ${Object.keys(g.images || {}).length ? `<div class="row" style="margin-top:6px">${Object.keys(g.images).map((f) => `<button class="btn" type="button" data-gx="${esc(f)}">Remove ${esc(f)} image</button>`).join('')}</div>` : ''}`;
+    ${Object.keys(g.images || {}).length ? `<div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px">${Object.keys(g.images).map((f) => { const n = f === 'section' ? 'A–A′' : f; return `<button class="btn" type="button" data-gfit="${esc(f)}">Fit ${esc(n)} by points${g.fits?.[f] ? ' ✓' : ''}</button><button class="btn" type="button" data-gx="${esc(f)}">Remove ${esc(n)} image</button>`; }).join('')}</div>` : ''}`;
   const apply = (o) => H.api.setGeology(o).catch((e) => H.status(e.message));
   el.querySelectorAll('[data-g]').forEach((inp) => inp.addEventListener(inp.type === 'range' || inp.type === 'text' ? 'change' : 'change', () => {
     const k = inp.dataset.g; let v = inp.type === 'checkbox' ? inp.checked : inp.value;
@@ -631,6 +687,8 @@ export function renderUI(el) {
     r.onload = () => H.api.setFaceImage(el.querySelector('#geo-img-face').value, r.result).catch((err) => H.status(err.message)); r.readAsDataURL(f); e.target.value = '';
   });
   el.querySelectorAll('[data-gx]').forEach((b) => b.addEventListener('click', () => H.api.setFaceImage(b.dataset.gx, null)));
+  // Fitting an image by known points: the picker (image-fit.js), loaded on the first click, in its own box (#geo-fit).
+  el.querySelectorAll('[data-gfit]').forEach((b) => b.addEventListener('click', () => import('./image-fit.js').then((m) => m.open(document.getElementById('geo-fit'), H, b.dataset.gfit)).catch((err) => H.status(err.message))));
 }
 
 // ---------- legend sections (geology rows, geophysics colour bar), drawn in the page's legend cards ----------
