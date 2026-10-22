@@ -208,6 +208,35 @@ THEME_TOKENS.ni_43101 = {
   panelAccentLeft: null,
 };
 
+// Studio — the /3d figure look in 2D (opt-in): white cards, ink text, one brand accent. Its cards (radius,
+// shadow, accent bar, dark/light, the title, scale-north and locator cards) are drawn by utils/studioCards.js;
+// these tokens colour everything else (callouts, footer, logo plate).
+THEME_TOKENS.studio = {
+  ...THEME_TOKENS.investor_clean,
+  panelRadius: 8,
+  panelFill: 'rgba(255,255,255,0.96)',
+  panelBorder: 'rgba(20,33,38,0.12)',
+  panelShadow: '0 4px 14px rgba(16,24,32,0.18)',
+  titleRadius: 8,
+  titleFill: 'rgba(255,255,255,0.96)',
+  titleBorder: 'rgba(20,33,38,0.12)',
+  titleAccent: '#c65322',
+  titleAccentStyle: 'left',
+  titleText: '#142126',
+  subtitleText: '#5f6e72',
+  panelTitle: '#142126',
+  bodyText: '#142126',
+  mutedText: '#5f6e72',
+  calloutFill: 'rgba(255,255,255,0.96)',
+  calloutBorder: '#c65322',
+  calloutText: '#142126',
+  northArrowText: '#142126',
+  scaleStroke: '#142126',
+  insetFill: '#14262e',
+  insetTitle: '#ffffff',
+  insetMuted: 'rgba(255,255,255,0.75)',
+};
+
 // Fallback aliases — keep old stored themeIds rendering correctly
 THEME_TOKENS.technical_report   = THEME_TOKENS.ni_43101;
 THEME_TOKENS.midnight_blueprint = THEME_TOKENS.forest_dark;

@@ -150,11 +150,42 @@ function decorativeShapes() {
   ];
 }
 
+// Each arm split down its axis, one half in ink and one in a tint, as a designed rose reads: four long
+// cardinal arms over four short intercardinal ones, inside a hairline ring.
+function roseShapes() {
+  const arm = (deg, len, waist, a, b) => {
+    const r = ((deg - 90) * Math.PI) / 180, side = r + Math.PI / 2;
+    const tip = [CX + len * Math.cos(r), CY + len * Math.sin(r)];
+    const w = (s) => [CX + s * waist * Math.cos(side), CY + s * waist * Math.sin(side)];
+    return [poly([tip, w(-1), [CX, CY]], 'fg', a), poly([tip, [CX, CY], w(1)], 'fg', b)];
+  };
+  return [
+    circ(CX, CY, R_OUT * 0.9, { stroke: 'fg', strokeWidth: 1, opacity: 0.3 }),
+    ...[45, 135, 225, 315].flatMap((d) => arm(d, R_OUT * 0.56, R_OUT * 0.13, 0.55, 0.18)),
+    ...[0, 90, 180, 270].flatMap((d) => arm(d, R_OUT, R_OUT * 0.17, 1, d ? 0.3 : 0.42)),
+    circ(CX, CY, R_OUT * 0.09, { fill: 'bg', stroke: 'fg', strokeWidth: 1.4 }),
+    text(CX, LABEL_BASE, 'N'),
+  ];
+}
+
+// A notched needle split down its axis: the left half filled, the right half open.
+function splitShapes() {
+  const tip = [CX, CY - R_OUT], notch = [CX, CY + R_OUT * 0.45];
+  const l = [CX - R_OUT * 0.42, CY + R_OUT], r = [CX + R_OUT * 0.42, CY + R_OUT];
+  return [
+    poly([tip, l, notch], 'fg', 1),
+    { kind: 'polygon', points: [tip, notch, r], fill: 'bg', stroke: 'fg', strokeWidth: 1.6, opacity: 1 },
+    text(CX, LABEL_BASE, 'N'),
+  ];
+}
+
 const BUILDERS = {
   classic: classicShapes,
   arrow: arrowShapes,
   decorative: decorativeShapes,
   surveyor: surveyorShapes,
+  rose: roseShapes,
+  split: splitShapes,
 };
 
 /**
