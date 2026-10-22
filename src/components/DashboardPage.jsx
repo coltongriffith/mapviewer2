@@ -10,6 +10,7 @@ import { remainingTenureSlots } from '../utils/entitlements';
 import { formatSyncTimestamp } from '../utils/tenureDates';
 import { listMyWorkspaces, listProperties, pickActive, setActiveWorkspaceId } from '../utils/workspace';
 import { jurisdictionLabel } from '../utils/jurisdictions';
+import { mapName, copyName } from '../utils/mapName.js';
 
 // The signed-in home.
 //
@@ -302,11 +303,14 @@ export default function DashboardPage({
     return list;
   }, [projects, query, sort]);
 
+  // The copy is named as the editor names it ("<name> (copy)", then
+  // "(copy 2)"…) and opened, so the map being edited is the copy, by name.
   const duplicate = async (entry) => {
     try {
       const full = await loadCloudProject(entry.id);
-      await saveCloudProject({ id: null, name: `${entry.name} Copy`, payload: full.payload });
-      refresh();
+      const name = copyName(mapName(entry.name, full.payload?.layout?.title), projects.map((p) => p.name));
+      const created = await saveCloudProject({ id: null, name, payload: full.payload });
+      onOpenProject({ id: created.id, name, payload: full.payload, revision: created.revision });
     } catch (e) {
       setError(`Duplicating the project failed: ${String(e?.message || e).slice(0, 140)}`);
     }

@@ -46,6 +46,8 @@ const PublicationCheck = lazyGuarded(() => import('./components/PublicationCheck
 const ExportBackground = lazyGuarded(() => import('./components/ExportBackground'));
 const StudioCard = lazyGuarded(() => import('./components/StudioCard'));
 const StudioControls = lazyGuarded(() => import('./components/StudioControls'));
+const NameDialog = lazyGuarded(() => import('./components/NameDialog'));
+import { mapName, copyName } from './utils/mapName.js';
 import { loadGeoJSON, loadCSV, loadShapefileSet, MAX_FEATURES } from './utils/importers';
 import {
   CALLOUT_TYPES,
@@ -726,6 +728,10 @@ export default function App({ initialAction = null }) {
   const [project, setProject] = useState(initialWorkspace.project);
   const [projectId, setProjectId] = useState(initialWorkspace.projectId);
   const [projectName, setProjectName] = useState(initialWorkspace.projectName);
+  // The one name the header, saves and copies use (utils/mapName.js).
+  const currentMapName = mapName(projectName, project.layout.title);
+  // Save As… asks in a dialog (window.prompt blocked the page): the default name while open.
+  const [saveAsName, setSaveAsName] = useState(null);
   const [recentProjects, setRecentProjects] = useState(() => listProjects());
   const [showRecentProjects, setShowRecentProjects] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
@@ -1105,7 +1111,7 @@ export default function App({ initialAction = null }) {
       const outcome = await runGuardedSave({
         ticket,
         snapshot,
-        doSave: () => saveCloudProject({ id: projectId, name: projectName, payload: project, expectedRevision: projectRevisionRef.current }),
+        doSave: () => saveCloudProject({ id: projectId, name: currentMapName, payload: project, expectedRevision: projectRevisionRef.current }),
         getCurrentSerialized: () => lastSerializedRef.current,
         onSaved: (r) => { projectRevisionRef.current = r?.revision ?? null; lastSavedSnapshotRef.current = snapshot; setIsDirty(false); flashSaved(); },
         // Saved, but the user kept editing: advance the baseline to what the
@@ -1121,7 +1127,7 @@ export default function App({ initialAction = null }) {
         } else if (err?.code === 'SAVE_CONFLICT') {
           // Another tab/device saved since we loaded. Never silently clobber:
           // stop autosaving and let the user choose (P1-01).
-          setSaveConflict({ name: projectName });
+          setSaveConflict({ name: currentMapName });
           setUploadStatus({
             type: 'error',
             message: 'This project was changed in another tab or device. Your edits here are unsaved — reload it, or choose Overwrite to keep this version.',
@@ -1132,7 +1138,7 @@ export default function App({ initialAction = null }) {
           const created = await runGuardedSave({
             ticket,
             snapshot,
-            doSave: () => saveCloudProject({ id: null, name: projectName, payload: project }),
+            doSave: () => saveCloudProject({ id: null, name: currentMapName, payload: project }),
             getCurrentSerialized: () => lastSerializedRef.current,
             onSaved: () => { lastSavedSnapshotRef.current = snapshot; setIsDirty(false); flashSaved(); },
             onMismatch: () => { lastSavedSnapshotRef.current = snapshot; },
@@ -1151,7 +1157,7 @@ export default function App({ initialAction = null }) {
       }
     }, 10000);
     return () => window.clearTimeout(t);
-  }, [project, user, projectId, projectName, isDirty, projectHome?.readOnly]);
+  }, [project, user, projectId, currentMapName, isDirty, projectHome?.readOnly]);
 
   // Warn before leaving with unsaved cloud changes. Only for signed-in users:
   // anonymous work is continuously persisted to the local draft, so a prompt
@@ -3473,6 +3479,7 @@ export default function App({ initialAction = null }) {
       return;
     }
     setScreen('editor');
+    if (intent !== 'resume') leaveSavedMap();
     if (intent === 'claims') {
       const province = REGION_TO_PROVINCE[(params.get('region') || '').toLowerCase()] || null;
       // No live registry for this region → open the upload path instead of the
@@ -4835,7 +4842,7 @@ export default function App({ initialAction = null }) {
   };
 
   const saveCurrentProject = async (nextName = null, accountSave = null) => {
-    const nameToSave = (nextName || accountSave?.projectName || projectName || project.layout?.title || 'Untitled map').trim();
+    const nameToSave = (nextName || (accountSave ? mapName(accountSave.projectName, accountSave.payload?.layout?.title) : currentMapName)).trim();
     if (user && !accountSave && projectId && projectHome?.readOnly) {
       setUploadStatus({ type: 'error', message: `View only: changes to ${projectHome.propertyName || projectHome.orgName} maps are not saved. Use Save As for a personal copy.` });
       return undefined;
@@ -4939,19 +4946,18 @@ export default function App({ initialAction = null }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
-  const nextFreeName = (base, existing) => {
-    if (!existing.includes(base)) return base;
-    let n = 2;
-    while (existing.includes(`${base} (${n})`)) n++;
-    return `${base} (${n})`;
-  };
-
-  const saveAsProject = async () => {
-    const existingNames = recentProjects.map(p => p.name);
-    const defaultName = nextFreeName(projectName || project.layout?.title || 'Untitled map', existingNames);
-    const nextName = window.prompt('Save project as', defaultName);
-    if (!nextName) return;
+  // Opened from the menu (an event, not a name) it asks for the name in a
+  // dialog, offering the map's name or, when taken, its next "(copy)" name;
+  // the dialog calls back with the name to save under.
+  const saveAsProject = async (nextName) => {
+    if (typeof nextName !== 'string') {
+      const names = recentProjects.map(p => p.name);
+      setSaveAsName(names.includes(currentMapName) ? copyName(currentMapName, names) : currentMapName);
+      return;
+    }
+    setSaveAsName(null);
     const nameToSave = nextName.trim();
+    if (!nameToSave) return;
     if (user) {
       const snapshot = JSON.stringify(project);
       const payloadToSave = project;
@@ -5111,7 +5117,7 @@ export default function App({ initialAction = null }) {
   }, [screen, user, sharedMapId]);
 
   const duplicateCurrentProject = async () => {
-    const name = `${projectName || project.layout?.title || 'Untitled map'} Copy`;
+    const name = copyName(currentMapName, recentProjects.map(p => p.name));
     if (user) {
       const snapshot = JSON.stringify(project);
       const payloadToSave = project;
@@ -5173,6 +5179,10 @@ export default function App({ initialAction = null }) {
     setIsDirty(false);
     setUploadStatus({ type: 'success', message: 'Started a new blank project workspace.' });
   };
+  // A registry search or upload begun from the home page, the dashboard or an
+  // ?intent= link starts a new map. It used to land in the last saved map, so
+  // the new claims, and autosave, went into a map nobody had opened.
+  const leaveSavedMap = () => { if (projectId) startNewProject(); };
 
   // "New map in this property": the row is created in the property first, so
   // every save after this goes to the company, then the editor opens it.
@@ -5344,7 +5354,7 @@ export default function App({ initialAction = null }) {
         onOpenTenureMonitor={(filter = null) => { setTenureInitialFilter(filter); setScreen('tenure'); }}
         onOpenAccount={() => setScreen('account')}
         onOpenBrandKits={() => { setScreen('editor'); setShowBrandKitManager(true); }}
-        onSearchClaims={() => { setScreen('editor'); setAddClaimsModalPath('registry'); setShowAddClaimsModal(true); }}
+        onSearchClaims={() => { leaveSavedMap(); setScreen('editor'); setAddClaimsModalPath('registry'); setShowAddClaimsModal(true); }}
         onOpenWorkspace={() => setScreen('workspace')}
         onOpenProperty={openProperty}
         onExit={goToLanding}
@@ -5357,7 +5367,7 @@ export default function App({ initialAction = null }) {
     return (
       <>
         <LandingPage
-          onOpenEditor={() => { setScreen('editor'); setAddClaimsModalPath('registry'); setShowAddClaimsModal(true); }}
+          onOpenEditor={() => { leaveSavedMap(); setScreen('editor'); setAddClaimsModalPath('registry'); setShowAddClaimsModal(true); }}
           onLoadSample={loadSampleData}
           onLoadSampleStyle={(styleId) => loadSampleData(styleId)}
           recentProjects={recentProjects}
@@ -5366,6 +5376,7 @@ export default function App({ initialAction = null }) {
           onSearchBCClaims={(query) => {
             // The landing page's hero lookup passes the term the visitor typed;
             // the plain CTAs pass a click event, hence the string check.
+            leaveSavedMap();
             setScreen('editor');
             setAddClaimsModalPath('registry');
             if (typeof query === 'string' && query.trim()) {
@@ -5374,7 +5385,7 @@ export default function App({ initialAction = null }) {
             }
             setShowAddClaimsModal(true);
           }}
-          onUploadFile={() => { setScreen('editor'); setAddClaimsModalPath('upload'); setShowAddClaimsModal(true); }}
+          onUploadFile={() => { leaveSavedMap(); setScreen('editor'); setAddClaimsModalPath('upload'); setShowAddClaimsModal(true); }}
           onOpenAccount={() => setScreen('dashboard')}
           onOpenTenureMonitor={() => { setTenureInitialFilter(null); setScreen('tenure'); }}
         />
@@ -5434,7 +5445,8 @@ export default function App({ initialAction = null }) {
             <MenuItem onClick={duplicateCurrentProject}>Duplicate</MenuItem>
           </Menu>
           <div className="ed-doc">
-            <span className="ed-doc-name" title={project.layout.title || 'Project Map'}>{project.layout.title || 'Project Map'}</span>
+            {/* The open map's own name (as on the dashboard), not the figure title. */}
+            <span className="ed-doc-name" title={currentMapName}>{currentMapName}</span>
             {projectHome && (
               <button
                 type="button"
@@ -7991,7 +8003,7 @@ export default function App({ initialAction = null }) {
                   // Deliberate overwrite: null expectation skips the check.
                   setSaveConflict(null);
                   try {
-                    const res = await saveCloudProject({ id: projectId, name: projectName, payload: project, expectedRevision: null });
+                    const res = await saveCloudProject({ id: projectId, name: currentMapName, payload: project, expectedRevision: null });
                     projectRevisionRef.current = res.revision ?? null;
                     setIsDirty(false);
                     setUploadStatus({ type: 'success', message: 'Overwrote the cloud version with this one.' });
@@ -8152,6 +8164,9 @@ export default function App({ initialAction = null }) {
         </div>
       )}
       {showAuthFromGate && <AuthModal resumeEditor onClose={() => setShowAuthFromGate(false)} context="Sign in on this device to save your map to your account. Once it is saved, you can open it from your dashboard on desktop." />}
+      {saveAsName != null && <React.Suspense fallback={null}>
+        <NameDialog title="Save as a new map" label="Map name" initialValue={saveAsName} onSubmit={saveAsProject} onClose={() => setSaveAsName(null)} />
+      </React.Suspense>}
       {showShareModal && (
         <div className="modal-backdrop" onClick={() => setShowShareModal(false)}>
           <div className="share-modal" onClick={e => e.stopPropagation()}>
@@ -8216,7 +8231,9 @@ export default function App({ initialAction = null }) {
                       setShareUrl(`${base}/map/${id}`);
                       trackEvent('share_created', { mapId: id }, user?.id);
                     } catch (e) {
-                      alert('Failed to create share link: ' + e.message);
+                      // The editor's error banner, not alert(), which blocks the page.
+                      setShowShareModal(false);
+                      setExportError(`Failed to create share link: ${e.message}`);
                     } finally {
                       clearInterval(shareElapsedRef.current);
                       setShareLoading(false);
