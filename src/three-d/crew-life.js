@@ -77,11 +77,18 @@ export function attach(H, A) {
   // Pointing at or tapping one of the crew: a pointer cursor, and they notice.
   let down = null;
   const on = (type, f) => { frame.addEventListener(type, f, true); L.off.push(() => frame.removeEventListener(type, f, true)); };
-  on('pointermove', (e) => { const i = hit(e); if (i >= 0) { H.renderer.domElement.style.cursor = 'pointer'; if (i !== L.hover && L.t !== null && L.t >= L.me[i].calm) notice(i); } L.hover = i; });
+  // Pointing is noticed only where motion is welcome; a tap always is.
+  on('pointermove', (e) => { const i = hit(e); if (i >= 0) { H.renderer.domElement.style.cursor = 'pointer'; if (i !== L.hover && L.t !== null && L.t >= L.me[i].calm && !still()) notice(i); } L.hover = i; });
   on('pointerleave', () => { L.hover = -1; });
   on('pointerdown', (e) => { down = { x: e.clientX, y: e.clientY, t: performance.now() }; });
   on('pointerup', (e) => { if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 8 && performance.now() - down.t < 600) { const i = hit(e); if (i >= 0) notice(i); } down = null; });
+  // Only over the 3D view: the section view (studio.js showView hides the 3D canvas, and stops the crew's frames) takes
+  // the bubbles away, and the crew can't be pointed at there; back in 3D they start afresh.
+  const gl = H.renderer.domElement, view = () => { const off = gl.hidden; L.box.hidden = off; if (off) hush(); else L.next = null; };
+  const mo = new MutationObserver(view); mo.observe(gl, { attributes: true, attributeFilter: ['hidden'] }); L.off.push(() => mo.disconnect()); view();
 }
+const still = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+function hush() { L.say = null; L.bubble?.classList.remove('on'); }
 export function detach() {
   if (!L) return;
   L.off.forEach((f) => f()); L.box?.remove(); L = null;
@@ -90,7 +97,7 @@ export function detach() {
 const tmp = new THREE.Vector3();
 // Which of the crew is under the pointer (the nearest), or -1: a box on screen from their boots to their hat.
 function hit(e) {
-  if (!L?.box) return -1;
+  if (!L?.box || L.box.hidden) return -1;
   const { H, A } = L, r = L.box.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top; let best = -1, bz = Infinity;
   A.grp.updateMatrixWorld();
   A.people.forEach((f, i) => {
@@ -118,7 +125,7 @@ export function tick(t, still) {
     if (move) pose(f, i, at(L.plans[i] || L.plans[0], me.clock), n, t, dt);
   });
   // Chatter: one bubble at a time, every 6-12 s, held 3 s.
-  if (L.say && t > L.say.until) { L.say = null; L.bubble?.classList.remove('on'); }
+  if (L.say && t > L.say.until) hush();
   if (L.box && L.c.chatter && !still && !L.say && t >= L.next) { say(Math.floor(L.lines.rnd() * L.A.people.length), L.lines.next(), t, 3); L.next = t + 3 + 6 + L.lines.rnd() * 6; }
   if (L.say) place(L.A.people[L.say.i]);
   return move;

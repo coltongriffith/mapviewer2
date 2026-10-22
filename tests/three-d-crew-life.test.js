@@ -88,6 +88,37 @@ describe('in the scene (with crew.js)', () => {
     crew.set({ chatter: true, life: false }); crew.sync(); await new Promise((r) => setTimeout(r, 0));
     const before = snap(); expect(life.tick(3, false)).toBe(false); expect(snap()).toBe(before);
   });
+  const at = (i) => { const [x, y] = crew.state().people[i]; return { clientX: x * 1200, clientY: y * 800, bubbles: true }; };
+  it('pointing at one of the crew: a hello; with reduced motion only a tap gets one', async () => {
+    await ready(); crew.tick(1000);
+    const canvas = frame.querySelector('canvas'), p = frame.querySelector('.em3d-crew-talk p');
+    canvas.dispatchEvent(new MouseEvent('pointermove', at(1)));
+    expect(p.classList.contains('on')).toBe(true); expect(life.REACT).toContain(p.textContent);
+    expect(canvas.style.cursor).toBe('pointer');
+    crew.set({ on: true }); crew.sync(); await new Promise((r) => setTimeout(r, 0)); crew.tick(1000);
+    const mm = window.matchMedia; window.matchMedia = (q) => ({ matches: /reduce/.test(q) });
+    try {
+      const q = frame.querySelector('.em3d-crew-talk p');
+      canvas.dispatchEvent(new MouseEvent('pointermove', at(0)));
+      expect(q.classList.contains('on')).toBe(false); // pointing alone: nothing
+      canvas.dispatchEvent(new MouseEvent('pointerdown', at(0))); canvas.dispatchEvent(new MouseEvent('pointerup', at(0)));
+      expect(q.classList.contains('on')).toBe(true); expect(life.REACT).toContain(q.textContent); // a tap: hello
+    } finally { window.matchMedia = mm; }
+  });
+  it('only over the 3D view: the section view hides the bubbles and the crew can\'t be pointed at there', async () => {
+    await ready();
+    const canvas = frame.querySelector('canvas'), box = frame.querySelector('.em3d-crew-talk'), p = box.querySelector('p');
+    for (let t = 1; t < 15 && !p.classList.contains('on'); t += 0.1) crew.tick(t * 1000);
+    expect(p.classList.contains('on')).toBe(true);
+    canvas.hidden = true; await new Promise((r) => setTimeout(r, 0)); // studio.js showView('section')
+    expect(box.hidden).toBe(true); expect(p.classList.contains('on')).toBe(false);
+    canvas.dispatchEvent(new MouseEvent('pointerdown', at(1))); canvas.dispatchEvent(new MouseEvent('pointerup', at(1)));
+    expect(p.classList.contains('on')).toBe(false);
+    canvas.hidden = false; await new Promise((r) => setTimeout(r, 0)); // back to 3D
+    expect(box.hidden).toBe(false); expect(p.classList.contains('on')).toBe(false); // no stale bubble
+    let back = null; for (let t = 20; t < 40 && !back; t += 0.1) { crew.tick(t * 1000); if (p.classList.contains('on')) back = t; }
+    expect(back).toBeGreaterThan(21); expect(back).toBeLessThan(26); // chatter starts afresh
+  });
   it('off removes the bubbles and the listeners', async () => {
     await ready(); expect(frame.querySelector('.em3d-crew-talk')).toBeTruthy();
     crew.set({ on: false }); crew.sync();

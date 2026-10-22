@@ -53,6 +53,16 @@ test('pointing at one of the crew: a pointer, and they notice with a hello', asy
   await expect.poll(async () => { await pointAt(page, 1); return bubble(page).count(); }, { timeout: 15_000 }).toBe(1);
   expect(REACT).toContain(await bubble(page).textContent());
   expect(await page.evaluate(() => document.getElementById('gl').style.cursor)).toBe('pointer');
+  // The section view takes the bubble away and nothing there is noticed; back in 3D, no stale bubble.
+  await page.evaluate(() => window.EM3D.showView('section'));
+  await expect(page.locator('.em3d-crew-talk')).toBeHidden();
+  await expect(bubble(page)).toHaveCount(0);
+  await pointAt(page, 2); await page.waitForTimeout(500);
+  await expect(bubble(page)).toHaveCount(0);
+  await page.mouse.move(5, 5);
+  await page.evaluate(() => window.EM3D.showView('3d'));
+  await expect(page.locator('.em3d-crew-talk')).toBeVisible();
+  expect(await bubble(page).count()).toBe(0);
   // In the Layout step, "Crew chatter" turns the bubbles off.
   await page.evaluate(() => window.EM3D.showStep('layout'));
   const chat = page.getByRole('checkbox', { name: 'Crew chatter' });
@@ -72,6 +82,8 @@ test('reduced motion: no walking and no bubbles of their own; a tap still gets a
   expect(await bubble(page).count()).toBe(0);
   expect(await pose()).toBe(p0); // nobody walked
   const [x, y] = await pointAt(page, 0);
+  await page.waitForTimeout(1000);
+  expect(await bubble(page).count()).toBe(0); // pointing alone is not noticed
   await page.mouse.click(x, y);
   await expect(bubble(page)).toHaveCount(1);
   expect(REACT).toContain(await bubble(page).textContent());
