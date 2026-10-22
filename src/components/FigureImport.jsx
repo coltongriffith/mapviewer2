@@ -5,7 +5,8 @@ import { fitTransform, describeFit, formatMetres, applyFit } from '../utils/geor
 import { TRACE_DEFAULTS, samplePatch } from '../utils/figureTrace.js';
 import {
   loadFigureImage, figurePixels, makeProjector, constraintsFor, placeFigure, runTrace, unitColour, unitFill, ringsToLngLat,
-  figureCreditText, figureRasterLayer, tracedLayer, utmZoneOf, parseCoord, FIGURE_MAX_EDGE,
+  figureCreditText, figureRasterLayer, utmZoneOf, parseCoord, FIGURE_MAX_EDGE, hasBlankMargin, finishFigure,
+  tracedForUnits, reconcileFigureLayers, refitMover,
 } from '../utils/figureImport.js';
 import { figureOverlay } from '../utils/figureOverlay.js';
 import { trackEvent } from '../utils/track';
@@ -29,7 +30,12 @@ export default function FigureImport({ source, existing, map: editorMap, setProj
   const [centre] = useState(() => {
     try { const c = editorMap.getCenter(); return { lat: c.lat, lng: c.lng, zoom: editorMap.getZoom() }; } catch { return { lat: 50, lng: -120, zoom: 12 }; }
   });
-  const [image, setImage] = useState(er ? { dataUri: er.dataUri, width: er.width, height: er.height, name: existing.sourceName || existing.name } : null);
+  // The picture in the frame the points are measured in (as first loaded),
+  // and the picture as kept (blank margins and a crop made transparent).
+  const [image, setImage] = useState(er ? { dataUri: er.dataUri, width: g?.frame?.width || er.width, height: g?.frame?.height || er.height, name: existing.sourceName || existing.name } : null);
+  const [scan, setScan] = useState({ margin: false, hide: false, crop: g?.crop || null });
+  const [cropPick, setCropPick] = useState(null); // null | 'first' | { x, y }
+  const [kept, setKept] = useState(null);
   const [error, setError] = useState('');
   const [tab, setTab] = useState('place');
   const [crs, setCrs] = useState(g?.crs || { kind: 'utm', zone: utmZoneOf(centre.lng), hemisphere: centre.lat < 0 ? 'S' : 'N', datum: 'NAD83' });
@@ -41,7 +47,7 @@ export default function FigureImport({ source, existing, map: editorMap, setProj
   const [opacity, setOpacity] = useState(er?.opacity ?? 0.75);
   const [zoom, setZoom] = useState(1);
   const [projector, setProjector] = useState(null);
-  const [units, setUnits] = useState(() => (g?.units || []).map((u) => ({ ...u, id: uid() })));
+  const [units, setUnits] = useState(() => (g?.units || []).map((u) => ({ ...u, id: u.id || uid() })));
   const [activeUnit, setActiveUnit] = useState(null);
   const [traceOpts, setTraceOpts] = useState({ lineWidth: TRACE_DEFAULTS.lineWidth, gap: TRACE_DEFAULTS.gap, minAreaPct: 0.05 });
   const [area, setArea] = useState(g?.area || null);
@@ -68,13 +74,26 @@ export default function FigureImport({ source, existing, map: editorMap, setProj
     return () => { live = false; };
   }, [source, er]);
 
-  // Fit the figure to the pane's width when it arrives.
+  // Fit the figure to the pane when it arrives, and look for a flat blank
+  // margin round it (a scan's page, the corners of a turned figure): hidden by
+  // default when there is one.
   useEffect(() => {
-    if (!image || !paneRef.current) return;
+    if (!image || !paneRef.current) return undefined;
     const pane = paneRef.current;
     setZoom(Math.min(2, Math.max(0.1, Math.min((pane.clientWidth - 4) / image.width, (pane.clientHeight - 4) / image.height))));
-    pixelsRef.current = null;
+    let live = true;
+    hasBlankMargin(image.dataUri).then((found) => { if (live) setScan((sc) => ({ ...sc, margin: found, hide: found })); }).catch(() => {});
+    return () => { live = false; };
   }, [image]);
+  useEffect(() => {
+    if (!image) return undefined;
+    let live = true;
+    finishFigure(image, { hideMargins: scan.margin && scan.hide, crop: scan.crop })
+      .then((k) => { if (live) { pixelsRef.current = null; setKept(k); } })
+      .catch((err) => { if (live) setError(err.message || 'Could not prepare the image.'); });
+    return () => { live = false; };
+  }, [image, scan]);
+  const shown = kept || image;
 
   // Latitude/longitude input is fitted in the UTM zone of the first typed
   // longitude (or the map's); UTM input in its own zone.
@@ -144,21 +163,22 @@ export default function FigureImport({ source, existing, map: editorMap, setProj
     const map = mapRef.current;
     if (!map || !image) return;
     if (!placement) { if (overlayRef.current) { map.removeLayer(overlayRef.current); overlayRef.current = null; } return; }
-    if (overlayRef.current?._raster.dataUri !== image.dataUri) {
+    if (overlayRef.current?._raster.dataUri !== shown.dataUri) {
       if (overlayRef.current) map.removeLayer(overlayRef.current);
-      overlayRef.current = figureOverlay({ ...image, corners: placement.corners, opacity }, { pane: 'overlayPane', zIndex: 1 }).addTo(map);
+      overlayRef.current = figureOverlay({ ...shown, corners: placement.corners, opacity }, { pane: 'overlayPane', zIndex: 1 }).addTo(map);
     } else {
       overlayRef.current.setCorners(placement.corners);
     }
-  }, [placement, image]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [placement, shown]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { overlayRef.current?.setOpacity(opacity); }, [opacity]);
 
-  // Traced units in map coordinates, shown on the map and handed back on Add.
+  // Traced units in map coordinates, shown on the map and handed back on Add
+  // (only the units still listed: a removed unit's polygons go with it).
   const traced = useMemo(() => {
-    if (!trace || !placement) return [];
-    return trace.units.map((t, i) => ({
-      unit: units.find((u) => u.id === t.id) || t,
-      polygons: (trace.results[i]?.polygons || []).map((p) => ringsToLngLat([p.outer, ...p.holes], trace.scale, fit, projector)),
+    if (!placement) return [];
+    return tracedForUnits(trace, units).map(({ unit, result }) => ({
+      unit,
+      polygons: result.polygons.map((p) => ringsToLngLat([p.outer, ...p.holes], trace.scale, fit, projector)),
     })).filter((t) => t.polygons.length);
   }, [trace, units, placement, fit, projector]);
   useEffect(() => {
@@ -174,7 +194,7 @@ export default function FigureImport({ source, existing, map: editorMap, setProj
 
   // ── the figure pane ───────────────────────────────────────────────────
   const getPixels = async () => {
-    if (!pixelsRef.current) pixelsRef.current = await figurePixels(image.dataUri);
+    if (!pixelsRef.current) pixelsRef.current = await figurePixels(shown.dataUri, image.width);
     return pixelsRef.current;
   };
 
@@ -183,7 +203,11 @@ export default function FigureImport({ source, existing, map: editorMap, setProj
     const rect = e.currentTarget.getBoundingClientRect();
     const x = (e.clientX - rect.left) / zoom, y = (e.clientY - rect.top) / zoom;
     if (x < 0 || y < 0 || x > image.width || y > image.height) return;
-    if (tab === 'place') {
+    if (tab === 'place' && cropPick) {
+      if (cropPick === 'first') { setCropPick({ x, y }); return; }
+      setScan((sc) => ({ ...sc, crop: { x0: Math.min(x, cropPick.x), y0: Math.min(y, cropPick.y), x1: Math.max(x, cropPick.x), y1: Math.max(y, cropPick.y) } }));
+      setCropPick(null);
+    } else if (tab === 'place') {
       const p = { id: uid(), kind: crs.kind === 'utm' ? nextKind : 'point', x: +x.toFixed(1), y: +y.toFixed(1), a: '', b: '' };
       setPoints((prev) => [...prev, p]);
       setFocusId(p.id);
@@ -233,33 +257,41 @@ export default function FigureImport({ source, existing, map: editorMap, setProj
   const autoCredit = figureCreditText({ ...fig, subject: fig.subject || (traced.length ? 'Geology (simplified)' : 'Figure') });
   const credit = creditEdited ? fig.credit : autoCredit;
 
-  const add = () => {
+  const add = async () => {
     if (!ok) return;
     const figure = { id: existing?.figure?.id || uid(), source: fig.source.trim(), date: fig.date.trim(), subject: fig.subject.trim(), credit: (credit || '').trim() };
-    const layers = [];
-    if (keepImage || existing) {
-      layers.push(figureRasterLayer({
-        id: existing?.id || uid(), image, placement, opacity, figure,
-        georef: {
-          crs, mode, points, area, kind: fit.kind, rms: +fit.rms.toFixed(2), work: projector.work,
-          units: units.map(({ name, samples, tolerance, fill }) => ({ name, samples, tolerance, fill })),
-        },
-      }));
+    const raster = keepImage || existing ? figureRasterLayer({
+      id: existing?.id || uid(), image: shown, placement, opacity, figure,
+      georef: {
+        crs, mode, points, area, kind: fit.kind, rms: +fit.rms.toFixed(2), work: projector.work,
+        frame: { width: image.width, height: image.height }, crop: scan.crop, margins: !!(scan.margin && scan.hide),
+        units: units.map(({ id, name, samples, tolerance, fill }) => ({ id, name, samples, tolerance, fill })),
+      },
+    }) : null;
+    // A corrected fit moves the units traced before and not traced again:
+    // back to figure pixels by the old fit, out by the new one.
+    let move = null;
+    if (g?.points) {
+      try {
+        const oldProjector = await makeProjector(g.crs, centre, g.work);
+        const oldFit = fitTransform(constraintsFor(g.points, oldProjector), { mode: g.mode });
+        const same = !oldFit.error && JSON.stringify(g.work) === JSON.stringify(projector.work)
+          && ['a', 'b', 'c', 'd', 'e', 'f'].every((k) => Math.abs(oldFit[k] - fit[k]) <= 1e-9 * Math.max(1, Math.abs(fit[k])));
+        if (!oldFit.error && !same) move = refitMover(oldFit, oldProjector, fit, projector);
+      } catch { /* left where they are */ }
     }
-    traced.forEach(({ unit, polygons }) => layers.push(tracedLayer({ id: uid(), unit, polygons, figure })));
-    // Added to the map, or swapped in for the figure being re-fitted; an
-    // empty map is framed on the figure.
-    const replaceId = existing?.id;
-    const added = layers.filter((l) => l.id !== replaceId);
+    const fresh = traced.map((t) => ({ ...t, id: uid() }));
+    // Added, or reconciled with the figure's layers on the map; an empty map
+    // is framed on the figure.
     setProject((prev) => {
       if (!prev.layers.length) {
         const b = placement.bounds;
         setTimeout(() => editorMap?.fitBounds([[b.south, b.west], [b.north, b.east]]), 0);
       }
-      return { ...prev, layers: [...prev.layers.map((l) => (l.id === replaceId ? layers[0] : l)), ...added] };
+      return { ...prev, layers: reconcileFigureLayers(prev.layers, { figure, raster, replaceId: existing?.id, traced: fresh, unitIds: new Set(units.map((u) => u.id)), move }) };
     });
-    added.forEach((l) => trackEvent('layer_added', { source: 'figure', role: l.role, kind: l.type, feature_count: l.geojson?.features?.length ?? 0 }));
-    onClose(layers[layers.length - 1]?.id);
+    if (!existing) [raster, ...fresh].filter(Boolean).forEach((l) => trackEvent('layer_added', { source: 'figure', role: l.role || 'other', kind: l.type || 'polygons', feature_count: l.polygons?.length ?? 0 }));
+    onClose(raster?.id || fresh[0]?.id);
   };
 
   useEffect(() => {
@@ -324,12 +356,13 @@ export default function FigureImport({ source, existing, map: editorMap, setProj
                   onClick={onFigureClick}
                   onKeyDown={(e) => { if (e.key === '+') setZoom((z) => Math.min(8, z * 1.5)); if (e.key === '-') setZoom((z) => z / 1.5); }}
                 >
-                  <img src={image.dataUri} alt="" draggable={false} />
+                  <img src={shown.dataUri} alt="" draggable={false} />
                   <svg viewBox={`0 0 ${image.width} ${image.height}`} preserveAspectRatio="none">
-                    {trace && tab !== 'place' && trace.results.map((res, i) => res.polygons.map((p, j) => (
-                      <path key={`${i}-${j}`} d={[p.outer, ...p.holes].map((ring) => `M${ring.map(([x, y]) => `${(x * trace.scale).toFixed(1)},${(y * trace.scale).toFixed(1)}`).join('L')}Z`).join('')}
-                        fill={unitFill(units.find((u) => u.id === trace.units[i].id) || trace.units[i])} fillOpacity="0.55" fillRule="evenodd" stroke="#111827" strokeWidth={1.2 / zoom} />
+                    {tab !== 'place' && tracedForUnits(trace, units).map(({ unit, result }) => result.polygons.map((p, j) => (
+                      <path key={`${unit.id}-${j}`} d={[p.outer, ...p.holes].map((ring) => `M${ring.map(([x, y]) => `${(x * trace.scale).toFixed(1)},${(y * trace.scale).toFixed(1)}`).join('L')}Z`).join('')}
+                        fill={unitFill(unit)} fillOpacity="0.55" fillRule="evenodd" stroke="#111827" strokeWidth={1.2 / zoom} />
                     )))}
+                    {tab === 'place' && scan.crop && <rect x={scan.crop.x0} y={scan.crop.y0} width={scan.crop.x1 - scan.crop.x0} height={scan.crop.y1 - scan.crop.y0} fill="none" stroke="#ea580c" strokeWidth={2 / zoom} strokeDasharray={`${6 / zoom} ${4 / zoom}`} />}
                     {area && <rect x={area.x0} y={area.y0} width={area.x1 - area.x0} height={area.y1 - area.y0} fill="none" stroke="#2563eb" strokeWidth={2 / zoom} strokeDasharray={`${6 / zoom} ${4 / zoom}`} />}
                     {tab === 'place' && points.map((p, i) => (
                       <g key={p.id}>
@@ -375,6 +408,15 @@ export default function FigureImport({ source, existing, map: editorMap, setProj
                       <button key={k} type="button" className={`fig-chip${nextKind === k || !isUtm ? ' is-active' : ''}`} aria-pressed={nextKind === k} onClick={() => setNextKind(k)}>{KIND_LABEL[k]}</button>
                     ))}
                     <span className="small-note">a known point (a collar, a grid crossing), or a grid label's tick on the frame.</span>
+                  </div>
+                  <div className="fig-row">
+                    <span className="fig-label">The scan</span>
+                    {scan.margin && (
+                      <label className="toggle-row"><input type="checkbox" checked={scan.hide} onChange={(e) => setScan({ ...scan, hide: e.target.checked })} /> <span>Hide the scan's blank margins</span></label>
+                    )}
+                    <button type="button" className={`fig-chip${cropPick ? ' is-active' : ''}`} onClick={() => setCropPick(cropPick ? null : 'first')}>{cropPick ? 'Click two corners…' : 'Crop…'}</button>
+                    {scan.crop && <button type="button" className="fig-chip" onClick={() => setScan({ ...scan, crop: null })}>No crop</button>}
+                    <span className="small-note">Hidden margins and anything outside the crop are left transparent on the map.</span>
                   </div>
                   {points.length ? (
                     <table className="fig-points">

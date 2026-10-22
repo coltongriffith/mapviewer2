@@ -2,17 +2,20 @@
 // map, the coordinate systems, the tracer's worker and the layers it all
 // becomes. Fetched only when the dialog opens (with proj4, lazily).
 //
-// The figure is stored as the picture itself (JPEG) plus the three corners
-// its fit puts on the ground, so the map keeps the original pixels and the
-// fit can be reopened and refined. Every layer made from it carries the same
-// `figure` record, whose credit line is printed on the export.
+// The figure is stored as the picture itself plus the three corners its fit
+// puts on the ground, so the map keeps the original pixels and the fit can be
+// reopened and refined. Every layer made from it carries the same `figure`
+// record, whose credit line is printed on the export.
 
 import { rasterLayer, utmProjString } from './rasterOverlay.js';
-import { applyFit } from './georef.js';
+import { applyFit, invertFit } from './georef.js';
+import { findMargin, clearMargin, clearOutside } from './figureMargins.js';
 
 // Stored inside the project and in shared copies (2 MB limit per share), so
 // the picture is kept to 2048 px on its long edge and about 1.2 MB as a data
-// URL: JPEG, stepping quality then size down until it fits.
+// URL: JPEG while it is opaque; WebP with alpha (PNG where the browser cannot
+// write WebP) once blank margins or a crop make part of it transparent. The
+// quality, then the size, steps down until it fits.
 export const FIGURE_MAX_EDGE = 2048;
 export const FIGURE_MAX_DATA_URL = 1200 * 1024;
 // The tracer works on at most this long edge (about 2.5 Mpx).
@@ -59,17 +62,63 @@ export async function loadFigureImage(source, name = 'Figure') {
   }
 }
 
-/** The figure's pixels at the tracer's working size. */
-export async function figurePixels(dataUri, maxEdge = TRACE_MAX_EDGE) {
-  const img = await loadImageEl(dataUri);
-  const s = Math.min(1, maxEdge / Math.max(img.naturalWidth, img.naturalHeight));
-  const w = Math.round(img.naturalWidth * s), h = Math.round(img.naturalHeight * s);
+function pixelsOf(img, w, h) {
   const canvas = document.createElement('canvas');
   canvas.width = w; canvas.height = h;
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   ctx.drawImage(img, 0, 0, w, h);
-  const { data } = ctx.getImageData(0, 0, w, h);
-  return { data, width: w, height: h, scale: img.naturalWidth / w };
+  return { canvas, ctx, px: ctx.getImageData(0, 0, w, h) };
+}
+
+/**
+ * The figure's pixels at the tracer's working size. `frameWidth` is the width
+ * the fit's pixel coordinates are measured in (the picture as first loaded),
+ * so `scale` takes a working pixel back to them.
+ */
+export async function figurePixels(dataUri, frameWidth, maxEdge = TRACE_MAX_EDGE) {
+  const img = await loadImageEl(dataUri);
+  const s = Math.min(1, maxEdge / Math.max(img.naturalWidth, img.naturalHeight));
+  const w = Math.round(img.naturalWidth * s), h = Math.round(img.naturalHeight * s);
+  const { data } = pixelsOf(img, w, h).px;
+  return { data, width: w, height: h, scale: (frameWidth || img.naturalWidth) / w };
+}
+
+/** Whether the picture has a flat blank margin round it (a scan's page, a turned figure's corners). */
+export async function hasBlankMargin(dataUri) {
+  const img = await loadImageEl(dataUri);
+  return !!findMargin(pixelsOf(img, img.naturalWidth, img.naturalHeight).px);
+}
+
+/**
+ * The picture as it is kept: its blank margins and anything outside `crop`
+ * (in frame pixels) made transparent. Opaque pictures stay JPEG. Returns
+ * { dataUri, width, height, name } or the image itself when there is nothing
+ * to do.
+ */
+export async function finishFigure(image, { hideMargins, crop }) {
+  if (!hideMargins && !crop) return image;
+  const img = await loadImageEl(image.dataUri);
+  const w0 = img.naturalWidth, h0 = img.naturalHeight;
+  let edge = Math.max(w0, h0);
+  for (;;) {
+    const s = edge / Math.max(w0, h0);
+    const w = Math.max(1, Math.round(w0 * s)), h = Math.max(1, Math.round(h0 * s));
+    const { canvas, ctx, px } = pixelsOf(img, w, h);
+    const margin = hideMargins ? findMargin(px) : null;
+    if (margin) clearMargin(px, margin.color);
+    const k = w / image.width;
+    if (crop) clearOutside(px, { x0: crop.x0 * k, y0: crop.y0 * k, x1: crop.x1 * k, y1: crop.y1 * k });
+    if (!margin && !crop) return image;
+    ctx.putImageData(px, 0, 0);
+    for (const q of [0.86, 0.76, 0.66]) {
+      const webp = canvas.toDataURL('image/webp', q);
+      if (!webp.startsWith('data:image/webp')) break; // no WebP writer: PNG below
+      if (webp.length <= FIGURE_MAX_DATA_URL) return { ...image, dataUri: webp, width: w, height: h };
+    }
+    const png = canvas.toDataURL('image/png');
+    if (png.length <= FIGURE_MAX_DATA_URL || edge <= 640) return { ...image, dataUri: png, width: w, height: h };
+    edge = Math.round(edge * 0.8);
+  }
 }
 
 // ── coordinate systems ────────────────────────────────────────────────────
@@ -78,11 +127,11 @@ export async function figurePixels(dataUri, maxEdge = TRACE_MAX_EDGE) {
 // metres: latitude/longitude input is fitted in the UTM zone of the map.
 export const utmZoneOf = (lng) => Math.max(1, Math.min(60, Math.floor((lng + 180) / 6) + 1));
 
-export async function makeProjector(crs, ref) {
+export async function makeProjector(crs, ref, keptWork = null) {
   const { default: proj4 } = await import('proj4');
-  const work = crs.kind === 'utm'
+  const work = keptWork || (crs.kind === 'utm'
     ? { zone: Number(crs.zone), hemisphere: crs.hemisphere, datum: crs.datum }
-    : { zone: utmZoneOf(ref.lng), hemisphere: ref.lat < 0 ? 'S' : 'N', datum: 'WGS84' };
+    : { zone: utmZoneOf(ref.lng), hemisphere: ref.lat < 0 ? 'S' : 'N', datum: 'WGS84' });
   const tr = proj4('EPSG:4326', utmProjString(work.zone, work.hemisphere, work.datum));
   const toWork = (lat, lng) => tr.forward([lng, lat]);
   const toLatLng = (E, N) => { const [lng, lat] = tr.inverse([E, N]); return [lat, lng]; };
@@ -214,5 +263,56 @@ export function tracedLayer({ id, unit, polygons, figure }) {
     style: { stroke: darker(fill), fill, fillOpacity: 0.55, strokeWidth: 1 },
     legend: { enabled: true, label: name, group: 'Geology' },
     figure,
+    figureUnit: unit.id,
+  };
+}
+
+/** The last trace's results for the units still in the dialog (a removed unit's polygons are not imported). */
+export function tracedForUnits(trace, units) {
+  if (!trace) return [];
+  return trace.units.map((t, i) => ({ unit: units.find((u) => u.id === t.id), result: trace.results[i] }))
+    .filter((t) => t.unit && t.result);
+}
+
+const mapCoords = (c, move) => (typeof c[0] === 'number' ? move(c) : c.map((x) => mapCoords(x, move)));
+
+/**
+ * The map's layers with a figure added or updated. `figure` (its source, date
+ * and credit) goes on every layer made from it. Each traced unit replaces the
+ * figure's layer for that unit (keeping the layer's id, style and a name the
+ * person changed), or is added; the layer of a unit removed in the dialog is
+ * removed. A layer traced earlier and not traced again is moved by `move`
+ * ([lng, lat] → [lng, lat], from the old fit to the new) when the fit changed.
+ * `raster` replaces `replaceId`, or is added first.
+ */
+export function reconcileFigureLayers(layers, { figure, raster, replaceId, traced, unitIds, move }) {
+  const byUnit = new Map(traced.map((t) => [t.unit.id, t]));
+  const done = new Set();
+  const out = [];
+  for (const l of layers) {
+    if (replaceId && l.id === replaceId) { if (raster) out.push(raster); continue; }
+    if (l.figure?.id !== figure.id) { out.push(l); continue; }
+    const unitId = l.figureUnit;
+    if (unitId && unitIds && !unitIds.has(unitId)) continue;
+    const t = unitId && byUnit.get(unitId);
+    if (t) {
+      const fresh = tracedLayer({ id: l.id, unit: t.unit, polygons: t.polygons, figure });
+      const renamed = (l.displayName || l.name) !== l.name;
+      out.push({ ...l, geojson: fresh.geojson, figure, ...(renamed ? {} : { name: fresh.name, displayName: fresh.displayName, legend: { ...l.legend, label: fresh.name } }) });
+      done.add(unitId);
+    } else {
+      out.push({ ...l, figure, ...(move && l.geojson ? { geojson: { ...l.geojson, features: l.geojson.features.map((f) => (f.geometry ? { ...f, geometry: { ...f.geometry, coordinates: mapCoords(f.geometry.coordinates, move) } } : f)) } } : {}) });
+    }
+  }
+  if (raster && !replaceId) out.push(raster);
+  return [...out, ...traced.filter((t) => !done.has(t.unit.id)).map((t) => tracedLayer({ id: t.id, unit: t.unit, polygons: t.polygons, figure }))];
+}
+
+/** [lng, lat] under the old fit → the same figure pixel under the new fit. */
+export function refitMover(oldFit, oldProjector, newFit, newProjector) {
+  return ([lng, lat]) => {
+    const [x, y] = invertFit(oldFit, ...oldProjector.toWork(lat, lng));
+    const [la, ln] = newProjector.toLatLng(...applyFit(newFit, x, y));
+    return [ln, la];
   };
 }

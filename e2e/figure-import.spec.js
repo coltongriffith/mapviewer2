@@ -7,7 +7,7 @@ import { deflateSync, crc32 } from 'node:zlib';
 
 // A 400 × 300 "figure" at 2 m per pixel, drawn turned 30° anticlockwise, its
 // top-left corner at 663 000 E, 5 608 000 N: speckled imagery, a pink unit at x 100–300, y 60–240
-// crossed by a white line, and a white title box.
+// crossed by a white line, a white title box, and a 10 px blank white page round it all.
 function figurePng() {
   const w = 400, h = 300, raw = Buffer.alloc((w * 3 + 1) * h);
   let s = 11;
@@ -19,7 +19,8 @@ function figurePng() {
       let c = [70 + n, 95 + n, 60 + n];
       if (x >= 100 && x < 300 && y >= 60 && y < 240) c = [214 + n / 4, 150 + n / 4, 176 + n / 4];
       if (y === 150 || y === 151) c = [255, 255, 255];
-      if (x < 80 && y < 40) c = [255, 255, 255];
+      if (x >= 20 && x < 80 && y >= 20 && y < 40) c = [255, 255, 255];
+      if (x < 10 || y < 10 || x >= 390 || y >= 290) c = [255, 255, 255];
       const o = y * (w * 3 + 1) + 1 + x * 3;
       raw[o] = c[0]; raw[o + 1] = c[1]; raw[o + 2] = c[2];
     }
@@ -57,6 +58,9 @@ test('a company figure is placed by points, traced by colour, credited and kept'
   await dialog.locator('input[type=file]').setInputFiles({ name: 'test-fig-1.png', mimeType: 'image/png', buffer: figurePng() });
   const canvas = dialog.locator('.fig-canvas');
   await expect(canvas).toBeVisible();
+  // The blank page is found and hidden by default: the picture kept is a WebP with alpha.
+  await expect(dialog.getByLabel("Hide the scan's blank margins")).toBeChecked({ timeout: 15_000 });
+  await expect(canvas.locator('img')).toHaveAttribute('src', /^data:image\/webp/);
   await dialog.getByLabel('Zone').fill('10');
 
   const clickFigure = (x, y) => canvas.evaluate((el, [px, py]) => {
@@ -88,7 +92,7 @@ test('a company figure is placed by points, traced by colour, credited and kept'
   await dialog.getByLabel('Unit name').fill('Pink diorite');
   // Its fill taken from a "legend swatch" (the white title box here).
   await dialog.getByRole('button', { name: 'Fill from legend' }).click();
-  await clickFigure(20, 20);
+  await clickFigure(40, 30);
   await expect(dialog.getByLabel('Fill colour')).toHaveValue('#ffffff');
   await dialog.getByLabel('Fill colour').fill('#d6a0b4');
   await dialog.getByRole('button', { name: 'Trace', exact: true }).click();
@@ -105,6 +109,7 @@ test('a company figure is placed by points, traced by colour, credited and kept'
 
   // The figure is drawn by its corners, and the traced unit is a legend entry.
   await expect(page.locator('.leaflet-container img.leaflet-image-layer').first()).toHaveAttribute('style', /matrix\(/, { timeout: 15_000 });
+  await expect(page.locator('.leaflet-container img.leaflet-image-layer').first()).toHaveAttribute('src', /^data:image\/webp/);
   await expect(page.locator('.legend-list').first()).toContainText('Pink diorite');
 
   // The PNG export prints the credit line and draws the picture by its corners
@@ -123,4 +128,19 @@ test('a company figure is placed by points, traced by colour, credited and kept'
   await page.goto('/?intent=resume');
   await expect(page.locator('.legend-list').first()).toContainText('Pink diorite', { timeout: 30_000 });
   await expect(page.locator('.leaflet-container img.leaflet-image-layer').first()).toHaveAttribute('style', /matrix\(/, { timeout: 15_000 });
+
+  // Reopened, traced again and updated: the unit's layer is replaced, not doubled.
+  await page.getByRole('tab', { name: /^customize$/i }).first().click();
+  await page.locator('.ins-acc-heading button', { hasText: /^Layers/ }).first().click();
+  await page.locator('.layer-item', { hasText: 'test-fig-1' }).first().click();
+  await page.getByRole('button', { name: 'Edit georeference / trace colours…' }).click();
+  await expect(dialog.getByTestId('fig-fit')).toContainText('RMS error');
+  await dialog.getByRole('tab', { name: '2 · Trace colours' }).click();
+  await expect(dialog.getByLabel('Unit name')).toHaveValue('Pink diorite');
+  await dialog.getByRole('button', { name: 'Trace', exact: true }).click();
+  await expect(dialog.getByText('1 area', { exact: true })).toBeVisible({ timeout: 30_000 });
+  await dialog.getByRole('button', { name: 'Update map' }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.locator('.layer-item', { hasText: 'Pink diorite' })).toHaveCount(1);
+  await expect(page.locator('.legend-list').first().locator('.legend-item', { hasText: 'Pink diorite' })).toHaveCount(1);
 });

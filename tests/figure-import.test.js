@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { fitTransform, applyFit, invertFit, describeFit } from '../src/utils/georef.js';
 import { traceColours, ringArea, samplePatch } from '../src/utils/figureTrace.js';
 import { figureCredits } from '../src/utils/rasterOverlay.js';
-import { figureCreditText, constraintsFor, parseCoord } from '../src/utils/figureImport.js';
+import { figureCreditText, constraintsFor, parseCoord, tracedForUnits, reconcileFigureLayers } from '../src/utils/figureImport.js';
+import { findMargin, clearMargin, clearOutside } from '../src/utils/figureMargins.js';
 
 // A figure turned 45° anticlockwise at 2 m per pixel, its top-left corner at
 // 663 000 E, 5 608 000 N (UTM 10N), like Tower's Fig. 2.
@@ -176,5 +177,107 @@ describe('credits', () => {
     const figure = { id: 'f1', credit };
     expect(figureCredits([{ figure }, { figure }, { figure: { credit: 'Other after X' }, visible: false }, {}])).toEqual([credit]);
     expect(figureCredits([{ type: 'raster' }, { type: 'polygons' }])).toEqual([]);
+  });
+});
+
+describe('blank margins', () => {
+  // A figure turned 45° on a white page: a diamond of speckled imagery with a
+  // white title card inside it, and white corners.
+  function turnedScan() {
+    const w = 200, h = 200, data = new Uint8ClampedArray(w * h * 4);
+    let s = 3;
+    const rnd = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
+    for (let y = 0; y < h; y += 1) {
+      for (let x = 0; x < w; x += 1) {
+        const inside = Math.abs(x - 100) + Math.abs(y - 100) < 95;
+        const card = x >= 85 && x < 115 && y >= 60 && y < 75;
+        const n = (rnd() - 0.5) * 30;
+        const c = !inside ? [255 - rnd() * 4, 255 - rnd() * 4, 253] : card ? [255, 255, 255] : [80 + n, 100 + n, 60 + n];
+        data.set([...c, 255], (y * w + x) * 4);
+      }
+    }
+    return { data, width: w, height: h };
+  }
+  const alpha = (img, x, y) => img.data[(y * img.width + x) * 4 + 3];
+
+  it('finds the white page and clears it from the edges in, keeping white inside the figure', () => {
+    const img = turnedScan();
+    const m = findMargin(img);
+    expect(m).not.toBeNull();
+    expect(m.color.every((c) => c > 245)).toBe(true);
+    clearMargin(img, m.color);
+    for (const [x, y] of [[0, 0], [199, 0], [0, 199], [199, 199], [20, 20], [180, 180]]) expect(alpha(img, x, y)).toBe(0);
+    expect(alpha(img, 100, 100)).toBe(255); // imagery
+    expect(alpha(img, 100, 67)).toBe(255); // the white card inside
+    // Nothing left to find on a cleared picture, and a figure without a page has none.
+    expect(findMargin(img)).toBeNull();
+    const full = turnedScan();
+    let t = 5;
+    for (let i = 0; i < full.data.length; i += 4) { t = (t * 1664525 + 1013904223) >>> 0; full.data.set([60 + (t % 60), 90 + (t % 40), 50], i); }
+    expect(findMargin(full)).toBeNull();
+  });
+
+  it('clears outside a crop', () => {
+    const img = turnedScan();
+    clearOutside(img, { x0: 50, y0: 50, x1: 150, y1: 150 });
+    expect(alpha(img, 49, 100)).toBe(0);
+    expect(alpha(img, 100, 100)).toBe(255);
+  });
+});
+
+describe('the figure layers on the map', () => {
+  const poly = (x) => [[[x, 50], [x + 0.01, 50], [x + 0.01, 50.01], [x, 50]]];
+  const old = { id: 'f1', source: 'Tower Fig. 1', date: '15 Oct 2026', credit: 'Geology (simplified) after Tower Fig. 1 (15 Oct 2026)' };
+  const layer = (id, unitId, name, x) => ({
+    id, name, displayName: name, type: 'polygons', figure: old, figureUnit: unitId, style: { fill: '#ff0000', fillOpacity: 0.3 },
+    legend: { enabled: true, label: name, group: 'Geology' },
+    geojson: { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: poly(x) } }] },
+  });
+  const onMap = () => [
+    { id: 'claims', name: 'Claims', geojson: null },
+    { id: 'img', type: 'raster', figure: old, raster: {} },
+    layer('L-durand', 'u-durand', 'Durand Stock', -120),
+    { ...layer('L-chil', 'u-chil', 'Chilcotin', -120.1), displayName: 'Chilcotin basalt (my name)' },
+    layer('L-dom', 'u-dom', 'Dominic Lake', -120.2),
+  ];
+
+  it('puts an edited credit on every layer of the figure, and prints it once', () => {
+    const figure = { ...old, credit: 'Geology after Tower Fig. 1 (rev.)' };
+    const out = reconcileFigureLayers(onMap(), { figure, raster: { id: 'img', type: 'raster', figure }, replaceId: 'img', traced: [], unitIds: new Set(['u-durand', 'u-chil', 'u-dom']), move: null });
+    expect(out.filter((l) => l.figure).every((l) => l.figure.credit === figure.credit)).toBe(true);
+    expect(figureCredits(out)).toEqual([figure.credit]);
+    // Even with a stale line left on one layer: one line per figure.
+    expect(figureCredits([{ figure: { id: 'f1', credit: 'new' } }, { figure: { id: 'f1', credit: 'old' } }])).toEqual(['new']);
+  });
+
+  it('does not import a unit removed after tracing', () => {
+    const trace = { units: [{ id: 'a' }, { id: 'b' }], results: [{ polygons: [1] }, { polygons: [2] }], scale: 1 };
+    expect(tracedForUnits(trace, [{ id: 'b', name: 'B' }]).map((t) => t.unit.name)).toEqual(['B']);
+    expect(tracedForUnits(null, [{ id: 'b' }])).toEqual([]);
+  });
+
+  it('replaces re-traced units in place, drops removed ones, adds new ones and moves the rest with a corrected fit', () => {
+    const figure = { ...old };
+    const unit = (id, name) => ({ id, name, samples: [[200, 150, 170]] });
+    const out = reconcileFigureLayers(onMap(), {
+      figure, raster: { id: 'img', type: 'raster', figure }, replaceId: 'img',
+      traced: [
+        { id: 'new-1', unit: unit('u-durand', 'Durand Stock diorite'), polygons: [poly(-119)] },
+        { id: 'new-2', unit: unit('u-chil', 'Chilcotin'), polygons: [poly(-119.5)] },
+        { id: 'new-3', unit: unit('u-roper', 'Roper Lake granodiorite'), polygons: [poly(-119.9)] },
+      ],
+      unitIds: new Set(['u-durand', 'u-chil', 'u-roper']), // Dominic Lake was removed
+      move: ([lng, lat]) => [lng + 1, lat],
+    });
+    expect(out.map((l) => l.id)).toEqual(['claims', 'img', 'L-durand', 'L-chil', 'new-3']);
+    const durand = out.find((l) => l.id === 'L-durand');
+    expect(durand.geojson.features[0].geometry.coordinates[0][0]).toEqual([-119, 50]); // the new trace
+    expect(durand.style).toEqual({ fill: '#ff0000', fillOpacity: 0.3 }); // the person's style kept
+    expect(durand.legend.label).toBe('Durand Stock diorite'); // renamed with the unit
+    expect(out.find((l) => l.id === 'L-chil').displayName).toBe('Chilcotin basalt (my name)'); // their own name kept
+    // A unit not traced again moves with the corrected fit.
+    const kept = reconcileFigureLayers(onMap(), { figure, raster: null, replaceId: null, traced: [], unitIds: new Set(['u-durand', 'u-chil', 'u-dom']), move: ([lng, lat]) => [lng + 1, lat] });
+    expect(kept.find((l) => l.id === 'L-dom').geojson.features[0].geometry.coordinates[0][0]).toEqual([-119.2, 50]);
+    expect(kept.find((l) => l.id === 'claims')).toEqual({ id: 'claims', name: 'Claims', geojson: null });
   });
 });
