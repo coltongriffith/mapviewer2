@@ -117,7 +117,7 @@ test('the layers ZIP: the figure, the map alone and the annotations alone, which
   mkdirSync(out, { recursive: true });
   for (const [k, v] of Object.entries(files)) { writeFileSync(join(out, k), v); keep(`2d-layers-${k}`, join(out, k)); }
   const about = JSON.parse(Buffer.from(files['layers.json']).toString());
-  expect(about.note).toMatch(/stack \(map below\) to make figure\.png/);
+  expect(about.note).toMatch(/stack \(map below\) to make the figure without/);
   const [fig, map, notes] = await Promise.all(['figure.png', 'map.png', 'annotations.png'].map((k) => inspect(page, files[k])));
   expect([map.w, map.h]).toEqual([fig.w, fig.h]);
   expect([notes.w, notes.h]).toEqual([fig.w, fig.h]);
@@ -127,10 +127,12 @@ test('the layers ZIP: the figure, the map alone and the annotations alone, which
   const texts = await page.evaluate(() => window.__texts);
   expect(texts.filter((t) => t === 'Buckhorn Creek Property')).toHaveLength(2);
 
-  // With the band and the draft mark on, they go on figure.png only, so the layers still stack.
+  // With the band and the draft mark on, they go on figure.png only; the layers reconstruct the clean figure.
   await page.getByLabel('Watermark band under the export (draft for review)').check();
   await page.getByLabel('Draft watermark over the map').check();
   const withBand = unzipSync(readFileSync((await download(page, 'Download layers (ZIP)')).path));
+  const brandedAbout = JSON.parse(Buffer.from(withBand['layers.json']).toString());
+  expect(brandedAbout.draftOverlay).toContain('on figure.png only');
   const [fig2, map2] = await Promise.all([inspect(page, withBand['figure.png']), inspect(page, withBand['map.png'])]);
   expect(fig2.h - map2.h).toBe(bandHeight(fig2.w));
   expect(map2.h).toBe(map.h);
