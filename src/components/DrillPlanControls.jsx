@@ -138,7 +138,7 @@ export default function DrillPlanControls({ plan, onChange, onReplace, map, prop
           <button className="btn primary" type="button" disabled={busy || (needsCrs(tables) && !crs)} onClick={build}>{plan ? 'Rebuild the drill plan' : 'Build the drill plan'}</button>
         </div>
       )}
-      {status && <div className={`small-note${status.type === 'error' ? ' error-text' : ''}`} role="status" data-testid="drill-plan-status">{status.lines.map((l) => <div key={l}>{l}</div>)}</div>}
+      {status && <div className="small-note" style={status.type === 'error' ? { color: '#b42318' } : undefined} role="status" data-testid="drill-plan-status">{status.lines.map((l) => <div key={l}>{l}</div>)}</div>}
     </>
   );
   if (!plan) {

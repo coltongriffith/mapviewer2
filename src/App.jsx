@@ -49,7 +49,7 @@ const StudioCard = lazyGuarded(() => import('./components/StudioCard'));
 const StudioControls = lazyGuarded(() => import('./components/StudioControls'));
 const DrillPlanOverlay = lazyGuarded(() => import('./components/DrillPlanOverlay'));
 const DrillPlanControls = lazyGuarded(() => import('./components/DrillPlanControls'));
-import { drillPlanLegendItems } from './utils/drillPlanLegend.js';
+import { useLazyDrillLegend } from './utils/useDrillLegend.js';
 const NameDialog = lazyGuarded(() => import('./components/NameDialog'));
 import { mapName, copyName } from './utils/mapName.js';
 import { loadGeoJSON, loadCSV, loadShapefileSet, MAX_FEATURES } from './utils/importers';
@@ -928,9 +928,11 @@ export default function App({ initialAction = null }) {
 
   // Before customization — the editor needs this to offer a removed entry back,
   // which it could not do from a list the removal has already been applied to.
+  // The drill plan's rows (utils/drillPlanLegend.js), loaded with the first plan; none without one.
+  const drillPlanLegend = useLazyDrillLegend(project.drillPlan);
   const derivedLegendItems = useMemo(
-    () => [...legendItems, ...areaClaimsLegendItems, ...drillPlanLegendItems(project.drillPlan)],
-    [legendItems, areaClaimsLegendItems, project.drillPlan],
+    () => [...legendItems, ...areaClaimsLegendItems, ...drillPlanLegend],
+    [legendItems, areaClaimsLegendItems, drillPlanLegend],
   );
   const allLegendItems = useMemo(
     () => applyLegendCustomization(derivedLegendItems, project.layout),

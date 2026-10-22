@@ -18,7 +18,7 @@ import { getMapFrame, scaleBarHeight } from '../utils/coordinateFrame.js';
 import CoordinateFrameOverlay from './CoordinateFrameOverlay.jsx';
 import { fitProjectToTemplate } from '../utils/frameMapForTemplate';
 import { projectStageSize, savedViewFor, zoomForSize } from '../utils/savedView';
-import { drillPlanLegendItems } from '../utils/drillPlanLegend.js';
+import { useLazyDrillLegend } from '../utils/useDrillLegend.js';
 
 const MapCanvas = lazyGuarded(() => import('./MapCanvas'));
 const StudioCard = lazyGuarded(() => import('./StudioCard'));
@@ -82,9 +82,10 @@ export default function ReadOnlyMapStage({ project, onExportReady }) {
   // A shared project has to show the legend its author edited, not the raw
   // derivation — otherwise entries they renamed or removed reappear for the
   // reader.
+  const drillPlanLegend = useLazyDrillLegend(project.drillPlan);
   const legendItems = useMemo(
-    () => applyLegendCustomization([...buildLegendItems(template, project.layers, project.layout), ...drillPlanLegendItems(project.drillPlan)], project.layout),
-    [template, project.layers, project.layout, project.drillPlan]
+    () => applyLegendCustomization([...buildLegendItems(template, project.layers, project.layout), ...drillPlanLegend], project.layout),
+    [template, project.layers, project.layout, drillPlanLegend]
   );
   const legendGroups = useMemo(() => groupLegendItems(legendItems, project.layout), [legendItems, project.layout]);
   const resolvedZones = useMemo(() => {

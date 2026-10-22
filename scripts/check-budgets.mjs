@@ -69,7 +69,12 @@ const BUDGETS = {
   // 150.40 configured, +0.11 kB over main's 150.29): the editor takes a file handed over by a property page ("Start a map from a file", "Use in map")
   // and imports it once the new property map is open. It has to run in App, where the import lives; the
   // property page and the dashboard's 3D section are lazy chunks.
-  maxJsChunkGzipKb: 150.7,
+  // 150.7 → 151.4 (Oct 2026, 2D drill plan, measured 151.11 configured, +0.62 kB over main's 150.49): what the editor
+  // must hold synchronously for an opt-in drill plan (project.drillPlan) — the Drill plan section in the Annotate tab
+  // and its hand-off to the lazy DrillPlanControls, the stage's hand-off to the lazy DrillPlanOverlay, the plan's
+  // update/remove setters and the hook that loads its legend rows (utils/useDrillLegend.js). Reading the files,
+  // laying out the plan, its legend rows and its painting are all lazy.
+  maxJsChunkGzipKb: 151.4,
   initialJsGzipKb: 75,
   initialAuthJsGzipKb: 135,
   // The former configured check omitted VITE_ADMIN_EMAIL, which pruned the
@@ -154,7 +159,14 @@ const BUDGETS = {
   // 944.7): the homepage's "New in Exploration Maps" section (3D figures, Studio, sharing, workspace) in its own lazy
   // LandingNew chunk (~1.2 kB with its alt texts and copy), so the homepage's initial JS and its budget are unchanged
   // (+0.1 kB measured for the section heading and the guarded lazy hand-off); the editor route is unchanged.
-  totalAuthJsGzipKb: 946.4,
+  // 946.4 → 969.9 (Oct 2026, 2D drill plan, measured 969.6, +23.6 kB over main's 946.0): all of it lazy but App's
+  // +0.6 kB (maxJsChunkGzipKb above). The plan's layout and primitives (utils/drillPlan.js, 7.0 kB, loaded by the
+  // stage and the exporter only for a map with a plan), its controls and file reader (DrillPlanControls with
+  // utils/drillPlanData.js, 8.9 kB), the stage overlay (1.9 kB), its colours and legend rows (1.5 kB), the
+  // exporter's hook (+0.5 kB in renderScene) and the polyline/rotation painters (+0.3 kB in studioCards and
+  // StudioCard); drillDb (6.7 kB), desurvey (0.6 kB) and sectionGeometry (1.0 kB) are now chunks shared with the
+  // drill panel and /3d's lazy sections and min-curvature rather than copies inside them (-7.3 kB there).
+  totalAuthJsGzipKb: 969.9,
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
@@ -180,7 +192,8 @@ const BUDGETS = {
   // 871.5 → 876.5 (measured 876.14, +4.92 kB over main's 871.22): the admin 3D usage tab, as totalAuthJsGzipKb above.
   // 876.5 → 877.8 (Oct 2026, production errors, measured 877.5, 876.1 on main): as totalAuthJsGzipKb above.
   // 877.8 → 879.1 (measured 878.8, 877.5 on main): the homepage's lazy LandingNew chunk, as totalAuthJsGzipKb above.
-  totalJsGzipKb: 879.1,
+  // 879.1 → 901.7 (measured 901.4, 878.8 on main): the 2D drill plan, as totalAuthJsGzipKb above.
+  totalJsGzipKb: 901.7,
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the
   // totals above. /3d carries three.js (~109 kB gzip) and its editor.
@@ -390,9 +403,11 @@ const BUDGETS = {
   // code is unchanged, the extra chunk's overhead is what is new.
   // 338.1 → 339.0 (Oct 2026, production errors, measured 338.7, 337.8 on main): the stale-chunk recovery in the entry and
   // the Canvas redraw fix in vendor-leaflet, as totalAuthJsGzipKb above.
-  editorAuthJsGzipKb: 339.0,
+  // 339.0 → 339.7 (Oct 2026, 2D drill plan, measured 339.4, 338.8 on main): the App code as maxJsChunkGzipKb above.
+  editorAuthJsGzipKb: 339.7,
   // 270 → 271.0 (Oct 2026, production errors, measured 270.7, 269.6 on main): the same as editorAuthJsGzipKb above.
-  editorJsGzipKb: 271.0,
+  // 271.0 → 271.7 (Oct 2026, 2D drill plan, measured 271.4, 270.8 on main): the same as editorAuthJsGzipKb above.
+  editorJsGzipKb: 271.7,
   claimsAuthJsGzipKb: 355,
   claimsJsGzipKb: 290,
   // Stylesheet, gzipped. Today ~29 kB.

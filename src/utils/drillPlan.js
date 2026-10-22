@@ -14,12 +14,11 @@
 import { measureText, cardShell, textOn } from './studioCards.js';
 import { holeColors, binsOf, releaseHoles, byHole } from './drillPlanLegend.js';
 import { pubCallouts, pubLines, isApproved } from '../three-d/published-results.js';
-import { segHits } from '../three-d/leaders.js';
-import { hits, overlapArea } from '../three-d/layout.js';
 import { letters, lookingWord } from '../../shared/sectionGeometry.js';
 
 export const PAD_RADIUS_M = 5;
 export const FAN_PX = 6;
+const BAR_OFF = 5.5; // px from a trace's centre line to its assay bars'
 const INK = '#142126', NAVY = '#14262e', GOLD = '#f5c518', NEW_GREEN = '#2f9e44';
 const key = (id) => String(id ?? '').trim().toLowerCase();
 const tx = (x, y, s, size, weight, family, fill, o = {}) => ({ t: 'text', x, y, s: String(s ?? ''), size, weight, family, fill, anchor: 'start', ls: 0, ...o });
@@ -74,6 +73,19 @@ function dirOf(pts) {
 }
 
 // ── Measuring and boxes ─────────────────────────────────────────────────────
+// Boxes are [x0, y0, x1, y1] (as the 3D page's layout helpers take them; kept here so /3d's chunks stay as they are).
+const hits = (a, b, pad = 0) => !(a[2] + pad < b[0] || a[0] - pad > b[2] || a[3] + pad < b[1] || a[1] - pad > b[3]);
+const overlapArea = (a, b) => Math.max(0, Math.min(a[2], b[2]) - Math.max(a[0], b[0])) * Math.max(0, Math.min(a[3], b[3]) - Math.max(a[1], b[1]));
+// Whether the segment p→q passes through box b grown by pad (Liang–Barsky).
+function segHits(p, q, b, pad = 0) {
+  let t0 = 0, t1 = 1; const dx = q[0] - p[0], dy = q[1] - p[1];
+  for (const [d, lo, hi, o] of [[dx, b[0] - pad, b[2] + pad, p[0]], [dy, b[1] - pad, b[3] + pad, p[1]]]) {
+    if (Math.abs(d) < 1e-9) { if (o < lo || o > hi) return false; continue; }
+    let a = (lo - o) / d, c = (hi - o) / d; if (a > c) [a, c] = [c, a];
+    t0 = Math.max(t0, a); t1 = Math.min(t1, c); if (t0 > t1) return false;
+  }
+  return true;
+}
 const W = (s, size, weight, family, ls = 0) => measureText(s, size, weight, family, ls);
 const box = (x, y, w, h) => [x, y, x + w, y + h];
 const nearestOn = (b, p) => [Math.max(b[0], Math.min(b[2], p[0])), Math.max(b[1], Math.min(b[3], p[1]))];
@@ -222,11 +234,11 @@ export function planLayout(plan, view) {
   const padOf = new Map(); pads.forEach((p) => p.ids.forEach((id) => padOf.set(id, p)));
 
   // Each hole in px, fanned apart (perpendicular to the pad's mean direction) when its pad is fanned.
-  const px = new Map();
+  const px = new Map(), side = new Map(); // side: which side of its trace a hole's assay bars run (+1 or −1)
   holes.forEach((h) => px.set(h.id, (h.path?.length ? h.path : [[h.lng, h.lat, 0]]).map(([lng, lat, d]) => [...pt(lng, lat), d])));
   pads.filter((p) => fan[p.key]).forEach((p) => {
     const ds = p.ids.map((id) => dirOf(px.get(id))), m = [ds.reduce((s, d) => s + d[0], 0), ds.reduce((s, d) => s + d[1], 0)], l = Math.hypot(...m) || 1, n = [-m[1] / l, m[0] / l];
-    p.ids.forEach((id, i) => { const o = (i - (p.ids.length - 1) / 2) * FAN_PX; px.set(id, px.get(id).map(([x, y, d]) => [x + n[0] * o, y + n[1] * o, d])); });
+    p.ids.forEach((id, i) => { const o = (i - (p.ids.length - 1) / 2) * FAN_PX; side.set(id, o < 0 ? -1 : 1); px.set(id, px.get(id).map(([x, y, d]) => [x + n[0] * o, y + n[1] * o, d])); });
   });
   const segs = []; // trace segments, for tags and cards to keep off
   holes.forEach((h) => { const q = px.get(h.id); for (let i = 1; i < q.length; i++) segs.push([q[i - 1], q[i]]); });
@@ -256,14 +268,15 @@ export function planLayout(plan, view) {
     holes.forEach((h) => { const q = px.get(h.id); if (q.length > 1) base.push({ t: 'pline', pts: q.map(([x, y]) => [x, y]), stroke: '#0b1a20', sw: 4.6, opacity: 0.5 }); });
     holes.forEach((h) => { const q = px.get(h.id); if (q.length > 1) base.push({ t: 'pline', pts: q.map(([x, y]) => [x, y]), stroke: colors.get(key(h.id)), sw: 2.6, role: 'trace' }); });
   }
-  // Assay bars: each interval at or above the lowest bin, in its bin's colour; touching intervals of one bin
-  // are one bar.
+  // Assay bars: each interval at or above the lowest bin, in its bin's colour, alongside its trace so the hole's
+  // own colour stays in view (fanned pad holes on their outer sides); touching intervals of one bin are one bar.
   const els = plan.assays?.elements || [], ei = Math.max(0, els.findIndex((e) => e.name === plan.element)), bins = binsOf(plan);
   if (show.bars && els.length && bins.length) {
     const binOf = (v) => (Number.isFinite(v) ? bins.filter((b) => v >= b.min).pop() || null : null);
     const bars = [];
     holes.forEach((h) => {
-      const q = px.get(h.id); let run = null;
+      const d = dirOf(px.get(h.id)), k = BAR_OFF * (side.get(h.id) || 1), q = px.get(h.id).map(([x, y, dd]) => [x - d[1] * k, y + d[0] * k, dd]);
+      let run = null;
       (plan.assays.rows?.[h.id] || []).forEach((r) => {
         const b = binOf(r[2 + ei]);
         if (run && b === run.b && r[0] <= run.t + 0.01) { run.t = r[1]; return; }
@@ -274,8 +287,8 @@ export function planLayout(plan, view) {
     });
     // Low grades first, so the high ones sit on top where bars meet.
     bars.sort((a, b) => a.b.min - b.b.min);
-    bars.forEach((r) => base.push({ t: 'pline', pts: span(r.q, r.f, r.t), stroke: '#0b1a20', sw: 9, opacity: 0.55, cap: 'butt' }));
-    bars.forEach((r) => base.push({ t: 'pline', pts: span(r.q, r.f, r.t), stroke: r.b.color, sw: 6.5, cap: 'butt', role: 'bar' }));
+    bars.forEach((r) => base.push({ t: 'pline', pts: span(r.q, r.f, r.t), stroke: '#0b1a20', sw: 7.4, opacity: 0.55, cap: 'butt' }));
+    bars.forEach((r) => base.push({ t: 'pline', pts: span(r.q, r.f, r.t), stroke: r.b.color, sw: 5.2, cap: 'butt', role: 'bar' }));
   }
   // Collars: a white disc ringed in the hole's colour; on a common pad, one disc split into each hole's colour.
   const avoid = [...panels];
