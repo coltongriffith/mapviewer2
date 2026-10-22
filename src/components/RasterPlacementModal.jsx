@@ -7,7 +7,7 @@ import { reprojectBounds, validBounds, utmProjString, looksLikeLatLng } from '..
 
 const num = (v) => (v === '' || v == null ? NaN : Number(v));
 
-export default function RasterPlacementModal({ image, initialBounds, initialCrs, mapCenter, onImport, onClose }) {
+export default function RasterPlacementModal({ image, initialBounds, initialCrs, mapCenter, onImport, onClose, onGeoreference }) {
   const startUtm = initialCrs === 'utm' || (initialBounds && !looksLikeLatLng(initialBounds));
   const guessZone = mapCenter ? Math.floor((mapCenter.lng + 180) / 6) + 1 : 10;
   const [mode, setMode] = useState(startUtm ? 'utm' : 'latlng');
@@ -116,6 +116,9 @@ export default function RasterPlacementModal({ image, initialBounds, initialCrs,
         </div>
         <p className="small-note" style={{ marginTop: 8 }}>
           The image is stretched to fit the box, so it must be north-up in the coordinate system you pick. A rotated grid is placed by its bounding box.
+          {onGeoreference && !initialBounds && (
+            <> A company figure, or one drawn at an angle: <button type="button" className="link-btn" onClick={onGeoreference}>georeference it by points instead</button>.</>
+          )}
         </p>
         {error && <div className="export-hd-error" role="alert" style={{ marginBottom: 10 }}>{error}</div>}
         <div className="export-hd-actions">

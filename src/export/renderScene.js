@@ -23,7 +23,7 @@ import { isBracket, distanceLineLabel, bracketTicks, bracketLabelAnchor } from '
 import { pickScaleBar } from '../utils/scaleBar.js';
 import { resolvePointSymbol, symbolPath } from '../utils/pointSymbol.js';
 import { screenScale } from '../utils/stageScale.js';
-import { tileLayerCredits } from '../utils/rasterOverlay.js';
+import { tileLayerCredits, figureCredits } from '../utils/rasterOverlay.js';
 import { getMapFrame, scaleFrame, computeGridTicks, projectionLabel, frameFont, FRAME_FONT_PX } from '../utils/coordinateFrame.js';
 import { fillPatternSpec, hasFillPattern } from '../../shared/fillPattern.js';
 import { diagnostic } from '../../shared/figureDiagnostics.js';
@@ -2261,6 +2261,7 @@ export function creditLinesFor(scene) {
     ...exportCreditLines(scene.project?.layers || []),
     ...referenceOverlayCredits(layout.referenceOverlays),
     ...tileLayerCredits(scene.project?.layers || []),
+    ...figureCredits(scene.project?.layers || []),
     ...note,
   ];
 }
@@ -2355,6 +2356,14 @@ async function drawTilesCanvas(ctx, scene, scale) {
 function rasterPlacement(scene, layer, scale) {
   const r = layer?.raster;
   if (!r?.dataUri || !r?.bounds || !scene.map) return null;
+  if (r.corners) {
+    // An imported figure turned by its fit: placed by its top-left, top-right
+    // and bottom-left corners, as the editor's overlay places it.
+    const [tl, tr, bl] = ['tl', 'tr', 'bl'].map((k) => scene.map.latLngToContainerPoint(r.corners[k]));
+    const w = r.width, h = r.height;
+    return { w, h, opacity: r.opacity ?? 0.85, href: r.dataUri,
+      matrix: [(tr.x - tl.x) * scale / w, (tr.y - tl.y) * scale / w, (bl.x - tl.x) * scale / h, (bl.y - tl.y) * scale / h, tl.x * scale, tl.y * scale] };
+  }
   const sw = scene.map.latLngToContainerPoint([r.bounds.south, r.bounds.west]);
   const ne = scene.map.latLngToContainerPoint([r.bounds.north, r.bounds.east]);
   return { x: sw.x * scale, y: ne.y * scale, w: (ne.x - sw.x) * scale, h: (sw.y - ne.y) * scale, opacity: r.opacity ?? 0.85, href: r.dataUri };
@@ -2373,7 +2382,9 @@ async function drawRastersCanvas(ctx, scene, scale) {
     if (!pl) continue;
     const img = await loadImage(pl.href).catch(() => null);
     if (!img) continue;
-    ctx.save(); ctx.globalAlpha = pl.opacity; ctx.drawImage(img, pl.x, pl.y, pl.w, pl.h); ctx.restore();
+    ctx.save(); ctx.globalAlpha = pl.opacity;
+    if (pl.matrix) { ctx.transform(...pl.matrix); ctx.drawImage(img, 0, 0, pl.w, pl.h); } else ctx.drawImage(img, pl.x, pl.y, pl.w, pl.h);
+    ctx.restore();
   }
   ctx.restore();
 }
@@ -2381,6 +2392,7 @@ function renderRastersSvg(scene, scale) {
   return visibleRasterLayers(scene).map((layer) => {
     const pl = rasterPlacement(scene, layer, scale);
     if (!pl) return '';
+    if (pl.matrix) return `<image href="${escapeXml(pl.href)}" width="${pl.w}" height="${pl.h}" transform="matrix(${pl.matrix.map((v) => +v.toFixed(5)).join(' ')})" opacity="${pl.opacity}" preserveAspectRatio="none" />`;
     return `<image href="${escapeXml(pl.href)}" x="${pl.x.toFixed(1)}" y="${pl.y.toFixed(1)}" width="${pl.w.toFixed(1)}" height="${pl.h.toFixed(1)}" opacity="${pl.opacity}" preserveAspectRatio="none" />`;
   }).join('');
 }

@@ -218,3 +218,17 @@ export function tileLayerCredits(layers) {
     })
     .filter(Boolean);
 }
+
+/**
+ * Credit lines for imported company figures ("Geology (simplified) after
+ * Tower Fig. 1 (15 Oct 2026)"): each figure's line once, while any layer made
+ * from it is shown.
+ */
+export function figureCredits(layers) {
+  const lines = new Set();
+  for (const l of layers || []) {
+    const text = l?.visible !== false && String(l?.figure?.credit || '').trim();
+    if (text) lines.add(text);
+  }
+  return [...lines];
+}

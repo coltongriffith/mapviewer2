@@ -286,7 +286,7 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
     for (const [id, existing] of Object.entries(rasterRefs.current)) {
       const w = wanted.get(id);
       if (!w || w.layer.visible === false || w.layer !== existing.layer) {
-        map.removeLayer(existing.leaflet);
+        if (existing.leaflet) map.removeLayer(existing.leaflet);
         delete rasterRefs.current[id];
       }
     }
@@ -296,6 +296,16 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
       if (layer.type === 'raster') {
         const r = layer.raster || {};
         if (!r.dataUri || !r.bounds) return;
+        if (r.corners) {
+          // An imported figure, turned by its fit: a lazy overlay of its own.
+          const entry = { layer, leaflet: null };
+          rasterRefs.current[id] = entry;
+          import('../utils/figureOverlay.js').then(({ figureOverlay }) => {
+            if (rasterRefs.current[id] !== entry || mapRef.current !== map) return;
+            entry.leaflet = figureOverlay(r, { pane: 'rasterPane', zIndex: index }).addTo(map);
+          }).catch(() => reportError('Imported figure overlay could not load', { kind: 'asset_load' }));
+          return;
+        }
         leaflet = L.imageOverlay(r.dataUri, [[r.bounds.south, r.bounds.west], [r.bounds.north, r.bounds.east]], {
           opacity: r.opacity ?? 0.85, pane: 'rasterPane', zIndex: index, interactive: false,
         });

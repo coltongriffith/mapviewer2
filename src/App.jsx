@@ -39,6 +39,8 @@ const ExportHDModal = lazyGuarded(() => import('./components/ExportHDModal'));
 const HowToUseModal = lazyGuarded(() => import('./components/HowToUseModal'));
 const ColumnMapperModal = lazyGuarded(() => import('./components/ColumnMapperModal'));
 const RasterPlacementModal = lazyGuarded(() => import('./components/RasterPlacementModal'));
+const FigureImport = lazyGuarded(() => import('./components/FigureImport'));
+const FigureLayerControls = lazyGuarded(() => import('./components/FigureLayerControls'));
 const ClassificationPanel = lazyGuarded(() => import('./components/ClassificationPanel'));
 const AddClaimsModal = lazyGuarded(() => import('./components/AddClaimsModal'));
 const UpgradeModal = lazyGuarded(() => import('./components/UpgradeModal'));
@@ -887,6 +889,8 @@ export default function App({ initialAction = null }) {
   const [csvMappingData, setCsvMappingData] = useState(null); // { headers, rows, filename } for ColumnMapperModal
   // { image, initialBounds, initialCrs, layerId? } for RasterPlacementModal
   const [rasterPlacement, setRasterPlacement] = useState(null);
+  // { source } (a file or placed image) or { layerId } (a figure to re-fit) for the company figure dialog
+  const [figureImport, setFigureImport] = useState(null);
   const [customTile, setCustomTile] = useState({ kind: 'xyz', url: '', layers: '', name: '', attribution: '', error: '' });
   const layersSectionRef = useRef(null);
   const markersSectionRef = useRef(null);
@@ -2958,6 +2962,23 @@ export default function App({ initialAction = null }) {
     setSelectedLayerId(id);
     setUploadStatus({ type: 'info', message: `${layer.displayName} placed. Adjust its edges or opacity under Layers.` });
   };
+
+  // A company figure's layers (the placed picture, the traced units), added,
+  // or swapped in for the figure being re-fitted.
+  const addFigureLayers = ({ layers, replaceId, bounds }) => {
+    setFigureImport(null);
+    const wasEmpty = !project.layers.length;
+    setProject((prev) => ({
+      ...prev,
+      layers: [...prev.layers.map((l) => (l.id === replaceId ? layers.find((n) => n.id === replaceId) : l)), ...layers.filter((n) => n.id !== replaceId)],
+    }));
+    layers.filter((n) => n.id !== replaceId).forEach((l) => trackEvent('layer_added', { source: 'figure', role: l.role, kind: l.type, feature_count: l.geojson?.features?.length ?? 0 }));
+    if (layers.length) setSelectedLayerId(layers[layers.length - 1].id);
+    if (wasEmpty) leafletMapRef.current?.fitBounds([[bounds.south, bounds.west], [bounds.north, bounds.east]]);
+  };
+  const updateFigure = (figureId, patch) => setProject((prev) => ({
+    ...prev, layers: prev.layers.map((l) => (l.figure?.id === figureId ? { ...l, figure: { ...l.figure, ...patch } } : l)),
+  }));
 
   const addCustomTileLayer = () => {
     const error = validateTileSource(customTile);
@@ -5579,6 +5600,7 @@ export default function App({ initialAction = null }) {
               </button>
             </div>
             <UploadPanel onUploadFile={handleUploadFile} onUploadFiles={handleUploadFiles} inputRef={uploadInputRef} status={uploadStatus} />
+            <button type="button" className="link-btn ins-sample-link" onClick={() => setFigureImport({})}>Import a company figure (georeference, trace geology)…</button>
             {/* Loading the sample replaces the open map, so it is offered only
                 while there is nothing on the map to lose. */}
             {project.layers.length === 0 && (
@@ -6416,12 +6438,12 @@ export default function App({ initialAction = null }) {
                     <div className="small-note">
                       Edges: {selectedLayer.raster?.bounds?.north?.toFixed(5)}N · {selectedLayer.raster?.bounds?.south?.toFixed(5)}S · {selectedLayer.raster?.bounds?.west?.toFixed(5)}W · {selectedLayer.raster?.bounds?.east?.toFixed(5)}E
                     </div>
-                    <button className="secondary-btn" type="button" onClick={() => setRasterPlacement({
+                    {!selectedLayer.raster?.corners && <button className="secondary-btn" type="button" onClick={() => setRasterPlacement({
                       image: { name: selectedLayer.sourceName || selectedLayer.name, dataUri: selectedLayer.raster?.dataUri, width: selectedLayer.raster?.width, height: selectedLayer.raster?.height, sourceWidth: selectedLayer.raster?.width, sourceHeight: selectedLayer.raster?.height },
                       initialBounds: selectedLayer.raster?.bounds || null,
                       initialCrs: 'latlng',
                       layerId: selectedLayer.id,
-                    })}>Re-place image…</button>
+                    })}>Re-place image…</button>}
                     <p className="small-note">Drawn above the basemap and below every data layer. Exports include it at the same place and opacity.</p>
                   </>
                 ) : (
@@ -6758,6 +6780,11 @@ export default function App({ initialAction = null }) {
                 </React.Suspense>
               </div>
             ) : <p className="small-note">Select a layer to edit its display label, role, order, and colors.</p>}
+            {selectedLayer?.figure ? (
+              <React.Suspense fallback={null}>
+                <FigureLayerControls layer={selectedLayer} onUpdateFigure={updateFigure} onEdit={() => setFigureImport({ layerId: selectedLayer.id })} />
+              </React.Suspense>
+            ) : null}
           </InspectorGroup>
           </>
         )}
@@ -8302,6 +8329,16 @@ export default function App({ initialAction = null }) {
               }
             }}
             onClose={() => setRasterPlacement(null)}
+            onGeoreference={() => { setFigureImport({ source: rasterPlacement.image }); setRasterPlacement(null); }}
+          />
+        ) : null}
+        {figureImport ? (
+          <FigureImport
+            source={figureImport.source}
+            existing={project.layers.find((l) => l.id === figureImport.layerId)}
+            mapView={(() => { try { const m = leafletMapRef.current, c = m.getCenter(); return { lat: c.lat, lng: c.lng, zoom: m.getZoom() }; } catch { return null; } })()}
+            onDone={addFigureLayers}
+            onClose={() => setFigureImport(null)}
           />
         ) : null}
         {csvMappingData ? (

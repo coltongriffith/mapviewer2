@@ -955,6 +955,53 @@ button, input, select, textarea { font: inherit; }
 .pubcheck-item.is-error .pubcheck-mark { color: var(--ui-danger); }
 .pubcheck-item.is-warning .pubcheck-mark { color: #b45309; }
 .pubcheck-action { color: var(--ui-text-muted); }
+/* Import a company figure: the figure and a satellite map side by side, the
+   step's controls below. */
+.fig-import-card { width: min(1240px, 96vw); height: min(860px, 94vh); padding: 18px 20px 16px; gap: 10px; grid-template-rows: auto minmax(0, 1fr) auto auto; }
+.fig-import-head { display: flex; align-items: center; gap: 18px; padding-right: 36px; flex-wrap: wrap; }
+.fig-import-head .export-hd-title { font-size: 18px; }
+.fig-tabs { display: flex; gap: 4px; }
+.fig-tab { border: 1px solid var(--ui-border); background: var(--ui-surface-subtle); color: var(--ui-text-muted); border-radius: 999px; padding: 5px 12px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.fig-tab.is-active { background: var(--ui-action); border-color: var(--ui-action); color: #fff; }
+.fig-tab:disabled { opacity: 0.5; cursor: default; }
+.fig-empty { display: grid; place-content: center; gap: 10px; text-align: center; grid-row: 2 / 5; }
+.fig-file { cursor: pointer; padding: 12px 18px; }
+.fig-panes { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; min-height: 0; }
+.fig-pane { position: relative; overflow: auto; border: 1px solid var(--ui-border); border-radius: var(--r-md); background: #e2e8f0; }
+.fig-canvas { position: relative; cursor: crosshair; }
+.fig-canvas img, .fig-canvas svg { position: absolute; inset: 0; width: 100%; height: 100%; user-select: none; }
+.fig-zoom { position: sticky; top: 6px; left: 6px; z-index: 2; display: inline-flex; gap: 4px; height: 0; overflow: visible; margin: 6px; }
+.fig-zoom .secondary-btn { width: 30px; height: 30px; padding: 0; font-size: 16px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2); }
+.fig-map { border: 1px solid var(--ui-border); border-radius: var(--r-md); min-height: 240px; }
+.fig-map.is-picking, .fig-map.is-picking .leaflet-container { cursor: crosshair; }
+.fig-map-tip { font-weight: 700; padding: 1px 5px; }
+.fig-controls { display: grid; gap: 8px; max-height: 32vh; overflow-y: auto; align-content: start; font-size: 13px; }
+.fig-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.fig-row label, .fig-label { font-size: 12px; font-weight: 600; color: var(--ui-text-muted); }
+.fig-row input:not([type]), .fig-row select { padding: 5px 8px; border: 1px solid var(--ui-border); border-radius: var(--r-sm, 6px); font-size: 13px; }
+.fig-chip { border: 1px solid var(--ui-border-strong); background: #fff; color: var(--ui-text); border-radius: 999px; padding: 3px 10px; font-size: 12px; cursor: pointer; white-space: nowrap; }
+.fig-chip.is-active { border-color: var(--ui-action); background: var(--ui-action); color: #fff; }
+.fig-points { border-collapse: collapse; width: 100%; font-size: 13px; }
+.fig-points th { text-align: left; font-size: 11px; color: var(--ui-text-muted); font-weight: 600; padding: 2px 6px; }
+.fig-points td { padding: 2px 6px; }
+.fig-points input { width: 100%; min-width: 90px; padding: 4px 6px; border: 1px solid var(--ui-border); border-radius: 6px; font-size: 13px; }
+.fig-resid { font-variant-numeric: tabular-nums; color: var(--ui-text-muted); white-space: nowrap; }
+.fig-x { border: none; background: none; color: var(--ui-text-muted); font-size: 16px; cursor: pointer; padding: 0 4px; }
+.fig-fit { font-size: 13px; color: var(--ui-text); }
+.fig-fit.is-error { color: #b45309; font-weight: 500; }
+.fig-unit { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 8px; }
+.fig-unit.is-active { background: var(--ui-surface-subtle); outline: 1px solid var(--ui-border); }
+.fig-unit input[aria-label="Unit name"] { flex: 1; min-width: 160px; padding: 4px 8px; border: 1px solid var(--ui-border); border-radius: 6px; font-size: 13px; }
+.fig-swatch { width: 22px; height: 16px; border-radius: 3px; border: 1px solid rgba(0, 0, 0, 0.25); flex: none; }
+.fig-tol { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--ui-text-muted); }
+.fig-tol input { width: 90px; }
+.fig-credit { flex: 1; min-width: 320px; }
+.fig-footer { display: flex; align-items: center; gap: 10px; border-top: 1px solid var(--ui-border); padding-top: 10px; }
+.fig-footer .small-note { flex: 1 1 auto; min-width: 0; margin: 0; }
+.fig-footer .fig-cancel, .fig-footer .btn.primary { width: auto; flex: none; }
+.fig-footer .btn.primary, .fig-controls .btn.primary { width: auto; padding: 8px 18px; }
+.fig-layer-controls { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--ui-border); }
+@media (max-width: 760px) { .fig-panes { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; } }
 
 /* ── Panel drag-resize handles ── */
 .panel-delete-btn {
