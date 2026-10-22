@@ -1,10 +1,14 @@
-import React, { useId } from 'react';
+import React, { Suspense, useId } from 'react';
+import { lazyGuarded } from '../utils/preloadGuard';
 import { resolvePointSymbol, symbolPath } from '../utils/pointSymbol.js';
 import { isNearWhite, LIGHT_SWATCH_EDGE } from '../utils/legendCustomization.js';
 import { fillPatternSpec, patternIdPart } from '../../shared/fillPattern.js';
 
 // Legend swatches for the editor stage and the shared (read-only) map — one
 // copy, so the two cannot drift apart again (each used to carry its own).
+// A row of a layer with geology styling (fx) draws its real style, lazily.
+const FxSwatch = lazyGuarded(() => import('./FxSwatch.jsx'));
+const fxSwatch = (fx, style, type, width, height) => <Suspense fallback={null}><FxSwatch item={{ fx, style, type }} width={width} height={height} /></Suspense>;
 
 // Colours reach the legend from saved projects; keep them to colour syntax.
 function safeColor(v, fallback) {
@@ -45,7 +49,8 @@ export function LegendPointSwatch({ style, size = 14 }) {
   );
 }
 
-export function LegendLineSwatch({ style = {} }) {
+export function LegendLineSwatch({ style = {}, fx = null }) {
+  if (fx) return fxSwatch(fx, style, 'line', 22, 12);
   const stroke = safeColor(style.stroke, '#333333');
   const w = Math.min(style.strokeWidth ?? 2, 3);
   return (
@@ -56,12 +61,13 @@ export function LegendLineSwatch({ style = {} }) {
   );
 }
 
-export function LegendAreaSwatch({ style = {} }) {
+export function LegendAreaSwatch({ style = {}, fx = null }) {
   const stroke = style.stroke || '#3b82f6';
   // A hatched layer shows the map's own tile (shared/fillPattern.js) rather
   // than a flat fill. useId keeps the pattern id unique across every legend on
   // the page: the editor, the shared view, and any number of panels.
   const patternId = `lg-pat-${patternIdPart(useId())}`;
+  if (fx) return fxSwatch(fx, style, 'polygons', 18, 12);
   const spec = fillPatternSpec(style);
   const color = spec && safeColor(spec.color, '#54a6ff');
   return (
