@@ -17,7 +17,8 @@ const SatelliteInset = lazyGuarded(() => import('./SatelliteInset'));
 
 const fontFamily = (p) => p.css || `'${p.family || 'Inter'}', Arial, sans-serif`;
 
-function Prim({ p, shadowId, clipId }) {
+// One primitive as React SVG (also the drill plan's, components/DrillPlanOverlay.jsx).
+export function Prim({ p, shadowId, clipId }) {
   switch (p.t) {
     case 'rect':
       return <rect x={p.x} y={p.y} width={p.w} height={p.h} rx={p.r || 0} fill={p.fill || 'none'} fillOpacity={p.opacity ?? 1} stroke={p.stroke || undefined} strokeWidth={p.stroke ? p.sw || 1 : undefined} filter={p.shadow && p.fill ? `url(#${shadowId})` : undefined} />;
@@ -27,14 +28,16 @@ function Prim({ p, shadowId, clipId }) {
       return (
         <text
           x={p.x} y={p.y} textAnchor={p.anchor || 'start'} fontFamily={fontFamily(p)} fontSize={p.size} fontWeight={p.weight}
-          fill={p.fill} fillOpacity={p.opacity ?? 1} letterSpacing={p.ls || undefined}
+          fill={p.fill} fillOpacity={p.opacity ?? 1} letterSpacing={p.ls || undefined} transform={p.rot ? `rotate(${p.rot} ${p.x} ${p.y})` : undefined}
           {...(p.halo ? { stroke: p.halo.color, strokeOpacity: p.halo.opacity, strokeWidth: p.halo.width, strokeLinejoin: 'round', paintOrder: 'stroke' } : {})}
         >{p.s}</text>
       );
     case 'line':
       return <line x1={p.x1} y1={p.y1} x2={p.x2} y2={p.y2} stroke={p.stroke} strokeOpacity={p.opacity ?? 1} strokeWidth={p.sw || 1} />;
+    case 'pline':
+      return <polyline points={p.pts.map(([x, y]) => `${x},${y}`).join(' ')} fill="none" stroke={p.stroke} strokeOpacity={p.opacity ?? 1} strokeWidth={p.sw || 1} strokeLinecap={p.cap || 'round'} strokeLinejoin="round" strokeDasharray={p.dash ? p.dash.join(' ') : undefined} />;
     case 'circle':
-      return <circle cx={p.cx} cy={p.cy} r={p.r} fill={p.fill || 'none'} stroke={p.stroke || undefined} strokeWidth={p.stroke ? p.sw || 1 : undefined} strokeOpacity={p.opacity ?? 1} />;
+      return <circle cx={p.cx} cy={p.cy} r={p.r} fill={p.fill || 'none'} fillOpacity={p.fo ?? 1} stroke={p.stroke || undefined} strokeWidth={p.stroke ? p.sw || 1 : undefined} strokeOpacity={p.opacity ?? 1} />;
     case 'poly':
       return <polygon points={p.pts.map(([x, y]) => `${x},${y}`).join(' ')} fill={p.fill || 'none'} fillOpacity={p.opacity ?? 1} stroke={p.stroke || undefined} strokeWidth={p.stroke ? p.sw || 1 : undefined} strokeLinejoin="round" />;
     case 'image':

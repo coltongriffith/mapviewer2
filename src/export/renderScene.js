@@ -1284,6 +1284,17 @@ function renderStudioSvg(scene, scale, svgDefs, kind, satelliteImage = null) {
   return prims.length ? `<g id="em-studio-${kind}" class="em-panel">${paintSvg(prims, scale, svgDefs, { slot: () => satelliteImage })}</g>` : '';
 }
 
+// ── Drill plan (utils/drillPlan.js) ──────────────────────────────────────────
+// A map with a drill plan (project.drillPlan) gets its traces, bars, collars and pills over the data layers and
+// its tags and cards over the annotations, laid out as the editor stage lays them out. Without one, nothing is
+// loaded and nothing is drawn.
+async function drillPlanFor(scene) {
+  const plan = scene.project?.drillPlan;
+  if (!plan?.holes?.length || !scene.map) return null;
+  const { planLayout, mapView } = await import('../utils/drillPlan.js');
+  return planLayout(plan, mapView(scene.map, scene.width, scene.height, getOverlayMetrics(scene), scene.project.layout || {}));
+}
+
 // The footer exactly as the editor shows it: hidden when switched off or on the
 // NI 43-101 template (whose title block carries the source), and at the height
 // the user dragged it to. Export used to check only that footer TEXT existed,
@@ -2213,7 +2224,12 @@ export async function renderSceneToCanvas(sourceScene, options = {}) {
   if (options.background !== 'transparent') { ctx.fillStyle = mapBg; ctx.fillRect(0, 0, canvas.width, canvas.height); }
   const isNI = scene.template?.id === 'ni_43101_technical';
   const isSP = scene.template?.id === 'side_panel';
-  await drawTilesCanvas(ctx, scene, scale); await drawRastersCanvas(ctx, scene, scale); drawRegionHighlightsCanvas(ctx, scene, scale); await drawVectorsCanvas(ctx, scene, scale); drawEllipsesCanvas(ctx, scene, scale); drawPolygonsCanvas(ctx, scene, scale); await drawMarkersCanvas(ctx, scene, scale); await drawCalloutsCanvas(ctx, scene, scale); drawDistanceLinesCanvas(ctx, scene, scale);
+  const plan = await drillPlanFor(scene);
+  await drawTilesCanvas(ctx, scene, scale); await drawRastersCanvas(ctx, scene, scale); drawRegionHighlightsCanvas(ctx, scene, scale); await drawVectorsCanvas(ctx, scene, scale);
+  if (plan) await paintCanvas(ctx, plan.base, scale);
+  drawEllipsesCanvas(ctx, scene, scale); drawPolygonsCanvas(ctx, scene, scale); await drawMarkersCanvas(ctx, scene, scale);
+  if (plan) await paintCanvas(ctx, plan.over, scale);
+  await drawCalloutsCanvas(ctx, scene, scale); drawDistanceLinesCanvas(ctx, scene, scale);
   if (isSP) { drawSidebarPanelCanvas(ctx, scene, scale); }
   if (!isNI) { drawTitleBlockCanvas(ctx, scene, scale); drawFooterCanvas(ctx, scene, scale); }
   drawScaleBarCanvas(ctx, scene, scale);
@@ -3044,7 +3060,9 @@ export async function renderSceneToSvg(sourceScene, options = {}) {
   const fontCss = options.embedFonts === false ? '' : await embeddedFontCss(scene);
   if (fontCss) svgDefs.push(`<style type="text/css"><![CDATA[${fontCss}]]></style>`);
   const frame = exportFrame(scene, scale);
-  const mapLayers = `${basemapImage}${renderRastersSvg(scene, scale)}${renderRegionHighlightsSvg(scene, scale)}${renderVectorsSvg(scene, scale)}${renderEllipsesSvg(scene, scale, svgDefs)}${renderPolygonsSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${renderCalloutsSvg(scene, scale, svgDefs)}${renderDistanceLinesSvg(scene, scale)}`;
+  const plan = await drillPlanFor(scene);
+  const planSvg = (layer) => (plan ? `<g id="em-drill-plan-${layer}">${paintSvg(plan[layer], scale, svgDefs)}</g>` : '');
+  const mapLayers = `${basemapImage}${renderRastersSvg(scene, scale)}${renderRegionHighlightsSvg(scene, scale)}${renderVectorsSvg(scene, scale)}${planSvg('base')}${renderEllipsesSvg(scene, scale, svgDefs)}${renderPolygonsSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${planSvg('over')}${renderCalloutsSvg(scene, scale, svgDefs)}${renderDistanceLinesSvg(scene, scale)}`;
   let mapContentGroup;
   if (frame) {
     const clipId = 'em-mapframe-clip';
