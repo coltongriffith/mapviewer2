@@ -48,9 +48,12 @@ export function holeBars(h, P, ints, min, off) {
 const on = () => !!H.G && isPlanView(H.getCam().plunge);
 const feat = () => uses(S, 'planView');
 // The tubes hide in a plan view; the bars stand in for them (studio.js placeRibbons, extScene).
-export function sync() { const G = H.G; if (!G?.tubes) return; G.tubes.visible = G.tubesP.visible = !(feat() && on()); }
+// The tubes: hidden in a plan view, and while a block section draws its traces over the faces (block.js), whichever
+// sync runs last (this one runs with the ribbons, on every turn of the camera and before every export).
+export function sync() { const G = H.G; if (!G?.tubes) return; G.tubes.visible = G.tubesP.visible = !(feat() && on()) && S.block?.traces !== 'overlay'; }
 
 let barBoxes = [];
+const holeOn = (h) => !S.holesShown || S.holesShown.includes(h.id); // the holes shown (block.js)
 // Before the collars: the grid's lines and the bars. Returns null outside a plan view, else what studio.js asks
 // for next: ids (the IDs, when this module places them), labels (the grid's numbers) and foot (the orientation text).
 export function begin(ctx, K) {
@@ -98,7 +101,7 @@ function gridLabels(ctx, K, lay, grid) {
 // kept for the IDs to keep off.
 function drawBars(ctx, K) {
   const G = H.G, { u } = K, w = 5 * u, min = 9 * u, off = 7 * u, list = [], tags = H.ext('tags');
-  H.project.holes.forEach((h) => {
+  H.project.holes.filter(holeOn).forEach((h) => {
     const P = (d) => { const p = h.posAt(d); return H.proj(G.V(p.x, p.y, p.z)); }; if (P(0)[2] > 1) return;
     const alpha = tags?.fade(h) ? 0.35 : h.prov ? 0.6 : 1, ints = h.ints.map((it) => [it, H.intervalShown(it) ? H.binIndex(it.vals[S.valueCol]) : -1]).filter(([, bi]) => bi > 0);
     let box = null;
@@ -125,7 +128,7 @@ function drawIds(ctx, K, placed, idBoxes) {
   const want = (h) => (typeof t.showId?.[h.id] === 'boolean' ? t.showId[h.id] : t.idMode !== 'key' || !tags || tags.idShown(h)) && !(tags && t.at === 'collar' && tags.tagShown(h));
   const collars = [], items = [];
   font(500, 10, true);
-  H.project.holes.forEach((h) => {
+  H.project.holes.filter(holeOn).forEach((h) => {
     const s = H.proj(G.V(h.c.x, h.c.y, h.c.z)); if (s[2] > 1) return;
     collars.push([s[0] - 7 * u, s[1] - 7 * u, s[0] + 7 * u, s[1] + 7 * u]);
     if (want(h)) items.push({ hole: h, pri: co.includes(h) ? co.indexOf(h) : 100, x: s[0], y: s[1], w: ctx.measureText(h.id).width + 4 * u, h: 12 * u });

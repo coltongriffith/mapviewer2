@@ -1,0 +1,251 @@
+import { test, expect } from '@playwright/test';
+import { unzipSync } from 'fflate';
+import { readFileSync } from 'node:fs';
+
+// Exploration Maps 3D round 5E: the block section (block.js). The preset sets an opaque block of a few holes with
+// geology on its faces, grade bars, plain brackets and the legend, depth ticks and scale on the side face; hidden
+// holes lose their traces, IDs and callouts; earlier figures are unchanged.
+
+test.use({
+  launchOptions: {
+    args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'],
+    ...(process.env.PLAYWRIGHT_CHROMIUM_PATH ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH } : {}),
+  },
+});
+test.skip(({ isMobile }) => isMobile, 'Desktop only');
+test.describe.configure({ timeout: 300_000 }); // full-size exports and layer ZIPs under SwiftShader
+
+const LEGACY = JSON.parse(readFileSync('tests/fixtures/three-d/pre-round4-project.json', 'utf8'));
+// Figures exported from different states are compared byte for byte, so a page keeps the first font stylesheet it
+// was given (as in three-d-round5d.spec.js).
+const fontCss = new WeakMap();
+async function pinFonts(page) {
+  if (fontCss.has(page)) return;
+  fontCss.set(page, null);
+  await page.route('https://fonts.googleapis.com/css2?**', async (route) => {
+    if (!fontCss.get(page)) { const r = await route.fetch(); const { 'content-encoding': _e, 'content-length': _l, ...headers } = r.headers(); fontCss.set(page, { status: r.status(), headers, body: await r.body() }); }
+    await route.fulfill(fontCss.get(page));
+  });
+}
+async function open3d(page) {
+  await pinFonts(page);
+  await page.route('**/api/track', (r) => r.fulfill({ status: 204 }));
+  await page.goto('/3d');
+  await page.waitForFunction(() => window.EM3D?.getState().ready);
+  await page.evaluate(() => window.EM3D.layersReady());
+}
+const textsOf = (page, fn) => page.evaluate(async (src) => {
+  const out = [], P = CanvasRenderingContext2D.prototype, f = P.fillText;
+  P.fillText = function (t, ...a) { out.push(String(t)); return f.call(this, t, ...a); };
+  try { await (0, eval)(src)(); } finally { P.fillText = f; }
+  return out;
+}, fn.toString());
+// The sample with a three-unit lithology log by depth, so the faces carry geology.
+const withLogs = (page) => page.evaluate(async () => {
+  const E = window.EM3D, ids = E.getState().project.holeIds;
+  const lith = ['HoleID,From,To,Lith,Description', ...ids.flatMap((id) => [`${id},0,60,COV,Cover`, `${id},60,140,PHY,Phyllic alteration`, `${id},140,700,BIO,Early biotite`])].join('\n');
+  E.addFiles([...E.getProject().files.map(({ name, text }) => ({ name, text })), { name: 'lithology.csv', text: lith }]);
+  await E.layersReady();
+});
+const HOLES = ['EX-009', 'EX-015', 'EX-021', 'EX-027'];
+
+test('the block section preset sets an opaque block of the chosen holes, its furniture on the side face', async ({ page }) => {
+  const errors = []; page.on('pageerror', (e) => errors.push(e.message));
+  await open3d(page);
+  await withLogs(page);
+  // The news-release size (3:2), as the reference figure: the side face has room for the legend.
+  const st = await page.evaluate(async (holes) => { window.EM3D.setFigureSize('release'); return window.EM3D.applyPreset('blockSection', { holes }); }, HOLES);
+  expect(st.holesShown).toEqual(HOLES);
+  expect(st.block).toMatchObject({ furniture: true, traces: 'overlay', brackets: 'plain', page: 'bare', hist: { side: 'face', style: 'spikes', scale: 'linear', halo: false, palette: 'orange' } });
+  expect(st.geology).toMatchObject({ enabled: true, faces: 'all', opacity: 1, labelStyle: 'caps', blend: 1, fade: 0.3 });
+  expect(st.tags).toMatchObject({ at: 'collar', style: 'plain', idMode: 'all', emphasis: 'none', histograms: true });
+  expect(st.display).toMatchObject({ coPlacement: 'bracket', ribbons: false, inset: false });
+  expect(st.terrain.blockStyle).toBe('solid');
+  expect(st.wallLabels.filter((l) => l.size === 'heading')).toHaveLength(1);
+  expect(st.wallLabels[0].text).toBe('MAIN ZONE\n3D drilling model · illustrative data');
+  expect(st.callouts.shown.map((c) => c.holeId).every((id) => HOLES.includes(id))).toBe(true);
+  expect(st.camera.azimuth).toBe(322); // 38° round from looking north at the south face
+  // The figure: the shown IDs only, plain brackets ("508 m @" over "0.53% Cu"), depth ticks and the legend on the
+  // side face, no section letters and no title block.
+  const t = await textsOf(page, () => window.EM3D.exportPNG({ view: '3d' }));
+  expect(t.filter((x) => /^EX-\d{3}$/.test(x)).sort()).toEqual(HOLES);
+  expect(t.some((x) => /^\d+ m @$/.test(x))).toBe(true);
+  expect(t.some((x) => /^[\d.]+% Cu$/.test(x))).toBe(true);
+  expect(t.some((x) => /^– \d+ m$/.test(x))).toBe(true);
+  expect(t).toContain('Lithology');
+  expect(t).not.toContain('A′'); expect(t).not.toContain(st.brand.title);
+  // The block alone on white: no compass or "Looking …", no notes or footnote; the sources kept, small.
+  expect(t.some((x) => /^Looking /.test(x))).toBe(false);
+  expect(t.some((x) => /schematic|true widths/.test(x))).toBe(false);
+  expect(t.some((x) => /Made with Exploration Maps/.test(x))).toBe(true);
+  // The legend's assay rows in the bars' orange ramp: four classes from the colour limits.
+  const b = st.grade.bins;
+  expect(t).toEqual(expect.arrayContaining([`≥ ${b[3]}`, `${b[1]} – ${b[3]}`, `${b[0]} – ${b[1]}`, `< ${b[0]}`]));
+  // The furniture is drawn in the face's perspective: skewed text in the editable annotations.
+  const zip = unzipSync(Buffer.from((await page.evaluate(() => window.EM3D.exportLayers({ svg: true }))).split(',')[1], 'base64'));
+  const svg = new TextDecoder().decode(zip['annotations.svg']);
+  expect(svg).toMatch(/transform="matrix\([^"]+\)" xml:space="preserve">Lithology</);
+  expect(svg).toMatch(/transform="matrix\([^"]+\)" xml:space="preserve">– \d+ m</);
+  expect(svg).toContain('>508 m @<');
+  // Turned to look straight at the front face, the side face is edge-on: the legend goes back to the page, unskewed.
+  await page.evaluate(() => window.EM3D.setCamera({ azimuth: 0 }));
+  const zip2 = unzipSync(Buffer.from((await page.evaluate(() => window.EM3D.exportLayers({ svg: true }))).split(',')[1], 'base64'));
+  const svg2 = new TextDecoder().decode(zip2['annotations.svg']);
+  expect(svg2).toMatch(/<text[^>]*>Lithology</); expect(svg2).not.toMatch(/matrix\([^"]+\)" xml:space="preserve">Lithology</);
+  expect(svg2).not.toMatch(/>– \d+ m</);
+  // Saved and reopened, the look stays.
+  const after = await page.evaluate(async () => { const E = window.EM3D, p = JSON.parse(JSON.stringify(E.getProject())); E.clearFiles(); return E.loadProject(p); });
+  expect(after.block).toEqual(st.block); expect(after.holesShown).toEqual(HOLES);
+  expect(errors).toEqual([]);
+});
+
+test('hidden holes lose their traces, IDs and callouts; every hole again gives back the same figure', async ({ page }) => {
+  await open3d(page);
+  const r = await page.evaluate(async () => {
+    const E = window.EM3D, all = E.exportPNG({ view: '3d' }), sec = E.exportPNG({ view: 'section' });
+    const s = await E.setHolesShown(['EX-015', 'EX-021']);
+    const some = E.exportPNG({ view: '3d' });
+    let bad = null; try { await E.setHolesShown(['EX-999']); } catch (e) { bad = e.message; }
+    const back = await E.setHolesShown(null);
+    return { callouts: s.callouts.shown.map((c) => c.holeId), cands: s.callouts.candidates.map((c) => c.holeId), pending: s.project.pendingHoles, shown: s.holesShown, bad, differs: some !== all, same: E.exportPNG({ view: '3d' }) === all, secSame: E.exportPNG({ view: 'section' }) === sec, backShown: back.holesShown };
+  });
+  expect(r.shown).toEqual(['EX-015', 'EX-021']);
+  expect(r.callouts.length).toBeGreaterThan(0);
+  expect([...r.callouts, ...r.cands].every((id) => ['EX-015', 'EX-021'].includes(id))).toBe(true);
+  expect(r.bad).toMatch(/No hole "EX-999"/);
+  expect(r).toMatchObject({ differs: true, same: true, secSame: true, backShown: null });
+  const t = await textsOf(page, async () => { await window.EM3D.setHolesShown(['EX-015', 'EX-021']); window.EM3D.setTags({ idMode: 'all' }); return window.EM3D.exportPNG({ view: '3d' }); });
+  expect([...new Set(t.filter((x) => /^EX-\d{3}$/.test(x)))].sort()).toEqual(['EX-015', 'EX-021']); // at the toe, and on the callouts
+  // The picker in the Layout step lists every hole, the shown ones ticked; unticking one hides it.
+  await page.evaluate(() => window.EM3D.showStep('layout'));
+  await page.locator('[data-block="holes"]').click();
+  await expect(page.locator('#block-ui [data-hs]')).toHaveCount(34);
+  await page.locator('#block-ui [data-hs][value="EX-021"]').uncheck();
+  await expect.poll(async () => (await page.evaluate(() => window.EM3D.getState())).holesShown).toEqual(['EX-015']);
+});
+
+test('plain brackets: the length over the grade beside each hole, no chip or "incl." line; cards again on request', async ({ page }) => {
+  await open3d(page);
+  await withLogs(page);
+  const boxes = await page.evaluate(async (holes) => {
+    const E = window.EM3D; await E.applyPreset('blockSection', { holes });
+    return E.getState().callouts.shown.map((c) => c.holeId);
+  }, HOLES);
+  expect(boxes.length).toBeGreaterThan(1);
+  const t = await textsOf(page, () => window.EM3D.exportPNG({ view: '3d' }));
+  // Each callout as two lines, length then grade, and no ID chip or "incl." line beside the brackets.
+  const lens = t.filter((x) => /^\d+ m @$/.test(x)), grades = t.filter((x) => /^[\d.]+% Cu$/.test(x));
+  expect(lens.length).toBe(boxes.length); expect(grades.length).toBe(boxes.length);
+  expect(t.some((x) => /^incl\./.test(x))).toBe(false);
+  // Back to cards: the round-4 bracket with its chip and card.
+  const card = await textsOf(page, async () => { await window.EM3D.setBlock({ brackets: 'card' }); return window.EM3D.exportPNG({ view: '3d' }); });
+  expect(card.some((x) => /^\d+ m @ [\d.]+% Cu$/.test(x))).toBe(true);
+});
+
+test('the block\'s traces stay over the faces: the tubes stay hidden after the camera turns and in every export', async ({ page }) => {
+  await open3d(page);
+  await withLogs(page);
+  const r = await page.evaluate(async (holes) => {
+    const E = window.EM3D; await E.applyPreset('blockSection', { holes }); E.setStyle({ histograms: false });
+    const scene = async () => { const z = await E.exportLayers(); return z; };
+    // Turned away and back (the ribbons and plan view re-sync on every turn), then exported.
+    const c = E.getState().camera; E.setCamera({ azimuth: (c.azimuth + 40) % 360 }); await new Promise((res) => { requestAnimationFrame(() => requestAnimationFrame(res)); }); E.setCamera(c);
+    const a = await scene();
+    // Other grade colours would recolour the tubes: the scene, without them, does not change.
+    E.setStyle({ bins: [0.01, 0.02, 0.03, 0.04] }); const b = await scene();
+    await E.setBlock({ traces: 'tubes' }); const c2 = await scene();
+    return [a, b, c2];
+  }, HOLES);
+  const scenes = r.map((z) => Buffer.from(unzipSync(Buffer.from(z.split(',')[1], 'base64'))['scene.png']).toString('base64'));
+  expect(scenes[0] === scenes[1]).toBe(true);
+  expect(scenes[2] === scenes[1]).toBe(false); // with the tubes back, they show
+});
+
+test('the grade bars as spikes (the preset) or merged bars, and back to the same figure', async ({ page }) => {
+  await open3d(page);
+  await withLogs(page);
+  const r = await page.evaluate(async (holes) => {
+    const E = window.EM3D; await E.applyPreset('blockSection', { holes });
+    await E.setBlock({}); const spikes = E.exportPNG({ view: '3d' }); // rebuilt once, as each change below rebuilds (the camera kept to its rounded state)
+    const st = await E.setBlock({ hist: { style: 'bars', scale: 'log', halo: true } }); const bars = E.exportPNG({ view: '3d' });
+    let bad = null; try { await E.setBlock({ hist: { style: 'dots' } }); } catch (e) { bad = e.message; }
+    await E.setBlock({ hist: { style: 'spikes', scale: 'linear', halo: false } });
+    return { style: st.block.hist.style, differs: bars !== spikes, same: E.exportPNG({ view: '3d' }) === spikes, bad };
+  }, HOLES);
+  expect(r).toMatchObject({ style: 'bars', differs: true, same: true });
+  expect(r.bad).toMatch(/hist.style must be/);
+});
+
+test('a block section with the export options (#308) and the claim map inset (#309)', async ({ page }) => {
+  const errors = []; page.on('pageerror', (e) => errors.push(e.message));
+  // The registry, answered here: three project claims over the block.
+  await page.route('**/api/bc-claims?**', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ type: 'FeatureCollection', features: [0, 1, 2].map((i) => ({ type: 'Feature', properties: { TENURE_NUMBER_ID: 1090001 + i, CLAIM_NAME: `ER ${i}`, OWNER_NAME: 'Example Resources Ltd.', TITLE_TYPE_DESCRIPTION: 'Mineral' }, geometry: { type: 'Polygon', coordinates: [[[-130.49 + i * 0.012, 57.93], [-130.478 + i * 0.012, 57.93], [-130.478 + i * 0.012, 57.95], [-130.49 + i * 0.012, 57.95], [-130.49 + i * 0.012, 57.93]]] } })), meta: { returned: 3, truncated: false } }) }));
+  await open3d(page);
+  await withLogs(page);
+  const r = await page.evaluate(async (holes) => {
+    const E = window.EM3D; E.setFigureSize('release'); await E.applyPreset('blockSection', { holes });
+    // Transparent: the corners clear, the block and its furniture still drawn.
+    const alpha = async (url) => { const img = new Image(); img.src = url; await img.decode(); const c = document.createElement('canvas'); c.width = img.width; c.height = img.height; const x = c.getContext('2d'); x.drawImage(img, 0, 0); return [x.getImageData(2, 2, 1, 1).data[3], x.getImageData(img.width / 2, img.height / 2, 1, 1).data[3]]; };
+    const clear = await alpha(E.exportPNG({ view: '3d', background: 'transparent' })), white = await alpha(E.exportPNG({ view: '3d' }));
+    return { clear, white };
+  }, HOLES);
+  expect(r.clear).toEqual([0, 255]); expect(r.white).toEqual([255, 255]);
+  // Standalone: its details join a card on the page while the legend stays on the side face; no footer notes.
+  const t = await textsOf(page, async () => { await window.EM3D.setMapUse({ use: 'standalone', what: 'Target zone · block section', date: 'October 2026', sources: 'Company database' }); return window.EM3D.exportPNG({ view: '3d' }); });
+  expect(t).toContain('Target zone · block section'); expect(t).toContain('Lithology');
+  // The claim map inset, turned back on by hand over the block section, draws with the claims found around it.
+  const ins = await page.evaluate(async () => {
+    const E = window.EM3D; await E.setCRS('EPSG:26909'); await E.terrainReady(); const off = E.exportPNG({ view: '3d' });
+    await E.findClaims({ around: true, province: 'bc' }); E.setStyle({ inset: true, insetStyle: 'claims' }); await E.layersReady();
+    return { differs: E.exportPNG({ view: '3d' }) !== off, style: E.getState().tags.insetStyle };
+  });
+  expect(ins).toEqual({ differs: true, style: 'claims' });
+  expect(errors).toEqual([]);
+});
+
+test('a hidden hole leaves the section too, chosen or not: no trace, bars or ID', async ({ page }) => {
+  await open3d(page);
+  const t = await textsOf(page, async () => {
+    const E = window.EM3D; await E.setSection({ holes: ['EX-015', 'EX-021'] }); await E.setHolesShown(['EX-015']);
+    return E.exportPNG({ view: 'section' });
+  });
+  expect(t.some((x) => x.startsWith('EX-015'))).toBe(true);
+  expect(t.some((x) => x.includes('EX-021'))).toBe(false);
+  const both = await textsOf(page, async () => { await window.EM3D.setHolesShown(null); return window.EM3D.exportPNG({ view: 'section' }); });
+  expect(both.some((x) => x.includes('EX-021'))).toBe(true);
+});
+
+test('an earlier figure keeps its look: the pre-round-4 figure and a version 4 figure, before and after a block section', async ({ page }) => {
+  await open3d(page);
+  const r = await page.evaluate(async ({ legacy, holes }) => {
+    const E = window.EM3D, png = () => [E.exportPNG({ view: '3d' }), E.exportPNG({ view: 'section' })];
+    const v4 = JSON.parse(JSON.stringify(E.getProject())); v4.settings.designVersion = 4; delete v4.settings.grid; delete v4.settings.holesShown; delete v4.settings.block;
+    await E.loadProject(legacy); await E.layersReady(); const a = png(), st = E.getState();
+    await E.loadProject(v4); await E.layersReady(); const b = png();
+    // A block section in between loads block.js; neither figure changes after it.
+    await E.applyPreset('blockSection', { holes }); await E.layersReady();
+    await E.loadProject(legacy); await E.layersReady(); const a2 = png();
+    await E.loadProject(v4); await E.layersReady(); const b2 = png();
+    return { legacy: [a[0] === a2[0], a[1] === a2[1]], v4: [b[0] === b2[0], b[1] === b2[1]], block: st.block, holesShown: st.holesShown };
+  }, { legacy: LEGACY, holes: HOLES });
+  expect(r).toEqual({ legacy: [true, true], v4: [true, true], block: null, holesShown: null });
+});
+
+test('the geology options: near faces, soft and dashed contacts, a fade and names in capitals', async ({ page }) => {
+  await open3d(page);
+  await withLogs(page);
+  const r = await page.evaluate(async () => {
+    const E = window.EM3D; await E.setGeology({ enabled: true, faces: 'far' }); const base = E.exportPNG({ view: '3d' });
+    const near = await E.setGeology({ faces: 'near' }); const n = E.exportPNG({ view: '3d' });
+    await E.setGeology({ faces: 'far', blend: 1.5, dash: true, fade: 0.4, fadeDir: 'up' }); const soft = E.exportPNG({ view: '3d' });
+    await E.setGeology({ blend: 0, dash: false, fade: 0 }); const plain = E.exportPNG({ view: '3d' });
+    const errs = []; for (const o of [{ faces: 'side' }, { fadeDir: 'sideways' }, { labelStyle: 'bold' }, { blend: 'x' }]) { try { await E.setGeology(o); } catch (e) { errs.push(e.message); } }
+    return { painted: near.geology.facesPainted, nearDiffers: n !== base, softDiffers: soft !== base, plainSame: plain === base, errs };
+  });
+  expect(r.painted.length).toBe(2);
+  expect(r).toMatchObject({ nearDiffers: true, softDiffers: true, plainSame: true });
+  expect(r.errs).toHaveLength(4);
+  // Unit names painted on the faces in capitals (drawn on the faces' own canvases as the figure is exported).
+  const caps = await textsOf(page, async () => { await window.EM3D.setGeology({ labelStyle: 'caps' }); return window.EM3D.exportPNG({ view: '3d' }); });
+  expect(caps.some((x) => ['EARLY BIOTITE', 'COVER', 'PHYLLIC ALTERATION'].includes(x))).toBe(true);
+});
