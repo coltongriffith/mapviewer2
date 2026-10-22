@@ -138,6 +138,7 @@ export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSe
                 borderColor: 'transparent',
               } : {
                 background: callout.type === 'plain' ? 'transparent' : (style.background || '#ffffff'),
+                '--co-bg': style.background || '#ffffff', // Studio's results card fades this to its opacity
                 borderColor: style.border || '#102640',
                 color: style.textColor || '#0f172a',
                 fontSize: style.fontSize || 12,
