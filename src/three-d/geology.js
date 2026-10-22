@@ -216,7 +216,8 @@ export function labelSpots(cls, nx, ny, sx, sy, minShare = 0.03) {
 function rgbOf(h) { return [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)); }
 // Classes to an RGBA canvas. colors[c] = '#rrggbb' or null (hidden). Contacts are drawn a shade darker (with
 // contacts: a thin dark line), and texture adds a faint bedding striation and grain, as on hand-coloured sections.
-export function classCanvas(cls, nx, ny, colors, texture = true, contacts = false) {
+export function classCanvas(cls, nx, ny, colors, texture = true, contacts = false, o = {}) {
+  if (o.blend || o.fade || o.dash) return softCanvas(cls, nx, ny, colors, texture, contacts, o);
   const c = document.createElement('canvas'); c.width = nx; c.height = ny;
   const g = c.getContext('2d'), img = g.createImageData(nx, ny), d = img.data, rgb = colors.map((h) => (h ? rgbOf(h) : null));
   let seed = 12345; const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
@@ -230,6 +231,59 @@ export function classCanvas(cls, nx, ny, colors, texture = true, contacts = fals
   }
   g.putImageData(img, 0, 0); return c;
 }
+
+// The block section's faces (o: blend, dash, fade, fadeDir; see set): the units' colours blended softly across
+// their contacts (a box blur of about blend × 1% of the width), faded toward white along fadeDir (down, up, left or
+// right, as drawn) by up to fade, with the bedding texture, and contact lines solid or dashed.
+const WHITE_AT = { down: (i, j, nx, ny) => j / (ny - 1), up: (i, j, nx, ny) => 1 - j / (ny - 1), left: (i, j, nx) => 1 - i / (nx - 1), right: (i, j, nx) => i / (nx - 1) };
+export const fadeAt = (dir, i, j, nx, ny) => Math.max(0, Math.min(1, (WHITE_AT[dir] || WHITE_AT.down)(i, j, nx, ny))) ** 1.3;
+// Box blur of channel arrays over the covered cells only (m: 1 where covered), two passes per axis.
+export function blurMasked(chs, m, nx, ny, r) {
+  if (r < 1) return chs;
+  const line = (len, at, src, dst) => { let s = 0, n = 0; for (let k = -r; k < len + r; k++) { if (k + r < len) { s += src[at(k + r)] * m[at(k + r)]; n += m[at(k + r)]; } if (k - r - 1 >= 0 && k - r - 1 < len) { s -= src[at(k - r - 1)] * m[at(k - r - 1)]; n -= m[at(k - r - 1)]; } if (k >= 0 && k < len) dst[at(k)] = n > 0.5 ? s / n : src[at(k)]; } };
+  return chs.map((a) => {
+    let src = a;
+    for (let pass = 0; pass < 2; pass++) {
+      const t = new Float32Array(a.length), out = new Float32Array(a.length);
+      for (let j = 0; j < ny; j++) line(nx, (k) => j * nx + k, src, t);
+      for (let i = 0; i < nx; i++) line(ny, (k) => k * nx + i, t, out);
+      src = out;
+    }
+    return src;
+  });
+}
+function softCanvas(cls, nx, ny, colors, texture, contacts, o) {
+  const c = document.createElement('canvas'); c.width = nx; c.height = ny;
+  const g = c.getContext('2d'), img = g.createImageData(nx, ny), d = img.data, rgb = colors.map((h) => (h ? rgbOf(h) : null)), n = nx * ny;
+  const R = new Float32Array(n), Gc = new Float32Array(n), B = new Float32Array(n), m = new Float32Array(n), fade = Math.max(0, Math.min(1, +o.fade || 0));
+  for (let k = 0; k < n; k++) {
+    const col = cls[k] >= 0 ? rgb[cls[k]] : null; if (!col) continue;
+    const t = fade ? 0.85 * fade * fadeAt(o.fadeDir, k % nx, Math.floor(k / nx), nx, ny) : 0;
+    R[k] = col[0] + (255 - col[0]) * t; Gc[k] = col[1] + (255 - col[1]) * t; B[k] = col[2] + (255 - col[2]) * t; m[k] = 1;
+  }
+  const [r, gg, b] = blurMasked([R, Gc, B], m, nx, ny, Math.round(Math.max(0, +o.blend || 0) * nx / 100));
+  let seed = 12345; const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+    const k = j * nx + i, cl = cls[k], q = k * 4; if (!m[k]) continue;
+    // A contact: the cell below or to the right holds another (painted) unit; dashed: 10 on, 7 off along it.
+    const line = contacts && ((i + 1 < nx && cls[k + 1] !== cl && m[k + 1]) || (j + 1 < ny && cls[k + nx] !== cl && m[k + nx])) && (!o.dash || (i + j) % 17 < 10);
+    let f = line ? 0.62 : 1;
+    if (texture) f *= 1 + 0.022 * Math.sin(j * 0.9 + Math.sin(i * 0.05) * 3 + Math.sin(i * 0.013) * 5) + 0.03 * (rnd() - 0.5);
+    d[q] = Math.min(255, r[k] * f); d[q + 1] = Math.min(255, gg[k] * f); d[q + 2] = Math.min(255, b[k] * f); d[q + 3] = 255;
+  }
+  g.putImageData(img, 0, 0); return c;
+}
+
+// A name's ink in capitals: the unit's own hue, more saturated and dark (lightness 0.38), so it reads on its unit.
+export function unitInk(hex) {
+  const [r, g, b] = rgbOf(hex).map((v) => v / 255), mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+  const h = !d ? 0 : mx === r ? ((g - b) / d + 6) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4, l0 = (mx + mn) / 2, s0 = d ? d / (1 - Math.abs(2 * l0 - 1)) : 0;
+  const sat = Math.min(1, s0 * 1.4 + 0.12), l = 0.38, c = (1 - Math.abs(2 * l - 1)) * sat, x = c * (1 - Math.abs((h % 2) - 1)), m = l - c / 2;
+  const [p, q, t] = [[c, x, 0], [x, c, 0], [0, c, x], [0, x, c], [x, 0, c], [c, 0, x]][Math.floor(h) % 6];
+  return `#${[p, q, t].map((v) => Math.round((v + m) * 255).toString(16).padStart(2, '0')).join('')}`;
+}
+// The face most squarely toward the camera.
+const frontFace = () => { const d = H.camera.getWorldDirection(new THREE.Vector3()); return FACE_KEYS.slice().sort((p, q) => H.faceGeom(p).n.dot(d) - H.faceGeom(q).n.dot(d))[0]; };
 
 // ---------- the faces and the section plane ----------
 let H = null; // host (studio.js), set by init
@@ -258,12 +312,13 @@ export function planeSampler(a, b) {
 }
 const faceEnds = (f) => { const g = H.faceGeom(f); return [g.a, g.b]; };
 export const gridSize = (a, b) => { const G = H.G, len = Math.hypot(b[0] - a[0], b[1] - a[1]), h = G.zmax - G.B.z0, nx = 256; return [nx, Math.max(64, Math.min(256, Math.round(nx * h / Math.max(1, len))))]; };
-// Which faces a layer paints: "far" (the two turned from the camera), "all", or a list such as ["N", "E"].
+// Which faces a layer paints: "far" (the two turned from the camera), "near" (the two toward it), "all", or a list
+// such as ["N", "E"].
 export function faceWanted(sel, face) {
   if (sel === 'all') return true;
   if (Array.isArray(sel)) return sel.includes(face);
   const g = H.faceGeom(face), G = H.G, c = G.V((g.a[0] + g.b[0]) / 2, (g.a[1] + g.b[1]) / 2, (G.B.z0 + G.zmax) / 2);
-  return g.n.dot(H.camera.position.clone().sub(c)) <= 0;
+  return (g.n.dot(H.camera.position.clone().sub(c)) <= 0) === (sel !== 'near');
 }
 
 // Face layers: one textured mesh per face plus the section plane. Painters, in priority order, return
@@ -332,19 +387,25 @@ export function planeClasses(key, a, b, sizeOverride) {
 const strength = () => cfg().strength ?? 1.3;
 const colorOf = (code) => deepen(code === OTHER ? OTHER_COLOR : cfg().legend.find((e) => e.code === code)?.color || OTHER_COLOR, strength());
 function colorsNow() { return cache.fold.classes.map((c) => (cache.fold.clear?.has(c) ? null : colorOf(c))); }
-const fill = (hit, cols) => classCanvas(hit.fine, hit.nx * hit.f, hit.ny * hit.f, cols, cfg().texture !== false, cfg().contacts !== false);
+const soft = () => { const g = cfg(); return { blend: g.blend, dash: g.dash, fade: g.fade, fadeDir: g.fadeDir }; };
+const fill = (hit, cols) => classCanvas(hit.fine, hit.nx * hit.f, hit.ny * hit.f, cols, cfg().texture !== false, cfg().contacts !== false, soft());
+const softKey = () => { const o = soft(); return o.blend || o.dash || o.fade ? `|${JSON.stringify(o)}` : ''; };
 function geologyCanvas(key, a, b) {
-  const hit = planeClasses(key, a, b), cols = colorsNow(), ck = `${cols.join()}|${cfg().texture}|${cfg().contacts}`;
+  const hit = planeClasses(key, a, b), cols = colorsNow(), ck = `${cols.join()}|${cfg().texture}|${cfg().contacts}${softKey()}`;
   if (!hit.base || hit.ck !== ck) { hit.base = fill(hit, cols); hit.ck = ck; hit.lk = null; }
   if (key === 'section' || cfg().labels === false) return hit.base;
+  // A block section (block.js) names its units on the front face only, as the reference figure does.
+  if (H.S.block && key !== frontFace()) return hit.base;
   // Unit names in about 22 px type in the export, mirrored on a face seen from inside the block; none on a
   // face seen nearly edge-on (under 300 px across in the export, foreshortened to under 45%, or receding so
   // steeply that its names would slope by more than about 50°).
   const G = H.G, len = Math.hypot(b[0] - a[0], b[1] - a[1]), ht = G.zmax - G.B.z0, zm = G.B.z0 + ht / 2, at = (u, z) => H.proj(G.V(a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, z));
   const p0 = at(0.5, zm), p1 = at(0.5, zm + 10), pv = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) / 10, e0 = at(0, zm), e1 = at(1, zm), ph = Math.hypot(e1[0] - e0[0], e1[1] - e0[1]) / len, k = H.exportScale();
   if (ph * len * k < 300 || ph < 0.45 * pv / H.S.vex || Math.abs(e1[1] - e0[1]) > 1.2 * Math.abs(e1[0] - e0[0])) return hit.base; // and none sloping steeply
-  const size = Math.min(ht * 0.06, Math.max(ht * 0.015, 22 / (pv * k || 1))), bucket = Math.round(Math.log(size) / Math.log(1.2));
-  const mirror = faceWanted('far', key), font = labelFont(), lk = `${ck}|${bucket}|${mirror}|${cfg().legend.map((e) => e.name).join()}|${viewKey()}|${font}`;
+  // In capitals (a block section's names) about 24 u in the export, the cap height 1.6 times the bracket text's.
+  const fm = H.format?.(), want = cfg().labelStyle === 'caps' && fm ? 24 * Math.sqrt(fm.w * fm.h) / 900 : 22;
+  const size = Math.min(ht * (want > 22 ? 0.1 : 0.06), Math.max(ht * 0.015, want / (pv * k || 1))), bucket = Math.round(Math.log(size) / Math.log(1.2));
+  const mirror = faceWanted('far', key), font = labelFont(), lk = `${ck}|${bucket}|${mirror}|${cfg().legend.map((e) => e.name).join()}|${viewKey()}|${font}${cfg().labelStyle === 'caps' ? '|caps' : ''}${H.S.block ? `|b${H.S.holesShown}|${H.format?.().w}` : ''}`;
   if (hit.lk !== lk) { hit.canvas = labelCanvas(hit, cols, 1.2 ** bucket, len, ht, mirror, { at, ph, pv }, font); hit.lk = lk; }
   return hit.canvas;
 }
@@ -363,14 +424,21 @@ const viewKey = () => { const c = H.getCam(); return `${Math.round(c.azimuth / 5
 export const labelFont = () => H?.fonts?.() || '"Source Sans 3", "Segoe UI", sans-serif';
 function labelCanvas(hit, cols, size, len, ht, mirror, scr, font) {
   const c = document.createElement('canvas'), { nx, ny, f } = hit; c.width = hit.base.width; c.height = hit.base.height;
-  const g = c.getContext('2d'), kx = c.width / len, ky = c.height / ht, names = cache.fold.classes.map((code) => (code === OTHER ? null : cfg().legend.find((e) => e.code === code)?.name || code));
+  // labelStyle "caps": the names in tracked bold capitals, as on a hand-drawn block section.
+  const caps = cfg().labelStyle === 'caps', g = c.getContext('2d'), kx = c.width / len, ky = c.height / ht, names = cache.fold.classes.map((code) => { const t = code === OTHER ? null : cfg().legend.find((e) => e.code === code)?.name || code; return t && caps ? t.toUpperCase() : t; });
   // What a name keeps clear of: the key, highlighted and new holes and the grade shell on screen, and the
   // collars, pills, cards and brackets as last drawn. Plain and faded traces may pass over a name, as on
   // hand-drawn sections.
   const pts = H.project.holes.filter(H.prominent).flatMap((h) => h.path.filter((p, i) => i % 2 === 0).map((p) => H.proj(H.G.V(p.x, p.y, p.z)))), v = new THREE.Vector3();
   (H.G.shellMesh?.children || []).forEach((m) => { const a = m.geometry.attributes.position; for (let i = 0; i < a.count; i += 2) pts.push(H.proj(v.fromBufferAttribute(a, i))); });
   const boxes = H.occ.filter((b) => b[2] - b[0] < H.frame()[0] - 1), zt = H.G.zmax;
-  g.drawImage(hit.base, 0, 0); g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = `600 ${size * kx}px ${font}`;
+  // A block section (block.js): the names keep clear of every hole shown with its grade bars (to its right) and of the heading.
+  if (H.S.block) {
+    const bw = 0.06 * H.frame()[0];
+    H.project.holes.filter(H.holeOn).forEach((h) => h.path.forEach((p, i) => { if (i % 2) return; const q = H.proj(H.G.V(p.x, p.y, p.z)); for (let t = 0; t <= 1; t += 0.25) pts.push([q[0] + bw * t, q[1]]); }));
+    (H.G.wallLabelMeshes || []).forEach((m) => { const ps = [[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]].map(([x, y]) => H.proj(v.set(x, y, 0).applyMatrix4(m.matrixWorld))); boxes.push([Math.min(...ps.map((q) => q[0])), Math.min(...ps.map((q) => q[1])), Math.max(...ps.map((q) => q[0])), Math.max(...ps.map((q) => q[1]))]); });
+  }
+  g.drawImage(hit.base, 0, 0); g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = `${caps ? 700 : 600} ${size * kx}px ${font}`; if (caps && 'letterSpacing' in g) g.letterSpacing = `${size * kx * 0.08}px`;
   labelSpots(hit.cls, nx, ny, len / nx, ht / ny).forEach(({ c: cl, spots }) => {
     if (!names[cl] || !cols[cl]) return;
     // On one line, else on two (split at the space nearest the middle), so a name fits between the holes.
@@ -388,7 +456,7 @@ function labelCanvas(hit, cols, size, len, ht, mirror, scr, font) {
       let best = null; for (let n = 0, k = 0; k < deep.length && n < 80; k += step) { const p = deep[k]; if (!fits(p)) continue; n++; const r = room(p); if (r > 0 && (!best || r > best.r)) best = { ...p, r }; }
       if (!best) continue;
       g.save(); g.translate((best.i + 0.5) * f, (best.j + 0.5) * f); g.scale(mirror ? -1 : 1, ky / kx);
-      g.fillStyle = `#${rgbOf(cols[cl]).map((v) => Math.round(v * 0.45).toString(16).padStart(2, '0')).join('')}`;
+      g.fillStyle = caps ? unitInk(cols[cl]) : `#${rgbOf(cols[cl]).map((v) => Math.round(v * 0.45).toString(16).padStart(2, '0')).join('')}`;
       lines.forEach((t, i) => g.fillText(t, 0, (i - (lines.length - 1) / 2) * size * 1.1 * kx)); g.restore();
       return;
     }
@@ -435,7 +503,7 @@ export function legendBlock() {
 // Paints the section view: the plane A→A′ classified at the section's own resolution, clipped by the profile.
 export function drawSection2D(ctx, { A, Bp, X, Y, L, clip }) {
   const g = cfg(); if (!g.enabled || !hasLogs()) return;
-  const G = H.G, hit = planeClasses('section2d', [A.x, A.y], [Bp.x, Bp.y], [320, 200]), cols = colorsNow(), ck = `${cols.join()}|${g.texture}|${g.contacts}`;
+  const G = H.G, hit = planeClasses('section2d', [A.x, A.y], [Bp.x, Bp.y], [320, 200]), cols = colorsNow(), ck = `${cols.join()}|${g.texture}|${g.contacts}${softKey()}`;
   if (!hit.canvas || hit.ck !== ck) { hit.canvas = fill(hit, cols); hit.ck = ck; }
   ctx.save(); clip(); ctx.globalAlpha = Math.min(1, g.opacity + 0.1); ctx.imageSmoothingEnabled = true;
   ctx.drawImage(hit.canvas, X(0), Y(G.zmax), X(L) - X(0), Y(G.B.z0) - Y(G.zmax)); ctx.restore();
@@ -453,8 +521,8 @@ export function set(o = {}) {
   const g = cfg();
   if (o.enabled !== undefined) g.enabled = !!o.enabled;
   if (o.faces !== undefined) {
-    const f = typeof o.faces === 'string' && !['far', 'all'].includes(o.faces) ? o.faces.toUpperCase().split(/[\s,]+/).filter(Boolean) : o.faces;
-    if (!(f === 'far' || f === 'all' || (Array.isArray(f) && f.every((x) => FACE_KEYS.includes(x))))) throw new Error('faces must be "far" (the two turned from the camera), "all", or a list such as ["N", "E"].');
+    const f = typeof o.faces === 'string' && !['far', 'near', 'all'].includes(o.faces) ? o.faces.toUpperCase().split(/[\s,]+/).filter(Boolean) : o.faces;
+    if (!(['far', 'near', 'all'].includes(f) || (Array.isArray(f) && f.every((x) => FACE_KEYS.includes(x))))) throw new Error('faces must be "far" (the two turned from the camera), "near" (the two toward it), "all", or a list such as ["N", "E"].');
     g.faces = Array.isArray(f) ? [...new Set(f)] : f;
   }
   if (o.opacity !== undefined) { const v = +o.opacity; if (!Number.isFinite(v)) throw new Error('opacity must be 0.1-1.'); g.opacity = Math.max(0.1, Math.min(1, v > 1 ? v / 100 : v)); }
@@ -463,7 +531,12 @@ export function set(o = {}) {
   if (o.smooth !== undefined) g.smooth = Math.max(0, Math.min(8, Math.round(+o.smooth) || 0));
   if (o.strength !== undefined) { const v = +o.strength; if (!Number.isFinite(v)) throw new Error('strength must be 0.5-2 (1: the legend colour; higher: deeper).'); g.strength = Math.max(0.5, Math.min(2, v)); }
   if (o.hidden !== undefined) { if (!['nearest', 'other', 'clear'].includes(o.hidden)) throw new Error('hidden must be "nearest" (hidden codes give way to the nearest visible unit), "other" (one muted "Other" unit) or "clear" (left unpainted).'); g.hidden = o.hidden; }
-  ['texture', 'section', 'contacts', 'labels', 'clean'].forEach((k) => { if (o[k] !== undefined) g[k] = !!o[k]; });
+  ['texture', 'section', 'contacts', 'labels', 'clean', 'dash'].forEach((k) => { if (o[k] !== undefined) g[k] = !!o[k]; });
+  // The block section's softer faces (softCanvas): blend 0-3, fade 0-1 toward white along fadeDir; names in capitals.
+  if (o.blend !== undefined) { const v = +o.blend; if (!Number.isFinite(v)) throw new Error('blend must be 0-3 (how softly units blend across their contacts; 0: crisp).'); g.blend = Math.max(0, Math.min(3, v)); }
+  if (o.fade !== undefined) { const v = +o.fade; if (!Number.isFinite(v)) throw new Error('fade must be 0-1 (how far the colours fade toward white along fadeDir).'); g.fade = Math.max(0, Math.min(1, v)); }
+  if (o.fadeDir !== undefined) { if (!Object.keys(WHITE_AT).includes(o.fadeDir)) throw new Error('fadeDir must be "down", "up", "left" or "right" (the way the colours fade toward white).'); g.fadeDir = o.fadeDir; }
+  if (o.labelStyle !== undefined) { if (!['plain', 'caps'].includes(o.labelStyle)) throw new Error('labelStyle must be "plain" or "caps" (unit names in tracked capitals).'); g.labelStyle = o.labelStyle; }
   if (o.title !== undefined) g.title = String(o.title).slice(0, 40) || 'Lithology';
   if (o.note !== undefined) g.note = o.note === null ? '' : String(o.note).slice(0, 200);
   if (o.legend !== undefined) {
@@ -495,7 +568,7 @@ export function renderUI(el) {
   el.innerHTML = `${logs ? '' : '<p class="muted">No lithology or alteration log loaded yet: add a CSV with Hole ID, From, To and a code column in step 1 (or an image per face below).</p>'}
     <div class="grid2">
       <label class="field"><span>Legend title</span><input type="text" data-g="title" value="${esc(g.title)}" list="geo-titles"></label>
-      <label class="field"><span>Faces painted</span><select data-g="faces"><option value="far" ${faces === 'far' ? 'selected' : ''}>The far two</option><option value="all" ${faces === 'all' ? 'selected' : ''}>All four</option><option value="chosen" ${faces === 'chosen' ? 'selected' : ''}>Chosen faces</option></select></label>
+      <label class="field"><span>Faces painted</span><select data-g="faces"><option value="far" ${faces === 'far' ? 'selected' : ''}>The far two</option><option value="near" ${faces === 'near' ? 'selected' : ''}>The near two (an opaque block)</option><option value="all" ${faces === 'all' ? 'selected' : ''}>All four</option><option value="chosen" ${faces === 'chosen' ? 'selected' : ''}>Chosen faces</option></select></label>
     </div>
     <datalist id="geo-titles"><option value="Lithology"><option value="Alteration"><option value="Geology"></datalist>
     <div class="row" ${faces === 'chosen' ? '' : 'hidden'} style="gap:12px;margin-top:6px">${FACE_KEYS.map((f) => `<label class="check"><input type="checkbox" data-gf="${f}" ${Array.isArray(g.faces) && g.faces.includes(f) ? 'checked' : ''}>${f}</label>`).join('')}</div>
@@ -510,7 +583,13 @@ export function renderUI(el) {
       <label class="field"><span>Search radius (m)</span><input type="number" min="5" data-g="search" value="${esc(g.search ?? '')}" placeholder="auto${H.G ? ` (${searchNow()} m)` : ''}"></label>
     </div>
     <div class="row" style="gap:14px;margin-top:6px"><label class="check"><input type="checkbox" data-g="texture" ${g.texture !== false ? 'checked' : ''}>Subtle texture</label><label class="check"><input type="checkbox" data-g="section" ${g.section ? 'checked' : ''}>Also on the A–A′ plane</label>
-      <label class="check"><input type="checkbox" data-g="contacts" ${g.contacts !== false ? 'checked' : ''}>Contact lines</label><label class="check"><input type="checkbox" data-g="labels" ${g.labels !== false ? 'checked' : ''}>Unit names on the faces</label><label class="check"><input type="checkbox" data-g="clean" ${g.clean !== false ? 'checked' : ''}>Clear small blotches</label></div>
+      <label class="check"><input type="checkbox" data-g="contacts" ${g.contacts !== false ? 'checked' : ''}>Contact lines</label><label class="check"><input type="checkbox" data-g="labels" ${g.labels !== false ? 'checked' : ''}>Unit names on the faces</label><label class="check"><input type="checkbox" data-g="clean" ${g.clean !== false ? 'checked' : ''}>Clear small blotches</label>
+      <label class="check"><input type="checkbox" data-g="dash" ${g.dash ? 'checked' : ''}>Dashed contacts</label><label class="check"><input type="checkbox" data-g="labelStyle" ${g.labelStyle === 'caps' ? 'checked' : ''}>Names in capitals</label></div>
+    <div class="grid2" style="margin-top:6px">
+      <label class="field"><span>Soft contacts <output class="mono">${(g.blend || 0).toFixed(1)}</output></span><input type="range" min="0" max="30" data-g="blend" value="${Math.round((g.blend || 0) * 10)}"></label>
+      <label class="field"><span>Fade toward white <output class="mono">${Math.round((g.fade || 0) * 100)}%</output></span><input type="range" min="0" max="100" step="5" data-g="fade" value="${Math.round((g.fade || 0) * 100)}"></label>
+      <label class="field"><span>Fading</span><select data-g="fadeDir">${[['down', 'Downward'], ['up', 'Upward'], ['left', 'To the left'], ['right', 'To the right']].map(([v, t]) => `<option value="${v}" ${(g.fadeDir || 'down') === v ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+    </div>
     </details>
     ${legend.length ? `<div class="files geo-legend" style="margin-top:8px">${legend.map((e, i) => `<div class="label-row" style="${present.size && !present.has(e.code) ? 'opacity:.55' : ''}">
       <input type="checkbox" data-gs="${i}" ${e.show !== false ? 'checked' : ''} aria-label="Show ${esc(e.code)}"><input type="color" data-gc="${i}" value="${esc(e.color)}" aria-label="Colour of ${esc(e.code)}">
@@ -522,7 +601,7 @@ export function renderUI(el) {
   const apply = (o) => H.api.setGeology(o).catch((e) => H.status(e.message));
   el.querySelectorAll('[data-g]').forEach((inp) => inp.addEventListener(inp.type === 'range' || inp.type === 'text' ? 'change' : 'change', () => {
     const k = inp.dataset.g; let v = inp.type === 'checkbox' ? inp.checked : inp.value;
-    if (k === 'opacity' || k === 'strength') v = +v / 100; if (k === 'anisotropy') v = +v; if (k === 'search') v = v === '' ? null : +v;
+    if (k === 'opacity' || k === 'strength' || k === 'fade') v = +v / 100; if (k === 'blend') v = +v / 10; if (k === 'labelStyle') v = v ? 'caps' : 'plain'; if (k === 'anisotropy') v = +v; if (k === 'search') v = v === '' ? null : +v;
     if (k === 'faces' && v === 'chosen') v = Array.isArray(g.faces) ? g.faces : ['N', 'E'];
     apply({ [k]: v });
   }));

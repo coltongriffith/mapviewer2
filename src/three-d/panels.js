@@ -138,7 +138,8 @@ export function renderLabelList(host) {
 export function renderWallLabelList(host) {
   H = host; const { S, esc, updateWallLabel, removeWallLabel, status } = H;
   const el = $('wall-list'), faces = ['N', 'S', 'E', 'W'];
-  el.innerHTML = S.wallLabels.map((L) => `<div class="label-row"><input type="text" data-wt="${esc(L.id)}" value="${esc(L.text)}" aria-label="Text of wall label ${esc(L.id)}">`
+  // A heading's lines (block.js) edit in a box of their own lines.
+  el.innerHTML = S.wallLabels.map((L) => `<div class="label-row">${L.text.includes('\n') ? `<textarea rows="2" data-wt="${esc(L.id)}" aria-label="Text of wall label ${esc(L.id)}">${esc(L.text)}</textarea>` : `<input type="text" data-wt="${esc(L.id)}" value="${esc(L.text)}" aria-label="Text of wall label ${esc(L.id)}">`}`
     + `<select data-wf="${esc(L.id)}" aria-label="Face of ${esc(L.text)}">${faces.map((f) => `<option ${f === L.face ? 'selected' : ''}>${f}</option>`).join('')}</select>`
     + (S.geology.legend.length ? `<select data-wu="${esc(L.id)}" aria-label="Unit colour of ${esc(L.text)}"><option value="">No unit</option>${S.geology.legend.map((e) => `<option value="${esc(e.code)}" ${e.code === L.unit ? 'selected' : ''}>${esc(e.name)}</option>`).join('')}</select>` : '') // EXT hook
     + `<button class="btn" type="button" data-wd="${esc(L.id)}" aria-label="Delete wall label ${esc(L.text)}">Delete</button></div>`).join('');
