@@ -119,6 +119,27 @@ function readAssays(t, problems) {
   }
   return { elements: elements.map((e) => ({ name: e.name, unit: e.unit })), rows };
 }
+// Two assay tables as one: elements matched by name (a new one adds a column), intervals of a hole together in
+// depth order, and an interval in both (same hole, from and to) one row with each table's values.
+export function mergeAssays(a, b) {
+  if (!a.elements.length && !a.rows.size) return b;
+  const elements = [...a.elements], at = b.elements.map((e) => { let i = elements.findIndex((x) => x.name === e.name); if (i < 0) { elements.push(e); i = elements.length - 1; } return i; });
+  const n = elements.length, rows = new Map();
+  const pad = (r) => [r[0], r[1], ...Array.from({ length: n }, (_, i) => r[2 + i] ?? null)];
+  a.rows.forEach((l, id) => rows.set(id, l.map(pad)));
+  b.rows.forEach((l, id) => {
+    const list = rows.get(id) || [];
+    l.forEach((r) => {
+      const v = Array(n).fill(null); at.forEach((i, j) => { v[i] = r[2 + j] ?? null; });
+      const same = list.find((x) => Math.abs(x[0] - r[0]) < 1e-6 && Math.abs(x[1] - r[1]) < 1e-6);
+      if (same) v.forEach((x, i) => { if (x !== null && same[2 + i] === null) same[2 + i] = x; });
+      else list.push([r[0], r[1], ...v]);
+    });
+    rows.set(id, list.sort((p, q) => p[0] - q[0]));
+  });
+  return { elements, rows };
+}
+
 // The release table, as the 3D page reads it, with each result's domain heading ("Upper Blue Sky") when the
 // table has a Domain or Zone column.
 function readRelease(t, problems) {
@@ -154,7 +175,7 @@ export async function buildPlan(tables, { crs = null, prev = null } = {}) {
   for (const t of tables) {
     if (t.kind === 'collars') readCollars(t, problems).forEach((v, k) => { if (!collars.has(k)) collars.set(k, v); });
     else if (t.kind === 'surveys') readSurveys(t, problems).forEach((v, k) => surveys.set(k, [...(surveys.get(k) || []), ...v]));
-    else if (t.kind === 'assays' && !assays.elements.length) assays = readAssays(t, problems);
+    else if (t.kind === 'assays') assays = mergeAssays(assays, readAssays(t, problems));
     else if (t.kind === 'published') results = results.concat(readRelease(t, problems));
   }
   if (!collars.size) throw new Error('Add a collar table (hole ID with easting/northing or longitude/latitude).');
@@ -182,7 +203,7 @@ export async function buildPlan(tables, { crs = null, prev = null } = {}) {
     // Offsets from the collar (x east, y north, metres), in the collars' grid when projected.
     const offs = desurveyed ? desurveyPath(st, len, 5) : desurveyPath(st.slice(0, 1), len, len);
     const at = (o) => {
-      if (proj) return proj.toLngLat(c.x + o.x, c.y + o.y);
+      if (!c.ll) return proj.toLngLat(c.x + o.x, c.y + o.y); // a collar table in longitude/latitude is never projected
       const h = Math.hypot(o.x, o.y);
       return h < 1e-6 ? [c.x, c.y] : destination([c.x, c.y], (Math.atan2(o.x, o.y) * 180) / Math.PI, h);
     };

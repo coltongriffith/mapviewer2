@@ -166,7 +166,9 @@ const BUDGETS = {
   // exporter's hook (+0.5 kB in renderScene) and the polyline/rotation painters (+0.3 kB in studioCards and
   // StudioCard); drillDb (6.7 kB), desurvey (0.6 kB) and sectionGeometry (1.0 kB) are now chunks shared with the
   // drill panel and /3d's lazy sections and min-curvature rather than copies inside them (-7.3 kB there).
-  totalAuthJsGzipKb: 969.9,
+  // 969.9 → 971.5 (Oct 2026, drill plan review: Fit to plan, the panel's hidden list, section ends kept clear of the
+  // panels, the larger pad tag, assay tables merged; measured 971.2): all in the lazy drillPlan and controls chunks.
+  totalAuthJsGzipKb: 971.5,
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
@@ -193,7 +195,8 @@ const BUDGETS = {
   // 876.5 → 877.8 (Oct 2026, production errors, measured 877.5, 876.1 on main): as totalAuthJsGzipKb above.
   // 877.8 → 879.1 (measured 878.8, 877.5 on main): the homepage's lazy LandingNew chunk, as totalAuthJsGzipKb above.
   // 879.1 → 901.7 (measured 901.4, 878.8 on main): the 2D drill plan, as totalAuthJsGzipKb above.
-  totalJsGzipKb: 901.7,
+  // 901.7 → 903.4 (measured 903.1): the drill plan review fixes, as totalAuthJsGzipKb above.
+  totalJsGzipKb: 903.4,
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the
   // totals above. /3d carries three.js (~109 kB gzip) and its editor.

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { parseTable, guessKind, needsCrs, buildPlan, figureSections, crsDef } from '../src/utils/drillPlanData.js';
-import { planLayout, padsOf, panelBoxes, FAN_PX } from '../src/utils/drillPlan.js';
+import { parseTable, guessKind, needsCrs, buildPlan, figureSections, crsDef, mergeAssays } from '../src/utils/drillPlanData.js';
+import { planLayout, padsOf, panelBoxes, FAN_PX, freeRect, fitPlan, planBounds } from '../src/utils/drillPlan.js';
 import { drillPlanLegendItems, holeColors, binsOf, RELEASE_COLORS, OTHER_COLOR } from '../src/utils/drillPlanLegend.js';
 import { paintSvg } from '../src/utils/studioCards.js';
 import { CRS, COLLARS_CSV, SURVEYS_CSV, ASSAYS_CSV, RESULTS_CSV, FIGURE_SETTINGS } from './fixtures/tower-drill.js';
@@ -77,6 +77,28 @@ describe('reading drill files as the 3D maker reads them', () => {
     expect(plan.fan).toEqual({ 'pad:077+078': true });
     expect(plan.release.title).toBe('Blue Sky');
     expect(plan.holes.find((h) => h.id === '064').color).toBe('#ff0000');
+  });
+
+  it('reads every assay table: elements matched by name, intervals of all tables, shared intervals as one row', async () => {
+    const t = await tables();
+    const au = await parseTable('HoleID,From,To,Au_gpt\n077,0,2,0.5\n077,2,4,1.5\n055,0,2,0.7');
+    const cu = await parseTable('HoleID,From,To,Cu_pct,Au_gpt\n077,2,4,0.31,\n078,0,2,0.2,4.2');
+    const { plan } = await buildPlan([t[0], { name: 'au.csv', ...au, kind: 'assays' }, { name: 'cu.csv', ...cu, kind: 'assays' }], { crs: CRS });
+    expect(plan.assays.elements.map((e) => e.name)).toEqual(['Au', 'Cu']);
+    expect(plan.assays.rows['077']).toEqual([[0, 2, 0.5, null], [2, 4, 1.5, 0.31]]);
+    expect(plan.assays.rows['078']).toEqual([[0, 2, 4.2, 0.2]]);
+    expect(plan.assays.rows['055']).toEqual([[0, 2, 0.7, null]]);
+    expect(plan.files).toEqual(['collars.csv', 'au.csv', 'cu.csv']);
+    expect(mergeAssays({ elements: [], rows: new Map() }, { elements: [{ name: 'Au' }], rows: new Map() }).elements).toEqual([{ name: 'Au' }]);
+  });
+
+  it('projects only the easting/northing collars when collar tables are mixed', async () => {
+    const t = await tables(), ll = await parseTable('HoleID,Longitude,Latitude,Azimuth,Dip,Depth\nGEO-1,-120.6950,50.6010,0,-90,100');
+    const { plan } = await buildPlan([t[0], { name: 'geo.csv', ...ll, kind: 'collars' }], { crs: CRS });
+    const g = plan.holes.find((h) => h.id === 'GEO-1');
+    expect(g.lng).toBeCloseTo(-120.695, 6);
+    expect(g.lat).toBeCloseTo(50.601, 6);
+    expect(plan.holes.find((h) => h.id === '077').lat).toBeCloseTo(50.6, 1);
   });
 
   it('takes a section with fixed ends from a saved 3D figure, in longitude/latitude', async () => {
@@ -210,8 +232,46 @@ describe('the plan as primitives', () => {
     expect(Math.abs(label.rot)).toBeLessThanOrEqual(90);
   });
 
+  it('sizes the common-pad tag as an interval tag and keeps it off the traces and pills', async () => {
+    const plan = await tower(), { over, targets } = planLayout(plan, view(plan));
+    const pad = targets.find((t) => t.key === 'pad:077+078'), tag = targets.find((t) => t.key === 'tag:077-L');
+    expect(over.find((p) => p.s === '077' && p.size >= 12)).toBeTruthy();
+    expect(pad.box[3] - pad.box[1]).toBeGreaterThanOrEqual((tag.box[3] - tag.box[1]) * 0.7); // a tag less its "incl." line
+    targets.filter((t) => t !== pad && t.key !== 'star').forEach((t) => expect(overlap(pad.box, t.box), t.key).toBe(false));
+  });
+
+  it('finds the largest area the panels leave free, and frames the plan inside it', async () => {
+    const panels = [[0, 700, 560, 1000], [1100, 600, 1600, 1000], [1200, 0, 1600, 220]];
+    const r = freeRect(panels, 1600, 1000, 400, 400);
+    panels.forEach((p) => expect(overlap(r, p)).toBe(false));
+    expect(r).toEqual([0, 0, 1100, 700]);
+    const plan = await tower({ section: { name: 'A–A′', a: { lng: -120.696, lat: 50.6025 }, b: { lng: -120.69, lat: 50.5985 } } });
+    const calls = [], map = { getSize: () => ({ x: 1600, y: 1000 }), latLngToContainerPoint: ([lat, lng]) => ({ x: lng * 1e4, y: -lat * 1e4 }), fitBounds: (b, o) => calls.push([b, o]) };
+    const zones = { legend: { left: 1100, top: 600, width: 500, height: 400 }, title: { left: 0, top: 700, width: 560, height: 300 } };
+    fitPlan(map, plan, zones, {});
+    expect(calls).toHaveLength(1);
+    expect(calls[0][0]).toEqual(planBounds(plan));
+    const { paddingTopLeft, paddingBottomRight } = calls[0][1];
+    // The free box right of the title and above the legend: [0, 0, 1100, 700] less the margin.
+    expect(paddingBottomRight[0]).toBeGreaterThanOrEqual(500);
+    expect(paddingBottomRight[1]).toBeGreaterThanOrEqual(300);
+    expect(paddingTopLeft[0]).toBeGreaterThan(0);
+  });
+
+  it('draws both section ends clear of a panel, and lists what a panel hides', async () => {
+    const [sec] = await figureSections(FIGURE_SETTINGS);
+    const plan = await tower({ section: { name: sec.name, ...sec.ends } }), v = view(plan), b = v.pt(sec.ends.b.lng, sec.ends.b.lat);
+    const panel = [b[0] - 40, b[1] - 40, 1600, 1000], { base, hidden } = planLayout(plan, view(plan, { panels: [panel] }));
+    const ends = base.filter((p) => p.role === 'section-end');
+    expect(ends.map((p) => p.s)).toEqual(['A', 'A′']);
+    const box = base[base.indexOf(ends[1]) - 1];
+    expect(overlap([box.x, box.y, box.x + box.w, box.y + box.h], panel)).toBe(false);
+    expect(hidden.map((x) => x.what)).toEqual(expect.arrayContaining(['section end A′']));
+    expect(planLayout(plan, v).hidden).toEqual([]);
+  });
+
   it('draws nothing without a plan', () => {
-    expect(planLayout(undefined, { pt: () => [0, 0], W: 10, H: 10 })).toEqual({ base: [], over: [], targets: [] });
+    expect(planLayout(undefined, { pt: () => [0, 0], W: 10, H: 10 })).toEqual({ base: [], over: [], targets: [], hidden: [] });
   });
 });
 

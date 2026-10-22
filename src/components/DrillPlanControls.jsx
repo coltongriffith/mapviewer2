@@ -1,7 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { KINDS, CRS_OPTIONS, parseTable, guessKind, needsCrs, buildPlan, figureSections } from '../utils/drillPlanData.js';
 import { holeColors, binsOf, releaseHoles, DEFAULT_BINS } from '../utils/drillPlanLegend.js';
-import { padsOf } from '../utils/drillPlan.js';
+import { padsOf, fitPlan, planLayout, mapView } from '../utils/drillPlan.js';
 import { isApproved } from '../three-d/published-results.js';
 import { supabase } from '../lib/supabase';
 
@@ -22,7 +22,7 @@ function Text({ id, label, value, placeholder, onChange }) {
   );
 }
 
-export default function DrillPlanControls({ plan, onChange, onReplace, map, propertyId }) {
+export default function DrillPlanControls({ plan, onChange, onReplace, map, propertyId, zones, layout }) {
   const [tables, setTables] = useState([]);
   const [crs, setCrs] = useState(plan?.crs && plan.crs !== 'EPSG:4326' ? plan.crs : '');
   const [status, setStatus] = useState(null); // { type: 'error' | 'success', lines }
@@ -30,6 +30,22 @@ export default function DrillPlanControls({ plan, onChange, onReplace, map, prop
   const [picking, setPicking] = useState(null);
   const [figures, setFigures] = useState(null); // the 3D figures to take a section from, once listed
   const [sections, setSections] = useState(null);
+  const [fitWanted, setFitWanted] = useState(false); // frame the plan once a new one's legend has settled
+  const [, setTick] = useState(0);
+
+  // A new plan is framed once the panels have taken their new size (its legend rows arrive a moment later).
+  useEffect(() => {
+    if (!fitWanted || !plan || !map) return undefined;
+    const t = setTimeout(() => { fitPlan(map, plan, zones, layout); setFitWanted(false); }, 450);
+    return () => clearTimeout(t);
+  }, [fitWanted, plan, map, zones, layout]);
+  // What the panels hide moves with the map.
+  useEffect(() => {
+    if (!map) return undefined;
+    const bump = () => setTick((t) => t + 1);
+    map.on('moveend zoomend resize', bump);
+    return () => map.off('moveend zoomend resize', bump);
+  }, [map]);
 
   const addFiles = async (files) => {
     const read = await Promise.all([...files].map(async (f) => {
@@ -56,6 +72,7 @@ export default function DrillPlanControls({ plan, onChange, onReplace, map, prop
     try {
       const { plan: next, notes, problems } = await buildPlan(tables, { crs: crs || null, prev: plan });
       onReplace(next);
+      if (!plan) setFitWanted(true);
       const n = Object.values(next.assays.rows).reduce((s, l) => s + l.length, 0);
       setStatus({ type: 'success', lines: [`${next.holes.length} hole${next.holes.length === 1 ? '' : 's'}, ${fmtN(n)} assay intervals, ${next.results.filter(isApproved).length} published results.`, ...notes, ...problems] });
       setTables([]);
@@ -150,6 +167,8 @@ export default function DrillPlanControls({ plan, onChange, onReplace, map, prop
     );
   }
 
+  const size = map?.getSize?.();
+  const hidden = size?.x ? planLayout(plan, mapView(map, size.x, size.y, zones, layout)).hidden : [];
   const show = { traces: true, bars: true, collars: true, pills: true, tags: true, padTag: true, card: false, ...(plan.show || {}) };
   const rel = releaseHoles(plan), bins = binsOf(plan), hl = plan.highlight, sec = plan.section;
   const setBins = (list) => onChange({ bins: list.map(({ min, color }) => ({ min, color })) });
@@ -159,6 +178,14 @@ export default function DrillPlanControls({ plan, onChange, onReplace, map, prop
     <div className="drill-plan-controls" data-testid="drill-plan-controls">
       <div className="feature-chip">{plan.holes.length} holes · {fmtN(n)} assay intervals · {(plan.results || []).filter(isApproved).length} published results{plan.crs && plan.crs !== 'EPSG:4326' ? ` · ${plan.crs}` : ''}</div>
       {files}
+      <div className="button-row">
+        <button type="button" className="secondary-btn" disabled={!map} onClick={() => fitPlan(map, plan, zones, layout)}>Fit to plan</button>
+      </div>
+      {hidden.length > 0 && (
+        <div className="small-note" role="status" data-testid="drill-plan-hidden" style={{ color: '#b54708' }}>
+          Hidden by a panel or the frame edge: {hidden.map((x) => x.what).join(', ')}. Press Fit to plan, or move the panel.
+        </div>
+      )}
 
       <h3 className="ins-sub-title">Show</h3>
       {SHOW.map(([k, l]) => (

@@ -15,6 +15,7 @@ import { measureText, cardShell, textOn } from './studioCards.js';
 import { holeColors, binsOf, releaseHoles, byHole } from './drillPlanLegend.js';
 import { pubCallouts, pubLines, isApproved } from '../three-d/published-results.js';
 import { letters, lookingWord } from '../../shared/sectionGeometry.js';
+import { getMapFrame } from './coordinateFrame.js';
 
 export const PAD_RADIUS_M = 5;
 export const FAN_PX = 6;
@@ -197,22 +198,22 @@ function highlightCard(hl, family) {
 
 // The common pad's tag: "COMMON DRILL PAD" over "077 −50° / 078 −70° → NW", each ID in its hole's colour.
 function padCard(pad, holes, colors, fanned, family) {
-  const p = 6, parts = pad.ids.map((id) => { const h = holes.find((x) => x.id === id); return { id, color: colors.get(key(id)), dip: Number.isFinite(h?.dip) ? minus(h.dip) : '' }; });
+  const p = 7, size = 12, parts = pad.ids.map((id) => { const h = holes.find((x) => x.id === id); return { id, color: colors.get(key(id)), dip: Number.isFinite(h?.dip) ? minus(h.dip) : '' }; });
   const az = pad.ids.map((id) => holes.find((x) => x.id === id)?.az).filter(Number.isFinite);
   const toward = az.length ? `→ ${lookingWord(az.reduce((s, a) => s + a, 0) / az.length)}` : '';
   // Words with the gaps between them as space (an SVG viewer would drop a leading space in the text itself).
-  const segs = [], gap = 3.5; parts.forEach((q, i) => { if (i) segs.push({ s: '/', fill: '#ffffff', w: 650 }); segs.push({ s: q.id, fill: q.color === '#ffffff' ? '#ffffff' : mix(q.color, 0.1), w: 800 }); if (q.dip) segs.push({ s: q.dip, fill: '#ffffff', w: 650 }); });
-  if (toward) segs.push({ s: toward, fill: '#ffffff', w: 650 });
-  const rowW = segs.reduce((s, g) => s + W(g.s, 9, g.w, family), 0) + gap * (segs.length - 1), note = fanned ? 'traces offset for clarity' : '';
-  const w = Math.ceil(p * 2 + Math.max(W('COMMON DRILL PAD', 7, 700, family, 0.9), rowW, note ? W(note, 7, 400, family) : 0));
-  const h = p * 2 + 9 + 12 + (note ? 10 : 0);
+  const segs = [], gap = 4; parts.forEach((q, i) => { if (i) segs.push({ s: '/', fill: '#ffffff', w: 650 }); segs.push({ s: q.id, fill: q.color === '#ffffff' ? '#ffffff' : mix(q.color, 0.1), w: 800 }); if (q.dip) segs.push({ s: q.dip, fill: '#ffffff', w: 700 }); });
+  if (toward) segs.push({ s: toward, fill: '#ffffff', w: 700 });
+  const rowW = segs.reduce((s, g) => s + W(g.s, size, g.w, family), 0) + gap * (segs.length - 1), note = fanned ? 'traces offset for clarity' : '';
+  const w = Math.ceil(p * 2 + Math.max(W('COMMON DRILL PAD', 7.5, 700, family, 0.8), rowW, note ? W(note, 8.5, 500, family) : 0));
+  const h = p * 2 + 9.5 + 4 + 14 + (note ? 12 : 0);
   return {
     w, h,
     draw: (x, y) => {
-      const out = [{ t: 'rect', x, y, w, h, r: 4, fill: NAVY, opacity: 0.92, shadow: true }, tx(x + p, y + p + 7, 'COMMON DRILL PAD', 7, 700, family, 'rgba(255,255,255,0.72)', { ls: 0.9 })];
+      const out = [{ t: 'rect', x, y, w, h, r: 5, fill: NAVY, opacity: 0.94, shadow: true }, tx(x + p, y + p + 8, 'COMMON DRILL PAD', 7.5, 700, family, 'rgba(255,255,255,0.75)', { ls: 0.8, role: 'pad-heading' })];
       let xx = x + p;
-      segs.forEach((g) => { out.push(tx(xx, y + p + 9 + 10, g.s, 9, g.w, family, g.fill)); xx += W(g.s, 9, g.w, family) + gap; });
-      if (note) out.push(tx(x + p, y + p + 9 + 12 + 7.5, note, 7, 400, family, 'rgba(255,255,255,0.7)'));
+      segs.forEach((g) => { out.push(tx(xx, y + p + 9.5 + 4 + 11, g.s, size, g.w, family, g.fill)); xx += W(g.s, size, g.w, family) + gap; });
+      if (note) out.push(tx(x + p, y + p + 9.5 + 4 + 14 + 9, note, 8.5, 500, family, 'rgba(255,255,255,0.8)'));
       return out;
     },
   };
@@ -226,8 +227,9 @@ function padCard(pad, holes, colors, fanned, family) {
  */
 export function planLayout(plan, view) {
   const base = [], over = [], targets = [];
-  if (!plan?.holes?.length) return { base, over, targets };
+  if (!plan?.holes?.length) return { base, over, targets, hidden: [] };
   const { pt, W: FW, H: FH, panels = [], family = 'Inter' } = view;
+  const edge = view.frame || [0, 0, FW, FH]; // the map's frame (inside the coordinate ticks), else the stage
   const show = { traces: true, bars: true, pills: true, collars: true, tags: true, padTag: true, card: false, ...(plan.show || {}) };
   const colors = holeColors(plan), rel = releaseHoles(plan), pads = padsOf(plan), fan = plan.fan || {};
   const holes = [...plan.holes].sort((a, b) => byHole(a.id, b.id));
@@ -244,13 +246,18 @@ export function planLayout(plan, view) {
   holes.forEach((h) => { const q = px.get(h.id); for (let i = 1; i < q.length; i++) segs.push([q[i - 1], q[i]]); });
 
   // Section line A–A′: a dashed line, boxed letters past each end, its name along it.
-  const sec = plan.section;
+  const sec = plan.section, endBoxes = [];
   if (sec?.a && sec?.b) {
     const a = pt(sec.a.lng, sec.a.lat), b = pt(sec.b.lng, sec.b.lat), l = dist(a, b) || 1, u = [(b[0] - a[0]) / l, (b[1] - a[1]) / l];
     const [la, lb] = letters({ id: 'A', ...sec, name: sec.name || 'A–A′' });
     base.push({ t: 'pline', pts: [a, b], stroke: '#0b1a20', sw: 3.6, opacity: 0.4, cap: 'butt' }, { t: 'pline', pts: [a, b], stroke: '#ffffff', sw: 1.7, dash: [7, 5], cap: 'butt' });
+    // Each end's box just past the end, or (when that is off the frame or under a panel) moved in along the line,
+    // so both letters always show while their ends are on the map.
     [[a, -1, la], [b, 1, lb]].forEach(([p, s, t]) => {
-      const c = [p[0] + u[0] * 13 * s, p[1] + u[1] * 13 * s], bw = Math.max(18, W(t, 10.5, 800, family) + 8);
+      const bw = Math.max(18, W(t, 10.5, 800, family) + 8), fits = (c) => c[0] - bw / 2 >= edge[0] + 2 && c[1] - 9 >= edge[1] + 2 && c[0] + bw / 2 <= edge[2] - 2 && c[1] + 9 <= edge[3] - 2 && !panels.some((o) => hits([c[0] - bw / 2, c[1] - 9, c[0] + bw / 2, c[1] + 9], o, 2));
+      const spots = [13, -13, -30, -50, -75, -105].filter((d) => d > 0 || -d < l / 2).map((d) => [p[0] + u[0] * d * s, p[1] + u[1] * d * s]);
+      const c = spots.find(fits) || spots[0];
+      endBoxes.push([c[0] - bw / 2, c[1] - 9, c[0] + bw / 2, c[1] + 9]);
       base.push({ t: 'rect', x: c[0] - bw / 2, y: c[1] - 9, w: bw, h: 18, r: 3, fill: '#1d4f7a', opacity: 1, stroke: '#ffffff', sw: 1.2 }, tx(c[0], c[1] + 3.8, t, 10.5, 800, family, '#ffffff', { anchor: 'middle', role: 'section-end' }));
     });
     const label = String(sec.label ?? `SECTION ${sec.name || 'A–A′'}`).toUpperCase();
@@ -291,7 +298,7 @@ export function planLayout(plan, view) {
     bars.forEach((r) => base.push({ t: 'pline', pts: span(r.q, r.f, r.t), stroke: r.b.color, sw: 5.2, cap: 'butt', role: 'bar' }));
   }
   // Collars: a white disc ringed in the hole's colour; on a common pad, one disc split into each hole's colour.
-  const avoid = [...panels];
+  const avoid = [...panels, ...endBoxes];
   if (show.collars) {
     const done = new Set();
     holes.forEach((h) => {
@@ -332,7 +339,14 @@ export function planLayout(plan, view) {
   }
 
   // ── Cards, tags and their leaders ──
-  const frame = [4, 4, FW - 4, FH - 4], placed = [], leaders = [];
+  const frame = [edge[0] + 4, edge[1] + 4, edge[2] - 4, edge[3] - 4], placed = [], leaders = [];
+  // What the panels or the frame edge hide: collars (a pad as one), the star and the section's ends.
+  const hidden = [];
+  const check = (what, q) => { const off = q[0] < edge[0] || q[1] < edge[1] || q[0] > edge[2] || q[1] > edge[3]; if (off || panels.some((o) => q[0] >= o[0] && q[0] <= o[2] && q[1] >= o[1] && q[1] <= o[3])) hidden.push({ what, off }); };
+  const seenPad = new Set();
+  holes.forEach((h) => { const p = padOf.get(h.id); if (p) { if (!seenPad.has(p.key)) { seenPad.add(p.key); check(`pad ${p.ids.join(' / ')}`, pt(p.lng, p.lat)); } } else check(`collar ${h.id}`, pt(h.lng, h.lat)); });
+  if (sec?.a && sec?.b) { const [la, lb] = letters({ id: 'A', ...sec, name: sec.name || 'A–A′' }); check(`section end ${la}`, pt(sec.a.lng, sec.a.lat)); check(`section end ${lb}`, pt(sec.b.lng, sec.b.lat)); }
+  if (plan.highlight?.at && show.highlight !== false) check('highlight star', pt(plan.highlight.at.lng, plan.highlight.at.lat));
   const crossings = (b) => segs.reduce((n, [p, q]) => n + (segHits(p, q, b, 2) ? 1 : 0), 0);
   // A card's box: where it was dragged (plan.pos[key], its top-left from the anchor), else the clearest spot
   // around the anchor: off the panels, pills, collars and other cards first, then off the traces, then near.
@@ -404,9 +418,9 @@ export function planLayout(plan, view) {
   // The common pad's tag, near the pad.
   if (show.padTag && show.collars) pads.forEach((p) => {
     const anchor = pt(p.lng, p.lat);
-    put(p.key, anchor, padCard(p, holes, colors, !!fan[p.key], family), [14, 30, 55, 90], { color: '#ffffff', sw: 1 });
+    put(p.key, anchor, padCard(p, holes, colors, !!fan[p.key], family), [34, 60, 95, 140, 200], { color: '#ffffff', sw: 1.1, dot: true });
   });
-  return { base, over, targets };
+  return { base, over, targets, hidden };
 }
 // Whether segments p1–p2 and q1–q2 cross.
 function segsCross(p1, p2, q1, q2) {
@@ -414,10 +428,57 @@ function segsCross(p1, p2, q1, q2) {
   return o(p1, p2, q1) !== o(p1, p2, q2) && o(q1, q2, p1) !== o(q1, q2, p2);
 }
 
+// ── Fit to plan ─────────────────────────────────────────────────────────────
+/** Everything the plan draws on the ground: hole paths, the star and the section's ends, as [[s, w], [n, e]]. */
+export function planBounds(plan) {
+  const pts = [];
+  (plan?.holes || []).forEach((h) => (h.path?.length ? h.path : [[h.lng, h.lat]]).forEach(([lng, lat]) => pts.push([lng, lat])));
+  if (plan?.highlight?.at) pts.push([plan.highlight.at.lng, plan.highlight.at.lat]);
+  if (plan?.section?.a && plan?.section?.b) pts.push([plan.section.a.lng, plan.section.a.lat], [plan.section.b.lng, plan.section.b.lat]);
+  if (!pts.length) return null;
+  const lng = pts.map((p) => p[0]), lat = pts.map((p) => p[1]);
+  return [[Math.min(...lat), Math.min(...lng)], [Math.max(...lat), Math.max(...lng)]];
+}
+/**
+ * The largest box of the stage (W × H) clear of the panels for content of aspect w:h, as [x0, y0, x1, y1]: tried
+ * between every panel edge, scored by how large the content can be drawn in it.
+ */
+export function freeRect(panels, FW, FH, w = 1, h = 1) {
+  const xs = [...new Set([0, FW, ...panels.flatMap((b) => [b[0], b[2]])].map((v) => Math.max(0, Math.min(FW, v))))].sort((p, q) => p - q);
+  const ys = [...new Set([0, FH, ...panels.flatMap((b) => [b[1], b[3]])].map((v) => Math.max(0, Math.min(FH, v))))].sort((p, q) => p - q);
+  let best = [0, 0, FW, FH], score = -1;
+  for (const x0 of xs) for (const x1 of xs) for (const y0 of ys) for (const y1 of ys) {
+    if (x1 <= x0 || y1 <= y0 || panels.some((b) => b[0] < x1 && x0 < b[2] && b[1] < y1 && y0 < b[3])) continue;
+    const k = Math.min((x1 - x0) / Math.max(w, 1e-6), (y1 - y0) / Math.max(h, 1e-6));
+    if (k > score) { score = k; best = [x0, y0, x1, y1]; }
+  }
+  return best;
+}
+/**
+ * Frames the map on the plan inside the stage area the panels leave free, with room around it for the tags and
+ * cards (margin px). Returns the free box used, or null without a plan.
+ */
+export function fitPlan(map, plan, zones, layout = {}, margin = 56) {
+  const b = planBounds(plan), size = map?.getSize?.();
+  if (!b || !size?.x) return null;
+  const p0 = map.latLngToContainerPoint(b[0]), p1 = map.latLngToContainerPoint(b[1]);
+  const e = frameBox(layout, size.x, size.y), outside = [[0, 0, size.x, e[1]], [0, e[3], size.x, size.y], [0, 0, e[0], size.y], [e[2], 0, size.x, size.y]].filter((b) => b[2] > b[0] && b[3] > b[1]);
+  const r = freeRect([...panelBoxes(zones, layout), ...outside], size.x, size.y, Math.abs(p1.x - p0.x) + 1, Math.abs(p1.y - p0.y) + 1);
+  const m = Math.max(8, Math.min(margin, (r[2] - r[0]) / 4, (r[3] - r[1]) / 4));
+  map.fitBounds(b, { paddingTopLeft: [r[0] + m, r[1] + m], paddingBottomRight: [size.x - r[2] + m, size.y - r[3] + m], animate: false, maxZoom: 19 });
+  return r;
+}
+
+// The map's frame inside the coordinate ticks when the layout draws one, else the whole stage.
+function frameBox(layout, width, height) {
+  const f = getMapFrame(layout, { width, height });
+  return f ? [f.left, f.top, f.right, f.bottom] : [0, 0, width, height];
+}
+
 /** The view a Leaflet map gives: composition px for longitude/latitude, the stage size and the panels. */
 export function mapView(map, width, height, zones, layout = {}) {
   return {
     pt: (lng, lat) => { const p = map.latLngToContainerPoint([lat, lng]); return [p.x, p.y]; },
-    W: width, H: height, panels: panelBoxes(zones, layout), family: layout.fonts?.callout || 'Inter', accent: /^#[0-9a-f]{6}$/i.test(layout.accentColor || '') ? layout.accentColor : null,
+    W: width, H: height, frame: frameBox(layout, width, height), panels: panelBoxes(zones, layout), family: layout.fonts?.callout || 'Inter', accent: /^#[0-9a-f]{6}$/i.test(layout.accentColor || '') ? layout.accentColor : null,
   };
 }

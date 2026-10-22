@@ -72,6 +72,9 @@ test('drill plan: files in, traces, bars, pad, tags, results card, drag, PNG exp
   await controls.getByLabel('Collar coordinates').selectOption(CRS);
   await build.click();
   await expect(page.getByTestId('drill-plan-status')).toContainText(/9 holes, 560 assay intervals, 9 published results\./);
+  // A new plan is framed in the area the panels leave free: nothing of it sits under a panel.
+  await page.waitForTimeout(1500);
+  await expect(page.getByTestId('drill-plan-hidden')).toHaveCount(0);
 
   // On the stage: a trace per hole, assay bars, toe pills, the pad's split collar and a tag per published interval.
   const stage = page.locator('.map-stage');
@@ -85,6 +88,11 @@ test('drill plan: files in, traces, bars, pad, tags, results card, drag, PNG exp
   await expect(page.locator('.legend-card')).toContainText('≥ 10');
 
   // The pad's traces fanned apart; the results card on.
+  // Panned away, the panel lists what is off the map; Fit to plan brings it all back.
+  await page.mouse.move(700, 450); await page.mouse.down(); await page.mouse.move(1500, 950, { steps: 8 }); await page.mouse.up();
+  await expect(page.getByTestId('drill-plan-hidden')).toContainText('pad 077 / 078');
+  await controls.getByRole('button', { name: 'Fit to plan' }).click();
+  await expect(page.getByTestId('drill-plan-hidden')).toHaveCount(0);
   await controls.getByLabel(/Fan their traces apart/).check();
   await expect(stage.locator('.drill-plan-layer text', { hasText: 'traces offset for clarity' })).toHaveCount(1);
   await controls.getByLabel('Results card').check();
