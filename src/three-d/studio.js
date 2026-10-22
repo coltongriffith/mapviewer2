@@ -778,6 +778,7 @@ function placeWallLabel(mesh) {
 // Screen boxes of the wall labels, so hole IDs can keep off them.
 function wallLabelBoxes() {
   return (G?.wallLabelMeshes || []).map((m) => {
+    if (!m.visible) return [-1, -1, -1, -1]; // hidden (a heading under a side title): off the frame
     const ps = [[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]].map(([x, y]) => proj(new THREE.Vector3(x, y, 0).applyMatrix4(m.matrixWorld)));
     return [Math.min(...ps.map((q) => q[0])), Math.min(...ps.map((q) => q[1])), Math.max(...ps.map((q) => q[0])), Math.max(...ps.map((q) => q[1]))];
   });
@@ -785,7 +786,7 @@ function wallLabelBoxes() {
 function buildWallLabels() {
   if (!G) return;
   (G.wallLabelMeshes || []).forEach((m) => { root.remove(m); m.geometry.dispose(); m.material.map.dispose(); m.material.dispose(); });
-  G.wallLabelMeshes = S.wallLabels.map((L) => { const m = wallLabelMesh(L); root.add(m); return m; });
+  G.wallLabelMeshes = S.wallLabels.map((L) => { const m = wallLabelMesh(L); m.visible = !(L.size === 'heading' && S.block?.page === 'side'); root.add(m); return m; }); // a side title replaces the heading
   G.wallPrimary = S.primary;
 }
 function wallPatch(L, o) {
@@ -1533,7 +1534,7 @@ function drawOverlay(ctx, k, forExport) {
   }).filter(Boolean);
   // Frame furniture
   const logo = BK?.logo ? { w: 0, bottom: m } : drawLogo(ctx, K, W, forExport);
-  const headBottom = BK?.head ? m : drawHeader(ctx, K, W, S.title, S.subtitle, logo.w);
+  const headBottom = BK?.title ? BK.title() : BK?.head ? m : drawHeader(ctx, K, W, S.title, S.subtitle, logo.w); // EXT hook: a block's side title
   // EXT hook: a standalone map's credits and notes go in the legend (mapuse.js), not the footer; a bare block section
   // keeps its credits alone, small (block.js).
   const SA = EXT.mapuse?.on(), footTop = BK?.foot && !SA ? BK.foot(terrainCredits(true)) : drawFooter(ctx, K, W, H, SA ? [] : terrainCredits(true), SA ? [] : autoNotes('3d'), SA ? '' : S.footnote);
@@ -1778,7 +1779,7 @@ function loop(now) {
 let clearBg = false;
 const foot = (v) => { if (G?.foot) G.foot.visible = !!v; };
 function figureCanvas(view, layer = 'figure', wrap = (c) => c, o = {}) {
-  const f = FORMATS[S.format], out = document.createElement('canvas'); out.width = f.w; out.height = f.h; const ctx = wrap(out.getContext('2d'));
+  const f = o.size || FORMATS[S.format], out = document.createElement('canvas'); out.width = f.w; out.height = f.h; const ctx = wrap(out.getContext('2d'));
   clearBg = o.background === 'transparent';
   try {
     if (view === 'section') { ctx.scale(f.w / W, f.h / H); drawSection(ctx, W, H, true); return out; }
@@ -1797,15 +1798,30 @@ const fileSlug = () => (S.title.split('·')[0].trim() || 'figure').toLowerCase()
 function downloadURL(url, name) { const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
 const nope = (m) => { throw new Error(m); };
 // Export options: background "white" (as before) or "transparent"; a transparent export leaves the drop shadow off
-// unless shadow: true.
-const xopts = (o) => { if (![undefined, 'white', 'transparent'].includes(o.background)) nope('background must be "white" or "transparent".'); return { background: o.background, shadow: o.shadow ?? (o.background === 'transparent' ? false : undefined) }; };
+// unless shadow: true. width (px) or scale (2, 3): that many pixels whatever the screen, laid out as at the figure size.
+const xopts = (o) => { if (![undefined, 'white', 'transparent'].includes(o.background)) nope('background must be "white" or "transparent".'); const size = exportSize(o); return { background: o.background, shadow: o.shadow ?? (o.background === 'transparent' ? false : undefined), ...(size && { size }) }; };
+function exportSize(o) {
+  if (o.width === undefined && (o.scale === undefined || +o.scale === 1)) return null;
+  const f = FORMATS[S.format], w = Math.round(o.width !== undefined ? +o.width : f.w * +o.scale), h = Math.round(w * f.h / f.w);
+  if (!(w >= 200 && w <= 16000)) nope('width must be 200-16000 px, or scale 0.25-4 (2: twice the figure size).');
+  const gl = renderer.getContext(), max = Math.min(...gl.getParameter(gl.MAX_VIEWPORT_DIMS), gl.getParameter(gl.MAX_RENDERBUFFER_SIZE));
+  if (Math.max(w, h) > max) nope(`${w} × ${h} px is over this browser's graphics limit (${max} px a side): choose a smaller size.`);
+  return { w, h };
+}
+// watermark: true or { client, year, status }: the Exploration Maps band under the figure (src/export/watermarkBand.js,
+// loaded with the first export that asks for it, so that export returns a Promise of the data URL). Prepared for S.company.
+let WM = null;
+const wmOpts = (w) => { if (w !== true && (typeof w !== 'object' || w === null)) nope('watermark must be true or { client, year, status }.'); return { client: S.company, ...(w === true ? {} : w) }; };
 function exportPNG(opts = {}) {
   if (!G) throw new Error('Nothing to export yet: add a collar file and an assay file.');
-  const id = opts.section, view = opts.view === 'section' || id ? 'section' : opts.view === '3d' ? '3d' : S.view, f = FORMATS[S.format], X = xopts(opts), fig = () => figureCanvas(view, 'figure', undefined, X);
+  if (opts.watermark && !WM) return import('../export/watermarkBand.js').then((m) => { WM = m; return exportPNG(opts); });
+  const id = opts.section, view = opts.view === 'section' || id ? 'section' : opts.view === '3d' ? '3d' : S.view, X = xopts(opts), fig = () => figureCanvas(view, 'figure', undefined, X);
   // EXT hook: one of the named sections (sections.js); "A" is a figure's only section.
-  const url = (id ? EXT.sections?.using(id, fig) ?? (id === 'A' ? fig() : nope(`No section "${id}": EM3D.addSection first.`)) : fig()).toDataURL('image/png');
+  let c = id ? EXT.sections?.using(id, fig) ?? (id === 'A' ? fig() : nope(`No section "${id}": EM3D.addSection first.`)) : fig();
+  if (opts.watermark) c = WM.withWatermarkBand(c, wmOpts(opts.watermark));
+  const url = c.toDataURL('image/png');
   if (opts.download) { downloadURL(url, `${fileSlug()}-${view === 'section' ? `section${id ? `-${id}` : ''}` : '3d'}-${S.format}.png`); exported(view === 'section' ? 'section' : 'png'); }
-  status(`Exported ${view === 'section' ? 'section A–A′' : 'the 3D figure'} at ${f.w} × ${f.h} px.`);
+  status(`Exported ${view === 'section' ? 'section A–A′' : 'the 3D figure'} at ${c.width} × ${c.height} px.`);
   return url;
 }
 // Designer handoff: the figure, its 3D render and annotations as separate transparent layers, the section
@@ -1820,7 +1836,11 @@ const extPending = new Set(), settled = () => Promise.race([Promise.resolve().th
   new Promise((ok, no) => setTimeout(() => no(new Error('A layer of this figure is still loading after 20 seconds, so nothing was exported. Check the connection and export again.')), 20000))]);
 const exportLayers = (o) => settled().then(desk).then((m) => m.exportLayers(o)).then((r) => { if (o?.download) exported('layers'); return r; });
 // The Export step's Background and Drop shadow; Transparent turns the shadow off (one click to keep it).
-const xui = (o) => ({ ...o, download: true, background: $('export-bg').value, shadow: S.dropShadow });
+// Its Pixel size (the figure size, 2×, 3× or a width) and the watermark band, for that export only.
+const xsize = () => { const v = $('export-scale').value; return v === 'w' ? { width: +$('export-width').value } : +v > 1 ? { scale: +v } : {}; };
+const xui = (o) => ({ ...o, download: true, background: $('export-bg').value, shadow: S.dropShadow, ...xsize(), ...($('export-wm').checked && { watermark: { client: $('export-client').value.trim() || S.company } }) });
+$('export-scale').addEventListener('change', (e) => { $('export-width-f').hidden = e.target.value !== 'w'; });
+$('export-wm').addEventListener('change', (e) => { $('export-client-f').hidden = !e.target.checked; if (!$('export-client').value) $('export-client').value = S.company.split('·')[0].trim(); });
 $('export-bg').addEventListener('change', (e) => { if (e.target.value === 'transparent' && S.dropShadow) { setStyle({ dropShadow: false }, false); renderExtUI(); status('Drop shadow off for the transparent background: tick it to keep it.'); } });
 $('export-layers').addEventListener('click', () => exportLayers(xui({ as: 'blob', svg: $('export-svg').checked })).catch((e) => status(e.message)));
 
@@ -1855,12 +1875,18 @@ $('desk').addEventListener('submit', (e) => { e.preventDefault(); settled().then
 // 9. Logo colours
 // ============================================================
 const toHex = (rgb) => `#${rgb.map((v) => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0')).join('')}`;
+// opts.removeBackground: a white or flat background made transparent first (logo-bg.js, loaded then, as with the first
+// logo added in the Brand step, which offers it).
+let LB = null; const lbLoad = () => import('./logo-bg.js').then((m) => (LB = m));
 function setLogo(src, opts = {}) {
+  if (src && opts.removeBackground) return lbLoad().then((m) => m.set(setLogo, status, src, opts)).then(getState);
+  if (LB && !opts.keep) LB.state.src = src;
+  const shown = () => { if (LB) { LB.state.removed = false; LB.render(); } }; // once the logo drawn is this one (logo-bg.js marks a removal after)
   return new Promise((resolve, reject) => {
-    if (!src) { S.logo = null; $('logo-prev').textContent = 'No logo'; drawSectionView(); schedulePublish(); status('Logo removed.'); resolve(getState()); return; }
+    if (!src) { S.logo = null; shown(); $('logo-prev').textContent = 'No logo'; drawSectionView(); schedulePublish(); status('Logo removed.'); resolve(getState()); return; }
     const img = new Image();
     img.onload = async () => {
-      S.logo = img; $('logo-prev').innerHTML = ''; const pv = new Image(); pv.src = src; pv.alt = 'Your logo'; $('logo-prev').appendChild(pv);
+      S.logo = img; shown(); $('logo-prev').innerHTML = ''; const pv = new Image(); pv.src = src; pv.alt = 'Your logo'; $('logo-prev').appendChild(pv);
       let picked = null; // the colour picker (logo-colours.js) loads with the first logo
       if (opts.autoColor !== false) try { picked = (await import('./logo-colours.js')).brandFromLogo(img); } catch { /* keep the colours */ }
       if (picked) { setBrand({ primary: picked.primary, accent: picked.accent }); $('col-note').textContent = picked.note; }
@@ -1870,7 +1896,7 @@ function setLogo(src, opts = {}) {
     img.src = src;
   });
 }
-$('logo-input').addEventListener('change', (e) => { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = () => setLogo(r.result).catch(() => {}); r.readAsDataURL(f); e.target.value = ''; });
+$('logo-input').addEventListener('change', (e) => { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = () => setLogo(r.result).then(() => lbLoad()).then((m) => m.offer(setLogo, status, r.result), () => {}); r.readAsDataURL(f); e.target.value = ''; });
 $('logo-clear').addEventListener('click', () => { setLogo(null); $('col-note').textContent = 'Picked automatically when you add a logo.'; });
 
 // ============================================================
@@ -2361,7 +2387,9 @@ const host = () => (extHost ||= {
   frame: () => [W, H], aim, controls, getCam, setCamera, blockOverflow, scene,
   get occ() { return overlayOcc; }, // what the painted unit names keep clear of (geology.js), with the prominent holes:
   prominent: (h) => !!EXT.tags && (EXT.tags.weight(h) > 1 || !!EXT.tags.highlightOf(h) || EXT.tags.statusOf(h) === 'new'),
-  camera, renderer, proj, sectionEnds, faceGeom, textOn, roundRect, fitText, esc, BIN_COLORS, binIndex, traceR, calloutLines, shownCallouts, coOv, isPending, setSpacing, drawCallout, brandTone, figureCanvas, xopts, getState, format: () => FORMATS[S.format], fileSlug, downloadURL,
+  camera, renderer, proj, sectionEnds, faceGeom, textOn, roundRect, fitText, esc, BIN_COLORS, binIndex, traceR, calloutLines, shownCallouts, coOv, isPending, setSpacing, drawCallout, brandTone, figureCanvas, xopts, getState,
+  watermark: async (w) => { const o = wmOpts(w); WM ||= await import('../export/watermarkBand.js'); return (c) => WM.withWatermarkBand(c, o); }, // the band, for desk.js
+  format: () => FORMATS[S.format], fileSlug, downloadURL,
   terrain: rtLoad, IMAGERY_CREDIT, status, redraw: () => { extScene(); drawSectionView(); schedulePublish(); },
   ROLE_LABEL, ROLE_FIELDS, FIELD_LABEL, gradeCols, refresh, get PR() { return PR; }, setStyle, pad3, labelFor, dcutChoices, meshName, restyle, schedulePublish,
   renderShellUI, renderEq, renderExtUI, renderLegendUI, FORMATS, setFigureSize, updateLabel, removeLabel, updateWallLabel, removeWallLabel,
@@ -2442,7 +2470,8 @@ document.querySelectorAll('[data-secmode]').forEach((b) => b.addEventListener('c
 const EXT_API = {
   async setSection(o = {}) { (await extLoad('section')).set(o); await extReady(); return getState(); },
   async setGeology(o = {}) { (await extLoad('geology')).set(o); await extReady(); if (S.wallLabels.some((L) => L.unit)) buildWallLabels(); renderWallLabelList(); drawSectionView(); return getState(); },
-  async setFaceImage(face, src) { await (await extLoad('geology')).setImage(face, src ?? null); await extReady(); drawSectionView(); status(src ? `Image painted on the ${String(face).toUpperCase()} face.` : 'Face image removed.'); return getState(); },
+  async setFaceImage(face, src, fit) { await (await extLoad('geology')).setImage(face, src ?? null, fit); await extReady(); drawSectionView(); status(src ? `Image painted on ${/^section$/i.test(face) ? 'the A–A′ plane' : `the ${String(face).toUpperCase()} face`}.` : 'Face image removed.'); return getState(); },
+  async fitFaceImage(face, points) { await (await extLoad('geology')).fitImage(face, points ?? null); await extReady(); drawSectionView(); status(points ? 'Image fitted to the points.' : 'Image stretched over the face again.'); return getState(); },
   async setGeophys(o = {}) { await extLoad('geology'); (await extLoad('geophys')).set(o); await extReady(); drawSectionView(); return getState(); },
   async setTags(o = {}) {
     (await extLoad('tags')).set(o);
@@ -2496,7 +2525,7 @@ function getState() {
       shown: shownCallouts().map((c) => { const L = calloutLines(c); return { holeId: c.h.id, ...PR?.ids(c), line1: L.l1 + L.l1b, line2: L.l2 }; }),
       published: PR?.summary(files, project?.holes, S.pubOverrides) || null,
       candidates: calcCallouts.slice(0, 15).map((c) => ({ holeId: c.h.id, broad: icText(c.ic.broad, c.h), fromM: Math.round(c.ic.broad.from), incl: c.ic.incl ? icText(c.ic.incl, c.h) : null })), overrides: coMap(), valueCol2: S.valueCol2 },
-    brand: { company: S.company, title: S.title, subtitle: S.subtitle, footnote: S.footnote, primary: S.primary, accent: S.accent, hasLogo: !!S.logo, credit: S.credit },
+    brand: { company: S.company, title: S.title, subtitle: S.subtitle, footnote: S.footnote, primary: S.primary, accent: S.accent, hasLogo: !!S.logo, logoBackgroundRemoved: !!LB?.state.removed, credit: S.credit },
     terrain: { style: S.terrain, styles: TERRAINS, source: S.terrainSource, surfaceFrom: G?.using || null, verticalExaggeration: S.vex, collarFit: S.collarFit, blockStyle: S.blockStyle,
       crs: S.crs, crsLabel: geo?.label || null, crsGuessed: !!geo?.guessed, status: realT.status, message: realT.message || null,
       dem: realT.dem ? (realT.dem.ok ? `z${realT.dem.z}, ${realT.dem.tiles} tiles` : `failed: ${realT.dem.error}`) : null,
@@ -2510,7 +2539,7 @@ function getState() {
     mapInfo: { ...S.mapInfo }, footnoteAuto: G ? autoNotes(S.view) : [], checks: getChecks(),
     ...extState(), // EXT hook: geology, geophys, tags
     // What the last drawing placed or left off: not settings, so neither saved nor compared for unsaved changes.
-    layout: { callouts: coHidden.map(([c, why]) => ({ key: c.key, holeId: c.h.id, why })), wallLabels: EXT.block?.placements() || {} },
+    layout: { callouts: coHidden.map(([c, why]) => ({ key: c.key, holeId: c.h.id, why })), wallLabels: EXT.block?.placements() || {}, imageFits: EXT.geology?.imageFits() || {} },
     overlays: S.overlays.map((o) => ({ ...o, data: undefined, ...EXT.overlays?.info(o) })), shapes: structuredClone(S.shapes), sections: EXT.sections?.state() || null,
     figureSize: { key: S.format, width: f.w, height: f.h, label: f.label }, figureSizes: Object.fromEntries(Object.entries(FORMATS).map(([k, v]) => [k, `${v.label}, ${v.w}×${v.h}`])),
   };

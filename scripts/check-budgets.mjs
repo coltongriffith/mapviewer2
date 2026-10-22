@@ -173,8 +173,13 @@ const BUDGETS = {
   // drill panel and /3d's lazy sections and min-curvature rather than copies inside them (-7.3 kB there).
   // 969.9 → 971.5 (Oct 2026, drill plan review: Fit to plan, the panel's hidden list, section ends kept clear of the
   // panels, the larger pad tag, assay tables merged; measured 971.2): all in the lazy drillPlan and controls chunks.
-  // 971.5 → 989.3 (Oct 2026, import a company figure merged over the 2D drill plan, measured 989.0, +17.8 kB over main's
-  // 971.2): all of it lazy. The dialog (FigureImport.jsx with utils/georef.js, utils/figureImport.js and
+  // 971.5 → 973.0 (Oct 2026, 3D round 5G merged over the 2D drill plan (5a7e0dbf), measured 972.7, 971.2 on main; on its
+  // own branch 946.4 → 947.8, measured 947.5 over 946.0): the watermark band (src/export/watermarkBand.js,
+  // ~1.5 kB: the Exploration Maps mark, wordmark, review status and "Prepared for" line under an export), shared so the
+  // 2D exporter can use it later; /3d imports it only for an export that asks for the band, so it counts here, not in
+  // the /3d page. Nothing else moves.
+  // 973.0 → 990.8 (Oct 2026, import a company figure merged over the drill plan and round 5G, measured 990.5, +17.8 kB over
+  // main's 972.7): all of it lazy. The dialog (FigureImport.jsx with utils/georef.js, utils/figureImport.js and
   // utils/figureMargins.js, 12.6 kB: the image kept as a JPEG, or WebP/PNG with alpha once its blank margins or a crop
   // are hidden; points and grid labels fitted as a similarity or affine with residuals in metres; the satellite map for
   // picking and previewing; colour samples; the credit; a re-fit reconciled with the layers traced before) and the
@@ -183,7 +188,7 @@ const BUDGETS = {
   // row (0.7 kB) only for a layer made from one. App as maxJsChunkGzipKb above, MapCanvas +0.19 kB (the lazy overlay
   // hook), renderScene +0.17 kB (a figure drawn by its corners in PNG and SVG, its credit line) and
   // RasterPlacementModal +0.1 kB (the link to the points dialog).
-  totalAuthJsGzipKb: 989.3,
+  totalAuthJsGzipKb: 990.8,
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
@@ -211,8 +216,10 @@ const BUDGETS = {
   // 877.8 → 879.1 (measured 878.8, 877.5 on main): the homepage's lazy LandingNew chunk, as totalAuthJsGzipKb above.
   // 879.1 → 901.7 (measured 901.4, 878.8 on main): the 2D drill plan, as totalAuthJsGzipKb above.
   // 901.7 → 903.4 (measured 903.1): the drill plan review fixes, as totalAuthJsGzipKb above.
-  // 903.4 → 921.1 (measured 920.8, 903.1 on main): import a company figure, as totalAuthJsGzipKb above.
-  totalJsGzipKb: 921.1,
+  // 903.4 → 904.8 (measured 904.5, 903.1 on main; on its own branch 879.1 → 880.6): the shared watermark band, as
+  // totalAuthJsGzipKb above.
+  // 904.8 → 922.6 (measured 922.3, 904.5 on main): import a company figure, as totalAuthJsGzipKb above.
+  totalJsGzipKb: 922.6,
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the
   // totals above. /3d carries three.js (~109 kB gzip) and its editor.
@@ -304,7 +311,13 @@ const BUDGETS = {
   // hooks only: the section view repainted by every geology setter (B5), the callouts left off a drawing and why
   // (getState().layout, kept out of the unsaved-work signature, B6), a callout's domain heading in setCallout, the unit wall label's hook in
   // placeWallLabel and its name from the legend, and setMapUse waiting for the block to be framed again. The rest is lazy.
-  threeDJsGzipKb: 173.6,
+  // 173.6 → 174.6 (Oct 2026, 3D round 5G merged over round 5F and the 2D drill plan (5a7e0dbf), measured 174.2, configured
+  // 174.3, 173.2 and 173.3 on 940ea04e, + 0.3; on its own branch 173.3 → 174.3, measured 173.9 over 173.0): the hooks for the
+  // round's opt-in features, all of whose work is lazy: the export's pixel size (width or scale, checked against the
+  // browser's graphics limit) and the watermark band's lazy import for exportPNG, exportLayers and the Export step's
+  // controls; setLogo's removeBackground and the Brand step's offer (logo-bg.js); setFaceImage's fit and fitFaceImage;
+  // the block's side title in place of the title block, and its heading label hidden under it (~0.9 kB in all).
+  threeDJsGzipKb: 174.6,
   // /3d's own modules fetched on first use (the geology, geophysics and tag layers, the account
   // client). They never load with the page or the app, so they sit outside the page and app totals.
   // 32 → 34 (Oct 2026, round 4): per-hole tags, grouped pending tags, callouts beside or bracketed on their
@@ -416,7 +429,13 @@ const BUDGETS = {
   // 150.2 → 149.0 (Oct 2026, the 2D drill plan merged over round 5F, measured 148.4, configured 148.7, −1.2 kB from main's
   // 149.9): /3d's lazy sections and min-curvature now share shared/sectionGeometry.js and shared/desurvey.js as chunks with
   // the 2D drill plan instead of each carrying a copy; nothing in /3d changed.
-  threeDLazyJsGzipKb: 149.0,
+  // 149.0 → 154.9 (Oct 2026, 3D round 5G merged over the 2D drill plan (5a7e0dbf), measured 154.4, configured 154.6,
+  // 148.4 and 148.7 on main, + 0.3; over round 5F alone 150.2 → 156.1, on its own branch 144.8 → 150.4): image-fit.js (~2.3 kB,
+  // the picker that fits a section image to a face by known points, fetched on its button), logo-bg.js with the shared
+  // src/utils/logoBackground.js (~1.5 kB, fetched with the first logo added in the Brand step or a removal asked for),
+  // geology.js +1.4 (the fit by known points, the A–A′ plane, getState().layout.imageFits, a fit whose hole has left the
+  // data shown stretched), block.js +0.6 (the side title) and tags.js +0.1 (several "incl." results joined with " & ").
+  threeDLazyJsGzipKb: 154.9,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.
