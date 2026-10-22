@@ -312,6 +312,14 @@ describe('/api/claims US read path: mirror first, live fallback', () => {
   let mirrorUrls;
   let blmCalls;
   let mirrorDown;
+  // The bbox RPC as PostgREST serves it: at most maxRows per response whatever
+  // is asked, offset/limit applied to the function's result (which stops at
+  // p_limit), and the total in Content-Range only for Prefer: count=exact.
+  let maxRows;
+  let rpcCalls;
+  let rpcFailAt;
+  let rpcNoTotal;
+  let claimantRows;
 
   beforeEach(() => {
     process.env.SUPABASE_URL = 'https://stub.supabase.co';
@@ -321,14 +329,37 @@ describe('/api/claims US read path: mirror first, live fallback', () => {
     mirrorUrls = [];
     blmCalls = 0;
     mirrorDown = false;
+    maxRows = 1000;
+    rpcCalls = [];
+    rpcFailAt = null;
+    rpcNoTotal = false;
+    claimantRows = null;
     vi.resetModules();
     vi.stubGlobal('fetch', vi.fn(async (url, init) => {
       const u = decodeURIComponent(String(url));
       if (u.includes('/rest/v1/us_claims?select=source_updated_at')) return json(mirrorDate ? [{ source_updated_at: mirrorDate }] : []);
-      if (u.includes('/rest/v1/us_claim_claimants')) return json([], 404);
+      if (u.includes('/rest/v1/us_claim_claimants')) {
+        if (!claimantRows) return json([], 404);
+        const off = Number(u.match(/offset=(\d+)/)?.[1] || 0);
+        const lim = Math.min(Number(u.match(/limit=(\d+)/)?.[1] || Infinity), maxRows);
+        return json(claimantRows.slice(off, off + lim));
+      }
       if (u.includes('/rest/v1/rpc/us_claims_in_bbox')) {
         mirrorUrls.push(`rpc ${init.body}`);
-        return mirrorDown ? json({ message: 'boom' }, 500) : json(mirrorRows);
+        if (mirrorDown) return json({ message: 'boom' }, 500);
+        const off = Number(u.match(/offset=(\d+)/)?.[1] || 0);
+        const lim = Math.min(Number(u.match(/limit=(\d+)/)?.[1] || Infinity), maxRows);
+        const count = /count=exact/.test(init.headers?.Prefer || '');
+        rpcCalls.push({ offset: off, limit: lim, count, order: u.match(/order=([a-z_]+)/)?.[1], pLimit: JSON.parse(init.body).p_limit });
+        if (rpcFailAt != null && off >= rpcFailAt) {
+          return json({ code: '57014', message: 'canceling statement due to statement timeout' }, 500);
+        }
+        const result = [...mirrorRows].sort((a, b) => a.id - b.id).slice(0, JSON.parse(init.body).p_limit);
+        const page = result.slice(off, off + lim);
+        const res = json(page);
+        const range = page.length ? `${off}-${off + page.length - 1}` : '*';
+        res.headers.set('content-range', `${range}/${count && !rpcNoTotal ? result.length : '*'}`);
+        return res;
       }
       if (u.includes('/rest/v1/us_claims?')) {
         mirrorUrls.push(u);
@@ -415,6 +446,94 @@ describe('/api/claims US read path: mirror first, live fallback', () => {
     expect(res.body.meta.source).toBe('mirror');
     expect(res.body.features).toHaveLength(2);
     expect(JSON.parse(mirrorUrls[0].slice(4))).toMatchObject({ min_lng: -117.1, max_lat: 40.5, p_state: 'NV' });
+    expect(res.body.meta).toMatchObject({ totalKnown: 2, returned: 2, truncated: false, pagesFetched: 1 });
+  });
+
+  // The production bug: PostgREST's max-rows (1000) cut a 1,207-claim box to
+  // exactly 1,000 rows and the response said totalKnown 1000, truncated false.
+  it('pages a bbox past the 1,000-row cap and returns every claim (1,207)', async () => {
+    mirrorRows = Array.from({ length: 1207 }, (_, i) => mirrorRow(i + 1));
+    const res = await run({ bbox: '-114.65,37.85,-114.25,38.1', province: 'us-nv' });
+    expect(res.body.meta.source).toBe('mirror');
+    expect(res.body.features).toHaveLength(1207);
+    expect(new Set(res.body.features.map((f) => f.properties.TAG_NUMBER)).size).toBe(1207);
+    expect(res.body.meta).toMatchObject({ totalKnown: 1207, returned: 1207, truncated: false, pagesFetched: 2 });
+    expect(rpcCalls.map((c) => c.offset)).toEqual([0, 1000]);
+    expect(rpcCalls[0]).toMatchObject({ count: true, order: 'id' });
+    expect(rpcCalls[1].count).toBe(false);
+    // Every page asks the function for the same ceiling, so the planner keeps
+    // the envelope-index plan and the pages line up.
+    expect(rpcCalls.map((c) => c.pLimit)).toEqual([10000, 10000]);
+    expect(blmCalls).toBe(0);
+  });
+
+  it('steps by the rows a page actually held, so a lower cap still reads everything', async () => {
+    maxRows = 400;
+    mirrorRows = Array.from({ length: 1207 }, (_, i) => mirrorRow(i + 1));
+    const res = await run({ bbox: '-114.65,37.85,-114.25,38.1', province: 'us-nv' });
+    expect(res.body.features).toHaveLength(1207);
+    expect(res.body.meta).toMatchObject({ totalKnown: 1207, truncated: false, pagesFetched: 4 });
+    expect(rpcCalls.map((c) => c.offset)).toEqual([0, 400, 800, 1200]);
+  });
+
+  it('marks a box with more claims than one response carries as truncated, total unknown', async () => {
+    // The function stops at p_limit (10,000): the count it reports is "at least".
+    mirrorRows = Array.from({ length: 12000 }, (_, i) => mirrorRow(i + 1));
+    const res = await run({ bbox: '-117.5,40.0,-116.5,40.7', province: 'us-nv' });
+    expect(res.body.features).toHaveLength(10000);
+    expect(res.body.meta).toMatchObject({ totalKnown: null, returned: 10000, truncated: true, pagesFetched: 10 });
+    expect(Math.max(...rpcCalls.map((c) => c.offset))).toBe(9000);
+  });
+
+  it('keeps the pages that arrived and says truncated when a later page times out', async () => {
+    mirrorRows = Array.from({ length: 2500 }, (_, i) => mirrorRow(i + 1));
+    rpcFailAt = 2000;   // the anon role's 3 s statement timeout on the third page
+    const res = await run({ bbox: '-114.65,37.85,-114.25,38.1', province: 'us-nv' });
+    expect(res.statusCode).toBe(200);
+    expect(res.body.meta.source).toBe('mirror');
+    expect(res.body.features).toHaveLength(2000);
+    expect(res.body.meta).toMatchObject({ totalKnown: 2500, returned: 2000, truncated: true });
+  });
+
+  it('hands the box to live BLM when the first page times out', async () => {
+    mirrorRows = Array.from({ length: 2500 }, (_, i) => mirrorRow(i + 1));
+    rpcFailAt = 0;
+    const res = await run({ bbox: '-114.65,37.85,-114.25,38.1', province: 'us-nv' });
+    expect(res.statusCode).toBe(200);
+    expect(res.body.meta.source).toBe('live');
+  });
+
+  it('walks until a short page when no total is disclosed', async () => {
+    rpcNoTotal = true;
+    mirrorRows = Array.from({ length: 2300 }, (_, i) => mirrorRow(i + 1));
+    const res = await run({ bbox: '-114.65,37.85,-114.25,38.1', province: 'us-nv' });
+    expect(res.body.features).toHaveLength(2300);
+    expect(res.body.meta).toMatchObject({ totalKnown: 2300, truncated: false, pagesFetched: 3 });
+  });
+
+  it('pages the claimant store past 1,000 rows and joins every serial', async () => {
+    const n = 2300;
+    claimantRows = Array.from({ length: n }, (_, i) => ({
+      serial: `NV10${5000000 + i + 1}`, claimant_name: 'AWESOME GOLD NEVADA LLC', claimant_role: 'owner of record',
+      state: 'NV', source: 'mlrs_report_120', snapshot_date: '2026-07-01',
+    }));
+    mirrorRows = Array.from({ length: n }, (_, i) => mirrorRow(i + 1));
+    const res = await run({ q: 'Awesome Gold Nevada LLC', type: 'company', province: 'us-nv' });
+    expect(res.body.resolution).toMatchObject({ status: 'resolved', resolvedAgainst: 'claimant', serialsMatched: n });
+    expect(res.body.features).toHaveLength(n);
+    expect(res.body.meta).toMatchObject({ totalKnown: n, truncated: false });
+  });
+
+  it('says truncated when the claimant store holds more rows than are read', async () => {
+    claimantRows = Array.from({ length: 5200 }, (_, i) => ({
+      serial: `NV10${5000000 + i + 1}`, claimant_name: 'AWESOME GOLD NEVADA LLC', claimant_role: 'owner of record',
+      state: 'NV', source: 'mlrs_report_120', snapshot_date: '2026-07-01',
+    }));
+    mirrorRows = Array.from({ length: 5200 }, (_, i) => mirrorRow(i + 1));
+    const res = await run({ q: 'Awesome Gold Nevada LLC', type: 'company', province: 'us-nv' });
+    expect(res.body.resolution.serialsMatched).toBe(5000);
+    expect(res.body.features).toHaveLength(5000);
+    expect(res.body.meta).toMatchObject({ totalKnown: null, truncated: true });
   });
 
   it('resolves a company through the alias ladder on claim names, labelled as such', async () => {
