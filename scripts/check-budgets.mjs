@@ -255,9 +255,8 @@ const BUDGETS = {
   // 924.4 → 924.9 (measured 924.6): dompurify 3.4.17 security update, as totalAuthJsGzipKb above.
   // 924.9 → 940.9 (measured 940.6): 2D labels and geology styling (above, measured 940.0) merged over the dompurify
   // update.
-  // 940.9 → 944.8 (P2-8, measured 944.5): the same lazy property recipe path.
-  // The unconfigured graph also retains more of the data reader that its old
-  // raw-only, disabled property button allowed Vite to prune.
+  // 940.9 → 944.8 (P2-8, measured 944.6): the same lazy property recipe path
+  // in the unconfigured build. Its initial route budgets also stay unchanged.
   totalJsGzipKb: 944.8,
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the

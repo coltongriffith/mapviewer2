@@ -53,7 +53,12 @@ test('2D property recipes stay staged until build and persist their exact text a
     await page.goto('/?intent=resume');
     await expect(page.locator('.leaflet-container').first()).toBeVisible();
     await page.locator('#ins-tab-annotate').click();
-    if (!await page.getByTestId('drill-plan-controls').isVisible()) await page.getByRole('button', { name: /^Drill plan/ }).click();
+    const toggle = page.getByRole('button', { name: /^Drill plan/ });
+    await expect(toggle).toBeVisible();
+    // The saved accordion can already be open while its lazy controls load.
+    // Inspect the toggle, not the deferred child's momentary visibility.
+    if (await toggle.getAttribute('aria-expanded') !== 'true') await toggle.click();
+    await expect(page.getByTestId('drill-plan-controls')).toBeVisible();
   };
   await open();
   const readPlan = async () => {

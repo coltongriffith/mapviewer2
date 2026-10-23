@@ -99,7 +99,13 @@ describe('a published version and the drill database notice', () => {
     await core.openProject(FIG);
     await vi.waitFor(() => expect(notice().hidden).toBe(false));
     expect(document.getElementById('drill-notice-text').textContent).toContain('changed from v3 to v4');
+    const readRecipes = sb.rpc;
+    let release;
+    sb.rpc = vi.fn((fn) => new Promise((resolve) => { release = () => resolve(readRecipes(fn)); }));
+    const inFlight = check();
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'));
     await core.openVersion(1);
+    release(); await inFlight; // A live-figure read finishes after the version opens.
     const loads = E.loadProject.mock.calls.length, reads = sb.rpc.mock.calls.length;
     await check();
     document.getElementById('drill-update').click();
@@ -108,6 +114,7 @@ describe('a published version and the drill database notice', () => {
     expect(sb.rpc.mock.calls.length).toBe(reads);
     expect(E.loadProject.mock.calls.length).toBe(loads);
     expect(E.getState().drillSource).toEqual(ref);
+    sb.rpc = readRecipes;
     await core.closeVersion();
     await vi.waitFor(() => expect(notice().hidden).toBe(false));
     expect(E.getState().drillSource).toEqual(ref);
