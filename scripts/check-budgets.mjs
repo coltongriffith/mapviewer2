@@ -247,7 +247,9 @@ const BUDGETS = {
   // GA4 (Oct 2026, measured 1073.9): public/gtag-init.js gains the GA4 config and its one-time-code filter
   // (+0.25 kB gzip; it is served to every page, so its explanation lives in tests/site-analytics-tags.test.js).
   // Combined Excel + page exports + GA4 budget; all changes retained when integrating main.
-  totalAuthJsGzipKb: 1093.0,
+  // Source CRS selection and same-datum preview add ~2.2 KiB to the lazy
+  // drill import UI. Proj4 is reused lazily; editor/startup limits unchanged.
+  totalAuthJsGzipKb: 1095.3,
   // 1009.4 → 1026.3 (measured 1026.0): lazy XLSX reader (~13.8 KiB), sheet/header preview
   // (~1.1 KiB), import wiring and numeric-format handling. Shared fflate adds ~1.2 KiB
   // for async ZIP workers; it remains one copy with the existing draft compression.
@@ -304,7 +306,7 @@ const BUDGETS = {
   // Same paginated table export (~2.9 KiB lazy); editor/homepage/3D startup budgets unchanged.
   // GA4 (measured 1006.6): as totalAuthJsGzipKb above.
   // Combined Excel + page exports + GA4, as configured above.
-  totalJsGzipKb: 1025.8,
+  totalJsGzipKb: 1028.1, // Source coordinate review: matching lazy-only increase.
   // 940.9 → 957.8 (measured 957.5): Excel import, as totalAuthJsGzipKb above.
   // 940.9 → 944.8 (P2-8, measured 944.6): the same lazy property recipe path
   // in the unconfigured build. Its initial route budgets also stay unchanged.
