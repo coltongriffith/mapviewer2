@@ -153,10 +153,17 @@ export default function ResultsPanel({ property, perms, revision = 0 }) {
     if (tableFormat === 'csv') return download(`${base}-results.csv`, toCsv(rows));
     setExporting(true);
     try {
-      const { resultsTableXlsx } = await import('../../utils/drillResultsXlsx.js');
-      download(`${base}-results.xlsx`, await resultsTableXlsx(out, recipe, tableOptions));
-      setNote('Downloaded the Excel table and recipe notes.');
-    } catch (e) { setError(e.message?.includes('too long for Excel') ? e.message : 'Excel export failed. Try again or download HTML.'); }
+      if (tableFormat === 'xlsx') {
+        const { resultsTableXlsx } = await import('../../utils/drillResultsXlsx.js');
+        download(`${base}-results.xlsx`, await resultsTableXlsx(out, recipe, tableOptions));
+        setNote('Downloaded the Excel table and recipe notes.');
+      } else {
+        const { resultsTablePages } = await import('../../utils/drillResultsPages.js');
+        const file = await resultsTablePages(out, recipe, tableOptions, tableFormat);
+        download(`${base}-results.${file.extension}`, file.blob);
+        setNote(`Downloaded ${file.pages} page${file.pages === 1 ? '' : 's'} with recipe notes${file.extension === 'zip' ? ' in a ZIP of PNG images' : ''}.`);
+      }
+    } catch (e) { setError(e.message?.includes('Download HTML') ? e.message : 'Table export failed. Try again or download HTML.'); }
     finally { setExporting(false); }
   };
   const copyFormattedTable = async () => {
@@ -218,14 +225,16 @@ export default function ResultsPanel({ property, perms, revision = 0 }) {
         <div className="ws-row">
           <button type="button" className="btn" onClick={() => copy(resultsText(results, recipe), 'results as text')}>Copy as text</button>
           <label className="ws-field">Table format
-            <select value={tableFormat} onChange={(e) => setTableFormat(e.target.value)}>
+            <select value={tableFormat} disabled={exporting} onChange={(e) => setTableFormat(e.target.value)}>
               <option value="csv">Spreadsheet (CSV / TSV)</option>
               <option value="html">Formatted table (HTML)</option>
               <option value="xlsx">Excel workbook (XLSX)</option>
+              <option value="png">Page images (PNG / ZIP)</option>
+              <option value="pdf">Printable pages (PDF)</option>
             </select>
           </label>
           <button type="button" className="btn" onClick={() => tableFormat === 'html' ? copyFormattedTable() : copy(toTsv(rows), 'table')}>{tableFormat === 'html' ? 'Copy formatted table' : 'Copy table (TSV)'}</button>
-          <button type="button" className="btn" disabled={exporting} onClick={downloadTable}>{exporting ? 'Preparing Excel…' : tableFormat === 'xlsx' ? 'Download Excel' : tableFormat === 'html' ? 'Download HTML' : 'Download CSV'}</button>
+          <button type="button" className="btn" disabled={exporting} onClick={downloadTable}>{exporting ? 'Preparing table…' : `Download ${tableFormat === 'xlsx' ? 'Excel' : tableFormat.toUpperCase()}`}</button>
           <button type="button" className="btn" disabled={!current || dirty} title={!current || dirty ? 'Save the recipe first' : undefined}
             onClick={() => { const f = toPublishedFile(results, out.columns, source, `${base}-published-results.csv`); download(f.name, f.text); }}>Download for 3D figures</button>
         </div>
