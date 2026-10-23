@@ -12,6 +12,7 @@ let db, as, one, val, su;
 const WORKSPACES = readMigration('20261023100000_workspaces_properties.sql');
 const FILES = readMigration('20261025100000_property_files.sql');
 const MIGRATION = readMigration('20261027100000_drill_database.sql');
+const ALTERATION = readMigration('20261101120000_drill_alteration.sql');
 
 const id = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const O = id(1); // owner
@@ -39,7 +40,8 @@ const au = (from, to, cu, aueq = null) => ({ hole_id: 'R-1', from_m: from, to_m:
   values: { Cu: cu, ...(aueq === null ? {} : { Au: aueq }) }, bdl: aueq === 0.0025 ? { Au: 0.005 } : {}, units: { Cu: '%', Au: 'g/t' } });
 
 beforeAll(async () => {
-  ({ db, as, one, val, su } = await createWorkspaceDb({ emails: EMAIL, migrations: [WORKSPACES, FILES, MIGRATION, MIGRATION] }));
+  // Run every legacy-kind regression against the extended functions too.
+  ({ db, as, one, val, su } = await createWorkspaceDb({ emails: EMAIL, migrations: [WORKSPACES, FILES, MIGRATION, MIGRATION, ALTERATION, ALTERATION] }));
   S.org = (await val(O, `select public.create_organization('Star Copper Corp.')`)).id;
   S.orgB = (await val(X, `select public.create_organization('Rival Metals')`)).id;
   await su(`insert into public.organization_members (org_id, user_id, role) values ($1, $2, 'admin'), ($1, $3, 'editor'), ($1, $4, 'viewer')`, [S.org, A, E, V]);
@@ -70,6 +72,7 @@ describe('migration', () => {
     expect(await su(`select tablename, policyname from pg_policies group by 1, 2 having count(*) > 1`)).toEqual([]);
     const pols = await su(`select tablename, policyname, cmd, qual from pg_policies where tablename like 'drill\\_%' order by 1, 2`);
     expect(pols.map((p) => [p.tablename, p.cmd])).toEqual([
+      ['drill_alteration', 'SELECT'],
       ['drill_assays', 'SELECT'], ['drill_collars', 'SELECT'], ['drill_column_templates', 'DELETE'], ['drill_column_templates', 'SELECT'],
       ['drill_import_batches', 'SELECT'], ['drill_lithology', 'SELECT'], ['drill_surveys', 'SELECT'],
     ]);
