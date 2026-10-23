@@ -48,16 +48,16 @@ const SHOW_SOCIAL_PROOF = false;
 const SOCIAL_PROOF_COMPANIES = ['Star Copper', 'Discovery Energy Metals'];
 
 // A handful of recognizable TSXV juniors whose claim-map pages are pre-built
-// (public/companies/*). The "claim your company map" wedge for the first-10
-// push — a visitor who recognizes their own ticker converts far better than one
-// imagining a blank map. Full directory lives at /companies/.
+// (public/companies/*), shown as plain-text lookups. Not logos: a logo row reads
+// as a client list, and these companies are not customers. Full directory lives
+// at /companies/.
 const COMPANY_PAGES = [
-  { ticker: 'DV', name: 'Dolly Varden Silver', logo: 'dolly-varden.webp' },
-  { ticker: 'GOT', name: 'Goliath Resources', logo: 'goliath.webp' },
-  { ticker: 'ESK', name: 'Eskay Mining', logo: 'eskay.webp' },
-  { ticker: 'BBB', name: 'Brixton Metals', logo: 'brixton.webp' },
-  { ticker: 'SCOT', name: 'Scottie Resources', logo: 'scottie.svg' },
-  { ticker: 'TUD', name: 'Tudor Gold', logo: 'tudor.webp' },
+  { ticker: 'DV', name: 'Dolly Varden Silver' },
+  { ticker: 'GOT', name: 'Goliath Resources' },
+  { ticker: 'ESK', name: 'Eskay Mining' },
+  { ticker: 'BBB', name: 'Brixton Metals' },
+  { ticker: 'SCOT', name: 'Scottie Resources' },
+  { ticker: 'TUD', name: 'Tudor Gold' },
 ];
 
 // What actually goes on these maps. Stated as capabilities with the nouns a
@@ -312,21 +312,25 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
           </ol>
         </section>
 
-        {/* ── Company proof, immediately under the hero ─────────── */}
+        {/* ── Company claim lookups, immediately under the hero ─── */}
         <section className="lm-proof-strip lm-reveal" id="companies" data-section="companies">
           <div className="lm-section-inner">
             <div className="lm-company-heading">
-              <p className="lm-proof-lead">
-                Company claim maps from public registry data.
-                Open a map, then request the editable version.
-              </p>
-              <a className="lm-company-all" href="/companies/" data-track="Company: See all">All mapped companies <span aria-hidden="true">→</span></a>
+              <div>
+                <h2 className="lm-company-title">Look up any listed company&rsquo;s claims</h2>
+                <p className="lm-proof-lead">
+                  Example maps built automatically from public registry records.
+                  These companies are not affiliated with or endorsed by Exploration Maps.
+                </p>
+              </div>
+              <a className="lm-company-all" href="/companies/" data-track="Company: See all">Browse all companies <span aria-hidden="true">→</span></a>
             </div>
             <ul className="lm-ticker-list">
               {COMPANY_PAGES.map((c) => (
                 <li key={c.ticker}>
-                  <a href={`/companies/${c.ticker.toLowerCase()}/`} data-track={`Company: ${c.ticker}`} aria-label={`Open ${c.name} claim map`} title={`${c.name} · View claim map`}>
-                    <img className={`lm-company-logo lm-company-logo-${c.ticker.toLowerCase()}`} src={`/company-logos/${c.logo}`} alt={c.name} width="160" height="44" loading="lazy" decoding="async" />
+                  <a href={`/companies/${c.ticker.toLowerCase()}/`} data-track={`Company: ${c.ticker}`}>
+                    <span className="lm-company-name">{c.name}</span>
+                    <span className="lm-company-meta">TSXV: {c.ticker} · claim map</span>
                   </a>
                 </li>
               ))}

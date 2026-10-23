@@ -73,7 +73,7 @@ Inside the editor these sections start closed. Click the heading to open them: *
 1. Type a company (e.g. `Dolly Varden`) in `Search mineral claims` and press `Search`. The editor opens with the registry search already running.
 2. Click the hero map. The Cedar Ridge demo loads.
 3. Click each of the three example cards (`Open this example →`). Each loads its own demo.
-4. Click a company tile (`DV`, `GOT`, `ESK`, `BBB`, `SCOT`, `TUD`) and `All mapped companies →`.
+4. Click a company tile (`DV`, `GOT`, `ESK`, `BBB`, `SCOT`, `TUD`) and `Browse all companies →`.
 **Gotchas.** The `Registry search is available across seven Canadian jurisdictions` disclosure lists the regions. The U.S. sentence only appears when the U.S. flag is on. The pricing buttons open the editor, not Stripe.
 **Film it.** Hero search → claims appear on a map in under ten seconds. Hook: "Type a company name. Get its claims on a map."
 
