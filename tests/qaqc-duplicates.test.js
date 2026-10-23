@@ -82,6 +82,25 @@ describe('one explicit immutable import group', () => {
     expect(result.summaries.within10).toEqual({ count: 0, total: 0, percent: null });
     expect(result.ranked).toEqual([]);
   });
+  it.each([1e-300, 1e-266, 1e-100, 1e-12, 1, 1e11])('includes decimal cutoff pairs without display rounding at scale %s', scale => {
+    for (const [x, y, cutoff] of [[0.9, 1.1, 10], [0.8, 1.2, 20]]) {
+      const aboveX = x - 1e-12, aboveY = y + 1e-12;
+      const result = analyze([
+        pair('boundary', x * scale, y * scale), pair('boundary-swapped', y * scale, x * scale),
+        pair('above', aboveX * scale, aboveY * scale), pair('above-swapped', aboveY * scale, aboveX * scale),
+      ]);
+      expect(result.summaries[`within${cutoff}`]).toEqual({ count: 2, total: 4, percent: 50 });
+      const boundary = result.points.find(p => p.id === 'boundary');
+      expect(boundary.hard).toBe(hardPercent(x * scale, y * scale));
+      expect(result.points.find(p => p.id === 'boundary-swapped').hard).toBe(boundary.hard);
+      // These genuinely above-cutoff values still round to the same visible
+      // percentage; their exclusion proves this is not display rounding.
+      const above = result.points.find(p => p.id === 'above');
+      expect(above.hard.toFixed(8)).toBe(cutoff.toFixed(8));
+      expect(above.hard - cutoff).toBeGreaterThan(4 * Number.EPSILON * cutoff);
+    }
+    if (scale === 1) expect(hardPercent(0.9, 1.1)).toBeGreaterThan(10);
+  });
 });
 
 describe('explicit exclusions and snapshot boundaries', () => {

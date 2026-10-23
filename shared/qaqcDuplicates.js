@@ -19,6 +19,12 @@ const nonempty = value => typeof value === 'string' && value.trim().length > 0;
 const sourceRow = value => Number.isInteger(value) && value >= 1 && value <= MAX_DUPLICATE_SNAPSHOT_ROWS;
 const validValue = value => typeof value === 'number' && Number.isFinite(value) && value >= 0 && value < 1e12;
 const byId = (a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+// Decimal boundary pairs can land a few floating-point steps above 10/20 after
+// subtraction, division and scaling (e.g. 0.9/1.1 -> 10.000000000000004).
+// This allowance is four relative machine epsilons of the cutoff, not display
+// rounding or an assay tolerance. Keep the underlying HARD/rank unrounded.
+const withinCutoff = (value, cutoff) => value <= cutoff
+  || value - cutoff <= 4 * Number.EPSILON * cutoff;
 
 /** Numerically symmetric HARD; no rounding or imputation. Null means undefined. */
 export function hardPercent(x, y) {
@@ -102,7 +108,7 @@ export function analyzeDuplicateSnapshot({ scope, records, parents, complete } =
   }
   const total = result.points.length;
   const within = threshold => {
-    const count = result.points.filter(point => point.hard <= threshold).length;
+    const count = result.points.filter(point => withinCutoff(point.hard, threshold)).length;
     return { count, total, percent: total ? 100 * count / total : null };
   };
   result.ranked = [...result.points].sort((a, b) => a.hard - b.hard || byId(a, b))

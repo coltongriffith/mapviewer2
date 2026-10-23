@@ -30,7 +30,7 @@ The result includes `scope`, `complete`, `interpretation: 'descriptive'`, `batch
 - Eligible points have `x` (original), `y` (duplicate), `hard`, `logEligible`, and `status: 'descriptive'`.
 - `excluded` has the same identity/source fields plus one primary `reason`, `message`, and `status: 'unassessed'`. An invalid/foreign parent is not copied into the result. Its raw/identity details remain unavailable to the comparison.
 - `ranked` sorts eligible points by increasing unrounded HARD, then duplicate UUID for stable ties. It adds one-based `rank` and `cumulativePercent = 100 * rank / N`.
-- `summaries` contains `hardCount`, `logCount`, `logExcludedCount`, and `within10`/`within20`, each with `count`, `total`, `percent`. Cutoffs are inclusive and evaluated before display rounding. Empty denominators produce null percentages.
+- `summaries` contains `hardCount`, `logCount`, `logExcludedCount`, and `within10`/`within20`, each with `count`, `total`, `percent`. Cutoffs are inclusive and evaluated before display rounding, with the floating-point boundary allowance below. Empty denominators produce null percentages.
 
 Exclusion precedence is missing parent, mismatched reference, missing element, exact-unit mismatch, censoring, invalid value, missing original result text, then both-zero undefined HARD. Any own BDL key excludes a result even if another importer supplied a substituted numeric value or malformed false flag. No DL/2, zero or detection-bound substitution occurs.
 
@@ -39,6 +39,8 @@ Exclusion precedence is missing parent, mismatched reference, missing element, e
 For finite nonnegative original `x` and duplicate `y`, both below the register's `1e12` bound and with positive sum:
 
 `HARD (%) = 100 * abs(x - y) / (x + y)`
+
+The inclusive 10/20% summary comparisons allow at most `4 * Number.EPSILON * cutoff` above the cutoff (about `8.9e-15` and `1.8e-14` percentage points respectively). This accounts for a few floating-point steps of arithmetic error: decimal 0.9/1.1 is a 10% boundary pair but computes as 10.000000000000004. It is not display rounding, an assay uncertainty estimate or a user-configured acceptance margin. HARD values and ranks remain unrounded; differences larger than that numerical allowance remain above the cutoff even if their displayed percentages look identical. Tests cover both directions of 0.9/1.1 and 0.8/1.2 at tiny, ordinary and large valid scales, plus genuinely above-cutoff pairs.
 
 This is symmetric and half the absolute relative percent difference based on the pair mean. For example, 90 and 110 give HARD 10%. The definition and paired-chart application are described in [SRK's technical report, Appendix C, pp. 126–127](https://www.sec.gov/Archives/edgar/data/795800/000119312516604500/d200931dex991.htm). That report's project criteria are not universal acceptance rules for this product.
 
