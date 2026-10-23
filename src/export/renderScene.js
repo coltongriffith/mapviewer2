@@ -2209,10 +2209,17 @@ export async function ensureExportFonts(scene, timeoutMs = 3000) {
 // Latin subset of each Google font the map uses as @font-face data URLs. If a
 // font cannot be fetched, the SVG still exports and says so.
 const GOOGLE_FONTS = new Set(['Inter', 'Montserrat', 'Lato', 'Open Sans', 'Roboto', 'Source Sans 3', 'IBM Plex Mono']);
-async function embeddedFontCss(scene) {
+async function embeddedFontCss(scene, options = {}) {
   if (typeof globalThis.fetch !== 'function') return '';
   const studio = studioOn(scene?.project?.layout);
-  const families = [...new Set(studio ? studioFontFamilies(scene.project.layout) : ['Inter', ...Object.values(scene?.project?.layout?.fonts || {})])].filter((f) => GOOGLE_FONTS.has(f));
+  // exportSVG appends branding after this render. Include its fonts now, but not
+  // for the clean annotations layer, even when its parent figure is branded.
+  const branding = new Set();
+  if (options.layer !== 'annotations') {
+    if (options.watermarkBand) branding.add(String(options.watermarkBand.font || 'Source Sans 3').split(',')[0].trim().replace(/^['"]|['"]$/g, ''));
+    if (options.draftOverlay) branding.add('Source Sans 3');
+  }
+  const families = [...new Set([...(studio ? studioFontFamilies(scene.project.layout) : ['Inter', ...Object.values(scene?.project?.layout?.fonts || {})]), ...branding])].filter((f) => GOOGLE_FONTS.has(f));
   // Bounded: a slow or blocked font host must not stall the export.
   const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
   const timer = setTimeout(() => ctrl?.abort(), 5000);
@@ -2234,8 +2241,8 @@ async function embeddedFontCss(scene) {
   const blocks = await Promise.all(families.map(async (family) => {
     try {
       const q = encodeURIComponent(family).replace(/%20/g, '+');
-      // Studio embeds every weight it sets (300 to 800), else the editor's four.
-      let res = studio ? await fetch(`https://fonts.googleapis.com/css2?${studioFontQuery(family)}&display=swap`) : { ok: false };
+      // Branding, like Studio, needs light (300) and heavy (800) text as well.
+      let res = studio || branding.has(family) ? await fetch(`https://fonts.googleapis.com/css2?${studioFontQuery(family)}&display=swap`) : { ok: false };
       if (!res.ok) res = await fetch(`https://fonts.googleapis.com/css2?family=${q}:wght@400;500;600;700&display=swap`);
       if (!res.ok) res = await fetch(`https://fonts.googleapis.com/css2?family=${q}:wght@400;700&display=swap`);
       if (!res.ok) throw new Error(String(res.status));
@@ -3121,7 +3128,7 @@ export async function renderSceneToSvg(sourceScene, options = {}) {
   const satelliteInset = await renderSatelliteInsetImageSvg(scene, scale);
 
   const svgDefs = [];
-  const fontCss = options.embedFonts === false ? '' : await embeddedFontCss(scene);
+  const fontCss = options.embedFonts === false ? '' : await embeddedFontCss(scene, options);
   if (fontCss) svgDefs.push(`<style type="text/css"><![CDATA[${fontCss}]]></style>`);
   const frame = exportFrame(scene, scale);
   const plan = await drillPlanFor(scene);
