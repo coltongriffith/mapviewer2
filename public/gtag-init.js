@@ -8,6 +8,5 @@ gtag('config', 'AW-18358773663');
   var q = l.search.slice(1).split('&').filter(Boolean);
   if (!q.some(p) && !l.hash.slice(1).split('&').some(p)) return gtag('config', 'G-6SR34P1CR7');
   q = q.filter(function (s) { return !p(s); });
-  gtag('config', 'G-6SR34P1CR7', { send_page_view: false });
-  gtag('event', 'page_view', { send_to: 'G-6SR34P1CR7', page_location: l.origin + l.pathname + (q.length ? '?' + q.join('&') : '') });
+  gtag('config', 'G-6SR34P1CR7', { page_location: l.origin + l.pathname + (q.length ? '?' + q.join('&') : '') });
 })(location, /^(session_id|authorization_id|code|token|token_hash|access_token|refresh_token)$/i);

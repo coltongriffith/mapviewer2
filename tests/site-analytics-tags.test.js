@@ -74,9 +74,10 @@ describe('Ahrefs Web Analytics', () => {
 // GA4's pageview reports the page address, and some app addresses carry one-time codes: Stripe's checkout
 // return (?session_id=), the connector consent page (?authorization_id=) and sign-in links (?code=,
 // #access_token=). As public/ahrefs-pageview.js does for Ahrefs, those never leave the browser: on such an
-// address the automatic pageview is off and one page_view is sent with the codes removed from the query and
-// no fragment. It is per event, so later in-app pageviews (after the app clears the codes with replaceState)
-// report their own address. The init file is served to every visitor, so it stays short.
+// address the GA4 config is given page_location with the codes removed from the query and no fragment, which
+// every GA4 event from that page load then reports (a per-event page_location still let user_engagement and
+// other events send the full address). Later events on that load keep the cleaned landing address. The init
+// file is served to every visitor, so it stays short.
 describe('Google Analytics 4', () => {
   const pages = ['index.html', '3d/index.html', ...htmlFiles('public')];
 
@@ -92,8 +93,8 @@ describe('Google Analytics 4', () => {
     const config = calls.find((c) => c[0] === 'config' && c[1] === 'G-6SR34P1CR7');
     expect(config, 'GA4 configured').toBeTruthy();
     const manual = calls.find((c) => c[0] === 'event' && c[1] === 'page_view');
-    // Without parameters, GA4's own pageview reports the full current address.
-    const reported = config[2]?.send_page_view === false ? manual?.[2]?.page_location : `${window.location.origin}${url}`;
+    // Without parameters, GA4's events report the full current address.
+    const reported = config[2]?.page_location ?? `${window.location.origin}${url}`;
     return { config: config[2], manual, reported };
   };
 
@@ -115,8 +116,9 @@ describe('Google Analytics 4', () => {
     ];
     for (const [url, expected] of cases) {
       const r = ga4(url);
-      expect(r.config, url).toEqual({ send_page_view: false });
-      expect(r.manual[2], url).toEqual({ send_to: 'G-6SR34P1CR7', page_location: expected });
+      // On the config, so every GA4 event from this page load (not only the pageview) gets the clean address.
+      expect(r.config, url).toEqual({ page_location: expected });
+      expect(r.manual, url).toBeUndefined();
       expect(r.reported, url).not.toMatch(/session_id|authorization_id|code=|token/);
     }
   });
