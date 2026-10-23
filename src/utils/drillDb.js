@@ -20,6 +20,7 @@ export const KINDS = [
   { value: 'surveys', label: 'Downhole surveys' },
   { value: 'assays', label: 'Assays' },
   { value: 'lithology', label: 'Lithology' },
+  { value: 'alteration', label: 'Alteration' },
 ];
 export const kindLabel = (k) => KINDS.find((x) => x.value === k)?.label || k;
 
@@ -55,9 +56,17 @@ export const FIELDS = {
     { key: 'code', label: 'Code', from: 'code' },
     { key: 'description', label: 'Description', from: 'desc' },
   ],
+  alteration: [
+    { key: 'hole_id', label: 'Hole ID', required: true, from: 'hole' },
+    { key: 'from_m', label: 'From', required: true, from: 'from' },
+    { key: 'to_m', label: 'To', required: true, from: 'to' },
+    { key: 'code', label: 'Code', re: /^(alteration|alteration_code|alteration_type|alt_code|code)$/ },
+    { key: 'description', label: 'Description', re: /^(alteration_description|alteration_desc|alt_description|alt_desc|description|desc)$/ },
+    { key: 'intensity', label: 'Intensity (text)', re: /^(alteration_intensity|alt_intensity|intensity)$/ },
+  ],
 };
 const NUMERIC = new Set(['x', 'y', 'z', 'azimuth', 'dip', 'depth', 'depth_m', 'from_m', 'to_m']);
-const TEXT_MAX = { hole_id: 60, status: 40, sample_id: 60, code: 60, description: 500 };
+const TEXT_MAX = { hole_id: 60, status: 40, sample_id: 60, code: 60, description: 500, intensity: 60 };
 
 export const BDL_MODES = [
   { value: 'half', label: 'Half the detection limit' },
@@ -125,6 +134,11 @@ const ROLE_KIND = { collar: 'collars', survey: 'surveys', assay: 'assays', litho
 /** The kind of drill data a table holds, by the 3D maker's rules (null when unclear). */
 export function detectKind(header, rows, name = '') {
   const entry = { header, rows, cols: matchCols(header) };
+  // Only explicit alteration signals suggest the new log. A generic Code or
+  // Intensity column does not reclassify legacy lithology/assay files.
+  if (entry.cols.hole !== undefined && entry.cols.from !== undefined && entry.cols.to !== undefined
+    && (header.some(h => /^(alteration(?:_code|_type|_description|_desc|_intensity)?|alt_(?:code|description|desc|intensity))$/.test(norm(h)))
+      || /(?:^|[^a-z])alteration(?:[^a-z]|$)/i.test(name))) return 'alteration';
   const kind = ROLE_KIND[refineRole(entry, roleOf(entry.cols, name), name)];
   if (kind) return kind;
   const n = String(name).toLowerCase();
@@ -170,6 +184,15 @@ export function autoMapping(kind, header, rows, { name = '', crs = null, decimal
   for (const f of FIELDS[kind]) {
     const i = f.from ? entry.cols[f.from] : n.findIndex((h) => f.re.test(h));
     if (i !== undefined && i >= 0) cols[f.key] = header[i];
+  }
+  if (kind === 'alteration') {
+    // Prefer explicitly named alteration fields when the file also contains
+    // generic/lithology columns; never infer a code from numeric intensity.
+    for (const key of ['code', 'description', 'intensity']) {
+      const field = FIELDS.alteration.find(f => f.key === key);
+      const explicit = n.findIndex(h => /^(alteration|alt_)/.test(h) && field.re.test(h));
+      if (explicit >= 0) cols[key] = header[explicit];
+    }
   }
   const mapping = { columns: cols, bdl: 'half', ...(decimalComma ? { decimalComma: true } : {}) };
   // Collars in latitude / longitude: x is longitude, y latitude, in WGS 84.
@@ -276,7 +299,7 @@ export function buildImport(kind, { header, rows, lines: fileLines = null }, map
   for (const f of fields) if (f.required && idx[f.key] < 0) err(null, `Choose the column for ${f.label}.`);
   const elements = kind === 'assays' ? (mapping.elements || []).filter((e) => !e.skip && e.column && header.includes(e.column) && cell(e.name)) : [];
   if (kind === 'assays' && !elements.length) err(null, 'Choose at least one element column.');
-  if (kind === 'lithology' && idx.code < 0 && idx.description < 0) err(null, 'Choose the column for Code or Description.');
+  if (['lithology', 'alteration'].includes(kind) && idx.code < 0 && idx.description < 0) err(null, 'Choose the column for Code or Description.');
   if (rows.length > MAX_ROWS) err(null, `The file has ${rows.length.toLocaleString('en-US')} rows; one import takes at most 20,000. Split files over 20,000 rows and import each part.`);
   const crs = cell(mapping.crs);
   if (kind === 'collars' && crs && !/^EPSG:\d{4,6}$/.test(crs)) err(null, 'The coordinate system must be written EPSG:<code>, for example EPSG:26910.');
@@ -338,7 +361,7 @@ export function buildImport(kind, { header, rows, lines: fileLines = null }, map
     if (o.azimuth !== undefined && !(o.azimuth >= 0 && o.azimuth <= 360)) fail(`Azimuth ${o.azimuth} is outside 0 to 360`);
     if (o.dip !== undefined && !(o.dip >= -90 && o.dip <= 90)) fail(`Dip ${o.dip} is outside -90 to 90`);
     if (kind === 'surveys' && o.azimuth === undefined && o.dip === undefined && !bad) fail('A survey station needs an azimuth or a dip');
-    if (kind === 'lithology' && !o.code && !o.description && !bad) fail('No code or description');
+    if (['lithology', 'alteration'].includes(kind) && !o.code && !o.description && !bad) fail('No code or description');
     if (kind === 'collars') {
       if (crs) o.crs = crs;
       if (o.planned === undefined && /^(planned|proposed)$/i.test(o.status || '')) o.planned = true;
@@ -374,7 +397,7 @@ export function buildImport(kind, { header, rows, lines: fileLines = null }, map
     warnings.push({ kind: 'dips-positive', holes: [], message: 'Dips are written positive down; they are stored negative (downward)' });
   }
   // Intervals: overlaps and gaps down each hole.
-  if (kind === 'assays' || kind === 'lithology') {
+  if (['assays', 'lithology', 'alteration'].includes(kind)) {
     const by = new Map();
     out.forEach((o) => { if (!by.has(o.hole_id)) by.set(o.hole_id, []); by.get(o.hole_id).push(o); });
     const overlap = [], gap = [];
@@ -383,10 +406,15 @@ export function buildImport(kind, { header, rows, lines: fileLines = null }, map
       for (let i = 1; i < l.length; i++) {
         if (l[i].from_m < l[i - 1].to_m - 1e-6) { overlap.push(id); break; }
       }
-      for (let i = 1; i < l.length; i++) if (l[i].from_m > l[i - 1].to_m + 0.01) { gap.push(id); break; }
+      let coveredTo = l[0].to_m;
+      for (let i = 1; i < l.length; i++) {
+        // Nested alteration intervals do not create a gap in the outer log.
+        if (l[i].from_m > (kind === 'alteration' ? coveredTo : l[i - 1].to_m) + 0.01) { gap.push(id); break; }
+        coveredTo = Math.max(coveredTo, l[i].to_m);
+      }
     });
     warn('overlapping-intervals', overlap, (n) => `Overlapping intervals in ${plural(n, 'hole')}`);
-    warn('gaps', gap, (n) => `Unsampled gaps between intervals in ${plural(n, 'hole')}`);
+    warn('gaps', gap, (n) => `${kind === 'alteration' ? 'Gaps between logged intervals' : 'Unsampled gaps between intervals'} in ${plural(n, 'hole')}`);
   }
   if (stats.over) warnings.push({ kind: 'over-limit', holes: [], message: `${plural(stats.over, 'value')} over the upper detection limit (">") kept at the limit` });
   if (stats.bdl) warnings.push({ kind: 'bdl', holes: [], message: `${plural(stats.bdl, 'value')} below detection, stored as ${BDL_MODES.find((m) => m.value === mode)?.label.toLowerCase()} and flagged` });
@@ -395,7 +423,7 @@ export function buildImport(kind, { header, rows, lines: fileLines = null }, map
 }
 
 // ── The diff in words ──────────────────────────────────────────────────────
-const NOUN = { collars: ['collar', 'collars'], surveys: ['survey station', 'survey stations'], assays: ['assay', 'assays'], lithology: ['lithology interval', 'lithology intervals'] };
+const NOUN = { collars: ['collar', 'collars'], surveys: ['survey station', 'survey stations'], assays: ['assay', 'assays'], lithology: ['lithology interval', 'lithology intervals'], alteration: ['alteration interval', 'alteration intervals'] };
 
 /** "12 new holes, 1,340 new assays, 3 changed assays" (or "No changes: 120 assays already stored"). */
 export function diffSentence(kind, d) {
@@ -420,6 +448,7 @@ export const serverErrors = (diff, lines) => (diff?.errors || []).map((e) => ({ 
 
 // ── Client ─────────────────────────────────────────────────────────────────
 const MESSAGES = [
+  [/INVALID_KIND:\s*alteration\b/, 'Alteration imports are not available on this site yet. Ask the site administrator to enable the alteration database update; existing drill imports still work.'],
   [/ORG_READ_ONLY/, 'You have view-only access here. Ask an admin of the workspace for editor access.'],
   [/BATCH_TOO_LARGE/, 'One import takes at most 20,000 rows (13 MB). Split files over 20,000 rows and import each part.'],
   [/BATCH_SUPERSEDED: (.*)/, (m) => `${m[1].charAt(0).toUpperCase()}${m[1].slice(1)}.`],

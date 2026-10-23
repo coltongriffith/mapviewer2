@@ -248,7 +248,9 @@ const BUDGETS = {
   // (+0.25 kB gzip; it is served to every page, so its explanation lives in tests/site-analytics-tags.test.js).
   // Combined Excel + page exports + GA4 budget; all changes retained when integrating main.
   // Lazy QA/QC mapper, import/register/history UI (+~9.5 KiB); initial routes unchanged.
-  totalAuthJsGzipKb: 1102.8,
+  // Alteration interval mapping/text intensity and stale-preview/template guards
+  // add ~0.8 KiB in the existing lazy drill tab; measured 1103.3 configured.
+  totalAuthJsGzipKb: 1103.6,
   // 1009.4 → 1026.3 (measured 1026.0): lazy XLSX reader (~13.8 KiB), sheet/header preview
   // (~1.1 KiB), import wiring and numeric-format handling. Shared fflate adds ~1.2 KiB
   // for async ZIP workers; it remains one copy with the existing draft compression.
@@ -306,7 +308,8 @@ const BUDGETS = {
   // GA4 (measured 1006.6): as totalAuthJsGzipKb above.
   // Combined Excel + page exports + GA4, as configured above.
   // Same lazy QA/QC controls; measured 1035.0 KiB plain.
-  totalJsGzipKb: 1035.5,
+  // Same lazy alteration import/lifetime correction; measured 1035.9 plain.
+  totalJsGzipKb: 1036.2,
   // 940.9 → 957.8 (measured 957.5): Excel import, as totalAuthJsGzipKb above.
   // 940.9 → 944.8 (P2-8, measured 944.6): the same lazy property recipe path
   // in the unconfigured build. Its initial route budgets also stay unchanged.
