@@ -38,17 +38,20 @@ function Records({ records, kind }) {
 function Register({ property, perms, client }) {
   const [kind, setKind] = useState('samples'), [revision, setRevision] = useState(0);
   const [pages, setPages] = useState([null]), [historyPages, setHistoryPages] = useState([null]);
-  const [records, setRecords] = useState(null), [history, setHistory] = useState(null);
+  const [recordPage, setRecordPage] = useState(null), [history, setHistory] = useState(null);
+  // Selection changes render before effect cleanup. Never interpret a loaded
+  // CRM row with the sample schema (or show samples as CRM definitions).
+  const records = recordPage?.kind === kind ? recordPage.data : null;
   const [error, setError] = useState(''), [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true), [busy, setBusy] = useState(null);
   const [available, setAvailable] = useState(false);
   const epoch = useRef(0);
   useEffect(() => () => { epoch.current++; }, []);
   useEffect(() => {
-    let active = true; setLoading(true); setError(''); setRecords(null); setHistory(null);
+    let active = true; setLoading(true); setError(''); setRecordPage(null); setHistory(null);
     if (!client) { setError('QA/QC needs a signed-in account.'); setLoading(false); return undefined; }
     Promise.all([listQaqcRecords(client, property.id, kind, pages.at(-1)), listQaqcBatches(client, property.id, historyPages.at(-1))])
-      .then(([current, batches]) => { if (active) { setRecords(current); setHistory(batches); setAvailable(true); } })
+      .then(([current, batches]) => { if (active) { setRecordPage({ kind, data: current }); setHistory(batches); setAvailable(true); } })
       .catch(e => { if (active) setError(qaqcError(e)); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };

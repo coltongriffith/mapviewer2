@@ -33,6 +33,7 @@ const collarBatch = { id: BATCH0, kind: 'collars', filename: 'Rails collars.csv'
 const drillSummary = () => ({ collars: 12, planned: 2, metres: 3420.5, surveys: 40, assays: 0, lithology: 0, holes: 12, elements: [], limit: 20000, batches: [{ ...collarBatch }] });
 
 test('QA/QC register: CRM then routine and dependent samples, stable retry and protected rollback', async ({ page }) => {
+  const pageErrors = []; page.on('pageerror', error => pageErrors.push(error.message));
   await fakeSupabase(page);
   const store = { samples: [], crms: [], batches: [] }, commits = [], results = new Map();
   let uncertain = true;
@@ -63,6 +64,10 @@ test('QA/QC register: CRM then routine and dependent samples, stable retry and p
   await region.getByRole('button', { name: 'Check QA/QC import' }).click();
   await region.getByRole('button', { name: 'Commit QA/QC import' }).click();
   await expect(region.getByText('Imported: 1 new, 0 changed, 0 unchanged.')).toBeVisible();
+  await region.getByLabel('Show records').selectOption('crms');
+  await expect(region.getByRole('table', { name: 'QA/QC register' }).getByRole('cell', { name: 'CRM-TEST', exact: true })).toBeVisible();
+  await region.getByLabel('Show records').selectOption('samples');
+  await expect(region.getByText('No current samples on this page.')).toBeVisible();
   await region.getByRole('combobox', { name: 'Import data', exact: true }).selectOption('samples');
   const sampleRows = [['lab_id', 'lab_batch_id', 'sample_id', 'sample_type', 'Au'], ['Lab-TEST', 'Job-TEST', '00001', 'routine', '<0.005']];
   await region.getByLabel('QA/QC data file').setInputFiles({ name: 'synthetic-routine.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: Buffer.from(xlsxFixture([{ name: 'Samples', rows: sampleRows }])) });
@@ -86,6 +91,13 @@ test('QA/QC register: CRM then routine and dependent samples, stable retry and p
   const table = region.getByRole('table', { name: 'QA/QC register' });
   await expect(table.getByRole('cell', { name: '00001', exact: true })).toBeVisible();
   await expect(table.getByText('Au: <0.005 g/t (below detection)', { exact: true })).toBeVisible();
+  await region.getByLabel('Show records').selectOption('crms');
+  await expect(table.getByRole('cell', { name: 'CRM-TEST', exact: true })).toBeVisible();
+  await expect(table.getByRole('cell', { name: '00001', exact: true })).toHaveCount(0);
+  await region.getByLabel('Show records').selectOption('samples');
+  await expect(table.getByRole('cell', { name: '00001', exact: true })).toBeVisible();
+  await expect(table.getByRole('cell', { name: 'CRM-TEST', exact: true })).toHaveCount(0);
+  expect(pageErrors).toEqual([]);
   const history = region.getByRole('table', { name: 'QA/QC imports' });
   await expect(history.getByRole('row').filter({ hasText: 'synthetic-routine.xlsx' }).getByRole('button')).toBeDisabled();
   page.once('dialog', dialog => dialog.accept());
