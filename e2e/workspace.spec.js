@@ -301,7 +301,12 @@ const withAssays = (fake) => { fake.drill = { ...fake.drill, assays: 200, holes:
 test('drill results: the recipe, the release table, copies and downloads, then saved for 3D', async ({ page }, testInfo) => {
   const fake = await fakeSupabase(page, { role: 'editor' });
   withAssays(fake);
-  await page.addInitScript(() => { navigator.clipboard.writeText = async (t) => { window.__copied = t; }; });
+  await page.addInitScript(() => {
+    navigator.clipboard.writeText = async (t) => { window.__copied = t; };
+    navigator.clipboard.write = async ([item]) => {
+      window.__formattedCopy = Object.fromEntries(await Promise.all(item.types.map(async (type) => [type, await (await item.getType(type)).text()])));
+    };
+  });
   await page.goto('/workspace/star-copper-corp/p/rails-copper-gold');
   await page.getByRole('tab', { name: 'Drill data' }).click();
   const region = page.getByRole('region', { name: 'Results' });
@@ -332,6 +337,27 @@ test('drill results: the recipe, the release table, copies and downloads, then s
   const file = await csv;
   expect(file.suggestedFilename()).toBe('rails-copper-gold-results.csv');
 
+  await region.getByLabel('Table format').selectOption('html');
+  await region.getByRole('button', { name: 'Copy formatted table' }).click();
+  await expect(region.getByRole('status')).toHaveText('Copied the formatted table and recipe notes.');
+  const formatted = await page.evaluate(() => window.__formattedCopy);
+  expect(formatted['text/plain']).toContain('Unsaved recipe: Default. Calculated from current assays.');
+  expect(formatted['text/plain']).toContain('True widths are not yet known.');
+  const htmlDownload = page.waitForEvent('download');
+  await region.getByRole('button', { name: 'Download HTML' }).click();
+  const htmlFile = await htmlDownload;
+  expect(htmlFile.suggestedFilename()).toBe('rails-copper-gold-results.html');
+  const html = await new Promise((resolve) => { let t = ''; htmlFile.createReadStream().then((st) => { st.on('data', (c) => { t += c; }); st.on('end', () => resolve(t)); }); });
+  expect(html).toBe(formatted['text/html']);
+  const exported = await page.context().newPage();
+  await exported.setContent(html);
+  await expect(exported.getByRole('row')).toHaveCount(5);
+  await expect(exported.getByRole('cell', { name: RESULT.split(', incl.')[0], exact: true })).toHaveCount(2);
+  await expect(exported.getByText('True widths are not yet known.')).toBeVisible();
+  await exported.screenshot({ path: testInfo.outputPath('drill-results-html.png'), fullPage: true });
+  await exported.close();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
+
   // Results for 3D come from a saved recipe only.
   const for3d = region.getByRole('button', { name: 'Download for 3D figures' });
   await expect(for3d).toBeDisabled();
@@ -341,6 +367,13 @@ test('drill results: the recipe, the release table, copies and downloads, then s
   expect(saved).toMatchObject({ p_property: PROP, p_name: 'Default', p_base_version: 0, p_recipe: { primary: 'Cu', equivalent: true, cutoff: 0.2, inclCutoff: 1, trueWidth: 'True widths are not yet known.' } });
   expect(saved.p_recipe.elements).toEqual([{ name: 'Cu', unit: '%', price: 4.5, recovery: 90 }, { name: 'Au', unit: 'g/t', price: 3000, recovery: 70 }]);
   await expect(region.getByText(/Default, version 1 · saved/)).toBeVisible();
+  await region.getByRole('button', { name: 'Copy formatted table' }).click();
+  await expect(region.getByRole('status')).toHaveText('Copied the formatted table and recipe notes.');
+  expect((await page.evaluate(() => window.__formattedCopy))['text/plain']).toContain('Saved recipe: Default, version 1. Calculated from current assays.');
+  await page.evaluate(() => { navigator.clipboard.write = async () => { throw new Error('Denied'); }; });
+  await region.getByRole('button', { name: 'Copy formatted table' }).click();
+  await expect(region.getByText('Copying a formatted table was blocked or is not supported by this browser. Download HTML instead.')).toBeVisible();
+  await expect(region.getByRole('button', { name: 'Download HTML' })).toBeEnabled();
   const pub = page.waitForEvent('download');
   await for3d.click();
   const pf = await pub;
