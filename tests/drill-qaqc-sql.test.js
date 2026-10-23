@@ -145,6 +145,44 @@ describe('QA/QC register foundation', () => {
     expect((await current('drill_qaqc_samples')).find(s => s.sample_id === '00001').id).toBe(originalId);
   });
 
+  it('does not attach a mixed import to the current parent of an unchanged duplicate', async () => {
+    const property = (await one(E, "insert into public.properties(org_id,name) values($1,'Duplicate dependency regression') returning id", [org])).id;
+    const duplicate = { ...sample, sample_id: 'DUP-1', sample_type: 'field_dup', parent_sample_id: sample.sample_id };
+    const blank = { ...sample, sample_id: 'BLANK-1', sample_type: 'blank' };
+    const p = await imp(E, 'samples', [sample], { property });
+    const d = await imp(E, 'samples', [duplicate], { property });
+    const original = await one(E, 'select id,parent_version_id from public.drill_qaqc_samples where batch_id=$1', [d.batch_id]);
+    const b = await imp(E, 'samples', [{ ...sample, values: { Au: 2 }, raw_values: { Au: '2.00' } }], { property });
+    const c = await imp(E, 'samples', [duplicate, blank], { property });
+    expect(c).toMatchObject({ new: 1, unchanged: 1, rows_written: 1 });
+    expect(await one(E, 'select depends_on from public.drill_qaqc_batches where id=$1', [c.batch_id])).toEqual({ depends_on: [] });
+    expect(await roll(E, b.batch_id)).toMatchObject({ restored: 1, withdrawn: 1 });
+    expect(await one(E, 'select id,parent_version_id from public.drill_qaqc_samples where batch_id=$1', [d.batch_id])).toEqual(original);
+    await expect(roll(E, p.batch_id)).rejects.toThrow(/BATCH_DEPENDENCY/);
+    await roll(E, d.batch_id);
+    await roll(E, p.batch_id);
+    // The unrelated blank remains current while the parent and duplicate history stays intact.
+    expect((await as(E, 'select sample_id from public.drill_qaqc_samples where property_id=$1 and superseded_by_batch is null', [property])).rows).toEqual([{ sample_id: 'BLANK-1' }]);
+    await roll(E, c.batch_id);
+  });
+
+  it('does not copy an unchanged standard CRM dependency into a new blank import', async () => {
+    const property = (await one(E, "insert into public.properties(org_id,name) values($1,'CRM dependency regression') returning id", [org])).id;
+    const standard = { ...sample, sample_id: 'STD-1', sample_type: 'standard', crm_id: crm.crm_id, crm_revision: crm.revision };
+    const crms = await imp(E, 'crms', [crm], { property });
+    const standards = await imp(E, 'samples', [standard], { property });
+    const original = await one(E, 'select id,crm_version_ids from public.drill_qaqc_samples where batch_id=$1', [standards.batch_id]);
+    const mixed = await imp(E, 'samples', [standard, { ...sample, sample_id: 'BLANK-1', sample_type: 'blank' }], { property });
+    expect(mixed).toMatchObject({ new: 1, unchanged: 1, rows_written: 1 });
+    expect(await one(E, 'select depends_on from public.drill_qaqc_batches where id=$1', [mixed.batch_id])).toEqual({ depends_on: [] });
+    expect(await one(E, 'select id,crm_version_ids from public.drill_qaqc_samples where batch_id=$1', [standards.batch_id])).toEqual(original);
+    await expect(roll(E, crms.batch_id)).rejects.toThrow(/BATCH_DEPENDENCY/);
+    await roll(E, standards.batch_id);
+    expect(await roll(E, crms.batch_id)).toMatchObject({ withdrawn: 1 });
+    expect((await as(E, 'select sample_id from public.drill_qaqc_samples where property_id=$1 and superseded_by_batch is null', [property])).rows).toEqual([{ sample_id: 'BLANK-1' }]);
+    await roll(E, mixed.batch_id);
+  });
+
   it('rolls back in dependency order, keeps history and refuses changed CRM revision after rollback', async () => {
     await roll(E, duplicateBatch);
     await roll(E, standardBatch);
