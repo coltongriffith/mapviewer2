@@ -121,8 +121,19 @@ snapshot. Both readers make 228 requests. The matching file SHA-256 values are:
 The cursor read/CSV conversion takes 2,639 ms, followed by 26,993 ms for the
 offset reader. This sequential local comparison proves output preservation,
 not a controlled performance ratio. This fixture has no lithology rows;
-lithology pagination is covered by the client contract tests. Saved-recipe
-integration from the separate recipe PR still needs combined validation.
+lithology pagination is covered by the client contract tests.
+
+Local composition with saved recipes from PR #341 passes 62 focused tests,
+including BDL half/zero/detection-limit rules across a 1,000-row page boundary,
+and seven browser cases (one existing mobile 2D-editor skip). The application
+changes combine without an extra fix. When adopting both branches, also carry
+the integration fixture updates: recipe mocks must honor cursor filters and
+terminal empty pages, and SQL comparison queries must select `bdl` consistently.
+The isolated integration commit is `215aea279eab48411da3731350f104dc26d10728`;
+it is not part of this reader branch. Its combined lazy-3D budget is 163.0 kB
+(measured 162.7 configured), so remeasure after combining rather than taking
+either branch's allowance unchanged. This is focused local compatibility
+evidence, not a full combined CI or deployed PostgREST-server pass.
 
 ## Remaining P2-9 acceptance
 
