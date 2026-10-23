@@ -295,45 +295,36 @@
 .lm-flow-inner h2 { margin: 0 0 3px; font-size: var(--fs-md); font-weight: 600; max-width: none; }
 .lm-flow-inner p { margin: 0; font-size: var(--fs-body); color: var(--ui-text-muted); line-height: 1.5; }
 
-/* ── Company proof strip ─────────────────────────────────────────────────── */
+/* ── Company claim lookups (plain text, not logos: these are not clients) ── */
 .lm-proof-strip { padding: var(--sp-5) 0; border-top: 1px solid var(--ui-border); background: var(--ui-surface-subtle); }
-.lm-company-heading { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+.lm-company-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; }
+.lm-company-title { margin: 0 0 4px; font-size: var(--fs-md); font-weight: 600; color: var(--ui-text); max-width: none; }
 .lm-proof-lead { margin: 0; font-size: var(--fs-body); color: var(--ui-text-muted); max-width: 64ch; line-height: 1.6; }
 .lm-company-all { color: var(--ui-text-muted); font-size: var(--fs-body); font-weight: 600; white-space: nowrap; text-decoration: none; }
 .lm-company-all span { margin-left: 8px; }
 .lm-company-all:hover { color: var(--ui-text); text-decoration: underline; text-underline-offset: 4px; }
-.lm-ticker-list { list-style: none; margin: 18px 0 0; padding: 0; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 20px; }
+.lm-ticker-list { list-style: none; margin: 18px 0 0; padding: 0; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
 .lm-ticker-list a {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 64px;
-  padding: 4px 0;
-  border-radius: 4px;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 56px;
+  padding: 10px 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: 6px;
+  background: var(--ui-surface);
   text-decoration: none;
+  transition: border-color 150ms ease;
 }
-.lm-company-logo {
-  display: block;
-  width: 100%;
-  max-width: 142px;
-  height: 38px;
-  object-fit: contain;
-  filter: grayscale(1) brightness(0.45);
-  opacity: 0.62;
-  mix-blend-mode: multiply;
-  transition: opacity 150ms ease;
-}
-.lm-company-logo-dv { max-width: 164px; filter: grayscale(1); }
-.lm-company-logo-bbb { max-width: 120px; height: 40px; }
-.lm-company-logo-scot { max-width: 132px; height: 42px; }
-.lm-company-logo-tud { max-width: 150px; }
-.lm-ticker-list a:hover .lm-company-logo, .lm-ticker-list a:focus-visible .lm-company-logo { opacity: 0.9; }
+.lm-company-name { color: var(--ui-text); font-size: var(--fs-body); font-weight: 600; line-height: 1.3; }
+.lm-company-meta { color: var(--ui-text-muted); font-size: var(--fs-sm, 0.8125rem); line-height: 1.3; }
+.lm-ticker-list a:hover { border-color: var(--ui-text-muted); }
 .lm-ticker-list a:focus-visible, .lm-company-all:focus-visible { outline: 2px solid var(--ui-focus); outline-offset: 4px; }
-@media (prefers-reduced-motion: reduce) { .lm-company-logo { transition: none; } }
-@media (max-width: 1000px) { .lm-ticker-list { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 24px; } }
+@media (prefers-reduced-motion: reduce) { .lm-ticker-list a { transition: none; } }
+@media (max-width: 1000px) { .lm-ticker-list { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 600px) {
   .lm-company-heading { align-items: flex-start; flex-direction: column; gap: 10px; }
-  .lm-ticker-list { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 24px; margin-top: 16px; }
+  .lm-ticker-list { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 16px; }
 }
 
 /* Legacy social-proof block (still gated off) */
