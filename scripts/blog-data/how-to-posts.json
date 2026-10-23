@@ -2,34 +2,37 @@
   {
     "slug": "how-to-map-bc-mineral-claims-live-registry",
     "mapTypeId": "mining-claims-map",
-    "title": "How to Map BC Mineral Claims from the Public Registry",
-    "metaDescription": "Search BC mineral claims by company or claimholder, import the tenures, style them and export an investor-ready map. Includes MTO verification steps.",
-    "directAnswer": "To map BC mineral claims, open Exploration Maps, search a company or claimholder to pull their British Columbia tenures from public registry data, add the claims to the map, assign the Claims layer role for standard styling, add context and a title block, then export a PNG or PDF. Always confirm current ownership, status, and boundaries in BC Mineral Titles Online (MTO) before relying on the map.",
-    "ctaTop": {
-      "text": "Search a claimholder and create a map.",
-      "sub": "Pull a company's BC tenures and have a styled map in minutes.",
-      "label": "Search BC claims →"
+    "title": "BC Mineral Claims Search: Find Claims by Owner, Number or Map",
+    "metaDescription": "Search BC mineral claims by owner, tenure number or area and see them on a map. Free, no login, searched live against BC's public mineral tenure data.",
+    "directAnswer": "Search British Columbia mineral, placer and coal titles by registered owner, tenure number or area below and see them on a map with owner, good-to date, area and title type. It is free, needs no account, and queries the province's public tenure layer, published by DataBC from Mineral Titles Online (MTO) records, each time you search.",
+    "publishedDate": "2025-11-20",
+    "updatedDate": "2026-10-23",
+    "fullTitle": "BC Mineral Claims Search & Map (MTO Data) | Exploration Maps",
+    "actionLabel": "Search claims →",
+    "faqSchema": true,
+    "searchBox": {
+      "region": "british-columbia",
+      "label": "Search BC mineral claims by owner, tenure number or area",
+      "placeholder": "e.g. Teck, 1044501, or 56.6, -130.4",
+      "note": "Free · no login · public registry data (live DataBC tenure query, verify in MTO)"
     },
     "ctaBottom": {
-      "text": "Keep your map for the next update.",
-      "sub": "Choose the investor layout, download a PNG, and save to a free account when you want to return.",
+      "text": "Look up a BC claim now.",
+      "sub": "Search by owner or tenure number, then add the claims to a map.",
       "label": "Search BC claims →"
     },
     "sections": [
       {
-        "h2": "What you'll need",
-        "body": "You can build a BC claims map two ways: search a claimholder directly inside Exploration Maps, or import a tenure file you already have. Either way it helps to have:",
-        "checklist": [
-          "A company or claimholder name (for the in-app claim search), or",
-          "A BC tenure file you exported from MTO or a GIS (GeoJSON, Shapefile, or KML)",
-          "Your company logo (PNG or JPG) for the title block",
-          "The project name and map date",
-          "The official MTO tenure numbers you want to verify"
-        ]
+        "h2": "Look up a BC claim by tenure number",
+        "body": "Choose Claim number(s) and enter the tenure number MTO shows, for example 1044501; an older staking tag number works too. You can paste a list from a claim schedule — up to 100 numbers separated by spaces, commas or new lines — and you are told which were found and which were not. If a single number is not found, you get the titles whose numbers start with what you typed, labelled as near matches rather than presented as yours."
       },
       {
-        "h2": "Step 1: Search BC claims by company or claimholder",
-        "body": "Open Exploration Maps and choose Add Claims → Search Claims Registry. Select British Columbia, then type a company or claimholder name. The tool returns the matching tenures from public BC registry data so you can map a competitor's ground or your own holdings without manually entering coordinates.",
+        "h3": "When a number is not found",
+        "body": "Check the number against your source, then look it up in Mineral Titles Online — the search links to it. MTO is the registry of record, and the public layer we search is a copy of it."
+      },
+      {
+        "h2": "Look up BC claims by owner (company)",
+        "body": "Choose Company and type the registered owner name, for example Teck. Every word must match, in any order, and if the full legal name finds nothing the search retries with the most distinctive words and tells you it did. If several owners match, pick the right one; their titles are then grouped by area with the claim count, total hectares and the range of good-to dates.",
         "image": {
           "alt": "Claim search panel with British Columbia selected and a company name typed in",
           "caption": "Searching BC tenures by claimholder name in the Add Claims panel",
@@ -37,68 +40,106 @@
         }
       },
       {
-        "h2": "If your search returns no claims",
-        "body": "An empty result does not establish that a company holds no ground. The public record may use a subsidiary or a different legal name.",
+        "html": "MTO records the legal owner on title, which is often a subsidiary or a joint-venture partner rather than the parent company. An empty name match is not evidence that the ground is unheld; try one distinctive word or a tenure number. The <a href=\"/blog/find-mineral-claims-owned-by-company-bc/\">company claim-search guide</a> covers mapping a whole land position."
+      },
+      {
+        "h2": "Find BC claims in an area on the map",
+        "body": "Choose Area and enter a latitude and longitude, for example 56.6, -130.4 in the Golden Triangle. The map opens on that point and loads every title within 25 km, each owner in its own colour; you can change the radius to 10, 50 or 100 km. Leave the box empty and the map opens on British Columbia: click the point you want, then Load Claims. There is no map-sheet search for BC."
+      },
+      {
+        "h2": "What you see for each BC claim",
+        "table": {
+          "headers": [
+            "Field",
+            "What it is"
+          ],
+          "rows": [
+            [
+              "Tenure number",
+              "The MTO tenure number, e.g. 1044501"
+            ],
+            [
+              "Owner",
+              "The registered owner, with its percentage ownership"
+            ],
+            [
+              "Claim name",
+              "The name recorded on title"
+            ],
+            [
+              "Tenure and title type",
+              "Mineral, Placer or Coal, and the title type, e.g. Two Post Claim"
+            ],
+            [
+              "Issue date",
+              "When the title was issued"
+            ],
+            [
+              "Good-to date",
+              "The date by which the title must be maintained to stay in good standing"
+            ],
+            [
+              "Area",
+              "In hectares"
+            ],
+            [
+              "Outline",
+              "The title polygon, drawn on the map"
+            ]
+          ]
+        }
+      },
+      {
+        "html": "For work history, transfers and anything that governs a transaction, open the title in <a href=\"https://www.mtonline.gov.bc.ca/mtov/home\" rel=\"nofollow noopener\" target=\"_blank\">Mineral Titles Online</a>."
+      },
+      {
+        "h2": "Check a claim in Mineral Titles Online (MTO), the official registry",
+        "ordered": true,
         "items": [
-          "Try one distinctive word from the registered owner name.",
-          "Search a tenure number from your source document instead.",
-          "Check the jurisdiction and current record in the official registry. Map-sheet lookup is not available in Exploration Maps; browse the map and nearby claims for an area instead."
-        ]
-      },
-      {
-        "h2": "Step 2: Add the claims to your map",
-        "body": "Select the tenures (or tenure groups) you want and click Add to map. They're added as a claims layer and the map fits to their extent automatically. If you instead have a tenure file, use the import button in the Layers section and select your GeoJSON, Shapefile, or KML — the layer is added the same way.",
-        "cta": {
-          "text": "Turn public claim data into a clean map.",
-          "sub": "Add a claimholder's BC tenures to the map in one click."
-        }
-      },
-      {
-        "h2": "Step 3: Assign the Claims role and style the tenures",
-        "body": "Expand the layer card and choose 'Claims' from the Role dropdown to apply the standard convention: a medium-blue stroke with a light, semi-transparent blue fill. Adjust the stroke and fill colour pickers if you want to distinguish optioned ground, JV claims, or separate blocks — each layer gets its own legend entry, so rename them to something descriptive like 'Optioned Claims' or 'Zone 1 Tenures'.",
-        "image": {
-          "alt": "Layer card showing the Claims role selected with blue stroke and fill",
-          "caption": "Assigning the Claims role applies investor-standard blue styling",
-          "src": "/blog-img/layer-claims-role.png"
-        }
-      },
-      {
-        "h2": "Step 4: Add context, a title block, and your logo",
-        "body": "Enable the Context overlay (roads, towns, water) and Reference Labels in the Design section so viewers can orient the property, and drop the overlay opacity to 40–60% so the claims stay dominant. Click the title on the map to enter the project and company name, set the map date in Design → Text & Metadata, and upload your logo at the bottom of the Layers section."
-      },
-      {
-        "h2": "Step 5: Export a clean BC claims map",
-        "body": "Pick an export ratio — Landscape 16:9 for slides and news releases, Letter Portrait for reports — frame the claims within the bounds, then export PNG for presentations or PDF for print. Free PNG exports retain a small Exploration Maps credit. Pro removes that credit for US$29/month or US$290/year.",
-        "image": {
-          "alt": "Export panel with Landscape 16:9 ratio selected over a framed BC claims map",
-          "caption": "Framing and exporting the finished BC claims map",
-          "src": "/blog-img/ratio-169.png"
-        }
-      },
-      {
-        "h2": "Example: mapping a competitor's Golden Triangle ground",
-        "body": "Say you want a one-slide map of a peer's claims near the Golden Triangle for a corporate update. Search their company name, select British Columbia, add their tenure group, assign the Claims role, switch to the Satellite basemap to show the terrain, add a title block with your logo and the date, then export Landscape 16:9. Total time is a few minutes versus an afternoon of downloading shapefiles and styling them in a desktop GIS."
-      },
-      {
-        "h2": "Verify everything in Mineral Titles Online",
-        "body": "Exploration Maps is a visualization and workflow tool, not the official registry. Before you publish or rely on a BC claims map, confirm the details directly in MTO.",
+          "Open Mineral Titles Online at mtonline.gov.bc.ca.",
+          "Use its title search to look up the tenure number, or find the claim in its Map Viewer.",
+          "Open the title to read its current owner, status and good-to date.",
+          "Treat MTO as the answer wherever it differs from a map: it is the registry of record."
+        ],
         "box": {
           "kind": "verify",
           "title": "Verify in BC Mineral Titles Online (MTO)",
           "html": "Always verify current ownership, status, expiry, good-to dates, and boundaries for each tenure number in <a href=\"https://www.mtonline.gov.bc.ca/mtov/home\" rel=\"nofollow noopener\" target=\"_blank\">BC Mineral Titles Online</a> before relying on the map. Tenure status can change daily."
-        },
-        "html": "If you want to keep watching those good-to-dates after the map is built, <a href=\"/blog/how-to-track-bc-mineral-claim-good-to-dates/\">Tenure Monitor</a> saves a claim portfolio and emails you before each deadline. It still points you back to MTO — it reads the public dataset, it is not the registry."
-      },
-      {
-        "h2": "Where the claim data comes from",
-        "box": {
-          "kind": "source",
-          "title": "Data source & disclaimer",
-          "html": "Pulls from public registry data where available. Some jurisdictions are queried live; others use refreshed public datasets. BC tenure information originates with the Province of British Columbia's Mineral Titles Online. Exploration Maps is not affiliated with or endorsed by the Government of British Columbia and is not the official registry of record."
         }
       },
       {
-        "h2": "What the app can and can't verify",
+        "h2": "How current is the BC data?",
+        "body": "Each search queries the province's public mineral tenure layer, published through DataBC, at the moment you search, so it is as current as that layer. The province does not document how often the layer is refreshed from MTO, so check anything very recent in MTO.",
+        "html": "If you want to keep watching good-to dates after the map is built, <a href=\"/blog/how-to-track-bc-mineral-claim-good-to-dates/\">Tenure Monitor</a> saves a claim portfolio and emails you before each deadline. It reads a synchronized copy of the same public dataset and points you back to MTO; it is not the registry.",
+        "box": {
+          "kind": "source",
+          "title": "Data source & disclaimer",
+          "html": "Some jurisdictions are queried live; others use refreshed public datasets. BC tenure information originates with the Province of British Columbia's Mineral Titles Online and is published by DataBC. Exploration Maps is not affiliated with or endorsed by the Government of British Columbia and is not the official registry of record."
+        }
+      },
+      {
+        "h2": "Then: make a map, edit it or export it",
+        "body": "Click Add to map to bring the titles into the editor as a claims layer. Choose the Claims role for the standard blue stroke and semi-transparent fill, rename layers to tell your ground from your neighbours’, add the Context overlay, a title block and your logo, then export Landscape 16:9 for slides or Letter Portrait for reports, as PNG or PDF. Free PNG exports keep a small Exploration Maps credit; Pro removes it for US$29/month or US$290/year.",
+        "image": {
+          "alt": "Export panel with Landscape 16:9 ratio selected over a framed BC claims map",
+          "caption": "Framing and exporting the finished BC claims map",
+          "src": "/blog-img/ratio-169.png"
+        },
+        "cta": {
+          "text": "Search BC claims and map them.",
+          "sub": "Find an owner’s titles and add them to a map in one click."
+        }
+      },
+      {
+        "h3": "Already have your tenure file?",
+        "body": "Upload your GeoJSON, KML/KMZ or zipped shapefile instead of searching again. Add separate files for your project and neighbouring ground, then give each layer a clear name."
+      },
+      {
+        "h3": "Example: a peer’s Golden Triangle ground",
+        "body": "Search the company name, pick its Golden Triangle group, add it to the map, assign the Claims role, switch to the Satellite basemap, add a title block and date, and export Landscape 16:9. Check any title you name in the figure in MTO before you publish."
+      },
+      {
+        "h2": "What the app can and can’t verify",
         "box": {
           "kind": "capability",
           "title": "Can and cannot verify",
@@ -107,33 +148,37 @@
       },
       {
         "h2": "Related guides",
-        "html": "Next, see the broader <a href=\"/blog/how-to-make-a-mining-claims-map/\">how to make a mining claims map</a> guide, compare workflows in <a href=\"/blog/how-to-search-ontario-mining-claims/\">Ontario</a>, learn to <a href=\"/blog/how-to-import-geojson-mining-map/\">import a GeoJSON or Shapefile</a>, and when you're done, <a href=\"/blog/how-to-make-a-professional-exploration-map/\">lay out and export the figure</a>. You can also start straight from the <a href=\"/bc-mineral-claims-map/\">BC mineral claims map</a> tool page. For worked examples, browse the <a href=\"/companies/bc/\">BC company claim maps</a>."
+        "html": "For what MTO is and when to go back to it, read the <a href=\"/blog/bc-mineral-titles-online-guide/\">Mineral Titles Online guide</a>. Compare with <a href=\"/blog/how-to-search-ontario-mining-claims/\">Ontario</a>, <a href=\"/blog/how-to-search-quebec-mining-claims/\">Quebec</a> or <a href=\"/blog/how-to-search-manitoba-mining-claims/\">Manitoba</a>, see every province in the <a href=\"/blog/canadian-mineral-claim-registries/\">Canadian claim registries guide</a>, and finish with the <a href=\"/blog/how-to-make-a-professional-exploration-map/\">professional map guide</a>. You can also start from the <a href=\"/bc-mineral-claims-map/\">BC mineral claims map</a> tool page, or browse the <a href=\"/companies/bc/\">BC company claim maps</a>."
       }
     ],
     "faqs": [
       {
-        "q": "Can I search BC mineral claims by company name?",
-        "a": "Yes. In Exploration Maps, choose Add Claims → Search Claims Registry, select British Columbia, and type a company or claimholder name. Matching tenures from public registry data are returned so you can add them to your map without entering coordinates. Always confirm the results against BC Mineral Titles Online."
+        "q": "How do I look up a BC mineral claim by tenure number?",
+        "a": "Choose Claim number(s) in the search box at the top of this page, type the tenure number (for example 1044501) and press Search claims. You can paste up to 100 numbers at once. If a number is not found, the search links to Mineral Titles Online."
       },
       {
-        "q": "Is Exploration Maps the official BC claims registry?",
-        "a": "No. Exploration Maps is a visualization and workflow tool. BC's official registry of record is Mineral Titles Online (MTO), operated by the Province of British Columbia. Use Exploration Maps to build and export maps, and verify ownership, status, and boundaries in MTO."
+        "q": "Can I search BC mineral claims by company name?",
+        "a": "Yes. Choose Company and type the registered owner name. Pick the matching owner and its titles are grouped by area with claim counts, hectares and good-to dates. Titles are often held by a subsidiary, so try that name too."
+      },
+      {
+        "q": "Can I see who owns a BC mineral claim?",
+        "a": "Yes. Each result shows the registered owner with its percentage ownership, the good-to date, area and title type. Confirm ownership and status in Mineral Titles Online."
       },
       {
         "q": "How current is the BC claim data?",
-        "a": "It reflects public registry data, which may be queried live or drawn from refreshed public datasets depending on the jurisdiction and source. Tenure status can change daily, so always verify current status and good-to dates in MTO before relying on the map."
+        "a": "Each search queries the province's public tenure layer, published by DataBC, when you search, so it is as current as that layer. Tenure status can change, so verify current status and good-to dates in MTO before relying on the map."
+      },
+      {
+        "q": "Can I search BC claims on a map by area?",
+        "a": "Yes. Choose Area and enter a latitude and longitude; the map opens there with every title within 25 km, and you can widen the radius to 50 or 100 km. Or leave the box empty and click a point on the map."
+      },
+      {
+        "q": "Is Exploration Maps the official BC claims registry?",
+        "a": "No. BC's registry of record is Mineral Titles Online (MTO), operated by the Province of British Columbia. Use Exploration Maps to find claims and build maps, and verify ownership, status and boundaries in MTO."
       },
       {
         "q": "What file formats can I import for BC tenures?",
         "a": "GeoJSON, Shapefile (.shp, zipped), and KML/KMZ. If you have corner coordinates in a spreadsheet, export it as CSV and use the Column Mapper to assign latitude and longitude. You can convert Shapefiles to GeoJSON for free at mapshaper.org."
-      },
-      {
-        "q": "Can I show my claims and a competitor's claims on the same map?",
-        "a": "Yes. Add each set as its own layer, give them different stroke and fill colours, and rename them so they read clearly in the legend (for example 'Our Claims' and 'Adjacent Tenures'). Each layer appears as a separate legend entry."
-      },
-      {
-        "q": "What's the standard colour for mineral claims on a BC map?",
-        "a": "A medium-blue stroke with a light, semi-transparent blue fill — the convention used in most NI 43-101 technical reports. It's applied automatically when you assign the Claims role, and you can override it per layer."
       }
     ],
     "relatedSlugs": [
@@ -141,10 +186,7 @@
       "find-mineral-claims-owned-by-company-bc",
       "how-to-track-bc-mineral-claim-good-to-dates"
     ],
-    "publishedDate": "2025-11-20",
-    "category": "mineral-claims",
-    "fullTitle": "How to Search & Map BC Mineral Claims | Exploration Maps",
-    "updatedDate": "2026-09-15"
+    "category": "mineral-claims"
   },
   {
     "slug": "how-to-track-bc-mineral-claim-good-to-dates",
@@ -1771,69 +1813,163 @@
   },
   {
     "slug": "how-to-search-manitoba-mining-claims",
-    "title": "Manitoba Mining Claims Search — Map Dispositions Free",
-    "metaDescription": "Map Manitoba mining claims by claim number: find numbers in iMaQs, pull boundaries into a styled map and export, with notes on what the data covers.",
-    "directAnswer": "To map Manitoba mining claims, open Exploration Maps, click 'Add Claims → Search Claims Registry', choose Manitoba, and search by claim or tenure number (e.g. CB12345). Manitoba's public claim data doesn't include holder names, so number search is the reliable route — get the numbers from the iMaQs registry, then map them in one click.",
+    "mapTypeId": "mining-claims-map",
+    "title": "Manitoba Mining Claims Search: Find Claims by Number or Map",
+    "metaDescription": "Search Manitoba mining claims by claim number or area and see them on a map. Free, no login, searched live against Manitoba's public iMaQs claim layer.",
+    "directAnswer": "Search Manitoba mining claims by claim number or area below and see them on a map with claim name, status, good-to date and area. It is free, needs no account, and queries Manitoba's public iMaQs mining claim layer live. That layer publishes no holder names, so Manitoba has no company search.",
     "publishedDate": "2026-06-14",
+    "updatedDate": "2026-10-23",
+    "fullTitle": "Manitoba Mining Claims Search & Map (iMaQs Data) | Exploration Maps",
+    "actionLabel": "Search claims →",
+    "faqSchema": true,
+    "searchBox": {
+      "region": "manitoba",
+      "modes": [
+        "number",
+        "area"
+      ],
+      "label": "Search Manitoba mining claims by claim number or area",
+      "placeholder": "e.g. MB16982, or 54.77, -101.88",
+      "note": "Free · no login · public registry data (live iMaQs map layer, verify in iMaQs)"
+    },
+    "ctaBottom": {
+      "text": "Look up a Manitoba claim now.",
+      "sub": "Search by claim number or area, then add the claims to a map.",
+      "label": "Search Manitoba claims →"
+    },
     "sections": [
       {
-        "h2": "Manitoba tenure in 30 seconds",
-        "body": "Manitoba mining claims are administered through iMaQs (the Integrated Mining and Quarrying System). The province's headline belts are the Flin Flon–Snow Lake VMS camp and the Thompson Nickel Belt, with gold camps at Lynn Lake and Rice Lake. Claim boundaries are published as public GIS data — with one quirk that changes how you search."
+        "h2": "Look up a Manitoba claim by number",
+        "body": "Choose Claim number(s) and enter the claim number as iMaQs records it, for example MB16982. Both the tenure number and the staking tag number are searched. You can paste a whole list from a claim schedule — up to 100 numbers separated by spaces, commas or new lines — and you are told which numbers were found and which were not."
       },
       {
-        "h2": "Why you search by number in Manitoba",
-        "body": "Manitoba's public claim layer publishes geometry and claim numbers but no holder names. That means company-name search isn't possible against the public data — searching here works by claim or tenure number.",
+        "h3": "When a number is not found",
+        "body": "We search the Mining Claim layer of the public iMaQs map. Patent mining claims, mineral exploration licences, mineral leases and cancelled claims are separate layers that are not searched here. Check the number against your source, then look it up in iMaQs, the registry of record."
+      },
+      {
+        "h2": "Why there is no company search for Manitoba",
+        "body": "Manitoba's public claim layer publishes claim numbers, names, dates and boundaries, but not the holder. A company name has nothing to match, so the search box offers claim numbers and area only. If you type a name into the Claim number box, the search tells you so rather than returning nothing.",
         "box": {
           "kind": "capability",
-          "title": "What works in Manitoba",
-          "html": "<strong>Works:</strong> search by claim/tenure number (e.g. CB12345), map the boundaries, style and export.<br><strong>Doesn't:</strong> company-name search — the public layer carries no ownership attribute. Find a company's claim numbers in <em>iMaQs</em> or their disclosures first, then map them here."
+          "title": "Finding a company’s Manitoba claims",
+          "html": "Take the claim numbers from the company's own disclosure — news releases and technical reports often list them — and paste the list into Claim number(s). Or search the area around the project, then check each claim in <a href=\"https://web33.gov.mb.ca/imaqs/\" rel=\"nofollow noopener\" target=\"_blank\">iMaQs</a>."
         }
       },
       {
-        "h2": "Find the numbers, then map them",
-        "items": [
-          "Look up the claims in Manitoba's iMaQs system (or take numbers from a company's news releases and technical reports)",
-          "In Exploration Maps: Add Claims → Search Claims Registry → Manitoba",
-          "Enter a claim/tenure number — matching claims return grouped geographically",
-          "Add to map: boundaries load as a styled claims layer",
-          "Add your own layers (drillholes, targets), title block, and export"
-        ]
+        "h2": "Find Manitoba claims in an area on the map",
+        "body": "Choose Area and enter a latitude and longitude, for example 54.77, -101.88 near Flin Flon. The map opens on that point and loads every claim within 25 km; you can change the radius to 10, 50 or 100 km. Leave the box empty and the map opens on Manitoba: click the point you want, then Load Claims."
       },
       {
-        "h2": "Verify before you rely on it",
+        "h2": "What you see for each Manitoba claim",
+        "table": {
+          "headers": [
+            "Field",
+            "What it is"
+          ],
+          "rows": [
+            [
+              "Claim number",
+              "The iMaQs tenure number, e.g. MB16982, and the staking tag where there is one"
+            ],
+            [
+              "Claim name",
+              "The name recorded for the claim"
+            ],
+            [
+              "Status",
+              "As a code, e.g. GOOD_STAND (good standing) or PENDING"
+            ],
+            [
+              "Good-to date",
+              "Where the layer records one; a pending claim may have none"
+            ],
+            [
+              "Area",
+              "In hectares"
+            ],
+            [
+              "Outline",
+              "The claim polygon, drawn on the map"
+            ],
+            [
+              "Holder",
+              "Not published on the public layer"
+            ]
+          ]
+        }
+      },
+      {
+        "html": "For the holder, the full record and assessment work, look the claim up in <a href=\"https://web33.gov.mb.ca/imaqs/\" rel=\"nofollow noopener\" target=\"_blank\">iMaQs</a>."
+      },
+      {
+        "h2": "Check a claim in iMaQs, the official registry",
+        "ordered": true,
+        "items": [
+          "Open iMaQs, Manitoba's Integrated Mining and Quarrying System, at web33.gov.mb.ca/imaqs.",
+          "Use Mining Search to look up the claim number, or Mining Map to find the claim on the map.",
+          "Open the claim to read its current record in the registry.",
+          "Treat iMaQs as the answer wherever it differs from a map: it is the registry of record."
+        ],
         "box": {
           "kind": "verify",
-          "title": "iMaQs is the record",
-          "html": "Confirm ownership, status, and expiry in Manitoba's official iMaQs registry before using the map in anything that matters — the public GIS layer can lag, and it carries no ownership data at all."
+          "title": "Verify in the official iMaQs",
+          "html": "Always verify current holder, status, expiry and boundaries in <a href=\"https://web33.gov.mb.ca/imaqs/\" rel=\"nofollow noopener\" target=\"_blank\">iMaQs</a> before relying on the map. Exploration Maps is not affiliated with the Government of Manitoba and is not the registry of record."
         }
       },
       {
-        "cta": {
-          "text": "Map Manitoba claims from their numbers.",
-          "sub": "Boundaries in, styled export out — minutes, not hours."
+        "h2": "How current is the Manitoba data?",
+        "html": "Each search queries the public iMaQs mining claim layer at the moment you search, so it is as current as that layer. It is the data behind the province's <a href=\"https://rdmaps.gov.mb.ca/Html5Viewer/index.html?viewer=MapGallery_Mining.MapGallery\" rel=\"nofollow noopener\" target=\"_blank\">Mineral Dispositions map</a> in the GIS Map Gallery. For the most up-to-date information on mineral dispositions, the province points to <a href=\"https://www.gov.mb.ca/iem/mines/imaqs/index.html\" rel=\"nofollow noopener\" target=\"_blank\">iMaQs</a> or the Mines Branch.",
+        "box": {
+          "kind": "source",
+          "title": "Data source & disclaimer",
+          "html": "Some jurisdictions are queried live; others use refreshed public datasets. Manitoba claim information comes from the public iMaQs mining map published by the Government of Manitoba and is queried live."
         }
+      },
+      {
+        "h2": "Then: make a map, edit it or export it",
+        "body": "Click Add to map to bring the claims into the editor. Because the public data has no holder, add each company’s claims as its own search and rename the layers by company, so the legend tells the ownership story. Then add your own files, choose a basemap, add a title block and logo, and export PNG for slides or PDF for reports. Free PNG exports keep a small Exploration Maps credit; Pro removes it for US$29/month or US$290/year. Tenure monitoring with good-to-date reminders covers British Columbia claims only for now.",
+        "cta": {
+          "text": "Search Manitoba claims and map them.",
+          "sub": "Paste a list of claim numbers and add them to a map in one click."
+        }
+      },
+      {
+        "h2": "What the app can and can’t verify",
+        "box": {
+          "kind": "capability",
+          "title": "Can and cannot verify",
+          "html": "<strong>Can:</strong> find and map claims from the public iMaQs layer by claim number or area, style and label them, and combine them with your own files.<br><strong>Cannot:</strong> show the holder, which the public layer does not publish, or confirm good standing or survey-grade boundaries. Confirm specifics in iMaQs."
+        }
+      },
+      {
+        "h2": "Related guides",
+        "html": "Compare with <a href=\"/blog/how-to-search-ontario-mining-claims/\">Ontario</a>, <a href=\"/blog/how-to-search-quebec-mining-claims/\">Quebec</a> or <a href=\"/blog/how-to-map-bc-mineral-claims-live-registry/\">British Columbia</a>, see every province in the <a href=\"/blog/canadian-mineral-claim-registries/\">Canadian claim registries guide</a>, import your own files with the <a href=\"/blog/how-to-import-geojson-mining-map/\">GeoJSON / Shapefile guide</a>, and finish with the <a href=\"/blog/how-to-make-a-professional-exploration-map/\">professional map guide</a>."
       }
     ],
     "faqs": [
       {
-        "q": "Why can't I search Manitoba claims by company name?",
-        "a": "Manitoba's public claim GIS layer doesn't publish holder names, so there's nothing to match a company search against. Get claim numbers from iMaQs or company disclosures, then search those numbers."
+        "q": "How do I look up a Manitoba mining claim by number?",
+        "a": "Choose Claim number(s) in the search box at the top of this page, type the claim number (for example MB16982) and press Search claims. You can paste up to 100 numbers at once, and you are told which were found and which were not."
       },
       {
-        "q": "Where do I find a company's Manitoba claim numbers?",
-        "a": "Three reliable places: the iMaQs registry itself, the company's technical reports (claims tables are standard), and news releases announcing acquisitions or staking. Claim numbers look like 'CB12345' or similar letter-prefix formats."
+        "q": "Can I see who owns a Manitoba mining claim?",
+        "a": "Not here. Manitoba's public claim layer does not publish the holder, so our results show the claim number, name, status, good-to date and area without an owner. For the holder and current status, check the claim in iMaQs, the registry of record, or ask the Mines Branch."
       },
       {
-        "q": "What claim types exist in Manitoba?",
-        "a": "Mining claims for exploration-stage tenure, mineral leases for advanced projects, and quarry permissions for aggregates. The public layer you'll map covers mining claims; leases appear in iMaQs."
+        "q": "How do I find all the claims a company holds in Manitoba?",
+        "a": "Take the claim numbers from the company's news releases or technical reports and paste them into Claim number(s). Or search the area around the project and check the claims in iMaQs."
       },
       {
-        "q": "Can I map an entire district like Snow Lake?",
-        "a": "Yes, practically: gather the claim numbers of the operators you care about and add each set — grouped results make multi-company district maps straightforward. There's no 'select everything in an area' from the public layer alone."
+        "q": "How current is this data?",
+        "a": "Each search queries the public iMaQs mining claim layer live, so it is as current as that layer. Claim status changes, so verify anything you rely on in iMaQs, the registry of record."
       },
       {
-        "q": "How do I show ownership on a Manitoba map if the data has no owners?",
-        "a": "Add it yourself: after mapping each company's claims as separate layers (one search per company's numbers), rename the layers and colour them by company. The legend then carries the ownership story the raw data can't."
+        "q": "Can I search Manitoba claims on a map by area?",
+        "a": "Yes. Choose Area and enter a latitude and longitude; the map opens there with every claim within 25 km, and you can widen the radius to 50 or 100 km. Or leave the box empty and click a point on the map."
+      },
+      {
+        "q": "Is Exploration Maps the official Manitoba claims registry?",
+        "a": "No. The registry of record is iMaQs, the Integrated Mining and Quarrying System of the Manitoba government's Mines Branch. Use Exploration Maps to find claims and build maps, and verify holder, status and boundaries in iMaQs."
       }
     ],
     "relatedSlugs": [
@@ -1841,9 +1977,7 @@
       "how-to-make-a-mining-claims-map",
       "how-to-search-ontario-mining-claims"
     ],
-    "mapTypeId": "mining-claims-map",
-    "category": "mineral-claims",
-    "fullTitle": "Manitoba Mining Claims Search | Exploration Maps"
+    "category": "mineral-claims"
   },
   {
     "slug": "how-to-search-newfoundland-mineral-claims",
@@ -2477,11 +2611,6 @@
     "metaDescription": "Step-by-step guide to BC Mineral Titles Online (MTO): search claims, check owners and good-to dates, and map tenures.",
     "cardSummary": "What MTO is, what it is authoritative for, and how to search, map and monitor BC mineral claims around it.",
     "directAnswer": "Mineral Titles Online (MTO) is the Province of British Columbia's official system for acquiring and administering mineral, placer and coal titles. It is where claims are staked, maintained, transferred and paid for, and it is the authoritative record of who holds a title and when it expires. Exploration Maps does not replace MTO — it reads the province's public tenure dataset so you can search claims by tenure number or registered owner, map them, and track good-to-dates, then sends you back to MTO for anything that governs a transaction or a deadline.",
-    "ctaTop": {
-      "text": "Search BC claims by tenure number or owner.",
-      "sub": "Map them in a couple of minutes, then verify in MTO.",
-      "label": "Search BC claims →"
-    },
     "ctaBottom": {
       "text": "Monitor up to 10 BC claims free.",
       "sub": "Reminders at 90, 30 and 1 day before each good-to-date."
@@ -2520,41 +2649,13 @@
       },
       {
         "h2": "Searching BC claims outside MTO",
-        "body": "In Exploration Maps, open Add Claims → Search Claims Registry and select British Columbia. Two search modes are available for BC:",
-        "table": {
-          "headers": [
-            "Search by",
-            "Use it when",
-            "Example"
-          ],
-          "rows": [
-            [
-              "Registered owner",
-              "You want a company's whole BC land position",
-              "Teck Resources"
-            ],
-            [
-              "Tenure number",
-              "You have a specific claim in hand",
-              "1012345"
-            ]
-          ]
-        },
-        "html": "Owner search returns <em>candidates</em> grouped by match confidence rather than a finished answer, because company names reach the registry in clipped legal form, under previous names, and through subsidiaries and joint-venture partners. You confirm what enters your map. The <a href=\"/blog/find-mineral-claims-owned-by-company-bc/\">company claim-search guide</a> covers that workflow in detail."
-      },
-      {
-        "h2": "If your search returns no claims",
-        "body": "An empty result does not establish that a company holds no ground. The public record may use a subsidiary or a different legal name.",
-        "items": [
-          "Try one distinctive word from the registered owner name.",
-          "Search a tenure number from your source document instead.",
-          "Check the jurisdiction and current record in the official registry. Map-sheet lookup is not available in Exploration Maps; browse the map and nearby claims for an area instead."
-        ]
+        "body": "Use the search box at the top of this page: by registered owner, by tenure number, or by area on the map. Map-sheet lookup is not available; use Area instead.",
+        "html": "The <a href=\"/blog/how-to-map-bc-mineral-claims-live-registry/\">BC mineral claims search guide</a> explains each search, the fields that come back, what to do when nothing matches, and how to check a result in MTO. Owner search returns candidates for you to confirm, because names reach the registry in clipped legal form, under previous names and through subsidiaries; the <a href=\"/blog/find-mineral-claims-owned-by-company-bc/\">company claim-search guide</a> covers that workflow."
       },
       {
         "h2": "Mapping the results",
         "body": "Select the tenures you want and add them to the map. They come in as a claims layer with the boundaries from the public dataset, and the map fits to their extent. Assign the Claims role for the blue stroke and semi-transparent fill convention that most NI 43-101 figures use, add a title block and your logo, and export.",
-        "html": "If you already have a tenure file from MTO or a GIS, import it instead — GeoJSON, zipped Shapefile and KML all work. See <a href=\"/blog/how-to-map-bc-mineral-claims-live-registry/\">how to map BC mineral claims from the public registry</a> for the full walkthrough. To lay the tenures out as an investor figure, use the <a href=\"/mining-map-software/\">mining map software</a>; for a drilling update, add collars and intercepts on a <a href=\"/drill-results-map/\">drill results map</a>. For worked examples, browse the <a href=\"/companies/\">mineral claim maps by company</a>."
+        "html": "If you already have a tenure file from MTO or a GIS, import it instead — GeoJSON, zipped Shapefile and KML all work. See the <a href=\"/blog/how-to-map-bc-mineral-claims-live-registry/\">BC mineral claims search guide</a> for the full walkthrough. To lay the tenures out as an investor figure, use the <a href=\"/mining-map-software/\">mining map software</a>; for a drilling update, add collars and intercepts on a <a href=\"/drill-results-map/\">drill results map</a>. For worked examples, browse the <a href=\"/companies/\">mineral claim maps by company</a>."
       },
       {
         "h2": "Tracking good-to-dates afterwards",
@@ -2569,7 +2670,7 @@
       },
       {
         "h2": "How current the public data is",
-        "body": "Exploration Maps synchronizes the province's published tenure dataset on a schedule and displays the timestamp of the last successful synchronization on every portfolio view and in every reminder email. The province does not document an update frequency for the published dataset, so nothing here is described as live.",
+        "body": "The claim search queries the province's published tenure dataset at the moment you search. Tenure Monitor reads a copy of the same dataset synchronized on a schedule, and shows the time of the last successful synchronization on every portfolio view and in every reminder email. The province does not document an update frequency for the published dataset, so neither is a substitute for MTO.",
         "box": {
           "kind": "source",
           "title": "Data source",
@@ -2606,8 +2707,8 @@
         "a": "Search by registered owner in Exploration Maps to see a company's published land position, or look up a specific tenure number. For authoritative ownership — the answer you would rely on for a transaction — check the tenure in MTO, which is the registry of record."
       },
       {
-        "q": "Is the claim data in Exploration Maps live?",
-        "a": "No. It reflects the last successful synchronization with the province's published dataset, and that timestamp is shown on every portfolio view and in every reminder email. Tenure status can change, so verify anything that matters in MTO."
+        "q": "How current is the claim data in Exploration Maps?",
+        "a": "The claim search queries the province's published tenure dataset when you search, so it is as current as that dataset. Tenure Monitor reads a synchronized copy and shows the time of the last synchronization on every portfolio view and in every reminder email. Tenure status can change, so verify anything that matters in MTO."
       },
       {
         "q": "What is a good-to-date?",
@@ -2621,7 +2722,15 @@
     ],
     "publishedDate": "2026-08-06",
     "fullTitle": "MTO BC: How to Use Mineral Titles Online (2026 Guide)",
-    "updatedDate": "2026-09-15"
+    "updatedDate": "2026-10-23",
+    "actionLabel": "Search claims →",
+    "faqSchema": true,
+    "searchBox": {
+      "region": "british-columbia",
+      "label": "Look up a BC claim by owner, tenure number or area",
+      "placeholder": "e.g. Teck, 1044501, or 56.6, -130.4",
+      "note": "Free · no login · public registry data (live DataBC tenure query, verify in MTO)"
+    }
   },
   {
     "slug": "find-mineral-claims-owned-by-company-bc",
