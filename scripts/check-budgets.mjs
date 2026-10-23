@@ -214,7 +214,11 @@ const BUDGETS = {
   // advisories GHSA-p98j-92pf-mc4p and related; the fixed release is ~0.3 kB larger.
   // 993.2 → 1009.4 (measured 1009.1): 2D labels and geology styling (above, measured 1008.4) merged over the dompurify
   // update.
-  totalAuthJsGzipKb: 1009.4,
+  // 1009.4 → 1012.0 (P2-8, measured 1011.7): opt-in property recipe snapshots.
+  // The shared loader (~1.0 kB) and staged 2D recipe picker (~1.3 kB added) are
+  // lazy; 3D-only picker/update code is counted separately below. Initial
+  // homepage, editor and claims route budgets stay unchanged.
+  totalAuthJsGzipKb: 1012.0,
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
@@ -251,7 +255,10 @@ const BUDGETS = {
   // 924.4 → 924.9 (measured 924.6): dompurify 3.4.17 security update, as totalAuthJsGzipKb above.
   // 924.9 → 940.9 (measured 940.6): 2D labels and geology styling (above, measured 940.0) merged over the dompurify
   // update.
-  totalJsGzipKb: 940.9,
+  // 940.9 → 944.8 (P2-8, measured 944.5): the same lazy property recipe path.
+  // The unconfigured graph also retains more of the data reader that its old
+  // raw-only, disabled property button allowed Vite to prune.
+  totalJsGzipKb: 944.8,
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the
   // totals above. /3d carries three.js (~109 kB gzip) and its editor.
@@ -485,7 +492,10 @@ const BUDGETS = {
   // data dropped rather than refused (+0.4 kB).
   // 156.5 → 161.2 (round 5H merged over the true-scale crew (b55edc19), measured 160.7, configured 160.9, + 0.3):
   // round 5H's +4.7 kB above on top of the crew's +1.6 kB; the two touch different chunks (block.js and tags.js; crew.js).
-  threeDLazyJsGzipKb: 161.2,
+  // 161.2 → 162.7 (P2-8, measured 162.2 plain / 162.4 configured): explicit
+  // recipe selection, snapshot ownership, collision/edited-wording guards and
+  // recipe-only update notices in property-data. No eager 3D page growth.
+  threeDLazyJsGzipKb: 162.7,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.

@@ -88,4 +88,28 @@ describe('a published version and the drill database notice', () => {
     expect(E.getState().brand.title).toBe('LIVE');
     await vi.waitFor(() => expect(notice().hidden).toBe(false));
   });
+
+  it('keeps a published recipe snapshot read-only while newer recipe results are available', async () => {
+    const ref = { ...REF, resultsRecipe: { id: 'r1', name: 'Default', version: 3, recipe: { cutoff: 1 }, fileName: 'property-recipe-results.csv' } };
+    db.three_d_projects[0].settings.settings.drillSource = structuredClone(ref);
+    db.figure_versions[0].snapshot.settings.settings.drillSource = structuredClone(ref);
+    // No newer import: this notice must come from the recipe alone.
+    db.drill_import_batches = [B1];
+    sb.rpc = vi.fn(async (fn) => ({ data: fn === 'drill_property_recipes' ? [{ ...ref.resultsRecipe, version: 4, recipe: { cutoff: 2 } }] : [], error: null }));
+    await core.openProject(FIG);
+    await vi.waitFor(() => expect(notice().hidden).toBe(false));
+    expect(document.getElementById('drill-notice-text').textContent).toContain('changed from v3 to v4');
+    await core.openVersion(1);
+    const loads = E.loadProject.mock.calls.length, reads = sb.rpc.mock.calls.length;
+    await check();
+    document.getElementById('drill-update').click();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(notice().hidden).toBe(true);
+    expect(sb.rpc.mock.calls.length).toBe(reads);
+    expect(E.loadProject.mock.calls.length).toBe(loads);
+    expect(E.getState().drillSource).toEqual(ref);
+    await core.closeVersion();
+    await vi.waitFor(() => expect(notice().hidden).toBe(false));
+    expect(E.getState().drillSource).toEqual(ref);
+  });
 });

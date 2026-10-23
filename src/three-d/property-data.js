@@ -170,7 +170,7 @@ const hideNotice = () => { $('drill-notice').hidden = true; };
 /** Another figure opened (or none): its notice and pending update go with it. */
 export function reset() { hideNotice(); pending = null; pickEpoch++; }
 // The pending update still belongs to the figure on screen: the same saved figure and property.
-const stillOurs = (p) => !!p && (host.current()?.id || null) === p.figureId
+const stillOurs = (p) => !!p?.figureId && host.current()?.id === p.figureId
   && JSON.stringify(em().getState().drillSource) === JSON.stringify(p.ref);
 const progressText = (n) => `Loading… ${['collars', 'surveys', 'assays', 'lithology'].filter((k) => n[k]).map((k) => `${fmtN(n[k])} ${k}`).join(', ')}`;
 
@@ -266,7 +266,7 @@ async function load() {
 export async function check() {
   reset();
   const ref = em().getState().drillSource, p = { ref, figureId: host.current()?.id || null };
-  if (ref?.kind !== 'property' || !ref.propertyId) return;
+  if (!p.figureId || ref?.kind !== 'property' || !ref.propertyId) return;
   const d = newerSince(ref, await listBatches(await host.client(), ref.propertyId));
   let recipe = null;
   if (ref.resultsRecipe) {
