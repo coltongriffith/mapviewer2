@@ -72,6 +72,7 @@ In a second terminal, from the repository root:
 ```sh
 node scripts/benchmark-drill-browser.mjs --smoke --out=browser-smoke.json
 node scripts/benchmark-drill-browser.mjs --out=browser-scale.json
+node scripts/benchmark-drill-browser.mjs --out=browser-profile.json --profile=load.cpuprofile
 ```
 
 Only a loopback HTTP server is accepted. The benchmark mocks the placeholder
@@ -82,6 +83,10 @@ observed long tasks. A successful run also saves `<report>.png`. The run is
 bounded to three minutes, uses desktop Chromium with software WebGL, and does
 not measure hosted SQL/network time or mobile performance. Failure details are
 saved without claiming the workload passed.
+The optional `--profile` records a Chrome CPU profile from immediately before
+the load click until completion or failure. Open it in DevTools' JavaScript
+profiler. Profile capture has its own five-second limit and reports failures;
+profiling adds overhead, so use an unprofiled run for timing comparisons.
 
 The first full browser run on main failed after fetching every row with
 `Maximum call stack size exceeded`. Scene setup spread all 202,000 path
@@ -94,8 +99,26 @@ capture found the import button enabled and the status reporting all 2,000
 holes and 200,000 assays loaded, but the run did not reach its scene-count and
 camera assertions. Observed long tasks included 31.8, 34.9, 37.1 and 21.0 seconds.
 This is evidence of prolonged UI blocking, not a successful performance gate.
-Profile the repeated scene work before choosing an optimization or extending
-timeouts. The reports retain the original failures.
+The subsequent 136-second CPU profile attributed about 92 seconds of self time
+to `tags.statuses()`. Although statuses are cached, each lookup rebuilds a key
+from every hole ID. Trace construction requested that lookup per path segment,
+and assay styling requested it per interval for both weight and fade. These
+hole-wide decisions now run once per hole within each synchronous build/style
+pass. No cross-pass cache is added: status, emphasis and visibility edits are
+re-evaluated on the next pass.
+
+With that change, the unprofiled full browser workload passes all scene/source
+counts and camera assertions: 37,696 ms load/settle, 1,660 ms camera/two frames,
+and a 6,358 ms maximum observed long task. The entire run including screenshot
+capture and cleanup took about 104 seconds. This is one local software-renderer
+measurement, not an interactive-performance target met. Eight PNG comparisons
+against main match exactly: 3D and section exports for the default sample, a
+20-hole synthetic figure, edited new/previous/planned statuses with emphasis,
+and a subsequent reset. The reports retain the original failures.
+
+Remaining work includes reducing the still-visible multi-second pauses and
+measuring physical-device responsiveness. Do not infer hosted performance from
+these mocked browser reads or this software GPU.
 
 Any query optimization must retain
 stable complete pagination and the existing import-change retry, with regression

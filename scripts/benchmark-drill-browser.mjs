@@ -7,10 +7,11 @@ import { chromium } from '@playwright/test';
 import { scaleCounts, scaleRow } from './fixtures/drill-scale-data.mjs';
 
 const args = process.argv.slice(2);
-assert(args.every((a) => a === '--smoke' || a.startsWith('--out=') || a.startsWith('--base-url=')), 'Only --smoke, --out= and --base-url= are supported.');
+assert(args.every((a) => a === '--smoke' || a.startsWith('--profile=') || a.startsWith('--out=') || a.startsWith('--base-url=')), 'Only --smoke, --profile=, --out= and --base-url= are supported.');
 const base = new URL(args.find((a) => a.startsWith('--base-url='))?.slice(11) || 'http://127.0.0.1:4197');
 assert(base.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(base.hostname) && !base.username && !base.password, 'The browser benchmark only accepts a local HTTP server.');
 const out = args.find((a) => a.startsWith('--out='))?.slice(6);
+const profilePath = args.find((a) => a.startsWith('--profile='))?.slice(10);
 const holes = args.includes('--smoke') ? 20 : 2000, expected = scaleCounts(holes);
 const uid = '00000000-0000-4000-8000-000000000001', org = '00000000-0000-4000-8000-000000000002', property = '00000000-0000-4000-8000-000000000003';
 const user = { id: uid, email: 'synthetic@scale.test', role: 'authenticated', aud: 'authenticated', email_confirmed_at: '2026-10-01T00:00:00Z', app_metadata: {}, user_metadata: {} };
@@ -22,7 +23,7 @@ const pages = [], errors = [], blocked = [];
 const report = { schemaVersion: 1, synthetic: true, startedAt: new Date().toISOString(), expected, pages, errors, blocked,
   renderer: 'Chromium headless, SwiftShader, 1400x900 desktop',
   limitations: ['Database reads are mocked without latency; SQL timings are measured separately.', 'Software WebGL timings are specific to this machine, not a field-device or hosted performance guarantee.'] };
-let browser, deadline, activePage;
+let browser, deadline, activePage, profiler;
 async function measure() {
   report.phase = 'browser-start';
   browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
@@ -69,6 +70,13 @@ async function measure() {
     new PerformanceObserver((list) => window.__scaleTasks.push(...list.getEntries().map((e) => e.duration))).observe({ type: 'longtask', buffered: false });
   });
   const start = performance.now();
+  if (profilePath) {
+    profiler = await context.newCDPSession(page);
+    await profiler.send('Profiler.enable');
+    await profiler.send('Profiler.setSamplingInterval', { interval: 1000 });
+    await profiler.send('Profiler.start');
+    report.cpuProfile = profilePath;
+  }
   report.phase = 'property-load';
   await page.locator('#drill-load').click();
   // Completion is the import button leaving its busy state. Terrain/layer
@@ -113,7 +121,19 @@ try {
   finally { clearTimeout(diagnosticDeadline); }
 }
 finally {
-  clearTimeout(deadline); await browser?.close(); report.finishedAt = new Date().toISOString();
+  clearTimeout(deadline);
+  if (profiler) {
+    let profileDeadline;
+    try {
+      const { profile } = await Promise.race([
+        profiler.send('Profiler.stop'),
+        new Promise((_, reject) => { profileDeadline = setTimeout(() => reject(new Error('CPU profile capture exceeded 5 seconds.')), 5000); }),
+      ]);
+      await writeFile(profilePath, JSON.stringify(profile));
+    } catch (e) { report.cpuProfileError = e.message; }
+    finally { clearTimeout(profileDeadline); }
+  }
+  await browser?.close(); report.finishedAt = new Date().toISOString();
   if (out) await writeFile(out, `${JSON.stringify(report, null, 2)}\n`);
   console.log(JSON.stringify({ status: report.status, loadAndSettleMs: report.loadAndSettleMs, cameraAndPaintMs: report.cameraAndPaintMs, maxLongTaskMs: report.maxLongTaskMs, error: report.error, out }));
 }
