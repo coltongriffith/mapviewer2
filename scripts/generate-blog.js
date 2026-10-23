@@ -599,18 +599,26 @@ const SEARCH_BOX_CSS = `
 @media(max-width:600px){.claim-search input{order:-1;flex-basis:100%}.claim-search select,.claim-search button{flex:1 1 40%;min-width:0}.claim-search{padding:14px;margin-bottom:22px}.claim-search-label{font-size:.95rem;margin-bottom:8px}.direct-answer{font-size:.98rem;line-height:1.55;padding:10px 14px;margin-bottom:16px}.breadcrumb{margin-bottom:12px}}
 `;
 
+const SEARCH_BOX_MODES = ['company', 'number', 'area'];
+
 function searchBoxBlock(post) {
   const b = post.searchBox;
   if (!b) return '';
+  // Only the modes the region's registry search really offers (Manitoba
+  // publishes no holder, so its box has no Company option). The editor ignores
+  // a mode a region does not offer, so offering one here would be a dead end.
+  const modes = b.modes || SEARCH_BOX_MODES;
+  if (!modes.length || modes.some((m) => !SEARCH_BOX_MODES.includes(m))) {
+    throw new Error(`${post.slug}: searchBox.modes must be some of ${SEARCH_BOX_MODES.join(', ')}`);
+  }
+  const modeLabels = { company: b.companyLabel || 'Company', number: 'Claim number(s)', area: 'Area (latitude, longitude)' };
   const hidden = { intent: 'claims', region: b.region, utm_source: 'blog', utm_medium: 'cta', utm_campaign: post.slug, utm_content: 'search-box' };
   return `<form class="claim-search" action="/" method="get" role="search" aria-label="${esc(b.label)}">
   ${Object.entries(hidden).map(([k, v]) => `<input type="hidden" name="${k}" value="${esc(v)}">`).join('\n  ')}
   <label class="claim-search-label" for="claim-search-q">${esc(b.label)}</label>
   <div class="claim-search-row">
     <select name="mode" aria-label="Search by">
-      <option value="company">${esc(b.companyLabel || 'Company')}</option>
-      <option value="number">Claim number(s)</option>
-      <option value="area">Area (latitude, longitude)</option>
+      ${modes.map((m) => `<option value="${m}">${esc(modeLabels[m])}</option>`).join('\n      ')}
     </select>
     <input id="claim-search-q" name="q" type="search" autocomplete="off" enterkeyhint="search" placeholder="${esc(b.placeholder)}">
     <button type="submit">Search claims</button>
