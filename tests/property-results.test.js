@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { defaultRecipe, computeResults } from '../shared/drillResults.js';
-import { pull } from '../src/three-d/property-data.js';
+import { pull, init, toggle, check, reset } from '../src/three-d/property-data.js';
 import { pullPropertyResults, selectRecipe, recipeChange, RESULTS_FILE } from '../src/utils/propertyResults.js';
 import { parseTable, guessKind, buildPlan } from '../src/utils/drillPlanData.js';
 import { readResults, pubCols, pubCallouts, pubLines } from '../src/three-d/published-results.js';
@@ -11,6 +11,117 @@ const prop = { id: 'test-property', name: 'Illustrative only' };
 const saved = (name = 'Default', version = 3, overrides = {}) => ({
   id: `${name}-${version}`, name, version,
   recipe: { ...defaultRecipe(['Au'], { Au: 'g/t' }), inclCutoff: null, ...overrides },
+});
+
+function figureHarness(f) {
+  let project = { v: 1, settings: { calloutMode: 'calculated', drillSource: null, pubOverrides: {} }, files: [{ name: 'other.csv', role: 'litho-model', text: 'keep' }] };
+  let figureId = 'figure-1';
+  const E = {
+    getState: () => ({ drillSource: project.settings.drillSource, terrain: { crs: 'EPSG:4326' }, usingSample: false }),
+    getProject: () => structuredClone(project),
+    clearFiles: vi.fn(() => { project.files = []; project.settings.drillSource = null; }),
+    addFiles: vi.fn((files, { drillSource }) => { project.files = structuredClone(files); project.settings.drillSource = drillSource; }),
+    setStyle: vi.fn((style) => Object.assign(project.settings, style)),
+    setCRS: vi.fn(async () => {}),
+    loadProject: vi.fn(async (p) => { project = structuredClone(p); }),
+  };
+  document.body.innerHTML = '<button id="drill-add"></button><div id="drill-pick" hidden><div id="drill-body"></div></div><div id="drill-notice" hidden><span id="drill-notice-text"></span><button id="drill-update"></button><button id="drill-dismiss"></button></div>';
+  window.EM3D = E;
+  const say = vi.fn();
+  init({ client: async () => f.sb, current: () => ({ id: figureId }), say, listHomes: async () => ({ properties: [prop] }) });
+  reset();
+  return { E, say, get: () => structuredClone(project), set: (p) => { project = structuredClone(p); }, switchFigure: () => { figureId = 'figure-2'; reset(); } };
+}
+const el = (id) => document.getElementById(id);
+async function clickAction(id) {
+  el(id).click();
+  await vi.waitFor(() => expect(el(id).disabled).toBe(false));
+}
+
+describe('3D property recipe controls', () => {
+  it('defaults to the saved recipe, preserves other files and enables its exact callouts', async () => {
+    const f = fixture(), h = figureHarness(f);
+    await toggle();
+    expect(el('drill-recipe').value).toBe('r:Default');
+    await clickAction('drill-load');
+    expect(h.get().settings).toMatchObject({ calloutMode: 'published', drillSource: { resultsRecipe: { name: 'Default', version: 3 } } });
+    expect(h.get().files.find((x) => x.name === RESULTS_FILE).role).toBe('published');
+    expect(h.get().files.find((x) => x.name === 'other.csv')).toEqual({ name: 'other.csv', role: 'litho-model', text: 'keep' });
+    expect(h.say).toHaveBeenLastCalledWith(expect.stringContaining('Results calculated with Default v3'));
+  });
+
+  it('requires a choice for ambiguous recipes and lets raw-only avoid the recipe query on load', async () => {
+    const f = fixture([saved('A'), saved('B')]), h = figureHarness(f);
+    await toggle();
+    expect(el('drill-load').disabled).toBe(true);
+    el('drill-recipe').value = 'raw'; el('drill-recipe').dispatchEvent(new Event('change', { bubbles: true }));
+    f.sb.rpc.mockClear(); await clickAction('drill-load');
+    expect(f.sb.rpc).not.toHaveBeenCalled();
+    expect(h.get().settings.drillSource.resultsRecipe).toBeUndefined();
+    expect(h.E.setStyle).not.toHaveBeenCalled();
+  });
+
+  it('keeps uploaded results and refuses silently mixing their IDs with a property recipe', async () => {
+    const f = fixture(), h = figureHarness(f), before = h.get();
+    before.files.push({ name: 'release.csv', role: 'published', text: 'uploaded results' }); h.set(before);
+    await toggle(); await clickAction('drill-load');
+    expect(h.get()).toEqual(before); expect(h.E.clearFiles).not.toHaveBeenCalled();
+    expect(el('drill-progress').textContent).toContain('already has uploaded results');
+    el('drill-recipe').value = 'raw'; el('drill-recipe').dispatchEvent(new Event('change', { bubbles: true }));
+    await clickAction('drill-load');
+    expect(h.get().files).toContainEqual(before.files[1]);
+  });
+
+  it('offers recipe-only updates and changes only its managed file when asked', async () => {
+    const f = fixture(), h = figureHarness(f);
+    await toggle(); await clickAction('drill-load');
+    const before = h.get(); before.settings.pubOverrides = { 'TEST-01:1': { dx: 20, show: false } }; h.set(before);
+    f.db.recipes = [saved('Default', 4, { cutoff: 99 })];
+    await check();
+    expect(el('drill-notice').hidden).toBe(false);
+    expect(el('drill-notice-text').textContent).toContain('v3 to v4');
+    expect(h.get()).toEqual(before);
+    await clickAction('drill-update');
+    expect(h.get().settings.drillSource.resultsRecipe.version).toBe(4);
+    expect(h.get().files.filter((x) => x.name === RESULTS_FILE)).toHaveLength(1);
+    expect((await parseTable(h.get().files.find((x) => x.name === RESULTS_FILE).text)).rows).toEqual([]);
+    expect(h.get().files.find((x) => x.name === 'other.csv')).toEqual(before.files.find((x) => x.name === 'other.csv'));
+    expect(h.get().settings.calloutMode).toBe('published');
+    expect(h.get().settings.pubOverrides).toEqual(before.settings.pubOverrides);
+  });
+
+  it('leaves the figure unchanged if its recipe disappears or another figure opens during a load', async () => {
+    const f = fixture(), h = figureHarness(f);
+    await toggle(); await clickAction('drill-load');
+    const before = h.get(); f.db.recipes = [];
+    await check(); expect(el('drill-notice-text').textContent).toContain('no longer available');
+    await clickAction('drill-update'); expect(h.get()).toEqual(before);
+    expect(h.say).toHaveBeenLastCalledWith(expect.stringContaining('no longer available'));
+    f.db.recipes = [saved()]; f.db.onRead = (table) => { if (table === 'drill_assays') h.switchFigure(); };
+    // The picker is still open; reload its initial selection before starting another load.
+    await toggle(); await toggle();
+    el('drill-load').click();
+    await vi.waitFor(() => expect(f.reads.filter((r) => r.table === 'drill_assays').length).toBeGreaterThan(1));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(h.get()).toEqual(before);
+  });
+
+  it('restores the previous figure if applying newly loaded data fails', async () => {
+    const f = fixture(), h = figureHarness(f), before = h.get();
+    h.E.addFiles.mockImplementationOnce(() => { throw new Error('bad figure'); });
+    await toggle(); await clickAction('drill-load');
+    expect(h.get()).toEqual(before); expect(el('drill-progress').textContent).toBe('bad figure');
+  });
+
+  it('preserves edited result wording rather than silently carrying stale grades into a recipe update', async () => {
+    const f = fixture(), h = figureHarness(f);
+    await toggle(); await clickAction('drill-load');
+    const before = h.get(); before.settings.pubOverrides = { 'TEST-01:1': { line1: 'User wording' } }; h.set(before);
+    f.db.recipes = [saved('Default', 4, { cutoff: 99 })];
+    await check(); await clickAction('drill-update');
+    expect(h.get()).toEqual(before);
+    expect(h.say).toHaveBeenLastCalledWith(expect.stringContaining('edited result wording'));
+  });
 });
 function fixture(recipes = [saved()]) {
   const db = {

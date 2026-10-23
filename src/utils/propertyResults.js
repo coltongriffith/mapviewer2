@@ -6,6 +6,7 @@ import { pull } from '../three-d/property-data.js';
 import { drillResultsDb } from './drillResultsDb.js';
 
 export const RESULTS_FILE = 'property-recipe-results.csv';
+export const listRecipes = async (sb, propertyId) => (await drillResultsDb(sb).recipes(propertyId)) || [];
 
 /** undefined: Default or sole recipe; null: raw data only; string: exact saved name. */
 export function selectRecipe(recipes, name) {
@@ -43,11 +44,10 @@ export function recipeChange(ref, recipes) {
  */
 export async function pullPropertyResults(sb, prop, { recipeName, onProgress = () => {}, tries = 2 } = {}) {
   if (recipeName === null) return pull(sb, prop, onProgress, tries);
-  const db = drillResultsDb(sb);
   for (let attempt = 0; attempt < tries; attempt++) {
-    const selected = selectRecipe(await db.recipes(prop.id), recipeName);
+    const selected = selectRecipe(await listRecipes(sb, prop.id), recipeName);
     const loaded = await pull(sb, prop, onProgress, tries);
-    const after = selectRecipe(await db.recipes(prop.id), recipeName);
+    const after = selectRecipe(await listRecipes(sb, prop.id), recipeName);
     // Recipes are versioned by name. Re-read rows as well if the chosen version
     // changed while pages were loading; never attach new metadata to old results.
     if (identity(selected) !== identity(after)) continue;
