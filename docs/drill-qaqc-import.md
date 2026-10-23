@@ -9,6 +9,7 @@ Exports:
 - `autoQaqcMapping(kind, header)`: reviewable header suggestions only. All measurement columns start deselected, with no inferred unit or sample type.
 - `buildQaqcImport(kind, table, mapping)`: `{rows, lines, errors, errorCount, warnings}`. Errors contain physical `line` and `message`; configuration errors use `line: null`. Up to 50 error details are retained, with the full count. **Any nonzero errorCount must prevent server preview/commit**, even though individually valid rows are also returned.
 - `parseQaqcValue(raw, {decimalComma})`: strict single-measurement parsing; primarily useful for tests or a cell preview.
+- `qaqcJsonBytes(value)`: UTF-8 serialized JSONB byte count, including structural separator spaces; use it to check provenance as well as row requests.
 - Limits: `MAX_QAQC_ROWS = 5000`, `MAX_QAQC_BYTES = 4000000`.
 
 Mapping uses `columns: {field: header}`, optional explicit `constants: {lab_id, lab_batch_id, sample_type}`, `elements: [{column, element, unit, skip}]`, and `decimalComma: true|false`. A mapped column takes precedence over a constant, including when a row's cell is blank. This prevents quietly filling incomplete lab identity/type data. Element names and units are required and exact. A source column cannot supply two mapped fields or measurements.

@@ -63,7 +63,7 @@ export function parseQaqcValue(raw, { decimalComma = false } = {}) {
 
 // PostgreSQL jsonb text adds one space after each structural comma/colon.
 // Count separators outside strings, so the client respects the RPC byte cap.
-function jsonbBytes(value) {
+export function qaqcJsonBytes(value) {
   const json = JSON.stringify(value);
   let inside = false, escaped = false, separators = 0;
   for (const c of json) {
@@ -152,6 +152,6 @@ export function buildQaqcImport(kind, table, mapping = {}) {
   });
   if (out.some(r => r.parent_sample_id)) warnings.push({ message: 'Duplicates require a previously imported routine parent in the same laboratory and lab job. Import parents separately.' });
   if (out.some(r => r.sample_type === 'standard')) warnings.push({ message: 'Import the exact CRM revision, element and unit definitions before importing standards.' });
-  if (jsonbBytes(out) > MAX_QAQC_BYTES) fail(null, 'Mapped rows exceed the 4 MB request limit. Split the file into smaller imports.');
+  if (qaqcJsonBytes(out) > MAX_QAQC_BYTES) fail(null, 'Mapped rows exceed the 4 MB request limit. Split the file into smaller imports.');
   return finish();
 }

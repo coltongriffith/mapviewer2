@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { autoQaqcMapping, buildQaqcImport, parseQaqcValue } from '../src/utils/drillQaqcImport';
+import { autoQaqcMapping, buildQaqcImport, parseQaqcValue, qaqcJsonBytes } from '../src/utils/drillQaqcImport';
 import { parseCsv } from '../src/utils/drillDb';
 
 const table = (rows, extra = {}) => ({ header: ['Sample', 'Type', 'Au'], rows, ...extra });
@@ -90,6 +90,11 @@ describe('explicit sample mapping', () => {
 });
 
 describe('CRM mapping and bounded requests', () => {
+  it('counts JSONB separator spaces without treating quoted punctuation as structural', () => {
+    const value = { filename: '岩,:".csv', columns: ['a', 'b'] };
+    const jsonb = '{"filename": "岩,:\\".csv", "columns": ["a", "b"]}';
+    expect(qaqcJsonBytes(value)).toBe(new TextEncoder().encode(jsonb).length);
+  });
   it('uses supplied certified numeric values and exact revision/unit/source', () => {
     const m = autoQaqcMapping('crms', crmTable.header);
     const result = buildQaqcImport('crms', crmTable, m);
