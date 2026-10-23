@@ -24,7 +24,7 @@ const DRILL_ROLES = ['collar', 'survey', 'assay', 'litho'];
 const TABLES = {
   collars: { select: 'hole_id,x,y,z,crs,azimuth,dip,depth,status,planned', order: ['hole_id'] },
   surveys: { select: 'hole_id,depth_m,azimuth,dip', order: ['hole_id', 'depth_m'] },
-  assays: { select: 'hole_id,from_m,to_m,values,units', order: ['hole_id', 'from_m', 'to_m'] },
+  assays: { select: 'hole_id,from_m,to_m,values,bdl,units', order: ['hole_id', 'from_m', 'to_m'] },
   lithology: { select: 'hole_id,from_m,to_m,code,description', order: ['hole_id', 'from_m', 'to_m'] },
 };
 
