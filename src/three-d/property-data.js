@@ -135,7 +135,7 @@ async function readAll(sb, kind, propertyId, onPage) {
     let q = sb.from(`drill_${kind}`).select(select).eq('property_id', propertyId).is('superseded_by_batch', null);
     order.forEach((k) => { q = q.order(k, { ascending: true }); });
     if (cursor) {
-      if (order.length === 1) q = q.gt(order[0], filterValue(cursor[0]));
+      if (order.length === 1) q = q.gt(order[0], cursor[0]);
       else {
         const terms = order.map((k, i) => {
           const parts = order.slice(0, i).map((p, j) => `${p}.eq.${filterValue(cursor[j])}`);
@@ -143,7 +143,9 @@ async function readAll(sb, kind, propertyId, onPage) {
           return parts.length === 1 ? parts[0] : `and(${parts.join(',')})`;
         });
         // The redundant leading-key bound enables an index seek before the OR filter.
-        q = q.gte(order[0], filterValue(cursor[0])).or(terms.join(','));
+        // Standalone SDK filters take literal values; only the OR grammar above
+        // consumes quotes/escapes. Quoting here would compare against extra quote characters.
+        q = q.gte(order[0], cursor[0]).or(terms.join(','));
       }
     }
     const { data, error } = await q.limit(PAGE);

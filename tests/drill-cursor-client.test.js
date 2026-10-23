@@ -6,9 +6,8 @@ import { parseDrillFilter, matchesDrillFilter } from './fixtures/drill-filter.js
 const compare = (keys) => (a, b) => {
   for (const k of keys) { if (a[k] < b[k]) return -1; if (a[k] > b[k]) return 1; } return 0;
 };
-function fixture({ cap = 2, onRequest = () => {}, ignoreCursor = false } = {}) {
+function fixture({ cap = 2, onRequest = () => {}, ignoreCursor = false, ids = ['A,(x)."q"\\z: *', 'H10', 'H2', 'Éclair'] } = {}) {
   const calls = [], base = { property_id: 'p1', superseded_by_batch: null };
-  const ids = ['A,(x)."q"\\z: *', 'H10', 'H2', 'Éclair'];
   const db = { drill_import_batches: [{ property_id: 'p1', id: 'b1', created_at: '2026-10-01T00:00:00Z' }],
     drill_collars: ids.map((hole_id) => ({ ...base, hole_id, x: 1, y: 2, z: 3, crs: null })),
     drill_surveys: ids.flatMap((hole_id) => [0, 0.1, 0.2, 2, 10].map((depth_m) => ({ ...base, hole_id, depth_m, azimuth: 0, dip: -60 }))),
@@ -57,7 +56,7 @@ describe('property cursors through the real Supabase client', () => {
     expect(ref).toMatchObject({ holes: 4, assays: 20, latestBatchId: 'b1' });
     const page = calls.filter((c) => c.table === 'drill_assays')[1];
     const quoted = '"A,(x).\\"q\\"\\\\z: *"';
-    expect(page.q.get('hole_id')).toBe(`gte.${quoted}`);
+    expect(page.q.get('hole_id')).toBe('gte.A,(x)."q"\\z: *');
     expect(page.q.get('or')).toBe(`(hole_id.gt.${quoted},and(hole_id.eq.${quoted},from_m.gt.0),and(hole_id.eq.${quoted},from_m.eq.0,to_m.gt.2))`);
     expect(page.url).toContain('%5C');
   });
@@ -77,13 +76,29 @@ describe('property cursors through the real Supabase client', () => {
     expect(f.calls.filter((c) => c.table === 'drill_assays' && !c.q.has('or'))).toHaveLength(2);
   });
 
-  it('quotes the single collar key without treating punctuation as filter operators', async () => {
+  it('passes the single collar key literally without treating punctuation as filter operators', async () => {
     const f = fixture({ cap: 1 });
     const loaded = await pull(f.sb, { id: 'p1' });
     expect(loaded.rows.collars).toHaveLength(4);
     const second = f.calls.filter((c) => c.table === 'drill_collars')[1];
-    expect(second.q.get('hole_id')).toBe('gt."A,(x).\\"q\\"\\\\z: *"');
+    expect(second.q.get('hole_id')).toBe('gt.A,(x)."q"\\z: *');
     expect(second.q.has('or')).toBe(false);
+  });
+
+  it.each(['H0001', '"H0001"', 'A,(x)."q"\\z: *'])('finishes the terminal page with literal SDK cursor values for %s', async (id) => {
+    const f = fixture({ ids: [id], cap: 1000 });
+    const loaded = await pull(f.sb, { id: 'p1' });
+    expect(loaded.rows.collars.map((r) => r.hole_id)).toEqual([id]);
+    for (const table of ['drill_collars', 'drill_surveys', 'drill_assays', 'drill_lithology']) {
+      const calls = f.calls.filter((c) => c.table === table);
+      expect(calls).toHaveLength(2);
+      expect(calls[1].q.get('hole_id')).toBe(`${table === 'drill_collars' ? 'gt' : 'gte'}.${id}`);
+    }
+  });
+
+  it('models standalone quoted IDs literally and unquotes only inside logic groups', () => {
+    expect(parseDrillFilter('hole_id.gt."H0001"').value).toBe('"H0001"');
+    expect(parseDrillFilter('or(hole_id.gt."H0001")').parts[0].value).toBe('H0001');
   });
 
   it('refuses an unstable import history after the existing bounded retry', async () => {

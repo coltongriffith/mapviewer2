@@ -1,6 +1,10 @@
 // Minimal independent PostgREST filter grammar for local fixtures. No eval and
 // no production import: tests inspect the real SDK's serialized request first.
 export function parseDrillFilter(input) {
+  // PostgREST pSingleVal consumes the entire standalone value literally. Only
+  // pLogicSingleVal inside and()/or() unquotes and unescapes quoted values.
+  const single = /^(hole_id|depth_m|from_m|to_m)\.(eq|gt|gte)\.([\s\S]*)$/.exec(input);
+  if (single) return { field: single[1], op: single[2], value: single[1] === 'hole_id' ? single[3] : Number(single[3]) };
   let at = 0;
   const list = () => {
     const parts = [expression()];
