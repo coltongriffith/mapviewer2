@@ -8,8 +8,7 @@
 // commits atomically. Column detection is the 3D maker's (src/three-d/roles.js),
 // so a file reads the same way in both places.
 //
-// CSV and tab- or semicolon-separated text only: no Excel reader ships with
-// the app, so Excel sheets are saved as CSV first.
+// CSV and Excel feed the same string-table contract; the Excel adapter is lazy.
 
 import { matchCols, roleOf, refineRole } from '../three-d/roles.js';
 
@@ -164,7 +163,7 @@ const share = (rows, i, test) => {
  * A first mapping for a table of `kind`: { columns: { field: header }, elements,
  * bdl, crs }. Columns are kept by header name, so a template fits the next file.
  */
-export function autoMapping(kind, header, rows, { name = '', crs = null } = {}) {
+export function autoMapping(kind, header, rows, { name = '', crs = null, decimalComma = false } = {}) {
   const entry = { header, rows, cols: matchCols(header) };
   refineRole(entry, roleOf(entry.cols, name), name); // adds code / desc for logs
   const n = header.map(norm), cols = {};
@@ -172,7 +171,7 @@ export function autoMapping(kind, header, rows, { name = '', crs = null } = {}) 
     const i = f.from ? entry.cols[f.from] : n.findIndex((h) => f.re.test(h));
     if (i !== undefined && i >= 0) cols[f.key] = header[i];
   }
-  const mapping = { columns: cols, bdl: 'half' };
+  const mapping = { columns: cols, bdl: 'half', ...(decimalComma ? { decimalComma: true } : {}) };
   // Collars in latitude / longitude: x is longitude, y latitude, in WGS 84.
   if (kind === 'collars' && !cols.x && entry.cols.lon !== undefined && entry.cols.lat !== undefined) {
     Object.assign(cols, { x: header[entry.cols.lon], y: header[entry.cols.lat] });
@@ -188,7 +187,7 @@ export function autoMapping(kind, header, rows, { name = '', crs = null } = {}) 
       if (used.has(h) || /units?$/.test(n[i])) return [];
       const el = parseElementHeader(h);
       const uc = [`${n[i]}_unit`, `${n[i]}_units`, `${norm(el.name)}_unit`, `${norm(el.name)}_units`].find((k) => unitCols.has(k));
-      const isValue = !NOT_ELEMENT.test(n[i]) && !/(^|_)id$/.test(n[i]) && share(rows, i, looksNumeric) >= 0.8;
+      const isValue = !NOT_ELEMENT.test(n[i]) && !/(^|_)id$/.test(n[i]) && share(rows, i, v => looksNumeric(decimalValue(v, decimalComma))) >= 0.8;
       return [{ column: h, name: el.name, unit: el.unit, unitColumn: uc ? header[unitCols.get(uc)] : null, ...(isValue ? {} : { skip: true }) }];
     });
   }
@@ -218,6 +217,10 @@ export function applyTemplate(template, header, candidates = null) {
 // ── Values ─────────────────────────────────────────────────────────────────
 const MISSING = /^(|-|--|na|n\/a|ns|is|nr|lnr|nss|\*|null|none|nan)$/i;
 const BDL_WORDS = /^(bdl|bld|nd|<dl|<lod|<ld|lod|trace|tr)$/i;
+
+// Opt-in and numeric fields only. Never strip punctuation from identifiers or
+// guess whether a comma means a decimal point or a thousands separator.
+const decimalValue = (value, comma) => comma ? cell(value).replace(/^([<>]?\s*[-+]?\d+),(\d+(?:e[-+]?\d+)?)$/i, '$1.$2') : value;
 
 /**
  * One assay cell → { value, dl?, over?, missing?, error? }. "<0.005" is below
@@ -315,7 +318,7 @@ export function buildImport(kind, { header, rows, lines: fileLines = null }, map
       if (idx[f.key] < 0) continue;
       const raw = r[idx[f.key]];
       if (NUMERIC.has(f.key)) {
-        const n = toNum(raw);
+        const n = toNum(decimalValue(raw, mapping.decimalComma));
         if (Number.isNaN(n)) fail(`${f.label} "${cell(raw)}" is not a number`);
         else if (n === null && f.required) fail(`${f.label} is empty`);
         else if (n !== null) o[f.key] = n;
@@ -343,7 +346,7 @@ export function buildImport(kind, { header, rows, lines: fileLines = null }, map
     if (kind === 'assays') {
       const values = {}, bdl = {};
       for (const e of elements) {
-        const p = parseAssay(r[header.indexOf(e.column)], mode);
+        const p = parseAssay(decimalValue(r[header.indexOf(e.column)], mapping.decimalComma), mode);
         const name = cell(e.name);
         if (p.error) { fail(`${e.column}: ${p.error}`); continue; }
         if (p.dl !== undefined) { bdl[name] = p.dl; stats.bdl++; }

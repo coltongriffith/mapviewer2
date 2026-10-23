@@ -241,6 +241,9 @@ const BUDGETS = {
   // editor's initial JS and the exporters are unchanged.
   // Combined Tower acceptance: export/API plus figure import; measured 1053.0 configured.
   totalAuthJsGzipKb: 1053.3,
+  // 1009.4 → 1026.3 (measured 1026.0): lazy XLSX reader (~13.8 KiB), sheet/header preview
+  // (~1.1 KiB), import wiring and numeric-format handling. Shared fflate adds ~1.2 KiB
+  // for async ZIP workers; it remains one copy with the existing draft compression.
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
@@ -283,6 +286,7 @@ const BUDGETS = {
   // totalAuthJsGzipKb above.
   // Combined Tower acceptance: same lazy features together; measured 984.6 plain.
   totalJsGzipKb: 984.9,
+  // 940.9 → 957.8 (measured 957.5): Excel import, as totalAuthJsGzipKb above.
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the
   // totals above. /3d carries three.js (~109 kB gzip) and its editor.
@@ -516,7 +520,10 @@ const BUDGETS = {
   // data dropped rather than refused (+0.4 kB).
   // 156.5 → 161.2 (round 5H merged over the true-scale crew (b55edc19), measured 160.7, configured 160.9, + 0.3):
   // round 5H's +4.7 kB above on top of the crew's +1.6 kB; the two touch different chunks (block.js and tags.js; crew.js).
-  threeDLazyJsGzipKb: 161.2,
+  // 161.2 → 161.3: the existing configured bundle is 161.187 KiB; XLSX shared-import
+  // hash churn moves it to 161.194 locally and 161.201 with CI's commit stamp. Keep 0.1 KiB
+  // of headroom for those hashes; no new /3d module or XLSX reader enters this graph.
+  threeDLazyJsGzipKb: 161.3,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.
@@ -545,6 +552,8 @@ const BUDGETS = {
   // Unchanged by the 2D export package (measured 341.3, as on main): App as maxJsChunkGzipKb above.
   // 341.5 to 342.6 (Oct 2026): 2D API bridge and accessible control names; API/help load after editor startup; measured 342.3 configured.
   editorAuthJsGzipKb: 342.9,
+  // Excel import: shared fflate's async ZIP worker support adds ~1.2 KiB (342.5 measured).
+  // The XLSX parser and sheet picker remain lazy; the homepage does not load compression.
   // 270 → 271.0 (Oct 2026, production errors, measured 270.7, 269.6 on main): the same as editorAuthJsGzipKb above.
   // 271.0 → 271.7 (Oct 2026, 2D drill plan, measured 271.4, 270.8 on main): the same as editorAuthJsGzipKb above.
   // 271.7 → 272.2 (measured 271.9, 271.4 on main): import a company figure, as editorAuthJsGzipKb above.
@@ -555,6 +564,8 @@ const BUDGETS = {
   // 273.4 to 274.5 (Oct 2026): Same bridge and control names; measured 274.2 plain.
   editorJsGzipKb: 274.9,
   // 355 to 355.3 (Oct 2026): claims shares the editor API bridge/control names; measured 355.0 in CI.
+  // Same shared compression increase as above (274.4 measured).
+  // Claims also restores drafts through shared compression (355.3 measured).
   claimsAuthJsGzipKb: 355.6,
   claimsJsGzipKb: 290,
   // Stylesheet, gzipped. Today ~29 kB.
