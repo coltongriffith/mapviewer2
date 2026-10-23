@@ -681,9 +681,9 @@ html.em3d-version .share-bar .btn { padding: 6px 11px; }
       <section>
         <div class="grid2"><label class="field"><span>Pixel size</span><select id="export-scale"><option value="1">The figure size</option><option value="2">2×</option><option value="3">3×</option><option value="w">A width in pixels</option></select></label>
           <label class="field" id="export-width-f" hidden><span>Width (px)</span><input type="number" id="export-width" min="200" max="16000" step="1" value="3484"></label></div>
-        <label class="check" style="margin-top:6px"><input type="checkbox" id="export-wm">Watermark band under the figure</label>
+        <label class="check" style="margin-top:6px"><input type="checkbox" id="export-wm">Watermark band and draft mark</label>
         <label class="field" id="export-client-f" style="margin-top:4px" hidden><span>Prepared for</span><input type="text" id="export-client" placeholder="Company name"></label>
-        <p class="muted" style="margin-top:4px">The pixel size is the export's whatever the screen: the figure is laid out as at the figure size above. The band adds the Exploration Maps logo, "Draft for review · Not for publication", who it was prepared for and the year under the figure (the PNGs, and figure.png and section.png in the layers ZIP).</p>
+        <p class="muted" style="margin-top:4px">The pixel size is the export's whatever the screen: the figure is laid out as at the figure size above. The band adds the Exploration Maps logo, "Draft for review · Not for publication", who it was prepared for and the year under the figure, and a faint draft mark across it (the PNGs, and figure.png and section.png in the layers ZIP).</p>
       </section>
       <section class="row">
         <button class="btn primary" type="button" id="export-3d">Download 3D figure (PNG)</button>
@@ -915,10 +915,12 @@ JavaScript API (run in the page console or via your agent's evaluate tool):
                                   exportLayers takes background and shadow too
   EM3D.exportPNG({..., width: 3484} | {..., scale: 2 | 3})   that many pixels whatever the screen, the figure
                                   laid out exactly as at the figure size (exportLayers takes them too)
-  EM3D.exportPNG({..., watermark: true | {client, year, status}})   Promise of the data URL: the Exploration
-                                  Maps band under the figure (logo, "DRAFT FOR REVIEW · NOT FOR
+  EM3D.exportPNG({..., watermark: true | {client, year, status, overlay}})   Promise of the data URL: the
+                                  Exploration Maps band under the figure (logo, "DRAFT FOR REVIEW · NOT FOR
                                   PUBLICATION", "Prepared for <client>" (default: the company) and ©
-                                  year). Off unless asked. exportLayers puts it under figure.png and section.png
+                                  year) and a faint "DRAFT · EXPLORATIONMAPS.COM" mark across the figure
+                                  (overlay: false leaves the mark off). Off unless asked. exportLayers puts
+                                  them on figure.png and section.png
   EM3D.setMapUse({use: "presentation" | "standalone", what, project, date, sources})   Promise.
                                   standalone: the title, what it shows (one line; else the subtitle),
                                   project and company, date (else today), coordinate system, sources,

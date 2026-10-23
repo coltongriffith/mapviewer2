@@ -1,4 +1,4 @@
-import { renderSceneToCanvas } from "./renderScene";
+import { figureCanvas } from "./exportPNG";
 
 // Page size presets in inches [width, height]
 export const PDF_SIZES = {
@@ -22,7 +22,16 @@ export async function exportPDF(scene, options = {}) {
   const { jsPDF } = await import('jspdf');
   const pdf = new jsPDF({ orientation, unit: 'in', format: [size.w, size.h] });
   // A PDF page is always opaque: a transparent PNG setting does not reach it (JPEG has no alpha).
-  const canvas = await renderSceneToCanvas(scene, { ...options, background: 'white' });
+  const canvas = await figureCanvas(scene, { ...options, background: 'white' });
+  pdfPage(pdf, canvas, size);
+
+  const filename = options.filename || scene.project?.layout?.exportSettings?.filename || 'exploration-maps-export';
+  pdf.save(`${filename}.pdf`);
+}
+
+// The canvas on the current page of pdf (size: a PDF_SIZES entry), letterboxed. The package export adds its
+// figures one page each through this too.
+export function pdfPage(pdf, canvas, size) {
   const imgData = canvas.toDataURL('image/jpeg', 0.93);
 
   // Letterbox: fit the map image within the PDF page preserving its aspect ratio
@@ -41,7 +50,13 @@ export async function exportPDF(scene, options = {}) {
     imgY = 0;
   }
   pdf.addImage(imgData, 'JPEG', imgX, imgY, imgW, imgH);
+}
 
-  const filename = options.filename || scene.project?.layout?.exportSettings?.filename || 'exploration-maps-export';
-  pdf.save(`${filename}.pdf`);
+// The canvas on opaque white, for a PDF page: the page image is a JPEG, which has no alpha, so a transparent
+// figure (a transparent-background export, or a PNG with alpha added to a package) would otherwise turn black.
+// The figure itself is left as it is: its PNG keeps the transparency.
+export function onWhite(canvas, doc = document) {
+  const out = doc.createElement('canvas'); out.width = canvas.width; out.height = canvas.height;
+  const g = out.getContext('2d'); g.fillStyle = '#ffffff'; g.fillRect(0, 0, out.width, out.height); g.drawImage(canvas, 0, 0);
+  return out;
 }

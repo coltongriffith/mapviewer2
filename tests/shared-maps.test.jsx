@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import React from 'react';
 
 // ── loadSharedMap: narrow RPC lookup ─────────────────────────────────────────
@@ -112,7 +112,8 @@ describe('SharedMapViewer PNG download', () => {
     render(<SharedMapViewer mapId="abc123def456" onExit={() => {}} user={null} entitlements={{ clean_export: false, max_export_pixels: 3000 }} />);
     const button = await screen.findByRole('button', { name: 'Download PNG' });
     expect(exportPng).not.toHaveBeenCalled();
-    button.click();
+    await waitFor(() => expect(button).toBeEnabled());
+    fireEvent.click(button);
     await screen.findByRole('button', { name: 'Download PNG again' });
     expect(exportPng).toHaveBeenCalledWith({ clean_export: false, max_export_pixels: 3000 });
     expect(trackEvent).toHaveBeenCalledWith('export_completed', expect.objectContaining({ format: 'png', source: 'shared_link', resolution_clamped: true }), undefined);
@@ -131,7 +132,10 @@ describe('SharedMapViewer PNG download', () => {
     rpcMock.mockResolvedValue({ data: state, error: null });
     exportPng.mockRejectedValue(new Error('tainted canvas'));
     render(<SharedMapViewer mapId="abc123def456" onExit={() => {}} user={null} />);
-    (await screen.findByRole('button', { name: 'Download PNG' })).click();
+    const button = await screen.findByRole('button', { name: 'Download PNG' });
+    // The button mounts before the lazy stage supplies its exporter.
+    await waitFor(() => expect(button).toBeEnabled());
+    fireEvent.click(button);
     expect(await screen.findByRole('alert')).toHaveTextContent('The PNG could not be made');
   });
 

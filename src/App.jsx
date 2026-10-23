@@ -47,6 +47,8 @@ const UpgradeModal = lazyGuarded(() => import('./components/UpgradeModal'));
 const FullResOfferModal = lazyGuarded(() => import('./components/FullResOfferModal'));
 const PublicationCheck = lazyGuarded(() => import('./components/PublicationCheck'));
 const ExportBackground = lazyGuarded(() => import('./components/ExportBackground'));
+// The watermark band toggle and the designer layers ZIP, in the Export step.
+const ExportExtras = lazyGuarded(() => import('./components/ExportExtras'));
 const StudioCard = lazyGuarded(() => import('./components/StudioCard'));
 const StudioControls = lazyGuarded(() => import('./components/StudioControls'));
 const GeoStyleControls = lazyGuarded(() => import('./components/GeoStyleControls'));
@@ -117,7 +119,7 @@ import {
 } from './utils/rasterOverlay.js';
 import { layerAnchorGroups, defaultAnchorForLayer, reanchorCalloutsForLayer } from './utils/featureClusters.js';
 import FeatureTrimList from './components/FeatureTrimList.jsx';
-import dissolveGeo from '@turf/dissolve';
+import { dissolveOwnerFeatures, layersWithNearbyClaims, nearbyClaimsLegendItems } from './utils/nearbyClaims.js';
 import {
   clearActiveProjectContext,
   deleteProjectRecord,
@@ -619,28 +621,6 @@ function initialWorkspaceState() {
 
 // ─── NI 43-101 live tick overlay ────────────────────────────────────────────
 
-// Merge all polygons belonging to one owner into a single outline, removing
-// the internal borders between adjacent claims. Returns a FeatureCollection.
-function dissolveOwnerFeatures(feats, ownerKey) {
-  const polys = [];
-  feats.forEach((f) => {
-    const g = f.geometry;
-    if (!g) return;
-    if (g.type === 'Polygon') {
-      polys.push({ type: 'Feature', properties: { __o: ownerKey }, geometry: g });
-    } else if (g.type === 'MultiPolygon') {
-      g.coordinates.forEach((coords) =>
-        polys.push({ type: 'Feature', properties: { __o: ownerKey }, geometry: { type: 'Polygon', coordinates: coords } }));
-    }
-  });
-  if (!polys.length) return { type: 'FeatureCollection', features: [] };
-  try {
-    const merged = dissolveGeo({ type: 'FeatureCollection', features: polys }, { propertyName: '__o' });
-    if (merged?.features?.length) return merged;
-  } catch (_) { /* dissolve failed — fall back to un-merged polygons */ }
-  return { type: 'FeatureCollection', features: polys };
-}
-
 // Maps a location/region slug (from SEO deep links and company-page CTAs) to
 // the province code the claims registry uses. Only the 7 registry-backed
 // provinces resolve; anything else returns undefined so callers fall back to
@@ -757,6 +737,9 @@ export default function App({ initialAction = null }) {
   const [fullResLink, setFullResLink] = useState(null);
   // Opt-in publication check (export/preflight.js): off unless ticked, per session.
   const [pubCheck, setPubCheck] = useState(false);
+  // The watermark band (item 38) and the draft mark over the map are on unless switched off for the free plan and
+  // sample maps, off otherwise.
+  const bandDefault = !entitlements.clean_export || project.layers.some((l) => l.dataSource === 'demo');
   const [preflight, setPreflight] = useState(null);
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
@@ -927,20 +910,7 @@ export default function App({ initialAction = null }) {
   const selectedPolygon = useMemo(() => project.polygons?.find((poly) => poly.id === selectedPolygonId) || null, [project.polygons, selectedPolygonId]);
   const legendItems = useMemo(() => buildLegendItems(template, project.layers, project.layout), [template, project.layers, project.layout]);
 
-  const areaClaimsLegendItems = useMemo(() => {
-    if (!areaClaims?.showInLegend || !areaClaims.features?.length) return [];
-    const { ownerColors = {}, ownerLabels = {}, hiddenOwners = [] } = areaClaims;
-    return Object.entries(ownerColors)
-      .filter(([owner]) => !hiddenOwners.includes(owner))
-      .map(([owner, color]) => ({
-        id: `__ac_${owner}`,
-        role: 'other',
-        group: 'Nearby Claims',
-        label: ownerLabels[owner] ?? owner,
-        type: 'polygons',
-        style: { fill: color, fillOpacity: areaClaims.fillOpacity ?? 0.22, stroke: color, strokeWidth: areaClaims.dissolve ? 1.5 : 1 },
-      }));
-  }, [areaClaims]);
+  const areaClaimsLegendItems = useMemo(() => nearbyClaimsLegendItems(areaClaims), [areaClaims]);
 
   // Before customization — the editor needs this to offer a removed entry back,
   // which it could not do from a list the removal has already been applied to.
@@ -4618,38 +4588,8 @@ export default function App({ initialAction = null }) {
         import('./export/exportSVG'),
         import('./export/renderScene'),
       ]);
-      // Build synthetic layers for visible nearby claims so they appear in export
-      let exportLayers = project.layers;
-      if (areaClaims?.visible && areaClaims.features?.length) {
-        const { features, ownerColors = {}, ownerLabels = {}, ownerField, hiddenOwners = [], showInLegend } = areaClaims;
-        const ownerGroups = {};
-        features.forEach((f) => {
-          const owner = (ownerField ? f.properties?.[ownerField] : null) || 'Unknown';
-          if (!(hiddenOwners || []).includes(owner)) {
-            if (!ownerGroups[owner]) ownerGroups[owner] = [];
-            ownerGroups[owner].push(f);
-          }
-        });
-        const claimLayers = Object.entries(ownerGroups).map(([owner, feats]) => {
-          const color = ownerColors[owner] || '#888888';
-          const exportFeats = areaClaims.dissolve
-            ? (dissolveOwnerFeatures(feats, owner)?.features || feats)
-            : feats;
-          return {
-            id: `__ac_${owner}`,
-            name: ownerLabels[owner] ?? owner,
-            displayName: ownerLabels[owner] ?? owner,
-            type: 'polygons',
-            role: 'other',
-            visible: true,
-            geojson: { type: 'FeatureCollection', features: exportFeats },
-            style: { fill: color, fillOpacity: areaClaims.fillOpacity ?? 0.22, stroke: color, strokeWidth: areaClaims.dissolve ? 1.5 : 1, layerOpacity: 1 },
-            legend: { enabled: !!showInLegend, label: ownerLabels[owner] ?? owner },
-            claimInfo: true,
-          };
-        });
-        exportLayers = [...project.layers, ...claimLayers];
-      }
+      // Visible nearby claims as layers, so they appear in the export (utils/nearbyClaims.js)
+      const exportLayers = layersWithNearbyClaims(project);
       const scene = buildScene(mapContainerRef.current, { ...project, layers: exportLayers, layout: { ...project.layout, legendItems: allLegendItems } }, leafletMapRef.current);
       // Entitlements decide the OUTPUT, not just which buttons are visible.
       // clean_export removes the corner credit; max_export_pixels caps the
@@ -4661,6 +4601,9 @@ export default function App({ initialAction = null }) {
       // This export's own warnings: a thumbnail render started meanwhile has its own.
       const exportContext = createExportContext();
       const opts = { ...baseSettings, ...exportOptions, paidTier: entitlements.clean_export, exportContext };
+      if (opts.band ?? bandDefault) opts.watermarkBand = { client: opts.bandClient || project.layout.companyName };
+      if (opts.draft ?? bandDefault) opts.draftOverlay = true;
+      if (format === 'layers') opts.svg = opts.layersSvg && canExportFormat(entitlements, 'svg');
       // The account's one free full-resolution export lifts the pixel cap for
       // this PNG only; the corner credit stays.
       const spendingCredit = Boolean(fullResCredit) && format === 'png' && Boolean(user)
@@ -4668,7 +4611,7 @@ export default function App({ initialAction = null }) {
       const pixelPlan = spendingCredit ? { ...entitlements, max_export_pixels: PRO_MAX_EXPORT_PIXELS } : entitlements;
       let resolutionClamped = false;
       let requestedPx = 0;
-      if (format === 'png') {
+      if (format === 'png' || format === 'layers') {
         const frame = mapContainerRef.current;
         const baseW = (opts.customWidth || 0) > 0 ? opts.customWidth : (frame?.clientWidth || viewportSize.width || 1600);
         const baseH = (opts.customHeight || 0) > 0 ? opts.customHeight : (frame?.clientHeight || viewportSize.height || 1000);
@@ -4705,6 +4648,9 @@ export default function App({ initialAction = null }) {
       } else if (format === 'pdf') {
         const { exportPDF } = await import('./export/exportPDF');
         await exportPDF(scene, opts);
+      } else if (format === 'layers') {
+        const { exportLayers } = await import('./export/exportLayers');
+        await exportLayers(scene, opts);
       }
       const warnings = exportContext.warnings;
       // Free and not yet spent: offer the full-resolution export in place of
@@ -4790,7 +4736,7 @@ export default function App({ initialAction = null }) {
     // every tier's allowed list, so export is never fully blocked — but SVG /
     // Illustrator / PDF now require a resolved Pro entitlement (or the
     // confirmed-Pro grace window), rather than merely an unresolved plan.
-    if (!canExportFormat(entitlements, format)) {
+    if (!canExportFormat(entitlements, format === 'layers' ? 'png' : format)) {
       trackEvent('pro_gate_shown', { feature: 'export_format', format, tier, signedIn: Boolean(user) }, user?.id);
       setUpgradeReason('export');
       try { sessionStorage.setItem('em_pro_gate_export_format', format); } catch { /* noop */ }
@@ -7496,6 +7442,7 @@ export default function App({ initialAction = null }) {
                 <input type="checkbox" checked={pubCheck} onChange={(e) => setPubCheck(e.target.checked)} />
                 <span>Publication check before download</span>
               </label>
+              <React.Suspense fallback={null}><ExportExtras layout={project.layout} updateLayout={updateLayout} bandDefault={bandDefault} svgAllowed={canExportFormat(entitlements, 'svg')} disabled={!mapReady || exporting} onLayers={() => handleExportClick('layers')} /></React.Suspense>
               {project.layout.basemap === 'blank' && <React.Suspense fallback={null}><ExportBackground layout={project.layout} updateLayout={updateLayout} /></React.Suspense>}
               {exportError && <div className="export-error-msg">{exportError}</div>}
             </div>
@@ -8301,37 +8248,8 @@ export default function App({ initialAction = null }) {
                     shareElapsedRef.current = setInterval(() => setShareElapsed(s => s + 1), 1000);
                     try {
                       // Bake visible nearby claims into layers so recipients see them
-                      let shareProject = project;
-                      if (areaClaims?.visible && areaClaims.features?.length) {
-                        const { features, ownerColors = {}, ownerLabels = {}, ownerField, hiddenOwners = [], showInLegend } = areaClaims;
-                        const ownerGroups = {};
-                        features.forEach((f) => {
-                          const owner = (ownerField ? f.properties?.[ownerField] : null) || 'Unknown';
-                          if (!(hiddenOwners || []).includes(owner)) {
-                            if (!ownerGroups[owner]) ownerGroups[owner] = [];
-                            ownerGroups[owner].push(f);
-                          }
-                        });
-                        const claimLayers = Object.entries(ownerGroups).map(([owner, feats]) => {
-                          const color = ownerColors[owner] || '#888888';
-                          const shareFeats = areaClaims.dissolve
-                            ? (dissolveOwnerFeatures(feats, owner)?.features || feats)
-                            : feats;
-                          return {
-                            id: `__ac_${owner}`,
-                            name: ownerLabels[owner] ?? owner,
-                            displayName: ownerLabels[owner] ?? owner,
-                            type: 'polygons',
-                            role: 'other',
-                            visible: true,
-                            geojson: { type: 'FeatureCollection', features: shareFeats },
-                            style: { fill: color, fillOpacity: areaClaims.fillOpacity ?? 0.22, stroke: color, strokeWidth: areaClaims.dissolve ? 1.5 : 1, layerOpacity: 1 },
-                            legend: { enabled: !!showInLegend, label: ownerLabels[owner] ?? owner },
-                            claimInfo: true,
-                          };
-                        });
-                        shareProject = { ...project, layers: [...project.layers, ...claimLayers] };
-                      }
+                      const shareLayers = layersWithNearbyClaims(project);
+                      const shareProject = shareLayers === project.layers ? project : { ...project, layers: shareLayers };
                       const id = await shareMap(shareProject);
                       const base = window.location.origin;
                       // No ?ref: the share id is already a unique opaque token,

@@ -8,7 +8,15 @@ export async function exportSVG(scene, options = {}) {
   }
 
   const baseName = options.filename || scene.project.layout?.exportSettings?.filename || "exploration-maps-export";
-  const svg = await renderSceneToSvg(scene, options);
+  let svg = await renderSceneToSvg(scene, options);
+  // The draft mark across the figure and the Exploration Maps band under it, when asked for
+  // (export/watermarkBand.js, loaded only then).
+  if (options.watermarkBand || options.draftOverlay) {
+    const band = await import('./watermarkBand.js');
+    await band.bandFontsReady();
+    if (options.draftOverlay) svg = band.withDraftOverlaySvg(svg);
+    if (options.watermarkBand) svg = band.withWatermarkBandSvg(svg, options.watermarkBand);
+  }
 
   if (options.illustratorMode) {
     // Extract the basemap data URI so Illustrator can link it as an external image

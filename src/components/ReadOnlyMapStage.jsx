@@ -19,6 +19,7 @@ import CoordinateFrameOverlay from './CoordinateFrameOverlay.jsx';
 import { fitProjectToTemplate } from '../utils/frameMapForTemplate';
 import { projectStageSize, savedViewFor, zoomForSize } from '../utils/savedView';
 import { useLazyDrillLegend } from '../utils/useDrillLegend.js';
+import { layersWithNearbyClaims, nearbyClaimsLegendItems } from '../utils/nearbyClaims.js';
 
 const MapCanvas = lazyGuarded(() => import('./MapCanvas'));
 const StudioCard = lazyGuarded(() => import('./StudioCard'));
@@ -41,7 +42,9 @@ function zoneStyle(zone) {
   return { position: 'absolute', top: zone.top, left: zone.left, width: zone.width, height: zone.height, zIndex: 400 };
 }
 
-export default function ReadOnlyMapStage({ project, onExportReady }) {
+// nearbyClaims: draw and list the project's nearby claims (project.areaClaims) as the editor's export does. The
+// dashboard's package export sets it; a shared map has them baked into its layers already, so the share page does not.
+export default function ReadOnlyMapStage({ project, onExportReady, nearbyClaims = false }) {
   const containerRef = useRef(null);
   const leafletMapRef = useRef(null);
   const [map, setMap] = useState(null);
@@ -84,8 +87,8 @@ export default function ReadOnlyMapStage({ project, onExportReady }) {
   // reader.
   const drillPlanLegend = useLazyDrillLegend(project.drillPlan);
   const legendItems = useMemo(
-    () => applyLegendCustomization([...buildLegendItems(template, project.layers, project.layout), ...drillPlanLegend], project.layout),
-    [template, project.layers, project.layout, drillPlanLegend]
+    () => applyLegendCustomization([...buildLegendItems(template, project.layers, project.layout), ...(nearbyClaims ? nearbyClaimsLegendItems(project.areaClaims) : []), ...drillPlanLegend], project.layout),
+    [template, project.layers, project.layout, project.areaClaims, nearbyClaims, drillPlanLegend]
   );
   const legendGroups = useMemo(() => groupLegendItems(legendItems, project.layout), [legendItems, project.layout]);
   const resolvedZones = useMemo(() => {
@@ -182,25 +185,36 @@ export default function ReadOnlyMapStage({ project, onExportReady }) {
   // viewer's plan sets the credit and the largest size).
   useEffect(() => {
     if (!map || !onExportReady) return;
+    const prepare = async (entitlements) => {
+      const container = containerRef.current;
+      await tilesSettled(container);
+      const [{ buildScene }, png, { clampExportSize }] = await Promise.all([
+        import('../export/buildScene'), import('../export/exportPNG'), import('../utils/entitlements'),
+      ]);
+      const opts = { ...(project.layout?.exportSettings || {}), noWatermark: true, paidTier: Boolean(entitlements?.clean_export) };
+      const baseW = opts.customWidth > 0 ? opts.customWidth : (container?.offsetWidth || 1600);
+      const baseH = opts.customHeight > 0 ? opts.customHeight : (container?.offsetHeight || 1000);
+      const ratio = opts.customWidth > 0 ? 1 : (Number(opts.pixelRatio) || 1);
+      const fit = clampExportSize(entitlements, baseW * ratio, baseH * ratio);
+      if (fit.clamped) Object.assign(opts, { customWidth: fit.width, customHeight: fit.height, pixelRatio: 1 });
+      const layers = nearbyClaims ? layersWithNearbyClaims(project) : project.layers;
+      const scene = buildScene(container, { ...project, layers, layout: { ...project.layout, legendItems } }, map);
+      return { png, opts, scene, fit };
+    };
     onExportReady({
       downloadPng: async (entitlements) => {
-        const container = containerRef.current;
-        await tilesSettled(container);
-        const [{ buildScene }, { exportPNG }, { clampExportSize }] = await Promise.all([
-          import('../export/buildScene'), import('../export/exportPNG'), import('../utils/entitlements'),
-        ]);
-        const opts = { ...(project.layout?.exportSettings || {}), noWatermark: true, paidTier: Boolean(entitlements?.clean_export) };
-        const baseW = opts.customWidth > 0 ? opts.customWidth : (container?.offsetWidth || 1600);
-        const baseH = opts.customHeight > 0 ? opts.customHeight : (container?.offsetHeight || 1000);
-        const ratio = opts.customWidth > 0 ? 1 : (Number(opts.pixelRatio) || 1);
-        const fit = clampExportSize(entitlements, baseW * ratio, baseH * ratio);
-        if (fit.clamped) Object.assign(opts, { customWidth: fit.width, customHeight: fit.height, pixelRatio: 1 });
-        const scene = buildScene(container, { ...project, layout: { ...project.layout, legendItems } }, map);
-        await exportPNG(scene, opts);
+        const { png, opts, scene, fit } = await prepare(entitlements);
+        await png.exportPNG(scene, opts);
         return { clamped: fit.clamped };
       },
+      // The figure as a canvas, under the same plan rules, for the dashboard's package export. extra: more export
+      // options (watermarkBand).
+      renderCanvas: async (entitlements, extra = {}) => {
+        const { png, opts, scene } = await prepare(entitlements);
+        return png.figureCanvas(scene, { ...opts, ...extra });
+      },
     });
-  }, [map, onExportReady, project, legendItems]);
+  }, [map, onExportReady, project, legendItems, nearbyClaims]);
 
   const layout = project.layout || {};
   // The Studio look's cards (components/StudioCard.jsx), drawn as the editor and the exports draw them.
