@@ -41,7 +41,7 @@ test('QA/QC duplicate comparisons: scoped historical charts, raw exclusions and 
   const record = (sample_id, sample_type, value) => ({ sample_id, sample_type, lab_id: 'Lab-A', lab_batch_id: 'Job-1', values: { Au: value }, units: { Au: 'g/t' }, raw_values: { Au: value.toFixed(2) }, bdl: {} });
   const parents = Array.from({ length: 4 }, (_, i) => ({ id: id(100 + i), property_id: PROP, batch_id: id(9), source_row: i + 1, superseded_by_batch: id(99), record: record(`P${i}`, 'routine', i === 2 ? 0 : 90) }));
   const duplicates = parents.map((parent, i) => ({ id: id(200 + i), property_id: PROP, batch_id: batch.id, source_row: i + 2, parent_version_id: parent.id, record: { ...record(`D${i}`, 'field_dup', i === 1 || i === 2 ? 0 : 110), parent_sample_id: parent.record.sample_id } }));
-  parents[3].record.bdl.Au = 0.005; parents[3].record.raw_values.Au = '<0.005';
+  parents[3].record.bdl.Au = 0.005; parents[3].record.raw_values.Au = 'ND';
   let failReferences = false;
   await page.route('**/rest/v1/drill_qaqc_batches*', route => route.fulfill({ json: [batch] }));
   await page.route('**/rest/v1/drill_qaqc_samples*', route => {
@@ -61,7 +61,7 @@ test('QA/QC duplicate comparisons: scoped historical charts, raw exclusions and 
   await expect(page.getByText(/9 rows submitted; 4 records written/)).toHaveText(/rolled back/);
   await expect(page.getByRole('img', { name: /log scatter, 1 positive pairs/ })).toBeVisible();
   await expect(page.getByRole('img', { name: /Ranked HARD cumulative plot, 2 eligible pairs/ })).toBeVisible();
-  await expect(page.getByRole('table', { name: 'Duplicate comparison data' })).toContainText('<0.005');
+  await expect(page.getByRole('table', { name: 'Duplicate comparison data' })).toContainText('ND g/t (below detection; recorded limit 0.005 g/t)');
   await expect(page.getByText(/HARD ≤10%: 1\/2 \(50%\)/)).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('duplicate-comparison.png'), fullPage: true });

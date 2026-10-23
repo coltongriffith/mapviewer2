@@ -46,6 +46,18 @@ it('discards older group responses and clears results when no group is selected'
   expect(load.mock.calls[0][2].signal.aborted).toBe(true);
   await choose(''); expect(screen.queryByRole('table')).toBeNull(); expect(screen.queryByRole('status')).toBeNull();
 });
+it('retains reported ND strings and separately displays recorded numeric detection limits on either result', async () => {
+  const data = snapshot(3);
+  data.parents[0].record.raw_values.Au = 'ND'; data.parents[0].record.bdl.Au = 0.005;
+  data.records[1].record.raw_values.Au = 'ND'; data.records[1].record.bdl.Au = 0.01;
+  data.parents[2].record.raw_values.Au = 'ND'; data.parents[2].record.bdl.Au = true;
+  load.mockResolvedValue(data); render(view()); await choose();
+  const table = await screen.findByRole('table', { name: 'Duplicate comparison data' });
+  expect(within(table).getByText('ND g/t (below detection; recorded limit 0.005 g/t)')).toBeTruthy();
+  expect(within(table).getByText('ND g/t (below detection; recorded limit 0.01 g/t)')).toBeTruthy();
+  expect(within(table).getByText('ND g/t (below detection)')).toBeTruthy();
+  expect(within(table).getAllByText(/Unassessed: At least one result is below detection/)).toHaveLength(3);
+});
 it('abandons property/session loads and never keeps a previous authenticated report', async () => {
   let auth; const unsubscribe = vi.fn(); const authenticated = { auth: { onAuthStateChange: callback => { auth = callback; return { data: { subscription: { unsubscribe } } }; } } };
   const ui = render(view({ client: authenticated })); await choose(); await screen.findByRole('table');

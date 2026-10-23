@@ -7,6 +7,10 @@ const number = value => value == null ? '—' : value !== 0 && (Math.abs(value) 
 const short = group => `${TYPES[group.sampleType]} · ${group.labId} / ${group.labBatchId} · ${group.element} (${group.unit})`;
 const chartStyle = { display: 'block', width: '100%', maxWidth: 460, margin: '0 auto' };
 
+function ReportedResult({ source }) {
+  return <>{source?.raw ?? 'Unavailable'} {source?.unit ?? ''}{source?.censored && <> (below detection{source.detectionLimit != null && <>; recorded limit {source.detectionLimit} {source.unit}</>})</>}</>;
+}
+
 function Scatter({ points, unit }) {
   const clip = useId().replace(/:/g, '');
   const positive = points.filter(point => point.logEligible);
@@ -64,7 +68,7 @@ function Results({ snapshot }) {
       <caption>Reported results in submitted-row order. Below-detection results stay as reported; no substituted values.</caption>
       <thead><tr><th>Submitted row / sample</th><th>Original result</th><th>Duplicate result</th><th>Comparison</th></tr></thead>
       <tbody>{rows.slice(page * 50, (page + 1) * 50).map(row => <tr key={row.id}><td>{row.sourceRow} · {row.sampleId}<br /><small>Original: {row.parentSampleId || 'Unavailable'}</small><details><summary>Record provenance</summary><p style={{ overflowWrap: 'anywhere' }}>Duplicate record: {row.id}<br />Import: {row.batchId}<br />Pinned parent: {row.parentId || 'Unavailable'}<br />Original import: {row.original?.batchId || 'Unavailable'}<br />Original submitted row: {row.original?.sourceRow ?? 'Unavailable'}</p></details></td>
-        <td>{row.original?.raw ?? 'Unavailable'} {row.original?.unit ?? ''}{row.original?.censored && ' (below detection)'}</td><td>{row.duplicate.raw ?? 'Unavailable'} {row.duplicate.unit ?? ''}{row.duplicate.censored && ' (below detection)'}</td>
+        <td><ReportedResult source={row.original} /></td><td><ReportedResult source={row.duplicate} /></td>
         <td>{row.status === 'unassessed' ? `Unassessed: ${row.message}` : <>HARD {number(row.hard)}%{!row.logEligible && <><br />Not on log scatter (zero value)</>}</>}</td></tr>)}</tbody>
     </table></div>
     {rows.length > 50 && <div className="ws-row"><button type="button" className="btn" disabled={page === 0} onClick={() => setPage(p => p - 1)}>Previous pairs</button><span>Page {page + 1} of {Math.ceil(rows.length / 50)}</span><button type="button" className="btn" disabled={(page + 1) * 50 >= rows.length} onClick={() => setPage(p => p + 1)}>Next pairs</button></div>}
