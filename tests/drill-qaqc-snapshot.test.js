@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createClient } from '@supabase/supabase-js';
-import { loadDuplicateSnapshot, QAQC_SNAPSHOT_MAX_BYTES } from '../src/utils/drillQaqcSnapshot.js';
+import { discoverDuplicateGroups, loadDuplicateSnapshot, QAQC_SNAPSHOT_MAX_BYTES } from '../src/utils/drillQaqcSnapshot.js';
 
 const id = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const scope = { propertyId: id(1), batchId: id(2), sampleType: 'field_dup', labId: 'L', labBatchId: 'J', element: 'Au', unit: 'g/t' };
@@ -54,6 +54,36 @@ function fixture({ count = 3, cap = 2, mutate = () => {}, ignoreCursor = false }
 }
 
 describe('bounded historical duplicate snapshot through the real Supabase client', () => {
+  it('discovers actual exact groups from the selected import only without reading parents', async () => {
+    const f = fixture({ count: 4 });
+    f.samples[1].record.units.Au = 'ppm'; f.samples[2].record.lab_id = 'Other lab';
+    f.samples[3].record.sample_type = 'routine';
+    const result = await discoverDuplicateGroups(f.client, { propertyId: scope.propertyId, batchId: scope.batchId });
+    expect(result.complete).toBe(true); expect(result.groups).toHaveLength(3);
+    expect(result.groups).toContainEqual(scope);
+    expect(result.groups).toContainEqual({ ...scope, unit: 'ppm' });
+    expect(result.groups).toContainEqual({ ...scope, labId: 'Other lab' });
+    expect(result.parents).toEqual([]); expect(result.manifest.referenceReadsComplete).toBe(false);
+    expect(f.calls.every(call => call.table === 'drill_qaqc_batches' || call.q.has('batch_id'))).toBe(true);
+  });
+
+  it('does not offer groups from an incomplete or invalid discovery read', async () => {
+    const f = fixture({ mutate: ({ q }) => q.has('or') ? {} : null });
+    expect(await discoverDuplicateGroups(f.client, scope)).toMatchObject({ complete: false, groups: [] });
+    const g = fixture(); g.samples[0].record.units.Au = '';
+    expect(await discoverDuplicateGroups(g.client, scope)).toMatchObject({ complete: false, groups: [], issues: [{ code: 'invalid_group' }] });
+  });
+
+  it('bounds populated group choices before returning an unmanageable selector', async () => {
+    const f = fixture({ count: 65, cap: 250 });
+    for (const [index, row] of f.samples.entries()) {
+      row.record.lab_id = `Lab-${index}`;
+      row.record.values = Object.fromEntries(Array.from({ length: 64 }, (_, element) => [`E${element}`, 1]));
+      row.record.units = Object.fromEntries(Object.keys(row.record.values).map(element => [element, 'ppm']));
+    }
+    expect(await discoverDuplicateGroups(f.client, scope)).toMatchObject({ complete: false, groups: [], issues: [{ code: 'group_limit' }] });
+    expect(f.calls.every(call => call.table === 'drill_qaqc_batches' || call.q.has('batch_id'))).toBe(true);
+  });
   it('reads every written row and exact superseded parent despite smaller server caps and tied keys', async () => {
     const f = fixture(); f.samples[1].source_row = 1;
     const progress = [];

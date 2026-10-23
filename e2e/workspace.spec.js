@@ -32,6 +32,50 @@ const BATCH0 = '00000000-0000-4000-8000-0000000000e0';
 const collarBatch = { id: BATCH0, kind: 'collars', filename: 'Rails collars.csv', rows: 12, rows_written: 12, summary: { new: 12, changed: 0, unchanged: 0, new_holes: 12 }, created_at: '2026-10-18T00:00:00Z', created_by_email: 'cfo@star.test', rolled_back_at: null, blocked_by: null };
 const drillSummary = () => ({ collars: 12, planned: 2, metres: 3420.5, surveys: 40, assays: 0, lithology: 0, holes: 12, elements: [], limit: 20000, batches: [{ ...collarBatch }] });
 
+test('QA/QC duplicate comparisons: scoped historical charts, raw exclusions and read-only return', async ({ page }, testInfo) => {
+  const errors = []; page.on('pageerror', error => errors.push(error.message));
+  await fakeSupabase(page, { role: 'viewer' });
+  const id = n => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+  const batch = { id: id(10), property_id: PROP, kind: 'samples', row_count: 9, rows_written: 4, request_hash: 'synthetic-request',
+    provenance: { filename: 'synthetic-duplicates.csv', sha256: 'a'.repeat(64) }, summary: { new: 4, changed: 0 }, created_at: '2026-10-23T12:00:00Z', rolled_back_at: '2026-10-23T13:00:00Z', depends_on: [] };
+  const record = (sample_id, sample_type, value) => ({ sample_id, sample_type, lab_id: 'Lab-A', lab_batch_id: 'Job-1', values: { Au: value }, units: { Au: 'g/t' }, raw_values: { Au: value.toFixed(2) }, bdl: {} });
+  const parents = Array.from({ length: 4 }, (_, i) => ({ id: id(100 + i), property_id: PROP, batch_id: id(9), source_row: i + 1, superseded_by_batch: id(99), record: record(`P${i}`, 'routine', i === 2 ? 0 : 90) }));
+  const duplicates = parents.map((parent, i) => ({ id: id(200 + i), property_id: PROP, batch_id: batch.id, source_row: i + 2, parent_version_id: parent.id, record: { ...record(`D${i}`, 'field_dup', i === 1 || i === 2 ? 0 : 110), parent_sample_id: parent.record.sample_id } }));
+  parents[3].record.bdl.Au = 0.005; parents[3].record.raw_values.Au = '<0.005';
+  let failReferences = false;
+  await page.route('**/rest/v1/drill_qaqc_batches*', route => route.fulfill({ json: [batch] }));
+  await page.route('**/rest/v1/drill_qaqc_samples*', route => {
+    const q = new URL(route.request().url()).searchParams;
+    expect(q.get('property_id')).toBe(`eq.${PROP}`);
+    if (q.has('superseded_by_batch')) return route.fulfill({ json: [] });
+    if (q.has('batch_id')) { expect(q.get('batch_id')).toBe(`eq.${batch.id}`); return route.fulfill({ json: q.has('or') ? [] : duplicates }); }
+    if (failReferences) return route.fulfill({ status: 403, json: { message: 'Denied synthetic reference read' } });
+    return route.fulfill({ json: q.getAll('id').some(value => value.startsWith('gt.')) ? [] : parents });
+  });
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold');
+  await page.getByRole('tab', { name: 'Drill data' }).click();
+  await page.getByRole('button', { name: 'Open QA/QC register' }).click();
+  await page.getByRole('button', { name: 'Compare duplicates' }).click();
+  await page.getByLabel('Comparison group').selectOption('0');
+  await expect(page.getByText('2 eligible / 4 selected pairs')).toBeVisible();
+  await expect(page.getByText(/9 rows submitted; 4 records written/)).toHaveText(/rolled back/);
+  await expect(page.getByRole('img', { name: /log scatter, 1 positive pairs/ })).toBeVisible();
+  await expect(page.getByRole('img', { name: /Ranked HARD cumulative plot, 2 eligible pairs/ })).toBeVisible();
+  await expect(page.getByRole('table', { name: 'Duplicate comparison data' })).toContainText('<0.005');
+  await expect(page.getByText(/HARD ≤10%: 1\/2 \(50%\)/)).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('duplicate-comparison.png'), fullPage: true });
+  await page.getByRole('button', { name: 'Back to QA/QC' }).click();
+  await expect(page.getByRole('button', { name: 'Compare duplicates' })).toBeFocused();
+  await expect(page.getByRole('button', { name: 'Roll back QA/QC import' })).toHaveCount(0);
+  failReferences = true;
+  await page.getByRole('button', { name: 'Compare duplicates' }).click();
+  await page.getByLabel('Comparison group').selectOption('0');
+  await expect(page.getByRole('alert')).toContainText('No comparison is shown');
+  await expect(page.getByRole('table', { name: 'Duplicate comparison data' })).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
 test('QA/QC register: CRM then routine and dependent samples, stable retry and protected rollback', async ({ page }) => {
   const pageErrors = []; page.on('pageerror', error => pageErrors.push(error.message));
   await fakeSupabase(page);
@@ -99,9 +143,9 @@ test('QA/QC register: CRM then routine and dependent samples, stable retry and p
   await expect(table.getByRole('cell', { name: 'CRM-TEST', exact: true })).toHaveCount(0);
   expect(pageErrors).toEqual([]);
   const history = region.getByRole('table', { name: 'QA/QC imports' });
-  await expect(history.getByRole('row').filter({ hasText: 'synthetic-routine.xlsx' }).getByRole('button')).toBeDisabled();
+  await expect(history.getByRole('row').filter({ hasText: 'synthetic-routine.xlsx' }).getByRole('button', { name: 'Roll back QA/QC import' })).toBeDisabled();
   page.once('dialog', dialog => dialog.accept());
-  await history.getByRole('row').filter({ hasText: 'synthetic-dependent.csv' }).getByRole('button').click();
+  await history.getByRole('row').filter({ hasText: 'synthetic-dependent.csv' }).getByRole('button', { name: 'Roll back QA/QC import' }).click();
   await expect(region.getByRole('alert')).toContainText('Roll back the dependent import first');
   expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
 });

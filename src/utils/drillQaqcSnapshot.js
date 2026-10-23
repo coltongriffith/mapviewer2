@@ -11,12 +11,13 @@ const compare = (a, b) => a.source_row - b.source_row || (a.id < b.id ? -1 : a.i
 const selected = (row, scope) => row.record.sample_type === scope.sampleType
   && row.record.lab_id === scope.labId && row.record.lab_batch_id === scope.labBatchId;
 function fail(code, message) { throw Object.assign(new Error(message), { snapshotCode: code }); }
-function validateScope(scope) {
+function validateScope(scope, discovery = false) {
   if (!object(scope) || !UUID.test(scope.propertyId) || !UUID.test(scope.batchId)
-    || !TYPES.includes(scope.sampleType)
-    || !['labId', 'labBatchId', 'element', 'unit'].every((key) => typeof scope[key] === 'string' && scope[key].trim() && scope[key].length <= 120)) {
+    || (!discovery && (!TYPES.includes(scope.sampleType)
+    || !['labId', 'labBatchId', 'element', 'unit'].every((key) => typeof scope[key] === 'string' && scope[key].trim() && scope[key].length <= 120)))) {
     throw new Error('Choose one property, sample import, duplicate type, laboratory, lab job, element and unit.');
   }
+  if (discovery) return { propertyId: scope.propertyId.toLowerCase(), batchId: scope.batchId.toLowerCase() };
   return { propertyId: scope.propertyId.toLowerCase(), batchId: scope.batchId.toLowerCase(),
     sampleType: scope.sampleType, labId: scope.labId, labBatchId: scope.labBatchId, element: scope.element, unit: scope.unit };
 }
@@ -37,7 +38,38 @@ function immutableBatch(batch) {
 export async function loadDuplicateSnapshot(client, selection, {
   signal, isCurrent = () => true, onProgress = () => {}, maxBytes = QAQC_SNAPSHOT_MAX_BYTES,
 } = {}) {
-  const scope = validateScope(selection);
+  return loadSnapshot(client, selection, { signal, isCurrent, onProgress, maxBytes }, false);
+}
+
+/** Discover actual group choices from the same bounded, validated batch read. */
+export async function discoverDuplicateGroups(client, selection, options = {}) {
+  const snapshot = await loadSnapshot(client, selection, options, true);
+  const groups = new Map();
+  if (snapshot.complete) for (const row of snapshot.records) {
+    const record = row.record;
+    if (!TYPES.includes(record.sample_type)) continue;
+    if (!['lab_id', 'lab_batch_id'].every(key => typeof record[key] === 'string' && record[key].trim() && record[key].length <= 120)
+      || !object(record.values) || !object(record.units)) {
+      return { ...snapshot, complete: false, groups: [], issues: [{ code: 'invalid_group', message: 'An imported duplicate has incomplete group metadata.' }] };
+    }
+    for (const element of Object.keys(record.values)) {
+      const unit = record.units[element];
+      if (!element.trim() || element.length > 120 || typeof unit !== 'string' || !unit.trim() || unit.length > 120) {
+        return { ...snapshot, complete: false, groups: [], issues: [{ code: 'invalid_group', message: 'An imported duplicate has incomplete element or unit metadata.' }] };
+      }
+      const group = { ...snapshot.scope, sampleType: record.sample_type, labId: record.lab_id, labBatchId: record.lab_batch_id, element, unit };
+      const key = JSON.stringify([group.sampleType, group.labId, group.labBatchId, element, unit]);
+      if (!groups.has(key)) groups.set(key, group);
+      if (groups.size > 4096) return { ...snapshot, complete: false, groups: [], issues: [{ code: 'group_limit', message: 'This import contains too many comparison groups. Use a smaller import to compare duplicates.' }] };
+    }
+  }
+  return { ...snapshot, groups: [...groups.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, group]) => group) };
+}
+
+async function loadSnapshot(client, selection, {
+  signal, isCurrent = () => true, onProgress = () => {}, maxBytes = QAQC_SNAPSHOT_MAX_BYTES,
+} = {}, discovery = false) {
+  const scope = validateScope(selection, discovery);
   if (!Number.isInteger(maxBytes) || maxBytes < 1 || maxBytes > QAQC_SNAPSHOT_MAX_BYTES) throw new Error('Invalid snapshot byte limit.');
   const records = [], parents = [], issues = [];
   let initial = null, refreshed = null, bytes = 0, requested = [], referenceReadsComplete = false;
@@ -91,7 +123,7 @@ export async function loadDuplicateSnapshot(client, selection, {
       onProgress({ phase: 'records', loaded: records.length, expected: initial.rows_written }); guard();
     }
     if (records.length !== initial.rows_written) fail('count_mismatch', 'The snapshot does not match the import written-row count.');
-    requested = [...new Set(records.filter((row) => selected(row, scope)).map((row) => row.parent_version_id).filter((id) => typeof id === 'string' && UUID.test(id)))].sort();
+    requested = discovery ? [] : [...new Set(records.filter((row) => selected(row, scope)).map((row) => row.parent_version_id).filter((id) => typeof id === 'string' && UUID.test(id)))].sort();
     for (let start = 0; start < requested.length; start += CHUNK) {
       const ids = requested.slice(start, start + CHUNK), allowed = new Set(ids);
       let last = null;
@@ -109,7 +141,7 @@ export async function loadDuplicateSnapshot(client, selection, {
         onProgress({ phase: 'parents', loaded: parents.length, expected: requested.length }); guard();
       }
     }
-    referenceReadsComplete = true;
+    referenceReadsComplete = !discovery;
     refreshed = await batch();
     if (immutableBatch(initial) !== immutableBatch(refreshed)) fail('batch_changed', 'The import metadata changed while the snapshot was loading.');
   } catch (error) {
@@ -128,7 +160,7 @@ export async function loadDuplicateSnapshot(client, selection, {
       retrievedAt: new Date().toISOString(), statusRefreshed: Boolean(refreshed), referenceReadsComplete,
       requestHash: initial?.request_hash ?? null, provenance: initial?.provenance ?? null,
       submittedCount: initial?.row_count ?? null, expectedWrittenCount: initial?.rows_written ?? null,
-      loadedWrittenCount: records.length, selectedCount: records.filter((row) => selected(row, scope)).length,
+      loadedWrittenCount: records.length, selectedCount: discovery ? null : records.filter((row) => selected(row, scope)).length,
       rolledBackAt: refreshed?.rolled_back_at ?? initial?.rolled_back_at ?? null,
       recordIds: records.map((row) => row.id), requestedParentIds: requested, parentIds: parents.map((row) => row.id),
       missingParentIds: [...missingParentIds], bytesRead: bytes,
