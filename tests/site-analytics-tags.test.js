@@ -70,6 +70,13 @@ describe('Ahrefs Web Analytics', () => {
   });
 });
 
+// Google Analytics 4 runs from public/gtag-init.js, beside the Google Ads config (one gtag.js serves both).
+// GA4's pageview reports the page address, and some app addresses carry one-time codes: Stripe's checkout
+// return (?session_id=), the connector consent page (?authorization_id=) and sign-in links (?code=,
+// #access_token=). As public/ahrefs-pageview.js does for Ahrefs, those never leave the browser: on such an
+// address the automatic pageview is off and one page_view is sent with the codes removed from the query and
+// no fragment. It is per event, so later in-app pageviews (after the app clears the codes with replaceState)
+// report their own address. The init file is served to every visitor, so it stays short.
 describe('Google Analytics 4', () => {
   const pages = ['index.html', '3d/index.html', ...htmlFiles('public')];
 
