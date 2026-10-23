@@ -349,7 +349,8 @@ export default function FigureImport({ source, existing, map: editorMap, setProj
   const acceptedLines = marksTraced.filter((t) => t.unit.kind === 'line').reduce((s2, t) => s2 + t.features.length, 0);
   const acceptedPoints = marksTraced.filter((t) => t.unit.kind === 'point').reduce((s2, t) => s2 + t.features.length, 0);
 
-  const autoCredit = figureCreditText({ ...fig, subject: fig.subject || (traced.length ? 'Geology (simplified)' : marksTraced.length ? 'Structure (simplified)' : 'Figure') });
+  const hasAcceptedMarks = acceptedLines + acceptedPoints > 0;
+  const autoCredit = figureCreditText({ ...fig, subject: fig.subject || (traced.length ? 'Geology (simplified)' : hasAcceptedMarks ? 'Structure (simplified)' : 'Figure') });
   const credit = creditEdited ? fig.credit : autoCredit;
 
   const add = async () => {
@@ -610,7 +611,7 @@ export default function FigureImport({ source, existing, map: editorMap, setProj
                     <label htmlFor="fig-date">Date</label>
                     <input id="fig-date" placeholder="e.g. 15 Oct 2026" value={fig.date} onChange={(e) => setFig({ ...fig, date: e.target.value })} />
                     <label htmlFor="fig-subj">What was taken</label>
-                    <input id="fig-subj" placeholder={traced.length ? 'Geology (simplified)' : marksTraced.length ? 'Structure (simplified)' : 'Figure'} value={fig.subject} onChange={(e) => setFig({ ...fig, subject: e.target.value })} />
+                    <input id="fig-subj" placeholder={traced.length ? 'Geology (simplified)' : hasAcceptedMarks ? 'Structure (simplified)' : 'Figure'} value={fig.subject} onChange={(e) => setFig({ ...fig, subject: e.target.value })} />
                   </div>
                   <div className="fig-row">
                     <label htmlFor="fig-credit">Credit line</label>
@@ -634,7 +635,7 @@ export default function FigureImport({ source, existing, map: editorMap, setProj
                 {credit ? `Credit: ${credit}` : 'No credit line yet (Credit tab).'}
               </span>
               <button className="export-hd-skip fig-cancel" type="button" onClick={() => onClose()}>Cancel</button>
-              <button className="btn primary" type="button" disabled={!ok || (!keepImage && !existing && !traced.length && !marksTraced.length)} onClick={add}>{existing ? 'Update map' : 'Add to map'}</button>
+              <button className="btn primary" type="button" disabled={!ok || (!keepImage && !existing && !traced.length && !hasAcceptedMarks)} onClick={add}>{existing ? 'Update map' : 'Add to map'}</button>
             </div>
           </>
         )}

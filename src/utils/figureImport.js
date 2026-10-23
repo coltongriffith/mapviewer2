@@ -321,6 +321,7 @@ export function markLayer({ id, set, features, figure }) {
     figure,
     figureUnit: set.id,
     figureStyle: thrust ? `thrust:${set.teeth === 'right' ? 'right' : 'left'}` : styleKey,
+    figureColour: colour,
   };
 }
 
@@ -339,8 +340,7 @@ export function marksForSets(detection, sets, review, toLngLat) {
       const teeth = accepted.filter((f) => f.teeth);
       const side = teeth.length ? (teeth.filter((f) => f.teeth === 'right').length > teeth.length / 2 ? 'right' : 'left') : null;
       return { unit: { ...set, teeth: set.teeth || side }, features: accepted.map((f) => toLngLat(set.kind, f)) };
-    })
-    .filter((t) => t.features.length);
+    }); // Keep empty detections so reconciliation can remove previously accepted features.
 }
 
 /** The last trace's results for the units still in the dialog (a removed unit's polygons are not imported). */
@@ -352,6 +352,7 @@ export function tracedForUnits(trace, units) {
 
 // A traced unit's polygon layer, or a set's line or point layer.
 const layerOf = (id, t, figure) => (t.unit.kind ? markLayer({ id, set: t.unit, features: t.features, figure }) : tracedLayer({ id, unit: t.unit, polygons: t.polygons, figure }));
+const emptyMarks = (t) => t.unit.kind && !t.features.length;
 
 const mapCoords = (c, move) => (typeof c[0] === 'number' ? move(c) : c.map((x) => mapCoords(x, move)));
 
@@ -366,6 +367,9 @@ const mapCoords = (c, move) => (typeof c[0] === 'number' ? move(c) : c.map((x) =
  */
 export function reconcileFigureLayers(layers, { figure, raster, replaceId, traced, unitIds, move }) {
   const byUnit = new Map(traced.map((t) => [t.unit.id, t]));
+  // Older imported layers have no figureColour; their raster retains the last dialog colour.
+  const previousMarks = new Map(layers.filter((l) => l.figure?.id === figure.id)
+    .flatMap((l) => l.raster?.georef?.marks || []).map((m) => [m.id, m]));
   const done = new Set();
   const out = [];
   for (const l of layers) {
@@ -375,6 +379,8 @@ export function reconcileFigureLayers(layers, { figure, raster, replaceId, trace
     if (unitId && unitIds && !unitIds.has(unitId)) continue;
     const t = unitId && byUnit.get(unitId);
     if (t) {
+      done.add(unitId);
+      if (emptyMarks(t)) continue;
       const fresh = layerOf(l.id, t, figure);
       const renamed = (l.displayName || l.name) !== l.name;
       let next = { ...l, geojson: fresh.geojson, figure, ...(renamed ? {} : { name: fresh.name, displayName: fresh.displayName, legend: { ...l.legend, label: fresh.name } }) };
@@ -384,14 +390,22 @@ export function reconcileFigureLayers(layers, { figure, raster, replaceId, trace
         const { fx: _fx, ...rest } = next;
         next = { ...rest, style: fresh.style, figureStyle: fresh.figureStyle, ...(fresh.fx ? { fx: fresh.fx } : {}) };
       }
+      if (t.unit.kind) {
+        const previousColour = l.figureColour ?? previousMarks.get(unitId)?.colour ?? fresh.figureColour;
+        if (previousColour.toLowerCase() !== fresh.figureColour.toLowerCase()) {
+          const colourStyle = t.unit.kind === 'line' ? { stroke: fresh.style.stroke }
+            : { markerFill: fresh.style.markerFill, markerColor: fresh.style.markerColor };
+          next = { ...next, style: { ...next.style, ...colourStyle } };
+        }
+        next.figureColour = fresh.figureColour;
+      }
       out.push(next);
-      done.add(unitId);
     } else {
       out.push({ ...l, figure, ...(move && l.geojson ? { geojson: { ...l.geojson, features: l.geojson.features.map((f) => (f.geometry ? { ...f, geometry: { ...f.geometry, coordinates: mapCoords(f.geometry.coordinates, move) } } : f)) } } : {}) });
     }
   }
   if (raster && !replaceId) out.push(raster);
-  return [...out, ...traced.filter((t) => !done.has(t.unit.id)).map((t) => layerOf(t.id, t, figure))];
+  return [...out, ...traced.filter((t) => !done.has(t.unit.id) && !emptyMarks(t)).map((t) => layerOf(t.id, t, figure))];
 }
 
 /** [lng, lat] under the old fit → the same figure pixel under the new fit. */

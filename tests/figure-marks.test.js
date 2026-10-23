@@ -162,11 +162,55 @@ describe('lines and points as layers', () => {
     };
     const review = { a: 'accepted', b: 'rejected' }; // c pending, d pending
     const out = marksForSets(det, [lineSet, pointSet], review, (kind) => (kind === 'line' ? lines[0] : points[0]));
-    expect(out).toHaveLength(1);
+    expect(out).toHaveLength(2);
     expect(out[0].unit.id).toBe('set-l');
     expect(out[0].features).toHaveLength(1);
+    expect(out[1].features).toEqual([]);
+    expect(reconcileFigureLayers([], { figure, traced: out, unitIds: new Set(['set-l', 'set-p']) })).toHaveLength(1);
     // a removed set's finds are not imported
     expect(marksForSets(det, [pointSet], { d: 'accepted' }, () => points[0]).map((t) => t.unit.id)).toEqual(['set-p']);
+  });
+
+  it.each(['line', 'point'])('removes a re-detected %s set with no accepted finds but keeps undetected sets', (kind) => {
+    const set = kind === 'line' ? lineSet : pointSet;
+    const features = kind === 'line' ? lines : points;
+    const old = markLayer({ id: 'old', set, features, figure });
+    const options = { figure, unitIds: new Set([set.id]) };
+    expect(reconcileFigureLayers([old], { ...options, traced: [] })[0].geojson).toEqual(old.geojson);
+    const detection = { sets: [set], results: [{ [kind === 'line' ? 'lines' : 'points']: [{ id: 'find' }] }] };
+    for (const review of [{ find: 'rejected' }, {}]) {
+      const traced = marksForSets(detection, [set], review, () => features[0]);
+      expect(reconcileFigureLayers([old], { ...options, traced })).toEqual([]);
+    }
+    const empty = marksForSets({ sets: [set], results: [{}] }, [set], {}, () => features[0]);
+    expect(reconcileFigureLayers([old], { ...options, traced: empty })).toEqual([]);
+  });
+
+  it.each(['line', 'point'])('applies a %s colour edit without resetting other layer styling', (kind) => {
+    const set = kind === 'line' ? lineSet : pointSet, features = kind === 'line' ? lines : points;
+    const old = markLayer({ id: 'old', set, features, figure });
+    old.style = { ...old.style, strokeWidth: 7, markerSize: 23, opacity: 0.4 };
+    const options = { figure, unitIds: new Set([set.id]) };
+    const [changed] = reconcileFigureLayers([old], { ...options, traced: [{ unit: { ...set, colour: '#1122cc' }, features }] });
+    expect(changed.style[kind === 'line' ? 'stroke' : 'markerFill']).toBe('#1122cc');
+    expect(changed.style.strokeWidth).toBe(7);
+    expect(changed.style.markerSize).toBe(23);
+    expect(changed.style.opacity).toBe(0.4);
+    // An editor-only colour change survives later detection with the same import colour.
+    const customized = { ...changed, style: { ...changed.style, stroke: '#aa0000', markerFill: '#aa0000' } };
+    const [again] = reconcileFigureLayers([customized], { ...options, traced: [{ unit: { ...set, colour: '#1122cc' }, features }] });
+    expect(again.style).toEqual(customized.style);
+  });
+
+  it('uses the saved figure colour when reopening a layer made before colour tracking', () => {
+    const old = markLayer({ id: 'old', set: pointSet, features: points, figure });
+    delete old.figureColour;
+    const raster = { id: 'image', figure, raster: { georef: { marks: [pointSet] } } };
+    const [changed] = reconcileFigureLayers([old, raster], {
+      figure, unitIds: new Set([pointSet.id]),
+      traced: [{ unit: { ...pointSet, colour: '#2233aa' }, features: points }],
+    });
+    expect(changed.style.markerFill).toBe('#2233aa');
   });
 
   it('reconciles: a re-detected set replaces its layer, a renamed layer keeps its name, a changed style applies', () => {

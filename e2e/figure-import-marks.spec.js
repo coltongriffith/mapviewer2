@@ -158,5 +158,38 @@ for (const rotation of [0, 45]) {
         return Math.hypot(actual[0] - expected[0], actual[1] - expected[1]);
       }))).toBeLessThan(12); // Endpoint can stop at the final dash rather than its following gap.
     }
+
+    if (rotation !== 0) return;
+    // Reopen the saved figure: colour-only edits must apply, and rejecting all
+    // re-detected marks must remove the previously imported layers.
+    await page.getByRole('tab', { name: /^customize$/i }).first().click();
+    await page.locator('.ins-acc-heading button', { hasText: /^Layers/ }).first().click();
+    const reopen = async () => {
+      await page.locator('.layer-item', { hasText: 'test-fig-2' }).first().click();
+      await page.getByRole('button', { name: 'Edit georeference / trace colours…' }).click();
+      await dialog.getByRole('tab', { name: '3 · Lines & points' }).click();
+      await dialog.getByRole('button', { name: 'Detect', exact: true }).click();
+      await expect(lineSet.getByTestId('fig-review-count')).toContainText('found');
+    };
+    await reopen();
+    await lineSet.getByRole('button', { name: 'Accept all' }).click();
+    await pointSet.getByRole('button', { name: 'Accept all' }).click();
+    await lineSet.getByLabel('Layer colour').fill('#1122cc');
+    await pointSet.getByLabel('Layer colour').fill('#22aa33');
+    await dialog.getByRole('button', { name: 'Update map' }).click();
+    await expect(dialog).toBeHidden();
+    await expect.poll(async () => {
+      const raw = await page.evaluate(() => localStorage.getItem('mapviewer.draft.v1'));
+      const json = raw.startsWith('gz1:') ? inflateRawSync(Buffer.from(raw.slice(4), 'base64')).toString('utf8') : raw;
+      return JSON.parse(json).payload.layers.filter(l => l.figure && l.type !== 'raster').map(l => l.style.stroke || l.style.markerFill);
+    }).toEqual(['#1122cc', '#22aa33']);
+    await reopen();
+    await lineSet.getByRole('button', { name: 'Reject all' }).click();
+    await pointSet.getByRole('button', { name: 'Reject all' }).click();
+    await dialog.getByRole('button', { name: 'Update map' }).click();
+    await expect(dialog).toBeHidden();
+    await expect.poll(saved).toEqual([]);
+    await expect(page.locator('.legend-item', { hasText: 'Discovery intersection' })).toHaveCount(0);
+    await expect(page.locator('.leaflet-container img.leaflet-image-layer').first()).toBeVisible();
   });
 }
