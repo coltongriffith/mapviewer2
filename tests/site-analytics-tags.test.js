@@ -73,10 +73,45 @@ describe('Ahrefs Web Analytics', () => {
 describe('Google Analytics 4', () => {
   const pages = ['index.html', '3d/index.html', ...htmlFiles('public')];
 
-  it('is configured in the shared gtag init, beside Google Ads', () => {
-    const init = readFileSync('public/gtag-init.js', 'utf8');
-    expect(init).toContain("gtag('config', 'AW-18358773663');");
-    expect(init).toContain("gtag('config', 'G-6SR34P1CR7');");
+  // Runs the init at an address; returns the GA4 config parameters and the address any pageview reports.
+  const ga4 = (url) => {
+    window.history.replaceState({}, '', url);
+    window.dataLayer = [];
+    new Function(readFileSync('public/gtag-init.js', 'utf8'))();
+    const calls = window.dataLayer.map((args) => Array.from(args));
+    delete window.dataLayer;
+    window.history.replaceState({}, '', '/');
+    expect(calls.some((c) => c[0] === 'config' && c[1] === 'AW-18358773663'), 'Google Ads config kept').toBe(true);
+    const config = calls.find((c) => c[0] === 'config' && c[1] === 'G-6SR34P1CR7');
+    expect(config, 'GA4 configured').toBeTruthy();
+    const manual = calls.find((c) => c[0] === 'event' && c[1] === 'page_view');
+    // Without parameters, GA4's own pageview reports the full current address.
+    const reported = config[2]?.send_page_view === false ? manual?.[2]?.page_location : `${window.location.origin}${url}`;
+    return { config: config[2], manual, reported };
+  };
+
+  it('is configured in the shared gtag init, beside Google Ads, with its own pageview', () => {
+    const plain = ga4('/app?company=star%20copper&utm_source=linkedin');
+    expect(plain.config).toBeUndefined();
+    expect(plain.manual).toBeUndefined();
+  });
+
+  it('never sends one-time codes to Google Analytics', () => {
+    const o = window.location.origin;
+    const cases = [
+      ['/?billing=success&session_id=cs_live_abc', `${o}/?billing=success`],
+      ['/oauth/consent?authorization_id=diof6bw3skq5', `${o}/oauth/consent`],
+      ['/#access_token=eyJ.x.y&refresh_token=r&type=magiclink', `${o}/`],
+      ['/?code=pkce-code&utm_source=x', `${o}/?utm_source=x`],
+      ['/?token_hash=abc&type=recovery', `${o}/?type=recovery`],
+      ['/?%E0%A4%A=1&session_id=s', `${o}/?%E0%A4%A=1`],
+    ];
+    for (const [url, expected] of cases) {
+      const r = ga4(url);
+      expect(r.config, url).toEqual({ send_page_view: false });
+      expect(r.manual[2], url).toEqual({ send_to: 'G-6SR34P1CR7', page_location: expected });
+      expect(r.reported, url).not.toMatch(/session_id|authorization_id|code=|token/);
+    }
   });
 
   it('runs on every page that loads gtag.js', () => {
