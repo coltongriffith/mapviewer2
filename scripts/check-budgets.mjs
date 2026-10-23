@@ -489,7 +489,10 @@ const BUDGETS = {
   // data dropped rather than refused (+0.4 kB).
   // 156.5 → 161.2 (round 5H merged over the true-scale crew (b55edc19), measured 160.7, configured 160.9, + 0.3):
   // round 5H's +4.7 kB above on top of the crew's +1.6 kB; the two touch different chunks (block.js and tags.js; crew.js).
-  threeDLazyJsGzipKb: 161.2,
+  // 161.2 → 161.3: the existing configured bundle is 161.187 KiB; XLSX shared-import
+  // hash churn moves it to 161.194 locally and 161.201 with CI's commit stamp. Keep 0.1 KiB
+  // of headroom for those hashes; no new /3d module or XLSX reader enters this graph.
+  threeDLazyJsGzipKb: 161.3,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.

@@ -196,7 +196,7 @@ test('the data library lists, adds, versions, downloads and deletes files', asyn
   await page.getByRole('tab', { name: 'Data library' }).click();
   const region = page.getByRole('region', { name: 'Data library' });
   const table = region.getByRole('table', { name: 'Data files' });
-  await expect(table.getByRole('row', { name: /assays\.csv.*Drill data Â· assays.*v2.*cfo@star\.test/ })).toBeVisible();
+  await expect(table.getByRole('row', { name: /assays\.csv.*Drill data · assays.*v2.*cfo@star\.test/ })).toBeVisible();
 
   // A new file: kind guessed from the name, uploaded to v1 of its own folder, then recorded.
   let chooser = page.waitForEvent('filechooser');
@@ -372,7 +372,7 @@ test('drill results: the recipe, the release table, copies and downloads, then s
   await region.getByLabel('Recovery for Au').fill('70');
   await region.getByLabel('"incl." cut-off').fill('1');
   await region.getByLabel('True-width note').fill('True widths are not yet known.');
-  await expect(region.getByText('CuEq = Cu + 0.756 Ã— Au', { exact: true })).toBeVisible();
+  await expect(region.getByText('CuEq = Cu + 0.756 × Au', { exact: true })).toBeVisible();
   const table = region.getByRole('table', { name: 'Drill results' });
   // Sorted by hole (R-2 before R-10) and depth, each "incl." under its interval.
   await expect(table.getByRole('row')).toHaveText([/Hole ID.*CuEq \(%\).*Cu \(%\).*Au \(g\/t\)/, /^R-2\s*34\.0\s*156\.0\s*122\.0\s*0\.61\s*0\.45\s*0\.21$/, /^incl\.\s*80\.0\s*98\.0\s*18\.0\s*1\.32/, /^R-10\s*34\.0/, /^incl\./]);
@@ -400,7 +400,7 @@ test('drill results: the recipe, the release table, copies and downloads, then s
   const saved = fake.rpc.find((c) => c.fn === 'drill_save_recipe').args;
   expect(saved).toMatchObject({ p_property: PROP, p_name: 'Default', p_base_version: 0, p_recipe: { primary: 'Cu', equivalent: true, cutoff: 0.2, inclCutoff: 1, trueWidth: 'True widths are not yet known.' } });
   expect(saved.p_recipe.elements).toEqual([{ name: 'Cu', unit: '%', price: 4.5, recovery: 90 }, { name: 'Au', unit: 'g/t', price: 3000, recovery: 70 }]);
-  await expect(region.getByText(/Default, version 1 Â· saved/)).toBeVisible();
+  await expect(region.getByText(/Default, version 1 · saved/)).toBeVisible();
   const pub = page.waitForEvent('download');
   await for3d.click();
   const pf = await pub;
@@ -420,7 +420,7 @@ test('drill results: the recipe, the release table, copies and downloads, then s
   await page.getByRole('table', { name: 'Import history' }).getByRole('button', { name: 'Roll back Rails collars.csv' }).click();
   await expect(region.getByText('1 intercept in 1 of 1 holes with assays.')).toBeVisible();
   expect(fake.assayReads).toBe(reads + 1);
-  await expect(region.getByText(/Default, version 1 Â· saved/)).toBeVisible();
+  await expect(region.getByText(/Default, version 1 · saved/)).toBeVisible();
 });
 
 test('drill results: members see the saved recipe and its table, without editing it', async ({ page }) => {
@@ -433,7 +433,7 @@ test('drill results: members see the saved recipe and its table, without editing
   await page.getByRole('tab', { name: 'Drill data' }).click();
   const region = page.getByRole('region', { name: 'Results' });
   await region.getByRole('button', { name: 'Show results' }).click();
-  await expect(region.getByText('Default, version 3 Â· saved')).toBeVisible();
+  await expect(region.getByText('Default, version 3 · saved')).toBeVisible();
   await expect(region.getByRole('table', { name: 'Drill results' }).getByRole('row').nth(1)).toHaveText(/^R-2\s*34\.0\s*156\.0\s*122\.0\s*0\.61/);
   await expect(region.getByLabel('Recovery for Au')).toBeDisabled();
   await expect(region.getByLabel('Cut-off', { exact: true })).toBeDisabled();
