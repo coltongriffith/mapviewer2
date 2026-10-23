@@ -298,7 +298,11 @@ async function update() {
     if (pending !== was || !stillOurs(was)) { if (pending === was) reset(); return; } // another figure opened while it read
     const p = em().getProject(), names = Object.values(FILE_NAMES);
     if (ref.resultsRecipe) names.push(ref.resultsRecipe.fileName);
-    p.files = p.files.filter((f) => !names.includes(f.name)).concat(files);
+    const keep = p.files.filter((f) => !names.includes(f.name));
+    if (now.resultsRecipe && keep.some((f) => f.role === 'published' || f.name === now.resultsRecipe.fileName)) {
+      throw new Error('This figure has uploaded results alongside its property recipe. Remove that uploaded results file before updating the recipe, or keep the saved figure.');
+    }
+    p.files = keep.concat(files);
     p.settings.drillSource = now;
     backup = em().getProject();
     await em().loadProject(p);

@@ -90,6 +90,24 @@ describe('3D property recipe controls', () => {
     expect(h.get().settings.pubOverrides).toEqual(before.settings.pubOverrides);
   });
 
+  it('refuses a recipe update when an uploaded results file was added after loading the recipe', async () => {
+    const f = fixture(), h = figureHarness(f);
+    await toggle(); await clickAction('drill-load');
+    const before = h.get();
+    before.files.push({ name: 'release.csv', role: 'published', text: before.files.find((x) => x.name === RESULTS_FILE).text });
+    h.set(before);
+    f.db.recipes = [saved('Default', 4, { cutoff: 99 })];
+    await check(); await clickAction('drill-update');
+    expect(h.get()).toEqual(before);
+    expect(h.E.loadProject).not.toHaveBeenCalled();
+    expect(h.say).toHaveBeenLastCalledWith(expect.stringContaining('uploaded results alongside its property recipe'));
+    expect(el('drill-notice').hidden).toBe(false);
+    // Removing the conflicting upload lets the same pending update complete.
+    h.set({ ...before, files: before.files.filter((x) => x.name !== 'release.csv') });
+    await clickAction('drill-update');
+    expect(h.get().settings.drillSource.resultsRecipe.version).toBe(4);
+  });
+
   it('leaves the figure unchanged if its recipe disappears or another figure opens during a load', async () => {
     const f = fixture(), h = figureHarness(f);
     await toggle(); await clickAction('drill-load');
