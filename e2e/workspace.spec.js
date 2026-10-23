@@ -317,6 +317,73 @@ test('the data library lists, adds, versions, downloads and deletes files', asyn
   expect(fake.patches).toEqual([{ id: FILE, body: { deleted_at: expect.any(String) } }]);
 });
 
+test('alteration import: CSV and Excel preserve source text with retry, templates and rollback', async ({ page }, testInfo) => {
+  const fake = await fakeSupabase(page, { role: 'editor' });
+  fake.drill.alteration = 0;
+  const imports = [], committed = new Set(); let uncertain = true;
+  await page.route('**/rest/v1/rpc/drill_import_batch', route => {
+    const args = route.request().postDataJSON(); imports.push(args);
+    expect(args.p_kind).toBe('alteration');
+    const diff = { ok: true, new: args.p_rows.length, changed: 0, unchanged: 0, new_holes: 0, missing_collars: 1, missing_collar_holes: ['SOURCE-01'], overlaps_existing: 0, changed_sample: [] };
+    if (args.p_dry_run) return route.fulfill({ json: diff });
+    if (!committed.has(args.p_batch)) {
+      committed.add(args.p_batch); fake.drill.alteration = args.p_rows.length;
+      fake.drill.batches.unshift({ id: args.p_batch, kind: 'alteration', filename: args.p_filename, summary: diff, created_at: '2026-10-23T12:00:00Z', rolled_back_at: null });
+    }
+    if (uncertain) { uncertain = false; return route.fulfill({ status: 500, json: { message: 'Synthetic response lost; retry unchanged import' } }); }
+    return route.fulfill({ json: { ...diff, committed: true } });
+  });
+  await page.route('**/rest/v1/rpc/drill_rollback_batch', route => {
+    const args = route.request().postDataJSON(); fake.drill.alteration = 0;
+    fake.drill.batches = fake.drill.batches.map(b => b.id === args.p_batch ? { ...b, rolled_back_at: '2026-10-23T13:00:00Z' } : b);
+    return route.fulfill({ json: { rolled_back: true, withdrawn: 2, restored: 0 } });
+  });
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold'); await page.getByRole('tab', { name: 'Drill data' }).click();
+  const region = page.getByRole('region', { name: 'Drill data', exact: true }), form = region.getByRole('form', { name: 'Import drill data' });
+  const rows = [['HoleID', 'From', 'To', 'Alteration code', 'Description', 'Intensity'], ['SOURCE-01', '0', '2', '03', '', '03'], ['SOURCE-01', '1', '3', '', 'Sericite', 'weak']];
+  await region.getByLabel('Drill data file').setInputFiles({ name: 'alteration.csv', mimeType: 'text/csv', buffer: Buffer.from(rows.map(r => r.join(',')).join('\n')) });
+  await expect(form.getByLabel('Data')).toHaveValue('alteration'); await expect(form.getByLabel('Intensity (text)')).toHaveValue('Intensity');
+  await expect(form.getByText(/Overlapping intervals in 1 hole/)).toBeVisible();
+  await form.getByRole('button', { name: 'Check against stored data' }).click();
+  await expect(form.getByRole('status', { name: 'Changes' })).toContainText('2 new alteration intervals');
+  await expect(form.getByText('1 hole has no collar yet: SOURCE-01')).toBeVisible();
+  await form.getByLabel('Template name').fill('Alteration source'); await form.getByRole('button', { name: 'Save columns as template' }).click();
+  await expect(form.getByLabel('Saved columns').locator('option', { hasText: 'Alteration source' })).toHaveCount(1);
+  await form.getByRole('button', { name: 'Commit import' }).click(); await expect(form.getByRole('alert')).toContainText('Synthetic response lost');
+  await form.getByRole('button', { name: 'Commit import' }).click(); await expect(region.getByText('Imported alteration.csv: 2 new alteration intervals.')).toBeVisible();
+  const attempts = imports.filter(a => !a.p_dry_run); expect(attempts[0].p_batch).toBe(attempts[1].p_batch);
+  expect(attempts[0].p_rows).toEqual([{ hole_id: 'SOURCE-01', from_m: 0, to_m: 2, code: '03', intensity: '03' }, { hole_id: 'SOURCE-01', from_m: 1, to_m: 3, description: 'Sericite', intensity: 'weak' }]);
+  await expect(region.getByText('Alteration intervals', { exact: true }).locator('..')).toHaveText('Alteration intervals2');
+  expect(fake.drill.collars).toBe(12); expect(fake.drill.assays).toBe(0);
+  page.once('dialog', d => d.accept()); await region.getByRole('button', { name: 'Roll back alteration.csv' }).click();
+  await expect(region.getByRole('table', { name: 'Import history' }).getByRole('row', { name: /alteration.csv.*Rolled back/ })).toBeVisible();
+  await expect(region.getByText('Alteration intervals', { exact: true }).locator('..')).toHaveText('Alteration intervals0');
+  await region.getByLabel('Drill data file').setInputFiles({ name: 'alteration.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: Buffer.from(xlsxFixture([{ name: 'Alteration', rows }])) });
+  await region.getByRole('button', { name: 'Use these columns' }).click();
+  await expect(form.getByLabel('Data')).toHaveValue('alteration'); await form.getByLabel('Saved columns').selectOption({ label: 'Alteration source' });
+  await form.getByRole('button', { name: 'Check against stored data' }).click(); await expect(form.getByRole('button', { name: 'Commit import' })).toBeEnabled();
+  expect(imports.at(-1).p_rows).toEqual(attempts[0].p_rows);
+  await form.getByRole('button', { name: 'Commit import' }).click(); await expect(region.getByText('Imported alteration.xlsx: 2 new alteration intervals.')).toBeVisible();
+  expect(fake.rpc.find(c => c.fn === 'drill_save_template').args.p_kind).toBe('alteration');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
+  await page.screenshot({ path: testInfo.outputPath('alteration-import.png'), fullPage: true });
+});
+
+test('alteration import: unavailable database support leaves legacy import usable', async ({ page }) => {
+  await fakeSupabase(page, { role: 'editor' });
+  await page.route('**/rest/v1/rpc/drill_import_batch', route => {
+    const args = route.request().postDataJSON();
+    return args.p_kind === 'alteration' ? route.fulfill({ status: 400, json: { code: '22023', message: 'INVALID_KIND: alteration' } }) : route.fulfill({ json: { ok: true, new: 1, changed: 0, unchanged: 0 } });
+  });
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold'); await page.getByRole('tab', { name: 'Drill data' }).click();
+  await page.getByLabel('Drill data file').setInputFiles({ name: 'alteration.csv', mimeType: 'text/csv', buffer: Buffer.from('HoleID,From,To,Alteration code,Intensity\nH1,0,1,03,weak') });
+  const form = page.getByRole('form', { name: 'Import drill data' });
+  await form.getByRole('button', { name: 'Check against stored data' }).click(); await expect(form.getByRole('alert')).toContainText('Alteration imports are not available on this site yet');
+  await form.getByLabel('Data').selectOption('lithology'); await form.getByLabel('Code', { exact: true }).selectOption('Alteration code');
+  await form.getByRole('button', { name: 'Check against stored data' }).click(); await expect(form.getByRole('button', { name: 'Commit import' })).toBeEnabled();
+  await expect(page.getByText('Alteration intervals', { exact: true })).toHaveCount(0);
+});
+
 test('drill data: import a CSV, map its columns, see the diff, commit and roll back', async ({ page }, testInfo) => {
   const fake = await fakeSupabase(page, { role: 'editor' });
   await page.goto('/workspace/star-copper-corp/p/rails-copper-gold');
