@@ -52,8 +52,9 @@ async function measure() {
       assert.equal(q.get('property_id'), `eq.${property}`); assert.equal(q.get('superseded_by_batch'), 'is.null');
       const offset = +(q.get('offset') || 0), limit = Math.min(+(q.get('limit') || 1000), 1000);
       let current = rows;
-      if (q.has('hole_id')) current = current.filter((r) => matchesDrillFilter(r, parseDrillFilter(`hole_id.${q.get('hole_id')}`)));
-      if (q.has('or')) current = current.filter((r) => matchesDrillFilter(r, parseDrillFilter(`or${q.get('or')}`)));
+      // Parse each immutable request filter once, not once per synthetic row.
+      if (q.has('hole_id')) { const filter = parseDrillFilter(`hole_id.${q.get('hole_id')}`); current = current.filter((r) => matchesDrillFilter(r, filter)); }
+      if (q.has('or')) { const filter = parseDrillFilter(`or${q.get('or')}`); current = current.filter((r) => matchesDrillFilter(r, filter)); }
       const data = current.slice(offset, offset + limit);
       pages.push({ table: path.split('/').pop(), offset, cursor: q.has('hole_id'), rows: data.length });
       return json(data);

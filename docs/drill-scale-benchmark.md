@@ -205,3 +205,27 @@ these mocked browser reads or this software GPU.
 Any query optimization must retain
 stable complete pagination and the existing import-change retry, with regression
 checks for repeated hole IDs, interval boundaries and access controls.
+
+## Load-only profile after the cursor reader
+
+A local diagnostic on `2eb4bc1f` stops CPU sampling after `layersReady` and
+two frames, before the camera check and without a screenshot. Its first run
+timed out after 120 seconds while fetching only 83,000 assays: 118.8 seconds
+of browser CPU samples were idle. The mock server was reparsing each immutable
+request filter for every synthetic row. The browser harness now parses each
+filter once per request, preserving the same row predicates and counts.
+
+With that fixture correction, the full 2,000-hole / 200,000-assay diagnostic
+passes source/scene counts and camera assertions: profiled load/settle 44,152 ms,
+camera/two frames 3,674 ms, maximum observed long task 6,964 ms. The 44,151 ms
+load-only CPU profile excludes camera and screenshot work. Aggregating matching
+call frames attributes 8,115 ms self time to `tags.statuses()`, 6,567 ms to
+`bufferData`, 1,962 ms to `bufferSubData`, and 16,548 ms to idle. Status-key work
+remains in overlay/tag callers despite the earlier scene-loop optimization.
+
+These profiled SwiftShader timings are not directly comparable with the earlier
+unprofiled run or representative of a physical GPU. Next investigate scoped
+reuse of status results within synchronous drawing passes; preserve invalidation
+after data/status/style edits and verify export parity. Graphics-buffer changes
+need separate evidence. No application rendering change follows from this
+diagnostic alone.
