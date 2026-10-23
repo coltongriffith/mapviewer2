@@ -5,6 +5,7 @@ import { writeFile } from 'node:fs/promises';
 import { performance } from 'node:perf_hooks';
 import { chromium } from '@playwright/test';
 import { scaleCounts, scaleRow } from './fixtures/drill-scale-data.mjs';
+import { parseDrillFilter, matchesDrillFilter } from '../tests/fixtures/drill-filter.js';
 
 const args = process.argv.slice(2);
 assert(args.every((a) => a === '--smoke' || a.startsWith('--profile=') || a.startsWith('--out=') || a.startsWith('--base-url=')), 'Only --smoke, --profile=, --out= and --base-url= are supported.');
@@ -50,8 +51,11 @@ async function measure() {
     if (rows) {
       assert.equal(q.get('property_id'), `eq.${property}`); assert.equal(q.get('superseded_by_batch'), 'is.null');
       const offset = +(q.get('offset') || 0), limit = Math.min(+(q.get('limit') || 1000), 1000);
-      const data = rows.slice(offset, offset + limit);
-      pages.push({ table: path.split('/').pop(), offset, rows: data.length });
+      let current = rows;
+      if (q.has('hole_id')) current = current.filter((r) => matchesDrillFilter(r, parseDrillFilter(`hole_id.${q.get('hole_id')}`)));
+      if (q.has('or')) current = current.filter((r) => matchesDrillFilter(r, parseDrillFilter(`or${q.get('or')}`)));
+      const data = current.slice(offset, offset + limit);
+      pages.push({ table: path.split('/').pop(), offset, cursor: q.has('hole_id'), rows: data.length });
       return json(data);
     }
     return json((req.headers().accept || '').includes('vnd.pgrst.object') ? null : []);

@@ -57,14 +57,15 @@ These are one-run diagnostic measurements, not a formal throughput benchmark.
 ## SQL cursor comparison
 
 `--compare-pagination` additionally reads all assays with three SQL cursor
-predicates and compares every page, in order, with the unchanged application
+predicates and compares every page, in order, with the application
 reader. It records query timings and final-page plans. Two-row pages on a
 separate synthetic property exercise repeated hole/from keys, fractional
 depths, punctuation/Unicode in IDs, and a superseded historical row. Each
 candidate also checks that a nonmember receives no rows; anonymous access is
 rejected. All data and queries stay in the fresh in-memory database.
 
-One full run on 23 October 2026 returned the same 200,000 assays in 201 reads:
+One full run on commit `18da7ab4` on 23 October 2026 returned the same 200,000
+assays in 201 reads:
 
 | Query approach | Sum of assay query times |
 | --- | ---: |
@@ -79,12 +80,31 @@ sorting a large offset prefix. The tuple candidate also seeks directly and
 took 1.35 ms. There is no new index or migration. The bound may help less when
 most intervals belong to one hole; this fixture has 100 intervals per hole.
 
-These are SQL experiments, not a changed application reader. Candidates run
-after the offset baseline in the same warm database, so the timings are
-diagnostic, not a controlled speed guarantee. Before adopting a candidate,
-verify real Supabase-client filter serialization (especially quoted IDs),
-complete pagination for every table and the existing import-change retry.
-SQL parameter binding here does not validate PostgREST filter escaping.
+Candidates run after the application reader in the same warm database, so
+the timings are diagnostic, not a controlled speed guarantee. SQL parameter
+binding here does not validate PostgREST filter escaping.
+
+## Application keyset reader
+
+The property reader now uses the bounded OR predicate for surveys, assays and
+lithology, and a single greater-than key for collars. It retains the current
+row and property filters, unique key ordering, CSV output and import-change
+retry. It reads until an empty page, including when a server returns fewer
+than the requested 1,000 rows. Invalid or repeated end-of-page keys fail with
+an error instead of looping or returning a partial figure. Text keys follow
+the [PostgREST quoted-value grammar](https://docs.postgrest.org/en/stable/references/api/url_grammar.html#reserved-characters).
+
+The real Supabase client is exercised with an isolated fetch fixture: encoded
+filters, punctuation/Unicode IDs, tied interval keys, fractional depths, all
+four tables, smaller response caps, read failures and concurrent imports.
+The fixture parses the filter grammar independently of the application; this
+is not a deployed PostgREST-server test.
+
+A full local run of the updated application reader took 2,572 ms including
+CSV conversion, versus the prior 25,190 ms offset run. All 200,000 assay rows
+and 2,000 result holes passed the same checks. Assay queries took 2,115 ms,
+survey queries 173 ms and collar queries 32 ms. These separate local runs
+demonstrate the intended index use without promising hosted latency.
 
 ## Remaining P2-9 acceptance
 

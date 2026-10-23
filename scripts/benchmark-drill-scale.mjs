@@ -8,6 +8,7 @@ import { createWorkspaceDb, readMigration } from '../tests/fixtures/workspace-db
 import { pull } from '../src/three-d/property-data.js';
 import { computeResults, defaultRecipe } from '../shared/drillResults.js';
 import { scaleCounts, scaleRow } from './fixtures/drill-scale-data.mjs';
+import { parseDrillFilter, drillFilterSql } from '../tests/fixtures/drill-filter.js';
 
 const args = process.argv.slice(2);
 assert(args.every((a) => a === '--smoke' || a === '--compare-pagination' || a.startsWith('--out=')), 'Only --smoke, --compare-pagination and --out=report.json are supported; remote connections are not supported.');
@@ -18,7 +19,7 @@ const EDITOR = '00000000-0000-4000-8000-000000000002';
 const OUTSIDER = '00000000-0000-4000-8000-000000000003';
 const measurements = [];
 const report = {
-  schemaVersion: 1, startedAt: new Date().toISOString(), synthetic: true,
+  schemaVersion: 1, startedAt: new Date().toISOString(), synthetic: true, reader: 'bounded-keyset',
   runtime: { node: process.version, platform: platform(), arch: arch(), cpu: cpus()[0]?.model },
   engine: 'in-memory PGlite, authenticated editor role, existing repository migrations',
   limits: { importBatchRows: 20000, importReferenceMs: 8000 },
@@ -45,17 +46,20 @@ function localClient(as) {
     drill_assays: ['hole_id', 'from_m', 'to_m', 'values', 'bdl', 'units'],
     drill_lithology: ['hole_id', 'from_m', 'to_m', 'code', 'description'],
   };
-  let queue = Promise.resolve();
+  let queue = Promise.resolve(), lastAssayPage;
   const requests = [];
-  return { requests, from(table) {
+  return { requests, get lastAssayPage() { return lastAssayPage; }, from(table) {
     assert(fields[table], `Unexpected table: ${table}`);
     let selected, property, current = false, offset = 0, limit = 1000;
-    const order = [];
+    const order = [], filters = [];
     const quote = (f) => { assert(fields[table].includes(f), `Unexpected field: ${f}`); return `"${f}"`; };
     const api = {
       select(s) { selected = s.split(',').map(quote).join(','); return api; },
       eq(k, v) { assert.equal(k, 'property_id'); property = v; return api; },
       is(k, v) { assert.equal(k, 'superseded_by_batch'); assert.equal(v, null); current = true; return api; },
+      gt(k, v) { filters.push(parseDrillFilter(`${k}.gt.${v}`)); return api; },
+      gte(k, v) { filters.push(parseDrillFilter(`${k}.gte.${v}`)); return api; },
+      or(v) { filters.push(parseDrillFilter(`or(${v})`)); return api; },
       order(k, options) { order.push(`${quote(k)} ${options?.ascending === false ? 'desc' : 'asc'}`); return api; },
       limit(n) { limit = n; return api; },
       range(a, b) { offset = a; limit = b - a + 1; return api; },
@@ -66,8 +70,11 @@ function localClient(as) {
         // shared connection; hosted PostgREST would use independent connections.
         const task = queue.then(async () => {
           const start = performance.now();
-          const result = await as(EDITOR, `select ${selected} from public.${table} where property_id=$1 ${current ? 'and superseded_by_batch is null' : ''} order by ${order.join(',')} limit $2 offset $3`, [property, limit, offset]);
-          requests.push({ table, offset, rows: result.rows.length, ms: Math.round((performance.now() - start) * 100) / 100 });
+          const params = [property, limit, offset], where = filters.map((f) => drillFilterSql(f, params));
+          const sql = `select ${selected} from public.${table} where property_id=$1 ${current ? 'and superseded_by_batch is null' : ''} ${where.length ? `and ${where.join(' and ')}` : ''} order by ${order.join(',')} limit $2 offset $3`;
+          const result = await as(EDITOR, sql, params);
+          if (table === 'drill_assays' && result.rows.length) lastAssayPage = { sql, params };
+          requests.push({ table, offset, cursor: filters.length > 0, rows: result.rows.length, ms: Math.round((performance.now() - start) * 100) / 100 });
           return { data: result.rows, error: null };
         });
         queue = task.catch(() => {});
@@ -152,7 +159,7 @@ try {
   assert.deepEqual(computed.problems, []);
   assert.equal(new Set(computed.results.map((r) => r.holeId)).size, holes);
   report.resultCount = computed.results.length;
-  report.lastAssayPagePlan = (await as(EDITOR, 'explain (analyze, buffers, format json) select hole_id,from_m,to_m,"values",units from public.drill_assays where property_id=$1 and superseded_by_batch is null order by hole_id,from_m,to_m limit 1000 offset $2', [property, Math.max(0, holes * 100 - 1000)])).rows;
+  report.lastAssayPagePlan = (await as(EDITOR, `explain (analyze, buffers, format json) ${client.lastAssayPage.sql}`, client.lastAssayPage.params)).rows;
   if (args.includes('--compare-pagination')) {
     report.paginationCandidates = await compareCursor(as, property, loaded.rows.assays);
     // Tiny pages force ties on the first two keys across a page boundary.
@@ -168,7 +175,7 @@ try {
     report.paginationBoundaries = await compareCursor(as, edgeProperty, expectedEdges, 2);
     const anonymous = cursorQuery('bounded_or', edgeProperty, 2, expectedEdges[0]);
     await assert.rejects(as(null, anonymous.sql, anonymous.params), /permission denied/);
-    report.paginationLimitations = ['Candidates are SQL-only and run after the offset baseline in the same warm database.', 'No PostgREST serialization or concurrent-import retry acceptance is claimed for the candidates.', 'The application still uses its existing offset reader and import-change retry.'];
+    report.paginationLimitations = ['Candidates are SQL-only and run after the application reader in the same warm database.', 'These SQL candidate comparisons do not validate PostgREST serialization or concurrent-import retries; see the client tests.', 'The application reader uses bounded keyset pagination and retains its import-change retry.'];
   }
   report.importReferenceExceeded = measurements.filter((m) => m.stage === 'import' && m.ms >= 8000);
   report.status = report.importReferenceExceeded.length ? 'local-import-reference-exceeded' : 'local-checks-passed';
