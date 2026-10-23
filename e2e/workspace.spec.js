@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { xlsxFixture } from '../tests/fixtures/xlsx.js';
+import readExcelFile from 'read-excel-file/node';
 
 // Company workspaces against an in-memory Supabase (auth, REST and RPC are
 // mocked; no request leaves the browser). Needs the configured client build
@@ -397,6 +398,23 @@ test('drill results: the recipe, the release table, copies and downloads, then s
   const file = await csv;
   expect(file.suggestedFilename()).toBe('rails-copper-gold-results.csv');
 
+  const downloadExcel = async () => {
+    await region.getByLabel('Table format').selectOption('xlsx');
+    const pending = page.waitForEvent('download');
+    await region.getByRole('button', { name: 'Download Excel' }).click();
+    const workbook = await pending;
+    expect(workbook.suggestedFilename()).toBe('rails-copper-gold-results.xlsx');
+    const chunks = [];
+    for await (const chunk of await workbook.createReadStream()) chunks.push(chunk);
+    const [sheet] = await readExcelFile(Buffer.concat(chunks), { trim: false });
+    await workbook.saveAs(testInfo.outputPath(sheet.data[1][0].startsWith('Saved') ? 'results-saved.xlsx' : 'results-draft.xlsx'));
+    expect(sheet.data[3].map(v => v ?? '')).toEqual(['R-2', '', '34.0', '156.0', '122.0', '0.61', '0.45', '0.21', RESULT.split(', incl.')[0]]);
+    expect(sheet.data[4].slice(0, 2)).toEqual(['R-2', 'incl.']);
+    expect(sheet.data.flat()).toContain('True widths are not yet known.');
+    return sheet.data;
+  };
+  expect((await downloadExcel())[1][0]).toBe('Unsaved recipe: Default. Calculated from current assays.');
+
   await region.getByLabel('Table format').selectOption('html');
   await region.getByRole('button', { name: 'Copy formatted table' }).click();
   await expect(region.getByRole('status')).toHaveText('Copied the formatted table and recipe notes.');
@@ -427,6 +445,8 @@ test('drill results: the recipe, the release table, copies and downloads, then s
   expect(saved).toMatchObject({ p_property: PROP, p_name: 'Default', p_base_version: 0, p_recipe: { primary: 'Cu', equivalent: true, cutoff: 0.2, inclCutoff: 1, trueWidth: 'True widths are not yet known.' } });
   expect(saved.p_recipe.elements).toEqual([{ name: 'Cu', unit: '%', price: 4.5, recovery: 90 }, { name: 'Au', unit: 'g/t', price: 3000, recovery: 70 }]);
   await expect(region.getByText(/Default, version 1 · saved/)).toBeVisible();
+  expect((await downloadExcel())[1][0]).toBe('Saved recipe: Default, version 1. Calculated from current assays.');
+  await region.getByLabel('Table format').selectOption('html');
   await region.getByRole('button', { name: 'Copy formatted table' }).click();
   await expect(region.getByRole('status')).toHaveText('Copied the formatted table and recipe notes.');
   expect((await page.evaluate(() => window.__formattedCopy))['text/plain']).toContain('Saved recipe: Default, version 1. Calculated from current assays.');

@@ -35,7 +35,8 @@
     "shpjs": "^4.0.4",
     "three": "0.147.0",
     "topojson-client": "^3.1.0",
-    "world-atlas": "^2.0.2"
+    "world-atlas": "^2.0.2",
+    "write-excel-file": "4.1.1"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",
