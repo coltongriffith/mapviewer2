@@ -212,7 +212,7 @@ test('a figure takes its holes from the property drill database, keeps them, and
   await open3d(page, `/3d?project=${saved.id}`);
   const notice = page.locator('#drill-notice');
   await expect(notice).toBeVisible({ timeout: 60_000 });
-  await expect(notice).toContainText('New drill data since this figure (1 new hole, 210 assays) —');
+  await expect(notice).toContainText('New drill data since this figure (1 new hole, 210 assays, 0 lithology intervals) —');
   st = await state(page);
   expect(st.project).toMatchObject({ holes: 12, intervals: 2520 });
   expect(st.drillSource.latestBatchId).toBe(B(4));

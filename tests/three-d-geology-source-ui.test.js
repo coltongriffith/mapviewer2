@@ -17,7 +17,7 @@ beforeEach(() => {
   project = { files: [file('property-lithology.csv', 'litho'), file('old-legend.csv', 'lithlegend'), file('terrain.csv', 'topo')], settings: { drillSource: ref(), geology: { legend: [{ code: 'A', name: 'Custom', nameSet: true }] } } };
   figure = { id: 'figure' }; say = vi.fn(); reads = [];
   tables = { drill_import_batches: [{ id: 'b2', property_id: 'p', kind: 'collars', created_at: '2026-10-03T00:00:00Z', summary: { new: 1 } }], drill_collars: [{ hole_id: 'H', x: 1, y: 2, z: 3, depth: 10 }] };
-  E = { getState: () => ({ ...project.settings, terrain: {}, usingSample: false }), getProject: () => clone(project), clearFiles: vi.fn(() => { project.files = []; project.settings.geology.legend = []; }), addFiles: vi.fn((files, opts) => { project.files = files; project.settings.drillSource = opts.drillSource; }), loadProject: vi.fn(async (p) => { project = clone(p); }), setStyle: vi.fn(), setGeology: vi.fn(async (o) => Object.assign(project.settings.geology, o)) };
+  E = { getState: () => ({ ...project.settings, terrain: {}, usingSample: false }), getProject: () => clone(project), clearFiles: vi.fn(() => { project.files = []; project.settings.geology.legend = []; }), addFiles: vi.fn((files, opts) => { project.files = files; project.settings.drillSource = opts.drillSource; if (opts.geologyTitle !== undefined) project.settings.geology.title = opts.geologyTitle; }), loadProject: vi.fn(async (p) => { project = clone(p); }), setStyle: vi.fn(), setGeology: vi.fn(async (o) => Object.assign(project.settings.geology, o)) };
   window.EM3D = E;
   init({ client: async () => client, current: () => figure, say, listHomes: async () => ({ properties: [{ id: 'p', name: 'Property', orgName: 'Org' }] }) }); reset();
 });
@@ -26,6 +26,11 @@ describe('explicit property geology source', () => {
   it('defaults legacy figures to lithology without changing their files when opening the picker', async () => {
     project.settings.drillSource = ref(null); const before = clone(project);
     await toggle(); expect(document.getElementById('drill-geology').value).toBe('lithology'); expect(project).toEqual(before);
+  });
+  it('omits the new heading option for a default lithology load', async () => {
+    await toggle(); await clickLoad();
+    expect(E.addFiles.mock.calls[0][1]).not.toHaveProperty('geologyTitle');
+    expect(E.setGeology).not.toHaveBeenCalled();
   });
   it('fresh alteration load replaces logs, resets custom labels and removes the previous uploaded legend, retaining terrain', async () => {
     await toggle(); change('drill-geology', 'alteration'); await clickLoad();
@@ -43,6 +48,20 @@ describe('explicit property geology source', () => {
     await toggle(); document.getElementById('drill-load').click(); await vi.waitFor(() => expect(resolve).toBeTypeOf('function'));
     change('drill-geology', 'alteration'); resolve({ files: [], ref: ref() }); await new Promise((r) => setTimeout(r, 0));
     expect(E.clearFiles).not.toHaveBeenCalled(); expect(say).not.toHaveBeenCalled(); expect(document.getElementById('drill-load').disabled).toBe(false);
+  });
+  it('sets the source heading with the files, without a delayed setter leaking into a different figure', async () => {
+    let finish;
+    E.setGeology.mockImplementation(() => new Promise((resolve) => { finish = () => { project.settings.geology.title = 'Alteration'; resolve(); }; }));
+    api.pullPropertyResults.mockResolvedValue({ files: [file('property-collars.csv', 'collar')], ref: { ...ref('alteration'), resultsRecipe: { name: 'Recipe', version: 1 } } });
+    await toggle(); change('drill-geology', 'alteration'); document.getElementById('drill-load').click();
+    await vi.waitFor(() => expect(E.addFiles).toHaveBeenCalled());
+    const callsBefore = E.setStyle.mock.calls.length;
+    figure = { id: 'different' }; project.settings.geology.title = 'Other figure';
+    finish?.(); await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(project.settings.geology.title).toBe('Other figure');
+    expect(E.setStyle.mock.calls.length).toBe(callsBefore);
+    expect(E.setGeology).not.toHaveBeenCalled();
+    expect(E.addFiles).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ geologyTitle: 'Alteration' }));
   });
   it('updates the saved alteration source while preserving custom legend labels', async () => {
     project.settings.drillSource = ref('alteration'); project.files = [file('property-alteration.csv', 'litho'), file('terrain.csv', 'topo')];

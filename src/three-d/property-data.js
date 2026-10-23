@@ -303,8 +303,7 @@ async function load() {
     if (ref.resultsRecipe && keep.some((f) => f.role === 'published' || f.name === ref.resultsRecipe.fileName)) throw new Error('This figure already has uploaded results. Choose raw drill data only to keep them, or remove that results file before using a property recipe.');
     backup = prior;
     if (!st.usingSample) E.clearFiles();
-    E.addFiles([...keep, ...files], { drillSource: ref });
-    if (changedGeology) await E.setGeology({ title: geologySource === 'alteration' ? 'Alteration' : 'Lithology' });
+    E.addFiles([...keep, ...files], { drillSource: ref, ...(changedGeology ? { geologyTitle: geologySource === 'alteration' ? 'Alteration' : 'Lithology' } : {}) });
     if (ref.resultsRecipe) E.setStyle({ calloutMode: 'published' });
     // The property's coordinate system when it has one; the figure's earlier one otherwise.
     if (ref.crs || crs) await E.setCRS(ref.crs || crs).catch(() => {});
