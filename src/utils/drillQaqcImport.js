@@ -61,17 +61,29 @@ export function parseQaqcValue(raw, { decimalComma = false } = {}) {
   return parsed.error ? parsed : { ...parsed, raw: original };
 }
 
-// PostgreSQL jsonb text adds one space after each structural comma/colon.
-// Count separators outside strings, so the client respects the RPC byte cap.
+// PostgreSQL jsonb text adds structural spaces and expands exponent numbers.
+// Count both outside strings, so small scientific values cannot evade byte caps.
 export function qaqcJsonBytes(value) {
   const json = JSON.stringify(value);
-  let inside = false, escaped = false, separators = 0;
-  for (const c of json) {
+  let inside = false, escaped = false, extra = 0;
+  for (let i = 0; i < json.length; i++) {
+    const c = json[i];
     if (inside) { if (escaped) escaped = false; else if (c === '\\') escaped = true; else if (c === '"') inside = false; }
     else if (c === '"') inside = true;
-    else if (c === ',' || c === ':') separators++;
+    else if (c === ',' || c === ':') extra++;
+    else if (c === '-' || /\d/.test(c)) {
+      const token = json.slice(i).match(/^-?\d+(?:\.\d+)?(?:e[+-]?\d+)?/i)?.[0];
+      if (!token) continue;
+      const exp = token.match(/^(-?)(\d+)(?:\.(\d+))?e([+-]?\d+)$/i);
+      if (exp) {
+        const digits = exp[2].length + (exp[3]?.length || 0), point = exp[2].length + Number(exp[4]);
+        const expanded = exp[1].length + (point <= 0 ? 2 - point + digits : point >= digits ? point : digits + 1);
+        extra += expanded - token.length;
+      }
+      i += token.length - 1;
+    }
   }
-  return new TextEncoder().encode(json).length + separators;
+  return new TextEncoder().encode(json).length + extra;
 }
 
 export function buildQaqcImport(kind, table, mapping = {}) {

@@ -94,6 +94,8 @@ describe('CRM mapping and bounded requests', () => {
     const value = { filename: '岩,:".csv', columns: ['a', 'b'] };
     const jsonb = '{"filename": "岩,:\\".csv", "columns": ["a", "b"]}';
     expect(qaqcJsonBytes(value)).toBe(new TextEncoder().encode(jsonb).length);
+    expect(qaqcJsonBytes({ tiny: 1e-300 })).toBe('{"tiny": '.length + 302 + 1);
+    expect(qaqcJsonBytes([1e-7, 1e21, -1.23e-8])).toBe('[0.0000001, 1000000000000000000000, -0.0000000123]'.length);
   });
   it('uses supplied certified numeric values and exact revision/unit/source', () => {
     const m = autoQaqcMapping('crms', crmTable.header);
