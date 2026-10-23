@@ -6921,7 +6921,7 @@ export default function App({ initialAction = null }) {
             {drillPlanOpen && (
               <div id="section-drill-plan">
                 <React.Suspense fallback={<div className="small-note">Loading…</div>}>
-                  <DrillPlanControls plan={project.drillPlan || null} onChange={updateDrillPlan} onReplace={replaceDrillPlan} map={leafletMapRef.current} propertyId={projectHome?.propertyId || null} zones={resolvedZones} layout={project.layout} />
+                  <DrillPlanControls key={projectId || 'draft'} plan={project.drillPlan || null} onChange={updateDrillPlan} onReplace={replaceDrillPlan} map={leafletMapRef.current} propertyId={projectHome?.propertyId || null} zones={resolvedZones} layout={project.layout} />
                 </React.Suspense>
               </div>
             )}

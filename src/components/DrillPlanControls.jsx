@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { KINDS, CRS_OPTIONS, parseTable, guessKind, needsCrs, buildPlan, figureSections } from '../utils/drillPlanData.js';
 import { holeColors, binsOf, releaseHoles, DEFAULT_BINS } from '../utils/drillPlanLegend.js';
 import { padsOf, fitPlan, planLayout, mapView } from '../utils/drillPlan.js';
@@ -27,11 +27,31 @@ export default function DrillPlanControls({ plan, onChange, onReplace, map, prop
   const [crs, setCrs] = useState(plan?.crs && plan.crs !== 'EPSG:4326' ? plan.crs : '');
   const [status, setStatus] = useState(null); // { type: 'error' | 'success', lines }
   const [busy, setBusy] = useState(false);
+  const [recipes, setRecipes] = useState(null);
+  const [recipeChoice, setRecipeChoice] = useState('');
+  const [stagedSource, setStagedSource] = useState(null);
+  const readEpoch = useRef({ value: 0 });
+  const context = useRef({ propertyId, plan });
+  context.current = { propertyId, plan };
   const [picking, setPicking] = useState(null);
   const [figures, setFigures] = useState(null); // the 3D figures to take a section from, once listed
   const [sections, setSections] = useState(null);
   const [fitWanted, setFitWanted] = useState(false); // frame the plan once a new one's legend has settled
   const [, setTick] = useState(0);
+
+  useEffect(() => {
+    const generation = readEpoch.current;
+    generation.value++; setTables([]); setStagedSource(null); setRecipes(null); setRecipeChoice(''); setBusy(false); setStatus(null);
+    return () => { generation.value++; };
+  }, [propertyId]);
+  useEffect(() => { readEpoch.current.value++; setBusy(false); }, [plan]);
+  const operation = () => {
+    const epoch = ++readEpoch.current.value, original = context.current;
+    return () => epoch === readEpoch.current.value && original.propertyId === context.current.propertyId && original.plan === context.current.plan;
+  };
+  const cancelStaged = () => {
+    readEpoch.current.value++; setTables([]); setStagedSource(null); setRecipes(null); setRecipeChoice(''); setBusy(false); setStatus(null);
+  };
 
   // A new plan is framed once the panels have taken their new size (its legend rows arrive a moment later).
   useEffect(() => {
@@ -48,36 +68,61 @@ export default function DrillPlanControls({ plan, onChange, onReplace, map, prop
   }, [map]);
 
   const addFiles = async (files) => {
+    const current = operation(); setBusy(true);
     const read = await Promise.all([...files].map(async (f) => {
       try { const t = await parseTable(await f.text()); return { name: f.name, ...t, kind: guessKind(t.header, t.rows, f.name) }; } catch (e) { return { name: f.name, error: e.message }; }
     }));
-    setTables((prev) => [...prev.filter((t) => !read.some((r) => r.name === t.name)), ...read.filter((r) => !r.error)]);
+    if (!current()) return;
+    // Switching to uploads discards the staged property batch, not the saved plan.
+    // Its recipe would no longer describe the newly supplied assays.
+    setTables((prev) => [...(stagedSource ? [] : prev.filter((t) => !read.some((r) => r.name === t.name))), ...read.filter((r) => !r.error)]);
+    setStagedSource(null); setRecipes(null); setBusy(false);
     const bad = read.filter((r) => r.error);
     setStatus(bad.length ? { type: 'error', lines: bad.map((r) => `${r.name}: ${r.error}`) } : null);
   };
   const fromProperty = async () => {
+    const current = operation();
     setBusy(true); setStatus(null);
     try {
-      const { pull } = await import('../three-d/property-data.js');
-      const { files, rows } = await pull(supabase, { id: propertyId, name: null });
-      if (!files.length) throw new Error('This property has no drill data yet. Import it on the property page.');
-      const stored = rows.collars?.[0]?.crs;
-      if (stored && stored !== 'EPSG:4326') setCrs(stored);
-      await addFiles(files.map((f) => ({ name: f.name, text: async () => f.text })));
-    } catch (e) { setStatus({ type: 'error', lines: [e.message] }); }
-    setBusy(false);
+      const { listRecipes, selectRecipe } = await import('../utils/propertyResults.js');
+      const found = await listRecipes(supabase, propertyId);
+      if (!current()) return;
+      setRecipes(found);
+      let selected;
+      try { selected = selectRecipe(found); } catch { selected = undefined; }
+      setRecipeChoice(selected ? `r:${selected.name}` : selected === null ? 'raw' : '');
+    } catch (e) {
+      if (current()) { setRecipes([]); setRecipeChoice(''); setStatus({ type: 'error', lines: [`Could not read saved recipes (${e.message}). You can choose raw drill data only.`] }); }
+    } finally { if (current()) setBusy(false); }
+  };
+  const loadProperty = async () => {
+    if (!recipeChoice) return;
+    const current = operation(); setBusy(true); setStatus(null);
+    try {
+      const { pullPropertyResults } = await import('../utils/propertyResults.js');
+      const { files, ref } = await pullPropertyResults(supabase, { id: propertyId, name: null }, { recipeName: recipeChoice === 'raw' ? null : recipeChoice.slice(2) });
+      if (!ref.holes) throw new Error('This property has no collars yet. Import them on the property page.');
+      const read = await Promise.all(files.map(async (f) => { const t = await parseTable(f.text); return { name: f.name, ...t, kind: f.role === 'published' ? 'published' : guessKind(t.header, t.rows, f.name) }; }));
+      if (!current()) return;
+      setTables(read); setStagedSource(ref); setRecipes(null); setCrs(ref.crs && ref.crs !== 'EPSG:4326' ? ref.crs : '');
+      setStatus({ type: 'success', lines: [ref.resultsRecipe ? `Loaded ${ref.resultsRecipe.name} v${ref.resultsRecipe.version}. Build the plan to use these calculated results.` : 'Raw drill data loaded. Build the plan to use it.'] });
+    } catch (e) { if (current()) setStatus({ type: 'error', lines: [e.message] }); }
+    finally { if (current()) setBusy(false); }
   };
   const build = async () => {
+    const current = operation();
     setBusy(true);
     try {
-      const { plan: next, notes, problems } = await buildPlan(tables, { crs: crs || null, prev: plan });
+      const { plan: next, notes, problems } = await buildPlan(tables, { crs: crs || null, prev: plan, drillSource: stagedSource });
+      if (!current()) return;
+      setBusy(false);
       onReplace(next);
       if (!plan) setFitWanted(true);
       const n = Object.values(next.assays.rows).reduce((s, l) => s + l.length, 0);
-      setStatus({ type: 'success', lines: [`${next.holes.length} hole${next.holes.length === 1 ? '' : 's'}, ${fmtN(n)} assay intervals, ${next.results.filter(isApproved).length} published results.`, ...notes, ...problems] });
-      setTables([]);
-    } catch (e) { setStatus({ type: 'error', lines: [e.message] }); }
-    setBusy(false);
+      setStatus({ type: 'success', lines: [`${next.holes.length} hole${next.holes.length === 1 ? '' : 's'}, ${fmtN(n)} assay intervals, ${next.results.filter(isApproved).length} ${stagedSource?.resultsRecipe ? 'calculated' : 'published'} results.`, ...notes, ...problems] });
+      setTables([]); setStagedSource(null);
+    } catch (e) { if (current()) setStatus({ type: 'error', lines: [e.message] }); }
+    if (current()) setBusy(false);
   };
 
   // One click on the map (or two, for a section's ends): picks a place.
@@ -130,15 +175,29 @@ export default function DrillPlanControls({ plan, onChange, onReplace, map, prop
     <>
       <div className="button-row">
         <label className="btn" htmlFor="drill-plan-files">Add drill files…</label>
-        <input id="drill-plan-files" type="file" multiple accept=".csv,.txt,.tsv" hidden aria-label="Drill files: collars, surveys, assays, published results" onChange={(e) => { addFiles(e.target.files || []); e.target.value = ''; }} />
+        <input id="drill-plan-files" type="file" multiple accept=".csv,.txt,.tsv" hidden disabled={busy} aria-label="Drill files: collars, surveys, assays, published results" onChange={(e) => { addFiles(e.target.files || []); e.target.value = ''; }} />
         {propertyId && supabase && <button className="secondary-btn" type="button" disabled={busy} onClick={fromProperty}>From the property's drill data</button>}
       </div>
+      {recipes !== null && <div className="control-grid">
+        <div className="control-row">
+          <label htmlFor="dp-recipe">Property results</label>
+          <select id="dp-recipe" value={recipeChoice} disabled={busy} onChange={(e) => setRecipeChoice(e.target.value)}>
+            <option value="" disabled>Choose results…</option>
+            <option value="raw">Raw drill data only</option>
+            {recipes.map((r) => <option key={r.name} value={`r:${r.name}`}>{r.name} · v{r.version}</option>)}
+          </select>
+        </div>
+        <p className="small-note">Loading replaces staged files. Your current plan stays unchanged until you build it. Recipe results are calculated from property data; they do not establish publication or QP approval.</p>
+        <button type="button" className="btn primary" disabled={busy || !recipeChoice} onClick={loadProperty}>Load property data</button>
+      </div>}
+      {(recipes !== null || tables.length > 0 || busy) && <button type="button" className="link-btn" onClick={cancelStaged}>Cancel staged import</button>}
+      {stagedSource && <p className="small-note">Property data is staged for this plan. Adding uploaded files replaces this staged import.</p>}
       {tables.length > 0 && (
         <div className="control-grid">
           {tables.map((t, i) => (
             <div className="control-row" key={t.name}>
               <label htmlFor={`dp-kind-${i}`}>{t.name} ({fmtN(t.rows.length)} rows)</label>
-              <select id={`dp-kind-${i}`} value={t.kind} onChange={(e) => setTables((prev) => prev.map((x) => (x === t ? { ...x, kind: e.target.value } : x)))}>
+              <select id={`dp-kind-${i}`} value={t.kind} disabled={busy || !!stagedSource} onChange={(e) => setTables((prev) => prev.map((x) => (x === t ? { ...x, kind: e.target.value } : x)))}>
                 {Object.entries(KINDS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select>
             </div>
@@ -176,7 +235,8 @@ export default function DrillPlanControls({ plan, onChange, onReplace, map, prop
 
   return (
     <div className="drill-plan-controls" data-testid="drill-plan-controls">
-      <div className="feature-chip">{plan.holes.length} holes · {fmtN(n)} assay intervals · {(plan.results || []).filter(isApproved).length} published results{plan.crs && plan.crs !== 'EPSG:4326' ? ` · ${plan.crs}` : ''}</div>
+      <div className="feature-chip">{plan.holes.length} holes · {fmtN(n)} assay intervals · {(plan.results || []).filter(isApproved).length} {plan.drillSource?.resultsRecipe ? 'calculated' : 'published'} results{plan.crs && plan.crs !== 'EPSG:4326' ? ` · ${plan.crs}` : ''}</div>
+      {plan.drillSource?.resultsRecipe && <p className="small-note">Calculated with saved property recipe {plan.drillSource.resultsRecipe.name} v{plan.drillSource.resultsRecipe.version}. Reload property data and rebuild to use newer results.</p>}
       {files}
       <div className="button-row">
         <button type="button" className="secondary-btn" disabled={!map} onClick={() => fitPlan(map, plan, zones, layout)}>Fit to plan</button>
