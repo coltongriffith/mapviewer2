@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { xlsxFixture } from '../tests/fixtures/xlsx.js';
 import readExcelFile from 'read-excel-file/node';
+import { unzipSync } from 'fflate';
 
 // Company workspaces against an in-memory Supabase (auth, REST and RPC are
 // mocked; no request leaves the browser). Needs the configured client build
@@ -359,6 +360,54 @@ const assayRows = (hole) => Array.from({ length: 100 }, (_, i) => {
 const RESULT = '122.0 m @ 0.61% CuEq (0.45% Cu, 0.21 g/t Au) from 34.0 m, incl. 18.0 m @ 1.32% CuEq';
 const withAssays = (fake) => { fake.drill = { ...fake.drill, assays: 200, holes: 12, elements: ['Au', 'Cu'] }; fake.assayRows = [...assayRows('R-10'), ...assayRows('R-2')]; };
 
+test('drill results: wide multipage images and PDF preserve the last hole and notes', async ({ page }, testInfo) => {
+  const fake = await fakeSupabase(page, { role: 'editor' });
+  withAssays(fake);
+  // Synthetic rows only. All assay columns must appear across labelled page groups.
+  fake.assayRows = Array.from({ length: 60 }, (_, i) => ({ ...assayRows('SYNTHETIC')[0], hole_id: `SYNTHETIC-${String(i).padStart(3, '0')}`, values: { Cu: 1, Au: 1, Ag: 1, Zn: 1, Pb: 1, Ni: 1, Co: 1, Mo: 1 }, units: { Cu: '%', Au: 'g/t', Ag: 'g/t', Zn: '%', Pb: '%', Ni: '%', Co: '%', Mo: '%' } }));
+  await page.addInitScript(() => {
+    const original = CanvasRenderingContext2D.prototype.fillText;
+    window.__tablePaint = [];
+    CanvasRenderingContext2D.prototype.fillText = function(text, ...args) { window.__tablePaint.push(text); return original.call(this, text, ...args); };
+  });
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold');
+  await page.getByRole('tab', { name: 'Drill data' }).click();
+  const region = page.getByRole('region', { name: 'Results' });
+  await region.getByRole('button', { name: 'Show results' }).click();
+  await region.getByLabel('True-width note').fill('Synthetic fixture only. ' + 'True widths are unknown. '.repeat(30));
+  await region.getByRole('button', { name: 'Save recipe' }).click();
+  await expect(region.getByRole('status')).toHaveText('Saved Default, version 1.');
+  let count;
+  for (const format of ['png', 'pdf']) {
+    await page.evaluate(() => { window.__tablePaint = []; });
+    await region.getByLabel('Table format').selectOption(format);
+    const pending = page.waitForEvent('download');
+    await region.getByRole('button', { name: `Download ${format.toUpperCase()}` }).click();
+    const file = await pending;
+    const chunks = [];
+    for await (const chunk of await file.createReadStream()) chunks.push(chunk);
+    const bytes = Buffer.concat(chunks);
+    if (format === 'png') {
+      expect(file.suggestedFilename()).toBe('rails-copper-gold-results.zip');
+      const files = unzipSync(bytes), names = Object.keys(files).sort(); count = names.length;
+      expect(count).toBeGreaterThan(3);
+      expect(names[0]).toBe('results-page-001.png');
+      expect(names.at(-1)).toBe(`results-page-${String(count).padStart(3, '0')}.png`);
+      for (const content of Object.values(files)) {
+        const data = Buffer.from(content);
+        expect([data.readUInt32BE(16), data.readUInt32BE(20)]).toEqual([1584, 1224]);
+      }
+    } else expect(bytes.toString('latin1').match(/\/Type \/Page\b/g)).toHaveLength(count);
+    await file.saveAs(testInfo.outputPath(`results-wide.${format === 'png' ? 'zip' : 'pdf'}`));
+    const painted = await page.evaluate(() => window.__tablePaint);
+    expect(painted).toContain('Saved recipe: Default, version 1. Calculated from current assays.');
+    for (let i = 0; i < 60; i++) expect(painted.join('')).toContain(`SYNTHETIC-${String(i).padStart(3, '0')}`);
+    expect(painted.join('')).toContain(('Synthetic fixture only. ' + 'True widths are unknown. '.repeat(30)).trim());
+    expect(painted.join('')).toContain('column group 2 of 2');
+    expect(painted.join('')).toContain('Mo (%)');
+  }
+});
+
 test('drill results: the recipe, the release table, copies and downloads, then saved for 3D', async ({ page }, testInfo) => {
   const fake = await fakeSupabase(page, { role: 'editor' });
   withAssays(fake);
@@ -414,6 +463,35 @@ test('drill results: the recipe, the release table, copies and downloads, then s
     return sheet.data;
   };
   expect((await downloadExcel())[1][0]).toBe('Unsaved recipe: Default. Calculated from current assays.');
+
+  // Actual image/PDF download, using the same formatted result and recipe notes.
+  await page.evaluate(() => {
+    const original = CanvasRenderingContext2D.prototype.fillText;
+    window.__tablePaint = [];
+    CanvasRenderingContext2D.prototype.fillText = function(text, ...args) { window.__tablePaint.push(text); return original.call(this, text, ...args); };
+  });
+  for (const format of ['png', 'pdf']) {
+    await page.evaluate(() => { window.__tablePaint = []; });
+    await region.getByLabel('Table format').selectOption(format);
+    const pending = page.waitForEvent('download');
+    await region.getByRole('button', { name: `Download ${format.toUpperCase()}` }).click();
+    const image = await pending;
+    expect(image.suggestedFilename()).toBe(`rails-copper-gold-results.${format}`);
+    const chunks = [];
+    for await (const chunk of await image.createReadStream()) chunks.push(chunk);
+    const bytes = Buffer.concat(chunks);
+    if (format === 'png') {
+      expect(bytes.subarray(1, 4).toString()).toBe('PNG');
+      expect([bytes.readUInt32BE(16), bytes.readUInt32BE(20)]).toEqual([1584, 1224]);
+    } else {
+      expect(bytes.subarray(0, 5).toString()).toBe('%PDF-');
+      expect(bytes.toString('latin1').match(/\/Type \/Page\b/g)).toHaveLength(1);
+    }
+    await image.saveAs(testInfo.outputPath(`results-draft.${format}`));
+    const painted = await page.evaluate(() => window.__tablePaint);
+    expect(painted.join('')).toContain(RESULT.split(', incl.')[0]);
+    expect(painted).toEqual(expect.arrayContaining(['R-2', 'incl.', '34.0', '156.0', '122.0', '0.61', 'True widths are not yet known.', 'Unsaved recipe: Default. Calculated from current assays.']));
+  }
 
   await region.getByLabel('Table format').selectOption('html');
   await region.getByRole('button', { name: 'Copy formatted table' }).click();
