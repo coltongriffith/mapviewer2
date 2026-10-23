@@ -248,6 +248,9 @@ const BUDGETS = {
   // The shared loader (~1.0 kB) and staged 2D recipe picker (~1.3 kB added) are
   // lazy; 3D-only picker/update code is counted separately below. Initial
   // homepage, editor and claims route budgets stay unchanged.
+  // 1012.0 → 1012.9 (P2-7 HTML table, measured 1012.6): escaped standalone
+  // table, provenance/notes and rich clipboard support in the lazy ResultsPanel.
+  // No initial-route or 3D budget change; no additional dependency.
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
@@ -293,6 +296,7 @@ const BUDGETS = {
   // 940.9 → 957.8 (measured 957.5): Excel import, as totalAuthJsGzipKb above.
   // 940.9 → 944.8 (P2-8, measured 944.6): the same lazy property recipe path
   // in the unconfigured build. Its initial route budgets also stay unchanged.
+  // 944.8 → 945.9 (P2-7 HTML table, measured 945.6): same lazy results export.
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the
   // totals above. /3d carries three.js (~109 kB gzip) and its editor.

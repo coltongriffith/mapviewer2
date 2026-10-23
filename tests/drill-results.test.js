@@ -10,6 +10,7 @@ import * as threeDIntercepts from '../src/three-d/intercepts.js';
 import * as threeDEq from '../src/three-d/metal-eq.js';
 import { readResults, pubCols, pubCallouts, pubLines, headline } from '../src/three-d/published-results.js';
 import { matchCols } from '../src/three-d/roles.js';
+import { resultsTableDocument } from '../shared/drillResultsHtml.js';
 
 // The property's results calculator (shared/drillResults.js): the drill database's current assays, one
 // recipe, the news-release table, and the same results as /3d's published-results records.
@@ -249,6 +250,61 @@ describe('the published results for /3d', () => {
     const cards = pubCallouts(recs, [{ id: 'H-1', len: 13 }]);
     expect(cards.map((c) => { const l = pubLines(c); return l.l2 ? `${l.l1}${l.l1b}, ${l.l2}` : l.l1 + l.l1b; })).toEqual(split.results.map((x) => x.text));
     expect(split.results.map((x) => x.text)).toEqual(['1.0 m @ 0.30% Cu from 0.0 m', '6.0 m @ 0.57% Cu from 7.0 m, incl. 1.0 m @ 1.10% Cu; incl. 1.0 m @ 1.10% Cu']);
+  });
+});
+
+describe('the portable HTML results table', () => {
+  const out = computeResults(textbookHole(), RECIPE);
+  const options = { propertyName: 'Example property', recipeName: 'Release', recipeVersion: 3, unsaved: false };
+  const parse = (html) => new DOMParser().parseFromString(html, 'text/html');
+
+  it('preserves every canonical cell, incl. row and figure interval wording without recalculating', () => {
+    const doc = parse(resultsTableDocument(out, RECIPE, options).html);
+    const actual = [...doc.querySelectorAll('tbody tr')].map((tr) => [...tr.cells].map((c) => c.textContent));
+    expect(actual).toEqual(tableRows(out.results, out.columns).slice(1));
+    expect(actual[0]).toEqual(['RC-24-001', '', '34.0', '156.0', '122.0', '0.61', '0.45', '0.21', out.results[0].line]);
+    expect(actual[1][0]).toBe('RC-24-001');
+    expect(actual[1][1]).toBe('incl.');
+    const published = toPublishedRecords(out.results, out.columns, 'test');
+    expect(actual.map((r) => r.at(-1))).toEqual(published.map((r, i) => `${i ? 'incl. ' : ''}${r.approvedText}`));
+    expect([...doc.querySelectorAll('th')].map((th) => th.textContent)).toEqual(['Hole ID', 'Type', 'From (m)', 'To (m)', 'Length (m)', 'CuEq (%)', 'Cu (%)', 'Au (g/t)', 'Interval']);
+  });
+
+  it('carries the exact recipe notes, provenance and limitations into HTML and plain clipboard text', () => {
+    const warnings = ['Incomplete assay load: only the first 200,000 assays are included.'];
+    const limited = { ...out, problems: ['An interval was skipped.'] };
+    const file = resultsTableDocument(limited, RECIPE, { ...options, warnings });
+    const doc = parse(file.html);
+    expect([...doc.querySelectorAll('li')].map((li) => li.textContent)).toEqual([...limited.problems, ...warnings, ...notes(RECIPE, out.eq)]);
+    expect(doc.body.textContent).toContain('Saved recipe: Release, version 3. Calculated from current assays.');
+    for (const note of [...limited.problems, ...warnings, ...notes(RECIPE, out.eq)]) expect(file.text).toContain(note);
+    expect(file.text).toContain('RC-24-001\tincl.\t80.0\t98.0\t18.0\t1.32');
+    expect(file.text).toContain('Saved recipe: Release, version 3.');
+  });
+
+  it('does not label unsaved edits as the saved recipe version', () => {
+    const file = resultsTableDocument(out, RECIPE, { ...options, unsaved: true });
+    expect(parse(file.html).body.textContent).toContain('Unsaved recipe: Release. Calculated from current assays.');
+    expect(file.text).not.toContain('version 3');
+    expect(file.html).not.toContain('Saved recipe:');
+    expect(resultsTableDocument(out, RECIPE).text).toContain('Unsaved recipe: Default.');
+  });
+
+  it('escapes user content in metadata, cells, interval wording, warnings and recipe notes', () => {
+    const attack = '"><img src=x onerror="alert(1)"><script>alert(2)</script>&\'';
+    const recipe = { ...RECIPE, trueWidth: attack };
+    const malicious = computeResults(textbookHole(attack), recipe);
+    // Include a literal markup string in a formatted cell as an additional boundary check.
+    malicious.results[0].cells.Cu = attack;
+    malicious.results[0].line = attack;
+    const file = resultsTableDocument(malicious, recipe, { propertyName: attack, recipeName: attack, warnings: [attack] });
+    const doc = parse(file.html);
+    expect(doc.querySelector('script,img,iframe,link,object')).toBeNull();
+    expect(doc.querySelector('[onerror]')).toBeNull();
+    expect(doc.title).toBe(`${attack} — drill results`);
+    expect(doc.querySelector('tbody td').textContent).toBe(attack);
+    expect([...doc.querySelectorAll('li')].at(-1).textContent).toBe(attack);
+    expect(file.text).toContain(attack); // plain text is not interpreted as HTML
   });
 });
 
