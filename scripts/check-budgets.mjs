@@ -240,7 +240,9 @@ const BUDGETS = {
   // point layers, the accepted finds on the preview map, tracing from the upload's own colours; +3.97 kB). App, the
   // editor's initial JS and the exporters are unchanged.
   // Combined Tower acceptance: export/API plus figure import; measured 1053.0 configured.
-  totalAuthJsGzipKb: 1053.3,
+  // Combined Tower + Phase 2 release: fonts, XLSX, recipes, cursors and HTML tables;
+  // measured 1073.4 configured. Feature costs/reasons are retained below.
+  totalAuthJsGzipKb: 1073.7,
   // 1009.4 → 1026.3 (measured 1026.0): lazy XLSX reader (~13.8 KiB), sheet/header preview
   // (~1.1 KiB), import wiring and numeric-format handling. Shared fflate adds ~1.2 KiB
   // for async ZIP workers; it remains one copy with the existing draft compression.
@@ -292,7 +294,8 @@ const BUDGETS = {
   // 940.9 → 953.4 (Oct 2026, measured 953.1, +12.3 kB over main's 940.8): import a company figure, lines and points, as
   // totalAuthJsGzipKb above.
   // Combined Tower acceptance: same lazy features together; measured 984.6 plain.
-  totalJsGzipKb: 984.9,
+  // Same combined release, measured 1006.3 plain; mostly lazy feature chunks.
+  totalJsGzipKb: 1006.6,
   // 940.9 → 957.8 (measured 957.5): Excel import, as totalAuthJsGzipKb above.
   // 940.9 → 944.8 (P2-8, measured 944.6): the same lazy property recipe path
   // in the unconfigured build. Its initial route budgets also stay unchanged.
@@ -533,7 +536,8 @@ const BUDGETS = {
   // 161.2 → 161.3: the existing configured bundle is 161.187 KiB; XLSX shared-import
   // hash churn moves it to 161.194 locally and 161.201 with CI's commit stamp. Keep 0.1 KiB
   // of headroom for those hashes; no new /3d module or XLSX reader enters this graph.
-  threeDLazyJsGzipKb: 161.3,
+  // Recipe/cursor composition plus result-ownership guard: 162.5 plain / 162.7 configured.
+  threeDLazyJsGzipKb: 163.0,
   // 161.2 → 162.7 (P2-8, measured 162.2 plain / 162.4 configured): explicit
   // recipe selection, snapshot ownership, collision/edited-wording guards and
   // recipe-only update notices in property-data. No eager 3D page growth.
@@ -566,7 +570,8 @@ const BUDGETS = {
   // and MapCanvas +0.31 kB (a styled layer's paths kept unseen for clicks, and the lazy hook to its canvases).
   // Unchanged by the 2D export package (measured 341.3, as on main): App as maxJsChunkGzipKb above.
   // 341.5 to 342.6 (Oct 2026): 2D API bridge and accessible control names; API/help load after editor startup; measured 342.3 configured.
-  editorAuthJsGzipKb: 342.9,
+  // Combined API bridge + shared XLSX compression support, measured 343.8 configured.
+  editorAuthJsGzipKb: 344.1,
   // Excel import: shared fflate's async ZIP worker support adds ~1.2 KiB (342.5 measured).
   // The XLSX parser and sheet picker remain lazy; the homepage does not load compression.
   // 270 → 271.0 (Oct 2026, production errors, measured 270.7, 269.6 on main): the same as editorAuthJsGzipKb above.
@@ -577,11 +582,13 @@ const BUDGETS = {
   // and geology styling, as editorAuthJsGzipKb above.
   // Unchanged by the 2D export package (measured 273.2, 273.2 on main): as editorAuthJsGzipKb above.
   // 273.4 to 274.5 (Oct 2026): Same bridge and control names; measured 274.2 plain.
-  editorJsGzipKb: 274.9,
+  // Same combined bridge/compression support, measured 275.7 plain.
+  editorJsGzipKb: 276.0,
   // 355 to 355.3 (Oct 2026): claims shares the editor API bridge/control names; measured 355.0 in CI.
   // Same shared compression increase as above (274.4 measured).
   // Claims also restores drafts through shared compression (355.3 measured).
-  claimsAuthJsGzipKb: 355.6,
+  // Claims shares that editor/compression graph, measured 356.5 configured.
+  claimsAuthJsGzipKb: 356.8,
   claimsJsGzipKb: 290,
   // Stylesheet, gzipped. Today ~29 kB.
   maxCssGzipKb: 40,

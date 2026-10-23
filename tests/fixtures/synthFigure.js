@@ -96,4 +96,3 @@ export function text(img, str, x, y, cellPx, colour) {
 }
 
 export const BLACK = [20, 20, 24], GOLD = [242, 184, 36], WHITE = [255, 255, 255], GREY = [150, 150, 160];
-
