@@ -55,9 +55,48 @@ These are one-run diagnostic measurements, not a formal throughput benchmark.
 
 ## Remaining P2-9 acceptance
 
-Measure `/3d` parsing, minimum-curvature paths and rendering in a real browser
-with the same scale. The current script measures the property data loader and
-intercept calculation in Node; it does not prove that the interactive figure
-loads successfully or remains responsive. Any query optimization must retain
+For browser measurements, build with the placeholder Supabase client and serve
+it locally. In PowerShell:
+
+```powershell
+$env:VITE_SUPABASE_URL='https://example.supabase.co'
+$env:VITE_SUPABASE_ANON_KEY='build-check-placeholder'
+npx vite build --outDir dist-auth-check
+$env:E2E_DIST='dist-auth-check'
+$env:PORT='4197'
+node scripts/serve-like-vercel.mjs
+```
+
+In a second terminal, from the repository root:
+
+```sh
+node scripts/benchmark-drill-browser.mjs --smoke --out=browser-smoke.json
+node scripts/benchmark-drill-browser.mjs --out=browser-scale.json
+```
+
+Only a loopback HTTP server is accepted. The benchmark mocks the placeholder
+Supabase host and blocks other external origins. Both harnesses use the same
+deterministic row generator. Browser reports record complete page counts,
+scene counts, load/settle time, a camera move with two animation frames and
+observed long tasks. A successful run also saves `<report>.png`. The run is
+bounded to three minutes, uses desktop Chromium with software WebGL, and does
+not measure hosted SQL/network time or mobile performance. Failure details are
+saved without claiming the workload passed.
+
+The first full browser run on main failed after fetching every row with
+`Maximum call stack size exceeded`. Scene setup spread all 202,000 path
+elevations into a single `Math.min` call. A streaming minimum removes this
+argument-count limit without changing the elevation calculation. Completion
+and responsiveness of the full scene still need verification after that fix.
+The patched 20-hole smoke case passes. Two full-scale attempts exceeded the
+120-second import wait under SwiftShader. At the second timeout, diagnostic
+capture found the import button enabled and the status reporting all 2,000
+holes and 200,000 assays loaded, but the run did not reach its scene-count and
+camera assertions. Observed long tasks included 31.8, 34.9, 37.1 and 21.0 seconds.
+This is evidence of prolonged UI blocking, not a successful performance gate.
+Profile the repeated scene work before choosing an optimization or extending
+timeouts. The reports retain the original failures.
+
+Any query optimization must retain
 stable complete pagination and the existing import-change retry, with regression
 checks for repeated hole IDs, interval boundaries and access controls.

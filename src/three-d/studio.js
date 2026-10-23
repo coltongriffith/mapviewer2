@@ -451,7 +451,10 @@ function rebuildScene(keepCam) {
     holes.forEach((h) => { const d = surf(h.c.x, h.c.y) - h.c.z; h.path.forEach((p) => { p.z += d; }); h.c.z += d; });
     if (Math.abs(med) >= 1) terrainNote = `Holes hung from the terrain: collars moved ${med > 0 ? '+' : '−'}${Math.round(Math.abs(med))} m (median) to the DEM surface.`;
   }
-  zmin = Math.min(...holes.flatMap((h) => h.path.map((p) => p.z)));
+  // Large properties can have hundreds of thousands of path vertices. A
+  // spread call exceeds the engine's argument limit before the scene exists.
+  zmin = Infinity;
+  for (const h of holes) for (const p of h.path) zmin = Math.min(zmin, p.z);
   let zmax = -Infinity; for (const v of grid) zmax = Math.max(zmax, v);
   B.z0 = Number.isFinite(E.z0) && E.z0 < zmax - 10 ? E.z0 : zmin - Math.max(25, 0.05 * diag);
   const zref = (zmax + B.z0) / 2;

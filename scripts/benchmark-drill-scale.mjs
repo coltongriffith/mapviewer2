@@ -7,6 +7,7 @@ import { performance } from 'node:perf_hooks';
 import { createWorkspaceDb, readMigration } from '../tests/fixtures/workspace-db.js';
 import { pull } from '../src/three-d/property-data.js';
 import { computeResults, defaultRecipe } from '../shared/drillResults.js';
+import { scaleCounts, scaleRow } from './fixtures/drill-scale-data.mjs';
 
 const args = process.argv.slice(2);
 assert(args.every((a) => a === '--smoke' || a.startsWith('--out=')), 'Only --smoke and --out=report.json are supported; remote connections are not supported.');
@@ -14,7 +15,6 @@ const holes = args.includes('--smoke') ? 20 : 2000;
 const out = args.find((a) => a.startsWith('--out='))?.slice(6);
 const OWNER = '00000000-0000-4000-8000-000000000001';
 const EDITOR = '00000000-0000-4000-8000-000000000002';
-const holeId = (n) => `SYNTHETIC-${String(n + 1).padStart(4, '0')}`;
 const measurements = [];
 const report = {
   schemaVersion: 1, startedAt: new Date().toISOString(), synthetic: true,
@@ -23,7 +23,7 @@ const report = {
   limits: { importBatchRows: 20000, importReferenceMs: 8000 },
   scope: 'SQL import/summary, actual paginated property loader and CSV conversion, Node intercept calculation',
   limitations: ['PGlite wall times are not hosted Postgres or network timings.', 'The 8-second comparison is a diagnostic reference, not enforcement of a server timeout.', 'Does not measure browser parsing, desurvey, WebGL rendering or device responsiveness.'],
-  expected: { collars: holes, surveys: holes * 10, assays: holes * 100 }, measurements,
+  expected: scaleCounts(holes), measurements,
 };
 async function timed(stage, run, detail = {}) {
   const start = performance.now();
@@ -87,15 +87,10 @@ try {
   const org = (await val(OWNER, "select public.create_organization('SYNTHETIC scale benchmark')")).id;
   await su("insert into public.organization_members (org_id,user_id,role) values ($1,$2,'editor')", [org, EDITOR]);
   const property = (await one(EDITOR, "insert into public.properties (org_id,name) values ($1,'SYNTHETIC positions - not exploration data') returning id", [org])).id;
-  const make = {
-    collars: (i) => ({ hole_id: holeId(i), x: 500000 + (i % 50) * 20, y: 5500000 + Math.floor(i / 50) * 20, z: 1000, crs: 'EPSG:32610', azimuth: 90, dip: -60, depth: 200 }),
-    surveys: (i) => ({ hole_id: holeId(Math.floor(i / 10)), depth_m: (i % 10) * 20, azimuth: 90 + (i % 10), dip: -60 }),
-    assays: (i) => ({ hole_id: holeId(Math.floor(i / 100)), from_m: (i % 100) * 2, to_m: (i % 100) * 2 + 2, values: { Au: ((i % 10) + 1) / 10 }, units: { Au: 'g/t' }, sample_id: `SYN-${i}` }),
-  };
   for (const [kind, count] of Object.entries(report.expected)) {
     for (let start = 0; start < count; start += 20000) {
       const size = Math.min(20000, count - start);
-      const rows = JSON.stringify(Array.from({ length: size }, (_, j) => make[kind](start + j)));
+      const rows = JSON.stringify(Array.from({ length: size }, (_, j) => scaleRow[kind](start + j)));
       const result = await timed('import', () => val(EDITOR, 'select public.drill_import_batch($1,$2,$3::jsonb,$4::jsonb,$5,$6,$7)',
         [property, kind, rows, '{}', `SYNTHETIC-${kind}-${start}.csv`, false, null]), { kind, offset: start, rows: size });
       assert.equal(result.committed, true); assert.equal(result.rows_written, size); assert.equal(result.new, size);
