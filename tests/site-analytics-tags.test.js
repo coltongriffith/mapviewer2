@@ -69,3 +69,29 @@ describe('Ahrefs Web Analytics', () => {
     expect(directive('connect-src')).toContain('https://analytics.ahrefs.com');
   });
 });
+
+describe('Google Analytics 4', () => {
+  const pages = ['index.html', '3d/index.html', ...htmlFiles('public')];
+
+  it('is configured in the shared gtag init, beside Google Ads', () => {
+    const init = readFileSync('public/gtag-init.js', 'utf8');
+    expect(init).toContain("gtag('config', 'AW-18358773663');");
+    expect(init).toContain("gtag('config', 'G-6SR34P1CR7');");
+  });
+
+  it('runs on every page that loads gtag.js', () => {
+    for (const file of pages) {
+      const html = readFileSync(file, 'utf8');
+      if (!html.includes('googletagmanager.com/gtag/js')) continue;
+      expect(html, `${file} loads the gtag init`).toContain('/gtag-init.js');
+    }
+  });
+
+  it('can send hits under the Content-Security-Policy', () => {
+    const vercel = JSON.parse(readFileSync('vercel.json', 'utf8'));
+    for (const csp of vercel.headers.flatMap((h) => h.headers).filter((h) => h.key === 'Content-Security-Policy').map((h) => h.value)) {
+      const connect = csp.split(';').map((d) => d.trim()).find((d) => d.startsWith('connect-src ')).split(/\s+/);
+      expect(connect).toEqual(expect.arrayContaining(['https://www.googletagmanager.com', 'https://*.google-analytics.com', 'https://*.analytics.google.com']));
+    }
+  });
+});
