@@ -188,7 +188,12 @@ begin
       raise exception 'CRM_REVISION_IMMUTABLE: use a new revision';
     end if;
     if old_id is null then fresh := fresh+1;
-    elsif old_record = r then unchanged := unchanged+1;
+    elsif old_record = r then
+      unchanged := unchanged+1;
+      -- No row is written, so this batch must not acquire its dependencies.
+      -- Existing parent/CRM version references and their original batch remain
+      -- authoritative, even if a newer parent is now current.
+      continue;
     else changed := changed+1; dependencies := array_append(dependencies,old_batch); end if;
     if p_kind = 'samples' and r ? 'parent_sample_id' then
       -- Parent must already be imported; no order-dependent/circular pairing.
