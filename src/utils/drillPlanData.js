@@ -168,7 +168,7 @@ const settings = (prev) => {
  * prev: the plan being replaced, whose choices (colours, bins, what shows, positions, cards) are kept.
  * @returns {Promise<{ plan, notes: string[], problems: string[] }>}
  */
-export async function buildPlan(tables, { crs = null, prev = null } = {}) {
+export async function buildPlan(tables, { crs = null, prev = null, drillSource = null } = {}) {
   const problems = [], notes = [];
   const collars = new Map(), surveys = new Map();
   let assays = { elements: [], rows: new Map() }, results = [];
@@ -242,6 +242,10 @@ export async function buildPlan(tables, { crs = null, prev = null } = {}) {
     results,
     files: tables.filter((t) => t.kind !== 'ignore').map((t) => t.name).slice(0, 12),
   };
+  // A rebuilt plan only claims provenance for the batch actually being built.
+  // Uploaded files must not inherit a previous property's saved-recipe label.
+  if (drillSource) plan.drillSource = structuredClone(drillSource);
+  else delete plan.drillSource;
   // A hole's own colour is kept only while the hole is on the plan.
   if (prev?.holes) plan.holes.forEach((h) => { const o = prev.holes.find((p) => key(p.id) === key(h.id)); if (o?.color) h.color = o.color; });
   return { plan, notes, problems };

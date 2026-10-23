@@ -244,6 +244,10 @@ const BUDGETS = {
   // 1009.4 → 1026.3 (measured 1026.0): lazy XLSX reader (~13.8 KiB), sheet/header preview
   // (~1.1 KiB), import wiring and numeric-format handling. Shared fflate adds ~1.2 KiB
   // for async ZIP workers; it remains one copy with the existing draft compression.
+  // 1009.4 → 1012.0 (P2-8, measured 1011.7): opt-in property recipe snapshots.
+  // The shared loader (~1.0 kB) and staged 2D recipe picker (~1.3 kB added) are
+  // lazy; 3D-only picker/update code is counted separately below. Initial
+  // homepage, editor and claims route budgets stay unchanged.
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
@@ -287,6 +291,8 @@ const BUDGETS = {
   // Combined Tower acceptance: same lazy features together; measured 984.6 plain.
   totalJsGzipKb: 984.9,
   // 940.9 → 957.8 (measured 957.5): Excel import, as totalAuthJsGzipKb above.
+  // 940.9 → 944.8 (P2-8, measured 944.6): the same lazy property recipe path
+  // in the unconfigured build. Its initial route budgets also stay unchanged.
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the
   // totals above. /3d carries three.js (~109 kB gzip) and its editor.
@@ -524,6 +530,9 @@ const BUDGETS = {
   // hash churn moves it to 161.194 locally and 161.201 with CI's commit stamp. Keep 0.1 KiB
   // of headroom for those hashes; no new /3d module or XLSX reader enters this graph.
   threeDLazyJsGzipKb: 161.3,
+  // 161.2 → 162.7 (P2-8, measured 162.2 plain / 162.4 configured): explicit
+  // recipe selection, snapshot ownership, collision/edited-wording guards and
+  // recipe-only update notices in property-data. No eager 3D page growth.
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.
