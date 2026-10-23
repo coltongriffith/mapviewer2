@@ -42,11 +42,11 @@ export function recipeChange(ref, recipes) {
  * "approved" flag is a parser convention, not publication or QP approval.
  * No recipe is created, saved or silently substituted for an explicit choice.
  */
-export async function pullPropertyResults(sb, prop, { recipeName, onProgress = () => {}, tries = 2 } = {}) {
-  if (recipeName === null) return pull(sb, prop, onProgress, tries);
+export async function pullPropertyResults(sb, prop, { recipeName, onProgress = () => {}, tries = 2, geologySource } = {}) {
+  if (recipeName === null) return pull(sb, prop, onProgress, tries, { geologySource });
   for (let attempt = 0; attempt < tries; attempt++) {
     const selected = selectRecipe(await listRecipes(sb, prop.id), recipeName);
-    const loaded = await pull(sb, prop, onProgress, tries);
+    const loaded = await pull(sb, prop, onProgress, tries, { geologySource });
     const after = selectRecipe(await listRecipes(sb, prop.id), recipeName);
     // Recipes are versioned by name. Re-read rows as well if the chosen version
     // changed while pages were loading; never attach new metadata to old results.
