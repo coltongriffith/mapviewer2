@@ -401,7 +401,9 @@ export function createApi(getBridge, win = typeof window !== 'undefined' ? windo
   async function saved(run) {
     const b = ed(), id0 = b.projectId, name0 = b.projectName;
     const out = await run(b);
-    if (out?.status === 'error') fail(`Saving failed: ${out.err?.message || 'unknown error'}.`);
+    if (out?.status === 'error' || out?.status === 'stale-error') fail(`Project action failed: ${out.err?.message || 'unknown error'}.`);
+    if (out?.status === 'stale') fail('The workspace changed before the project action finished. Check the current map before retrying.');
+    if (!['saved', 'saved-but-dirty', 'opened'].includes(out?.status)) fail('The project action did not confirm success.');
     for (let i = 0; i < 40; i += 1) { await pause(25); const n = B(); if (n.projectId !== id0 || n.projectName !== name0 || !n.isDirty) break; }
     await pause(30);
     return getState();

@@ -46,7 +46,7 @@ function tilePng(seed) {
 }
 
 // Auth, plan and the projects table in memory; nothing leaves the browser.
-async function fakeSupabase(page) {
+async function fakeSupabase(page, { signedIn = true } = {}) {
   const db = { rows: [], creates: [], updates: [], dialogs: [] };
   let next = 1;
   await page.route('**/api/track', (route) => route.fulfill({ status: 204 }));
@@ -57,15 +57,18 @@ async function fakeSupabase(page) {
   await page.route('https://example.supabase.co/**', async (route) => {
     const req = route.request(), url = new URL(req.url()), path = url.pathname, fn = path.split('/').pop();
     const json = (body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+    if (!signedIn && path.startsWith('/auth/v1/')) return json({ message: 'Not signed in' }, 401);
     if (path.startsWith('/auth/v1/')) return json(fn === 'user' ? user : fn === 'token' ? session : {});
     if (fn === 'user_plans') return json({ plan: 'pro', source: 'test', status: 'active' });
     if (fn === 'create_cloud_project') {
+      if (db.failCreates) return json({ code: 'P0001', message: 'Project quota reached' }, 409);
       const args = req.postDataJSON(), id = `00000000-0000-4000-8000-${String(next++).padStart(12, '0')}`;
       db.creates.push(args);
       db.rows.unshift({ id, name: args.p_name, payload: args.p_payload, revision: 1, updated_at: new Date().toISOString(), thumbnail: null });
       return json(id);
     }
     if (fn === 'save_cloud_project') {
+      if (db.failSaves) return json({ code: 'XX000', message: 'Save service unavailable' }, 503);
       const args = req.postDataJSON(), row = db.rows.find((r) => r.id === args.p_id);
       db.updates.push(args);
       if (row) Object.assign(row, { name: args.p_name, payload: args.p_payload, revision: row.revision + 1 });
@@ -73,6 +76,7 @@ async function fakeSupabase(page) {
     }
     if (path === '/rest/v1/projects' && req.method() === 'GET') {
       const id = (url.searchParams.get('id') || '').replace(/^eq\./, '');
+      if (id && db.failLoads) return json({ code: 'PGRST116', message: 'Saved map unavailable' }, 406);
       if (id) { const row = db.rows.find((r) => r.id === id); return row ? json(row) : json({ code: 'PGRST116', message: 'no rows' }, 406); }
       return json(db.rows.map(({ payload: _p, ...r }) => r));
     }
@@ -84,13 +88,13 @@ async function fakeSupabase(page) {
   blank.layout = { ...blank.layout, title: 'Untitled map', subtitle: '', footerEnabled: false };
   const draft = JSON.stringify({ schemaVersion: 1, payload: blank, projectId: null, projectName: 'Untitled map' });
   await page.addInitScript(([s, id, d]) => {
-    localStorage.setItem('sb-example-auth-token', JSON.stringify(s));
+    if (s) localStorage.setItem('sb-example-auth-token', JSON.stringify(s));
     localStorage.setItem(`em_migration_v2_${id}`, JSON.stringify({ done: true, projects: {} }));
     if (!sessionStorage.getItem('emap-seeded')) { localStorage.setItem('mapviewer.draft.v1', d); sessionStorage.setItem('emap-seeded', '1'); }
     window.__texts = [];
     const f = CanvasRenderingContext2D.prototype.fillText;
     CanvasRenderingContext2D.prototype.fillText = function (t, ...a) { window.__texts.push(String(t)); return f.call(this, t, ...a); };
-  }, [session, uid, draft]);
+  }, [signedIn ? session : null, uid, draft]);
   // No native dialog may open at any point.
   page.on('dialog', (d) => { db.dialogs.push(d.message()); d.dismiss(); });
   return db;
@@ -246,4 +250,92 @@ test('EMAP builds a Tower Fig 1-like figure, exports PNG and SVG as data, duplic
   expect(await page.evaluate(() => EMAP.newMap().then(() => 'replaced', (e) => e.message))).toMatch(/unsaved changes: EMAP\.save\(\) first, or newMap/);
   expect((await page.evaluate(() => EMAP.listProjects())).map((p) => p.name)).toEqual(expect.arrayContaining(['Rabbit North Fig 1', 'Rabbit North Project (copy)']));
   expect(db.dialogs).toEqual([]);
+});
+
+
+test('EMAP rejects cloud save, copy and open failures even when the current map is clean', async ({ page }) => {
+  const db = await fakeSupabase(page);
+  await page.goto('/?intent=resume');
+  await page.waitForFunction(() => window.EMAP);
+  await page.evaluate(() => EMAP.ready());
+  const original = await page.evaluate(() => EMAP.saveAs('Original'));
+  await expect.poll(() => page.evaluate(() => EMAP.listProjects().length)).toBe(1);
+  expect(original.map.unsaved).toBe(false);
+  db.failCreates = true; db.failSaves = true; db.failLoads = true;
+  for (const action of ['save', 'saveAs', 'duplicate', 'openProject']) {
+    const result = await page.evaluate(async ([method, id]) => {
+      try {
+        const args = method === 'saveAs' ? ['Failed copy'] : method === 'openProject' ? [id] : [];
+        await EMAP[method](...args);
+        return { error: null, map: EMAP.getState().map };
+      } catch (e) { return { error: e.message, map: EMAP.getState().map }; }
+    }, [action, original.map.id]);
+    expect.soft(result.error, action).toContain('failed');
+    expect(result.map).toEqual(original.map);
+  }
+  expect(db.rows).toHaveLength(1);
+  expect(db.dialogs).toEqual([]);
+});
+
+test('EMAP rejects full browser storage, then saves and copies successfully after storage recovers', async ({ page }) => {
+  await fakeSupabase(page, { signedIn: false });
+  await page.goto('/?intent=resume');
+  await page.waitForFunction(() => window.EMAP);
+  await page.evaluate(() => EMAP.ready());
+  const original = await page.evaluate(() => EMAP.saveAs('Local original'));
+  expect(original.map.signedIn).toBe(false);
+  expect(original.map.unsaved).toBe(false);
+  await page.evaluate(() => {
+    const write = Storage.prototype.setItem;
+    window.__restoreStorage = () => { Storage.prototype.setItem = write; };
+    Storage.prototype.setItem = function (key, value) {
+      if (key.startsWith('mapviewer.projects.v1')) throw new DOMException('Browser storage is full', 'QuotaExceededError');
+      return write.call(this, key, value);
+    };
+  });
+  for (const action of ['save', 'saveAs', 'duplicate']) {
+    const result = await page.evaluate(async (method) => {
+      try { await EMAP[method](...(method === 'saveAs' ? ['Failed local copy'] : [])); return { error: null }; }
+      catch (e) { return { error: e.message, map: EMAP.getState().map }; }
+    }, action);
+    expect.soft(result.error, action).toContain('failed');
+    expect(result.map).toEqual(original.map);
+  }
+  await page.evaluate(() => window.__restoreStorage());
+  const saved = await page.evaluate(() => EMAP.save());
+  expect(saved.map.id).toBe(original.map.id);
+  const copy = await page.evaluate(() => EMAP.duplicate());
+  expect(copy.map.id).not.toBe(original.map.id);
+  expect(copy.map.unsaved).toBe(false);
+  const reopened = await page.evaluate((id) => EMAP.openProject(id), original.map.id);
+  expect(reopened.map.id).toBe(original.map.id);
+});
+
+test('EMAP PNG dimensions preserve the composition and reject an incompatible height', async ({ page }) => {
+  await fakeSupabase(page);
+  await page.goto('/?intent=resume');
+  await page.waitForFunction(() => window.EMAP);
+  await page.evaluate(() => EMAP.ready());
+  await page.evaluate(() => EMAP.setBasemap('blank'));
+  const result = await page.evaluate(async () => {
+    const size = async (options) => {
+      const { data } = await EMAP.exportPNG({ as: 'blob', band: false, draft: false, ...options });
+      const bitmap = await createImageBitmap(data);
+      const dimensions = { width: bitmap.width, height: bitmap.height };
+      bitmap.close();
+      return dimensions;
+    };
+    const native = await size({ pixelRatio: 1 });
+    const width = 800, height = Math.round(native.height * width / native.width);
+    let error = null;
+    try { await size({ width, height: height + 150 }); } catch (e) { error = e.message; }
+    const actual = await size({ width, height });
+    const overlapping = await Promise.allSettled([size({ width, height }), size({ width, height })]);
+    return { expected: { width, height }, actual, error,
+      overlapping: overlapping.map((r) => r.status === 'fulfilled' ? { size: r.value } : { error: r.reason.message }) };
+  });
+  expect(result.error).toContain('must preserve the current map');
+  expect(result.error).toContain(`needs height ${result.expected.height}`);
+  expect(result.actual).toEqual(result.expected);
+  expect(result.overlapping).toEqual([{ size: result.expected }, { error: 'An export is already running: wait for it to finish.' }]);
 });

@@ -200,6 +200,9 @@ Example:
                                   map.png (basemap and data only), annotations.png (transparent; stacks
                                   over map.png), annotations.svg (svg: true, where SVG is allowed) and
                                   layers.json
+  PNG width and height (px) must preserve the current map's aspect ratio; incompatible sizes reject
+  with the matching height. To change the shape, set the map size in the Export step first. Omit both
+  to use pixelRatio. Dimensions exclude the optional band below the figure; plan limits still apply.
   draft: the separate tiled draft mark across the figure; true/false overrides this export only.
   Unset uses the saved setting, or defaults on for free/sample maps. In the layers ZIP it is on
   figure.png only; map.png and annotations stay clean.

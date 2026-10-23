@@ -28,7 +28,7 @@ function bridge(over = {}) {
   b.setDisplayLabel = (id, v) => b.updateLayer(id, { displayName: v, legend: { label: v } });
   b.updateDrillPlan = (patch) => b.setProject((p) => (p.drillPlan ? { ...p, drillPlan: { ...p.drillPlan, ...patch } } : p));
   b.newMap = vi.fn(() => b.setProject(createInitialProjectState()));
-  b.saveAs = vi.fn(async (name) => { b.projectName = name; b.projectId = 'p1'; b.isDirty = false; });
+  b.saveAs = vi.fn(async (name) => { b.projectName = name; b.projectId = 'p1'; b.isDirty = false; return { status: 'saved', result: { id: 'p1' } }; });
   b.exportFile = vi.fn(async () => ({ file: 'data:image/png;base64,AAAA', clamped: false, warnings: [] }));
   return b;
 }
@@ -194,6 +194,17 @@ describe('setters write the editor\'s project through its actions', () => {
     expect(b.saveAs).toHaveBeenCalledWith('Rabbit North Fig 1');
     expect(st.map).toMatchObject({ id: 'p1', name: 'Rabbit North Fig 1', unsaved: false });
     await expect(api.openProject('Nope', { discard: true })).rejects.toThrow('No saved map "Nope". Saved maps: none.');
+  });
+  it.each(['save', 'saveAs', 'duplicate', 'openProject', 'loadProject'])('%s rejects an unconfirmed or failed action even on a clean map', async (method) => {
+    const b = bridge({ recentProjects: [{ id: 'p1', name: 'Saved map' }] }), api = createApi(() => b, null);
+    const action = { openProject: 'open', loadProject: 'open' }[method] || method;
+    const args = { saveAs: ['Copy'], openProject: ['p1'], loadProject: [b.project] }[method] || [];
+    for (const outcome of [undefined, { status: 'error', err: new Error('Storage unavailable') }, { status: 'stale' }, { status: 'stale-error', err: new Error('Network failed') }]) {
+      b[action] = vi.fn(async () => outcome);
+      await expect(api[method](...args)).rejects.toThrow();
+      expect(b.projectId).toBe(null);
+      expect(b.isDirty).toBe(false);
+    }
   });
   it('exports follow the plan: a format it lacks is refused; the map must be ready', async () => {
     const b = bridge(), api = createApi(() => b, null);

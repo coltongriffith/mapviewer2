@@ -94,7 +94,11 @@ const BUDGETS = {
   // by the nearby-claims export preparation moving out of App into utils/nearbyClaims.js (one copy for the export,
   // the share and the package instead of two inline).
   // 152.7 to 153.8 (Oct 2026): 2D agent API bridge and accessible editor controls; measured 153.5 configured.
-  maxJsChunkGzipKb: 153.8,
+  // API review fixes: explicit project-action outcomes and PNG aspect-ratio validation in App,
+  // plus rejection handling/help in the lazy API. Measured +0.6 kB total / +0.3 kB editor;
+  // configured App 153.8, editor 342.6, claims 355.3, total 1040.6; plain editor 274.6,
+  // total 972.0. Related limits below retain about 0.3 kB headroom; homepage unchanged.
+  maxJsChunkGzipKb: 154.1,
   initialJsGzipKb: 75,
   initialAuthJsGzipKb: 135,
   // The former configured check omitted VITE_ADMIN_EMAIL, which pruned the
@@ -228,7 +232,7 @@ const BUDGETS = {
   // and the PDF page helper and white backing (+0.42 kB), ReadOnlyMapStage's renderCanvas and nearby claims
   // (+0.17 kB) and the dashboard's button (+0.11 kB). App is unchanged (see maxJsChunkGzipKb above).
   // 1018.1 to 1040.4 (Oct 2026): 2D agent API and sectional help (~21 kB lazy), plus editor bridge and names; measured 1040.1 configured.
-  totalAuthJsGzipKb: 1040.4,
+  totalAuthJsGzipKb: 1040.9,
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
@@ -267,7 +271,7 @@ const BUDGETS = {
   // update.
   // 940.9 → 949.7 (measured 949.4, 940.8 on main): 2D export package, as totalAuthJsGzipKb above.
   // 949.7 to 971.8 (Oct 2026): 2D agent API/help and accessible controls, as configured above; measured 971.5 plain.
-  totalJsGzipKb: 971.8,
+  totalJsGzipKb: 972.4,
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the
   // totals above. /3d carries three.js (~109 kB gzip) and its editor.
@@ -529,7 +533,7 @@ const BUDGETS = {
   // and MapCanvas +0.31 kB (a styled layer's paths kept unseen for clicks, and the lazy hook to its canvases).
   // Unchanged by the 2D export package (measured 341.3, as on main): App as maxJsChunkGzipKb above.
   // 341.5 to 342.6 (Oct 2026): 2D API bridge and accessible control names; API/help load after editor startup; measured 342.3 configured.
-  editorAuthJsGzipKb: 342.6,
+  editorAuthJsGzipKb: 342.9,
   // 270 → 271.0 (Oct 2026, production errors, measured 270.7, 269.6 on main): the same as editorAuthJsGzipKb above.
   // 271.0 → 271.7 (Oct 2026, 2D drill plan, measured 271.4, 270.8 on main): the same as editorAuthJsGzipKb above.
   // 271.7 → 272.2 (measured 271.9, 271.4 on main): import a company figure, as editorAuthJsGzipKb above.
@@ -538,9 +542,9 @@ const BUDGETS = {
   // and geology styling, as editorAuthJsGzipKb above.
   // Unchanged by the 2D export package (measured 273.2, 273.2 on main): as editorAuthJsGzipKb above.
   // 273.4 to 274.5 (Oct 2026): Same bridge and control names; measured 274.2 plain.
-  editorJsGzipKb: 274.5,
+  editorJsGzipKb: 274.9,
   // 355 to 355.3 (Oct 2026): claims shares the editor API bridge/control names; measured 355.0 in CI.
-  claimsAuthJsGzipKb: 355.3,
+  claimsAuthJsGzipKb: 355.6,
   claimsJsGzipKb: 290,
   // Stylesheet, gzipped. Today ~29 kB.
   maxCssGzipKb: 40,

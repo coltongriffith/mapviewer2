@@ -812,6 +812,8 @@ export default function App({ initialAction = null }) {
   const [annotationTool, setAnnotationTool] = useState(null);
   const [uploadStatus, setUploadStatus] = useState({ type: 'info', message: 'Drop a shapefile, GeoJSON, KML, CSV or a georeferenced image here to put your data on the map.' });
   const [exporting, setExporting] = useState(false);
+  // The API can retry within the same tick that a prior export settles.
+  const exportingRef = useRef(false);
   const [dragging, setDragging] = useState(null); // { id, hoverZone, ghostX, ghostY, ghostW, ghostH }
   const [resizeGuides, setResizeGuides] = useState([]);
   const [exportError, setExportError] = useState('');
@@ -4580,13 +4582,14 @@ export default function App({ initialAction = null }) {
   // a failure is thrown, and no upgrade or sign-up prompt opens.
   const handleExport = async (format, extraOptions = {}) => {
     const api = Boolean(extraOptions.as);
-    if (exporting) { if (api) throw new Error('An export is already running: wait for it to finish.'); return; }
+    if (exportingRef.current) { if (api) throw new Error('An export is already running: wait for it to finish.'); return; }
     setExportError('');
     if (!leafletMapRef.current || !mapContainerRef.current) {
       if (api) throw new Error('The map is not ready yet: await EMAP.ready(), then export.');
       setExportError('Map not ready — please wait a moment then try again.');
       return;
     }
+    exportingRef.current = true;
     setExporting(true);
     try {
       const [{ buildScene }, { exportPNG }, { exportSVG }, { createExportContext }] = await Promise.all([
@@ -4608,6 +4611,17 @@ export default function App({ initialAction = null }) {
       // This export's own warnings: a thumbnail render started meanwhile has its own.
       const exportContext = createExportContext();
       const opts = { ...baseSettings, ...exportOptions, paidTier: entitlements.clean_export, exportContext };
+      // API dimensions scale the current composition; changing its aspect ratio
+      // would also change the map framing. Refuse a size we cannot deliver.
+      if (api && format === 'png' && exportOptions.customWidth) {
+        const expectedHeight = Math.round(scene.height * exportOptions.customWidth / scene.width);
+        if (exportOptions.customHeight !== expectedHeight) {
+          throw new Error(`PNG dimensions must preserve the current map's aspect ratio: width ${exportOptions.customWidth} needs height ${expectedHeight}. Omit width and height to use pixelRatio, or change the map size in the Export step first.`);
+        }
+        if (exportOptions.customWidth < scene.width * 0.1) {
+          throw new Error(`PNG width must be at least ${Math.ceil(scene.width * 0.1)} px for this map.`);
+        }
+      }
       if (opts.band ?? bandDefault) opts.watermarkBand = { client: opts.bandClient || project.layout.companyName };
       if (opts.draft ?? bandDefault) opts.draftOverlay = true;
       if (format === 'layers') opts.svg = opts.layersSvg && canExportFormat(entitlements, 'svg');
@@ -4737,6 +4751,7 @@ export default function App({ initialAction = null }) {
       setUploadStatus({ type: 'error', message: `Export failed: ${err.message}` });
       if (api) throw err;
     } finally {
+      exportingRef.current = false;
       setExporting(false);
     }
   };
@@ -4868,7 +4883,7 @@ export default function App({ initialAction = null }) {
     const nameToSave = (nextName || (accountSave ? mapName(accountSave.projectName, accountSave.payload?.layout?.title) : currentMapName)).trim();
     if (user && !accountSave && projectId && projectHome?.readOnly) {
       setUploadStatus({ type: 'error', message: `View only: changes to ${projectHome.propertyName || projectHome.orgName} maps are not saved. Use Save As for a personal copy.` });
-      return undefined;
+      return { status: 'error', err: new Error('This map is view only. Use saveAs for a personal copy.') };
     }
     if (user) {
       // Snapshot + ticket BEFORE the await: edits made while the save is in
@@ -4923,7 +4938,7 @@ export default function App({ initialAction = null }) {
         // The write FAILED — never claim success. The in-memory project is
         // untouched and stays dirty so the user can free space and retry.
         setUploadStatus({ type: 'error', message: `Couldn't save to this browser: ${saved.storage?.message || 'storage write failed.'} Your map is still open — free up space (delete an old project) and save again.` });
-        return;
+        return { status: 'error', err: new Error(saved.storage?.message || 'Browser storage write failed.') };
       }
       setProjectId(saved.id);
       setProjectName(saved.name);
@@ -4933,6 +4948,7 @@ export default function App({ initialAction = null }) {
       saveDraft({ payload: project, projectId: saved.id, projectName: saved.name });
       setUploadStatus({ type: 'success', message: `Saved project: ${saved.name}` });
       captureAndStoreThumbnail(saved.id, false);
+      return { status: 'saved', result: { id: saved.id, name: saved.name } };
     }
   };
 
@@ -5009,11 +5025,12 @@ export default function App({ initialAction = null }) {
         setUploadStatus({ type: 'success', message: intoProperty?.propertyName ? `Saved to ${intoProperty.propertyName} as: ${nameToSave}` : `Saved to cloud as: ${nameToSave}` });
         captureAndStoreThumbnail(cloudId, true);
       }
+      return outcome;
     } else {
       const saved = saveProjectRecord({ id: crypto.randomUUID(), name: nameToSave, payload: project });
       if (!saved.storage?.ok) {
         setUploadStatus({ type: 'error', message: `Couldn't save to this browser: ${saved.storage?.message || 'storage write failed.'} Your map is still open — free up space and try again.` });
-        return;
+        return { status: 'error', err: new Error(saved.storage?.message || 'Browser storage write failed.') };
       }
       setProjectId(saved.id);
       setProjectName(saved.name);
@@ -5023,6 +5040,7 @@ export default function App({ initialAction = null }) {
       saveDraft({ payload: project, projectId: saved.id, projectName: saved.name });
       setUploadStatus({ type: 'success', message: `Saved as new project: ${saved.name}` });
       captureAndStoreThumbnail(saved.id, false);
+      return { status: 'saved', result: { id: saved.id, name: saved.name } };
     }
   };
 
@@ -5047,10 +5065,11 @@ export default function App({ initialAction = null }) {
         if (openTicket.stillCurrent()) {
           setUploadStatus({ type: 'error', message: `Failed to open project: ${err.message}` });
         }
-        return;
+        return { status: 'error', err };
       }
     }
-    if (!payload || !openTicket.stillCurrent()) return;
+    if (!openTicket.stillCurrent()) return { status: 'stale' };
+    if (!payload) return { status: 'error', err: new Error('The saved map has no project data.') };
     resetHistory();
     skipAutoFitRef.current = true;
     projectRevisionRef.current = revision;
@@ -5071,6 +5090,7 @@ export default function App({ initialAction = null }) {
     setIsDirty(false);
     if (entry.id) trackEvent('project_opened', { project_id: entry.id, source: 'recent' });
     setUploadStatus({ type: 'success', message: `Opened project: ${entry.name}` });
+    return { status: 'opened', result: { id: entry.id, name: entry.name } };
   };
 
   // Fork a shared map's state into the signed-in user's account and open the new
@@ -5164,11 +5184,12 @@ export default function App({ initialAction = null }) {
         listCloudProjects().then(setRecentProjects).catch(() => {});
         setUploadStatus({ type: 'success', message: `Duplicated to cloud as: ${name}` });
       }
+      return outcome;
     } else {
       const saved = duplicateProjectRecord({ sourcePayload: project, name });
       if (!saved.storage?.ok) {
         setUploadStatus({ type: 'error', message: `Couldn't duplicate in this browser: ${saved.storage?.message || 'storage write failed.'}` });
-        return;
+        return { status: 'error', err: new Error(saved.storage?.message || 'Browser storage write failed.') };
       }
       setProjectId(saved.id);
       setProjectName(saved.name);
@@ -5177,6 +5198,7 @@ export default function App({ initialAction = null }) {
       setIsDirty(false);
       saveDraft({ payload: project, projectId: saved.id, projectName: saved.name });
       setUploadStatus({ type: 'success', message: `Duplicated project as: ${saved.name}` });
+      return { status: 'saved', result: { id: saved.id, name: saved.name } };
     }
   };
 
