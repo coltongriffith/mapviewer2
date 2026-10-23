@@ -282,3 +282,12 @@ $$;
 revoke all on function public.drill_qaqc_validate(text,jsonb), public.drill_qaqc_key(text,jsonb),
   public.drill_qaqc_import(uuid,text,jsonb,jsonb,boolean,uuid), public.drill_qaqc_rollback(uuid) from public,anon,authenticated;
 grant execute on function public.drill_qaqc_import(uuid,text,jsonb,jsonb,boolean,uuid), public.drill_qaqc_rollback(uuid) to authenticated;
+
+-- Schema rollback: before any imports, remove the QA/QC RPCs/helpers and then
+-- the samples, CRM values and batch tables in dependency order; restore
+-- ws_property_has_content from 20261027100000_drill_database.sql, preserving
+-- its existing grants. After any imports, preserve/export all register data
+-- and version history and use an owner-reviewed forward fix instead of dropping
+-- tables. drill_qaqc_rollback withdraws batches while retaining their history;
+-- it is not a schema rollback. See docs/drill-qaqc-foundation.md.
+notify pgrst, 'reload schema';
