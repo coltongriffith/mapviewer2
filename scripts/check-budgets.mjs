@@ -232,7 +232,15 @@ const BUDGETS = {
   // and the PDF page helper and white backing (+0.42 kB), ReadOnlyMapStage's renderCanvas and nearby claims
   // (+0.17 kB) and the dashboard's button (+0.11 kB). App is unchanged (see maxJsChunkGzipKb above).
   // 1018.1 to 1040.4 (Oct 2026): 2D agent API and sectional help (~21 kB lazy), plus editor bridge and names; measured 1040.1 configured.
-  totalAuthJsGzipKb: 1040.9,
+  // 1009.4 → 1021.8 (Oct 2026, import a company figure: lines and points, measured 1021.5, +12.3 kB over main's 1009.2):
+  // all lazy, loaded only when the figure dialog opens and on the first Detect. The tracer's worker gains the line and
+  // symbol detector (utils/figureMarks.js, +8.35 kB in figureTrace.worker: Lab colour mask, Zhang–Suen skeleton cut at
+  // junctions, dash and dot chaining, dashes read along a line, the lettering and frame filters, shape by the outline's
+  // harmonics); the FigureImport chunk gains the "Lines & points" step with its review (FigureMarks.jsx, the line and
+  // point layers, the accepted finds on the preview map, tracing from the upload's own colours; +3.97 kB). App, the
+  // editor's initial JS and the exporters are unchanged.
+  // Combined Tower acceptance: export/API plus figure import; measured 1053.0 configured.
+  totalAuthJsGzipKb: 1053.3,
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
@@ -271,7 +279,10 @@ const BUDGETS = {
   // update.
   // 940.9 → 949.7 (measured 949.4, 940.8 on main): 2D export package, as totalAuthJsGzipKb above.
   // 949.7 to 971.8 (Oct 2026): 2D agent API/help and accessible controls, as configured above; measured 971.5 plain.
-  totalJsGzipKb: 972.4,
+  // 940.9 → 953.4 (Oct 2026, measured 953.1, +12.3 kB over main's 940.8): import a company figure, lines and points, as
+  // totalAuthJsGzipKb above.
+  // Combined Tower acceptance: same lazy features together; measured 984.6 plain.
+  totalJsGzipKb: 984.9,
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the
   // totals above. /3d carries three.js (~109 kB gzip) and its editor.
