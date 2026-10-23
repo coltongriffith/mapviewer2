@@ -10,7 +10,7 @@
 import { zipSync } from 'fflate';
 import { renderSceneToCanvas, renderSceneToSvg } from './renderScene';
 import { figureCanvas } from './exportPNG';
-import { downloadBlob } from '../utils/svg';
+import { downloadBlob, blobAs } from '../utils/svg';
 
 export const LAYER_FILES = { figure: 'figure.png', map: 'map.png', annotations: 'annotations.png', svg: 'annotations.svg', about: 'layers.json' };
 const NOTE = 'map.png and annotations.png stack (map below) to make the figure without its optional draft overlay or watermark band; annotations.png is transparent.';
@@ -40,6 +40,8 @@ export async function exportLayers(scene, opts = {}) {
   const files = await layerFiles(scene, opts);
   // PNGs are stored, not deflated: they are compressed already.
   const zip = zipSync(Object.fromEntries(Object.entries(files).map(([k, v]) => [k, k.endsWith('.png') ? [v, { level: 0 }] : v])));
+  // opts.as (window.EMAP): the ZIP comes back instead of downloading.
+  if (opts.as) return blobAs(new Blob([zip], { type: 'application/zip' }), opts.as);
   const name = opts.filename || scene.project.layout?.exportSettings?.filename || 'exploration-maps-export';
   downloadBlob(`${name}-layers.zip`, new Blob([zip], { type: 'application/zip' }));
   return Object.keys(files);

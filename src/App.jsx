@@ -532,8 +532,8 @@ function RecentProjectsModal({ entries, currentProjectId, onOpen, onRename, onDe
                   </>
                 ) : (
                   <>
-                    <button className="proj-action-btn" type="button" title="Rename" onClick={() => { setEditingId(entry.id); setConfirmDeleteId(null); }}>✎</button>
-                    <button className="proj-action-btn danger" type="button" title="Delete" onClick={() => { setConfirmDeleteId(entry.id); setEditingId(null); }}>✕</button>
+                    <button className="proj-action-btn" type="button" aria-label="Rename" title="Rename" onClick={() => { setEditingId(entry.id); setConfirmDeleteId(null); }}>✎</button>
+                    <button className="proj-action-btn danger" type="button" aria-label="Delete" title="Delete" onClick={() => { setConfirmDeleteId(entry.id); setEditingId(null); }}>✕</button>
                   </>
                 )}
               </div>
@@ -812,6 +812,8 @@ export default function App({ initialAction = null }) {
   const [annotationTool, setAnnotationTool] = useState(null);
   const [uploadStatus, setUploadStatus] = useState({ type: 'info', message: 'Drop a shapefile, GeoJSON, KML, CSV or a georeferenced image here to put your data on the map.' });
   const [exporting, setExporting] = useState(false);
+  // The API can retry within the same tick that a prior export settles.
+  const exportingRef = useRef(false);
   const [dragging, setDragging] = useState(null); // { id, hoverZone, ghostX, ghostY, ghostW, ghostH }
   const [resizeGuides, setResizeGuides] = useState([]);
   const [exportError, setExportError] = useState('');
@@ -4072,6 +4074,7 @@ export default function App({ initialAction = null }) {
       };
     });
     setSelectedCalloutId(calloutId);
+    return calloutId;
   };
 
   // Published results (a release table the user picks): each approved result's text on its hole's collar,
@@ -4335,6 +4338,7 @@ export default function App({ initialAction = null }) {
     setSelectedMarkerId(id);
     setSelectedEllipseId(null);
     setSelectedCalloutId(null);
+    return id;
   };
 
   const addEllipseAt = (latlng) => {
@@ -4395,6 +4399,7 @@ export default function App({ initialAction = null }) {
     setSelectedMarkerId(id);
     setSelectedEllipseId(null);
     setSelectedCalloutId(null);
+    return id;
   };
 
   const addDistanceLine = (p1, p2) => {
@@ -4573,13 +4578,18 @@ export default function App({ initialAction = null }) {
     setSelectedCalloutId(null);
   };
 
+  // extraOptions.as ("blob", "dataUrl" or "text", from window.EMAP): the file comes back instead of downloading,
+  // a failure is thrown, and no upgrade or sign-up prompt opens.
   const handleExport = async (format, extraOptions = {}) => {
-    if (exporting) return;
+    const api = Boolean(extraOptions.as);
+    if (exportingRef.current) { if (api) throw new Error('An export is already running: wait for it to finish.'); return; }
     setExportError('');
     if (!leafletMapRef.current || !mapContainerRef.current) {
+      if (api) throw new Error('The map is not ready yet: await EMAP.ready(), then export.');
       setExportError('Map not ready — please wait a moment then try again.');
       return;
     }
+    exportingRef.current = true;
     setExporting(true);
     try {
       const [{ buildScene }, { exportPNG }, { exportSVG }, { createExportContext }] = await Promise.all([
@@ -4601,6 +4611,17 @@ export default function App({ initialAction = null }) {
       // This export's own warnings: a thumbnail render started meanwhile has its own.
       const exportContext = createExportContext();
       const opts = { ...baseSettings, ...exportOptions, paidTier: entitlements.clean_export, exportContext };
+      // API dimensions scale the current composition; changing its aspect ratio
+      // would also change the map framing. Refuse a size we cannot deliver.
+      if (api && format === 'png' && exportOptions.customWidth) {
+        const expectedHeight = Math.round(scene.height * exportOptions.customWidth / scene.width);
+        if (exportOptions.customHeight !== expectedHeight) {
+          throw new Error(`PNG dimensions must preserve the current map's aspect ratio: width ${exportOptions.customWidth} needs height ${expectedHeight}. Omit width and height to use pixelRatio, or change the map size in the Export step first.`);
+        }
+        if (exportOptions.customWidth < scene.width * 0.1) {
+          throw new Error(`PNG width must be at least ${Math.ceil(scene.width * 0.1)} px for this map.`);
+        }
+      }
       if (opts.band ?? bandDefault) opts.watermarkBand = { client: opts.bandClient || project.layout.companyName };
       if (opts.draft ?? bandDefault) opts.draftOverlay = true;
       if (format === 'layers') opts.svg = opts.layersSvg && canExportFormat(entitlements, 'svg');
@@ -4641,22 +4662,23 @@ export default function App({ initialAction = null }) {
         if (needsReview(diagnostics)) { setPreflight({ format, extraOptions, diagnostics }); return; }
         checked = true;
       }
+      let file;
       if (format === 'png') {
-        await exportPNG(scene, opts);
+        file = await exportPNG(scene, opts);
       } else if (format === 'svg' || format === 'svg_ai') {
-        await exportSVG(scene, { ...opts, illustratorMode: format === 'svg_ai' });
+        file = await exportSVG(scene, { ...opts, illustratorMode: format === 'svg_ai' });
       } else if (format === 'pdf') {
         const { exportPDF } = await import('./export/exportPDF');
-        await exportPDF(scene, opts);
+        file = await exportPDF(scene, opts);
       } else if (format === 'layers') {
         const { exportLayers } = await import('./export/exportLayers');
-        await exportLayers(scene, opts);
+        file = await exportLayers(scene, opts);
       }
       const warnings = exportContext.warnings;
       // Free and not yet spent: offer the full-resolution export in place of
       // the plain upgrade prompt. An anonymous exporter pays with an email.
       const offerFullRes = resolutionClamped && !entitlements.clean_export && !spendingCredit
-        && (!user || !fullResCreditUsed(user));
+        && (!user || !fullResCreditUsed(user)) && !api;
       if (spendingCredit) {
         clearFullResExport();
         markFullResCreditUsed().catch(() => {});
@@ -4672,7 +4694,7 @@ export default function App({ initialAction = null }) {
           type: 'info',
           message: `Exported at ${entitlements.max_export_pixels.toLocaleString()} px, the free plan's maximum.`,
         });
-      } else if (resolutionClamped) {
+      } else if (resolutionClamped && !api) {
         setUpgradeReason('export_resolution');
         setUploadStatus({
           type: 'info',
@@ -4714,7 +4736,7 @@ export default function App({ initialAction = null }) {
       setHasExported(true);
       // Anonymous exporter just got value — nudge them to save it to an account.
       // Once per session, and not while an auth modal is already up.
-      if (!user && !offerFullRes) {
+      if (!user && !offerFullRes && !api) {
         try {
           if (!sessionStorage.getItem('em_post_export_nudge')) {
             sessionStorage.setItem('em_post_export_nudge', '1');
@@ -4722,11 +4744,14 @@ export default function App({ initialAction = null }) {
           }
         } catch { setShowPostExportSignup(true); }
       }
+      if (api) return { file, clamped: resolutionClamped, warnings };
     } catch (err) {
       trackEvent('export_failed', { format, message: String(err?.message ?? err).slice(0, 120) });
       setExportError(`Export failed: ${err.message}`);
       setUploadStatus({ type: 'error', message: `Export failed: ${err.message}` });
+      if (api) throw err;
     } finally {
+      exportingRef.current = false;
       setExporting(false);
     }
   };
@@ -4858,7 +4883,7 @@ export default function App({ initialAction = null }) {
     const nameToSave = (nextName || (accountSave ? mapName(accountSave.projectName, accountSave.payload?.layout?.title) : currentMapName)).trim();
     if (user && !accountSave && projectId && projectHome?.readOnly) {
       setUploadStatus({ type: 'error', message: `View only: changes to ${projectHome.propertyName || projectHome.orgName} maps are not saved. Use Save As for a personal copy.` });
-      return undefined;
+      return { status: 'error', err: new Error('This map is view only. Use saveAs for a personal copy.') };
     }
     if (user) {
       // Snapshot + ticket BEFORE the await: edits made while the save is in
@@ -4913,7 +4938,7 @@ export default function App({ initialAction = null }) {
         // The write FAILED — never claim success. The in-memory project is
         // untouched and stays dirty so the user can free space and retry.
         setUploadStatus({ type: 'error', message: `Couldn't save to this browser: ${saved.storage?.message || 'storage write failed.'} Your map is still open — free up space (delete an old project) and save again.` });
-        return;
+        return { status: 'error', err: new Error(saved.storage?.message || 'Browser storage write failed.') };
       }
       setProjectId(saved.id);
       setProjectName(saved.name);
@@ -4923,6 +4948,7 @@ export default function App({ initialAction = null }) {
       saveDraft({ payload: project, projectId: saved.id, projectName: saved.name });
       setUploadStatus({ type: 'success', message: `Saved project: ${saved.name}` });
       captureAndStoreThumbnail(saved.id, false);
+      return { status: 'saved', result: { id: saved.id, name: saved.name } };
     }
   };
 
@@ -4999,11 +5025,12 @@ export default function App({ initialAction = null }) {
         setUploadStatus({ type: 'success', message: intoProperty?.propertyName ? `Saved to ${intoProperty.propertyName} as: ${nameToSave}` : `Saved to cloud as: ${nameToSave}` });
         captureAndStoreThumbnail(cloudId, true);
       }
+      return outcome;
     } else {
       const saved = saveProjectRecord({ id: crypto.randomUUID(), name: nameToSave, payload: project });
       if (!saved.storage?.ok) {
         setUploadStatus({ type: 'error', message: `Couldn't save to this browser: ${saved.storage?.message || 'storage write failed.'} Your map is still open — free up space and try again.` });
-        return;
+        return { status: 'error', err: new Error(saved.storage?.message || 'Browser storage write failed.') };
       }
       setProjectId(saved.id);
       setProjectName(saved.name);
@@ -5013,6 +5040,7 @@ export default function App({ initialAction = null }) {
       saveDraft({ payload: project, projectId: saved.id, projectName: saved.name });
       setUploadStatus({ type: 'success', message: `Saved as new project: ${saved.name}` });
       captureAndStoreThumbnail(saved.id, false);
+      return { status: 'saved', result: { id: saved.id, name: saved.name } };
     }
   };
 
@@ -5037,10 +5065,11 @@ export default function App({ initialAction = null }) {
         if (openTicket.stillCurrent()) {
           setUploadStatus({ type: 'error', message: `Failed to open project: ${err.message}` });
         }
-        return;
+        return { status: 'error', err };
       }
     }
-    if (!payload || !openTicket.stillCurrent()) return;
+    if (!openTicket.stillCurrent()) return { status: 'stale' };
+    if (!payload) return { status: 'error', err: new Error('The saved map has no project data.') };
     resetHistory();
     skipAutoFitRef.current = true;
     projectRevisionRef.current = revision;
@@ -5061,6 +5090,7 @@ export default function App({ initialAction = null }) {
     setIsDirty(false);
     if (entry.id) trackEvent('project_opened', { project_id: entry.id, source: 'recent' });
     setUploadStatus({ type: 'success', message: `Opened project: ${entry.name}` });
+    return { status: 'opened', result: { id: entry.id, name: entry.name } };
   };
 
   // Fork a shared map's state into the signed-in user's account and open the new
@@ -5154,11 +5184,12 @@ export default function App({ initialAction = null }) {
         listCloudProjects().then(setRecentProjects).catch(() => {});
         setUploadStatus({ type: 'success', message: `Duplicated to cloud as: ${name}` });
       }
+      return outcome;
     } else {
       const saved = duplicateProjectRecord({ sourcePayload: project, name });
       if (!saved.storage?.ok) {
         setUploadStatus({ type: 'error', message: `Couldn't duplicate in this browser: ${saved.storage?.message || 'storage write failed.'}` });
-        return;
+        return { status: 'error', err: new Error(saved.storage?.message || 'Browser storage write failed.') };
       }
       setProjectId(saved.id);
       setProjectName(saved.name);
@@ -5167,6 +5198,7 @@ export default function App({ initialAction = null }) {
       setIsDirty(false);
       saveDraft({ payload: project, projectId: saved.id, projectName: saved.name });
       setUploadStatus({ type: 'success', message: `Duplicated project as: ${saved.name}` });
+      return { status: 'saved', result: { id: saved.id, name: saved.name } };
     }
   };
 
@@ -5240,6 +5272,25 @@ export default function App({ initialAction = null }) {
   // This is a one-time handoff from the lightweight marketing entry.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialAction]);
+
+  // window.EMAP (src/emap/api.js), loaded once the editor opens: it reads the map and changes it through the same
+  // state and actions as the controls, so undo and unsaved changes follow its edits as they follow a click.
+  const emap = useRef({});
+  Object.assign(emap.current, {
+    screen, project, setProject, projectId, projectName, isDirty, user, entitlements, bandDefault, recentProjects, mapReady,
+    map: leafletMapRef.current, legend: allLegendItems, zones: resolvedZones,
+    updateLayout, updateLayer, setDisplayLabel, changeLayerRole, removeLayer, moveLayer, setFramingLayer, autoFrameAll, pickMapStyle,
+    addLayer: addGeoJSONAsLayer, addCallout: addCalloutAtAnchor, updateCallout, removeCallout, arrangeCallouts: autoArrangeCallouts,
+    addMarker: addMarkerAt, addMapLabel: addMapLabelAt, updateMarker, removeMarker, updateDrillPlan, replaceDrillPlan,
+    exportFile: (format, o) => handleExport(format, { noWatermark: Boolean(user || getLastLeadEmail()), preflightOk: true, ...o }),
+    save: saveCurrentProject, saveAs: saveAsProject, duplicate: duplicateCurrentProject, open: openProjectFromRecent, newMap: startNewProject,
+    step: stepHistory,
+  });
+  useEffect(() => {
+    if (screen !== 'editor' || window.EMAP) return undefined;
+    const t = setTimeout(() => import('./emap/api.js').then((m) => m.install(() => emap.current), () => {}), 1000);
+    return () => clearTimeout(t);
+  }, [screen]);
 
   const referenceOverlays = project.layout.referenceOverlays || {};
 
@@ -5454,14 +5505,14 @@ export default function App({ initialAction = null }) {
             onDismiss={() => setShowMobileBanner(false)} />
         </React.Suspense>
       )}
-      <header className="ed-toolbar">
+      <header className="ed-toolbar" data-em="toolbar">
         <div className="ed-toolbar-left">
           <button className="ed-brand" type="button" onClick={goToLanding} title="Back to Exploration Maps" aria-label="Exploration Maps — back to the home page">
             <BrandMarkInline />
             <span className="ed-wide-label em-wordmark">Exploration&nbsp;<b>Maps</b></span>
           </button>
           <span className="ed-toolbar-sep ed-desktop-only" />
-          <Menu label="Project" align="left" title="Project file actions">
+          <Menu dataEm="project-menu" label="Project" align="left" title="Project file actions">
             <MenuItem onClick={startNewProject}>New map</MenuItem>
             <MenuItem onClick={() => setShowRecentProjects(true)}>Open…</MenuItem>
             <MenuSeparator />
@@ -5505,7 +5556,7 @@ export default function App({ initialAction = null }) {
           <button className="ui-btn ui-btn--ghost ui-btn--icon ed-desktop-only" type="button" aria-label="Redo" title="Redo (Ctrl+Y)" onClick={() => stepHistory(true)}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 14l5-5-5-5" /><path d="M20 9H10a6 6 0 0 0 0 12h3" /></svg>
           </button>
-          <button className="ui-btn ui-btn--ghost ed-desktop-only" type="button" title="Zoom the map to fit your data" onClick={autoFrameAll} disabled={!mapReady}>
+          <button className="ui-btn ui-btn--ghost ed-desktop-only" type="button" aria-label="Fit to data" title="Zoom the map to fit your data" onClick={autoFrameAll} disabled={!mapReady}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>
             <span className="ed-wide-label">Fit to data</span>
           </button>
@@ -5536,6 +5587,7 @@ export default function App({ initialAction = null }) {
             <span className="ed-wide-label">Share</span>
           </button>
           <Menu
+            dataEm="export-menu"
             label={exporting ? 'Exporting…' : 'Export'}
             align="right"
             triggerClassName="ui-btn"
@@ -5632,8 +5684,8 @@ export default function App({ initialAction = null }) {
               <div id="section-areaClaims" className="control-grid">
                 <p className="small-note">Load mineral tenure claims within a radius of your project area. Each claim owner is shown in a distinct colour.</p>
                 <div className="control-row">
-                  <label>{US_CLAIMS_ENABLED ? 'Jurisdiction' : 'Province'}</label>
-                  <select value={areaClaimsProvince} onChange={(e) => setAreaClaimsProvince(e.target.value)}>
+                  <label htmlFor="nearby-claims-jurisdiction">{US_CLAIMS_ENABLED ? 'Jurisdiction' : 'Province'}</label>
+                  <select id="nearby-claims-jurisdiction" data-em="nearby-claims-jurisdiction" value={areaClaimsProvince} onChange={(e) => setAreaClaimsProvince(e.target.value)}>
                     <optgroup label="Canada">
                       <option value="bc">British Columbia</option>
                       <option value="on">Ontario</option>
@@ -5677,8 +5729,8 @@ export default function App({ initialAction = null }) {
                   </div>
                 </div>
                 <div className="control-row">
-                  <label>Search Location</label>
-                  <div className="acl-pick-row">
+                  <span className="control-label">Search Location</span>
+                  <div role="group" aria-label="Search Location" className="acl-pick-row">
                     <button
                       className={`secondary-btn compact${areaClaimsPicking ? ' active-toggle' : ''}`}
                       type="button"
@@ -5690,7 +5742,7 @@ export default function App({ initialAction = null }) {
                     {areaClaimsPickCenter && (
                       <>
                         <span className="acl-pick-coords">{areaClaimsPickCenter.lat.toFixed(4)}, {areaClaimsPickCenter.lng.toFixed(4)}</span>
-                        <button className="acl-hide-btn" type="button" title="Clear pin — use claims layer instead" onClick={() => setAreaClaimsPickCenter(null)}>×</button>
+                        <button className="acl-hide-btn" type="button" aria-label="Clear pin — use claims layer instead" title="Clear pin — use claims layer instead" onClick={() => setAreaClaimsPickCenter(null)}>×</button>
                       </>
                     )}
                   </div>
@@ -5852,12 +5904,12 @@ export default function App({ initialAction = null }) {
                     <ColorField value={h.color || '#ef4444'} title="Color" onChange={(e) => updateLayout({ regionHighlights: project.layout.regionHighlights.map((x, j) => j === i ? { ...x, color: e.target.value } : x) })} brandColors={brandColors} />
                     <input type="range" min="0.1" max="1" step="0.05" value={h.opacity ?? 0.45} title="Opacity" onChange={(e) => updateLayout({ regionHighlights: project.layout.regionHighlights.map((x, j) => j === i ? { ...x, opacity: Number(e.target.value) } : x) })} />
                     <span className="range-label">{Math.round((h.opacity ?? 0.45) * 100)}%</span>
-                    <button className="icon-btn remove-btn" type="button" title="Remove" onClick={() => updateLayout({ regionHighlights: project.layout.regionHighlights.filter((_, j) => j !== i) })}>×</button>
+                    <button className="icon-btn remove-btn" type="button" aria-label="Remove" title="Remove" onClick={() => updateLayout({ regionHighlights: project.layout.regionHighlights.filter((_, j) => j !== i) })}>×</button>
                   </div>
                 );
               })}
               <div className="region-highlight-add-row">
-                <select value="" onChange={(e) => { const id = e.target.value; if (!id || (project.layout.regionHighlights || []).some((h) => h.regionId === id)) return; updateLayout({ regionHighlights: [...(project.layout.regionHighlights || []), { regionId: id, color: '#ef4444', opacity: 0.45 }] }); }}>
+                <select aria-label="Add region highlight" value="" onChange={(e) => { const id = e.target.value; if (!id || (project.layout.regionHighlights || []).some((h) => h.regionId === id)) return; updateLayout({ regionHighlights: [...(project.layout.regionHighlights || []), { regionId: id, color: '#ef4444', opacity: 0.45 }] }); }}>
                   <option value="">+ Add Region…</option>
                   {regionsNA.map((r) => <option key={r.id} value={r.id}>{r.name} ({r.abbrev})</option>)}
                 </select>
@@ -5895,7 +5947,7 @@ export default function App({ initialAction = null }) {
                   type="button"
                   className={`basemap-thumb${(project.layout.basemap || 'light') === key ? ' active' : ''}`}
                   onClick={() => updateLayout({ basemap: key })}
-                  title={label}
+                  aria-label={label} title={label}
                 >
                   <div className="basemap-thumb-swatch">
                     {thumb
@@ -6204,7 +6256,7 @@ export default function App({ initialAction = null }) {
               </div>
               {(project.layout.titleBgColor || project.layout.titleFgColor || project.layout.panelBgColor || project.layout.panelFgColor || project.layout.accentColor) && (
                 <div className="color-override-cell">
-                  <label>&nbsp;</label>
+                  <span className="control-label" aria-hidden="true">&nbsp;</span>
                   <button className="swatch-reset-all" type="button" onClick={() => updateLayout({ titleBgColor: null, titleFgColor: null, panelBgColor: null, panelFgColor: null, accentColor: null })}>Reset all</button>
                 </div>
               )}
@@ -6220,7 +6272,7 @@ export default function App({ initialAction = null }) {
                 <span>{project.layout.cornerRadius ?? themeTokens.panelRadius ?? 10}px</span>
                 {project.layout.cornerRadius != null && (
                   <button type="button" style={{ fontSize: 10, padding: '1px 5px', background: 'none', border: '1px solid #cbd5e1', borderRadius: 4, cursor: 'pointer', color: '#64748b' }}
-                    onClick={() => updateLayout({ cornerRadius: null })} title="Reset to theme default">↺</button>
+                    onClick={() => updateLayout({ cornerRadius: null })} aria-label="Reset to theme default" title="Reset to theme default">↺</button>
                 )}
               </div>
             </div>
@@ -6269,13 +6321,13 @@ export default function App({ initialAction = null }) {
             </div>
             {project.layout.showNorthArrow !== false && (
               <div className="control-row" style={{ marginTop: 10 }}>
-                <label>Compass Style</label>
-                <div className="north-arrow-style-picker">
+                <span className="control-label">Compass Style</span>
+                <div role="group" aria-label="Compass Style" className="north-arrow-style-picker">
                   {NORTH_ARROW_STYLES.map(({ key, label }) => (
                     <button key={key} type="button"
                       className={`north-arrow-style-btn${(project.layout.northArrowStyle || 'classic') === key ? ' active' : ''}`}
                       onClick={() => updateLayout({ northArrowStyle: key })}
-                      title={label}>
+                      aria-label={label} title={label}>
                       <NorthArrow scale={52} style={key} />
                       <span>{label}</span>
                     </button>
@@ -6461,12 +6513,12 @@ export default function App({ initialAction = null }) {
                 ) : null}
                 <div className="control-row inline-2">
                   <div>
-                    <label>{isPointStyledLayer(selectedLayer) ? 'Point Border' : 'Outline Color'}</label>
-                    <ColorField value={selectedLayer.style?.stroke || selectedLayer.style?.markerColor || '#2563eb'} onChange={(e) => { const id = selectedLayer.id, val = e.target.value; clearTimeout(layerStyleDebounceRef.current); layerStyleDebounceRef.current = setTimeout(() => updateLayer(id, { style: { stroke: val, markerColor: val } }), 50); }} brandColors={brandColors} />
+                    <label htmlFor="layer-outline-color">{isPointStyledLayer(selectedLayer) ? 'Point Border' : 'Outline Color'}</label>
+                    <ColorField id="layer-outline-color" value={selectedLayer.style?.stroke || selectedLayer.style?.markerColor || '#2563eb'} onChange={(e) => { const id = selectedLayer.id, val = e.target.value; clearTimeout(layerStyleDebounceRef.current); layerStyleDebounceRef.current = setTimeout(() => updateLayer(id, { style: { stroke: val, markerColor: val } }), 50); }} brandColors={brandColors} />
                   </div>
                   <div>
-                    <label>{isPointStyledLayer(selectedLayer) ? 'Point Fill' : 'Fill Color'}</label>
-                    <ColorField value={selectedLayer.style?.fill || selectedLayer.style?.markerFill || '#93c5fd'} onChange={(e) => { const id = selectedLayer.id, val = e.target.value; clearTimeout(layerStyleDebounceRef.current); layerStyleDebounceRef.current = setTimeout(() => updateLayer(id, { style: { fill: val, markerFill: val } }), 50); }} brandColors={brandColors} />
+                    <label htmlFor="layer-fill-color">{isPointStyledLayer(selectedLayer) ? 'Point Fill' : 'Fill Color'}</label>
+                    <ColorField id="layer-fill-color" value={selectedLayer.style?.fill || selectedLayer.style?.markerFill || '#93c5fd'} onChange={(e) => { const id = selectedLayer.id, val = e.target.value; clearTimeout(layerStyleDebounceRef.current); layerStyleDebounceRef.current = setTimeout(() => updateLayer(id, { style: { fill: val, markerFill: val } }), 50); }} brandColors={brandColors} />
                   </div>
                 </div>
                 <div className="control-row inline-2">
@@ -6519,8 +6571,8 @@ export default function App({ initialAction = null }) {
                       );
                     })()}
                     <div className="control-row">
-                      <label>Marker Shape</label>
-                      <div className="marker-shape-picker-visual">
+                      <span className="control-label">Marker Shape</span>
+                      <div role="group" aria-label="Marker Shape" className="marker-shape-picker-visual">
                         {[
                           ['circle', 'Circle'], ['square', 'Square'], ['triangle', 'Tri ▲'], ['triangle_down', 'Tri ▼'],
                           ['diamond', 'Diamond'], ['cross', 'Cross'], ['star', 'Star'], ['hexagon', 'Hexagon'],
@@ -6530,7 +6582,7 @@ export default function App({ initialAction = null }) {
                           const isActive = (selectedLayer.style?.markerShape || 'circle') === val;
                           return (
                             <button key={val} type="button" className={`shape-visual-btn${isActive ? ' active' : ''}`}
-                              onClick={() => updateLayer(selectedLayer.id, { style: { markerShape: val } })} title={label}>
+                              onClick={() => updateLayer(selectedLayer.id, { style: { markerShape: val } })} aria-label={label} title={label}>
                               <img src={markerSvgUrl(val, isActive ? '#ffffff' : color, 18)} alt={label} width="18" height="18" />
                             </button>
                           );
@@ -6538,8 +6590,8 @@ export default function App({ initialAction = null }) {
                       </div>
                     </div>
                     <div className="control-row">
-                      <label>Custom Icon</label>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span className="control-label">Custom Icon</span>
+                      <div role="group" aria-label="Custom Icon" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         {selectedLayer.style?.customMarkerDataUri && (
                           <img src={selectedLayer.style.customMarkerDataUri} alt="custom icon" style={{ width: 24, height: 24, objectFit: 'contain', border: '1px solid #d4deea', borderRadius: 4 }} />
                         )}
@@ -6558,7 +6610,7 @@ export default function App({ initialAction = null }) {
                           {selectedLayer.style?.customMarkerDataUri ? 'Change Icon' : 'Upload Icon'}
                         </button>
                         {selectedLayer.style?.customMarkerDataUri && (
-                          <button type="button" className="secondary-btn" style={{ flexShrink: 0 }}
+                          <button type="button" className="secondary-btn" aria-label="Remove custom icon" style={{ flexShrink: 0 }}
                             onClick={() => updateLayer(selectedLayer.id, { style: { customMarkerDataUri: null } })}>✕</button>
                         )}
                       </div>
@@ -6599,9 +6651,9 @@ export default function App({ initialAction = null }) {
                       return (
                         <div className="trim-panel">
                           <div className="control-row">
-                            <label>Remove individual shapes</label>
+                            <span className="control-label">Remove individual shapes</span>
                           </div>
-                          <div className="trim-actions">
+                          <div className="trim-actions" role="group" aria-label="Remove individual shapes">
                             <button
                               type="button"
                               className={`secondary-btn trim-toggle${trimming ? ' active' : ''}`}
@@ -6667,9 +6719,9 @@ export default function App({ initialAction = null }) {
                       return (
                         <div className="trim-panel">
                           <div className="control-row">
-                            <label>Style individual shapes</label>
+                            <span className="control-label">Style individual shapes</span>
                           </div>
-                          <div className="trim-actions">
+                          <div className="trim-actions" role="group" aria-label="Style individual shapes">
                             <button
                               type="button"
                               className={`secondary-btn trim-toggle${styling ? ' active' : ''}`}
@@ -6695,12 +6747,12 @@ export default function App({ initialAction = null }) {
                               <div className="small-note">{featureLabel(feature).title}</div>
                               <div className="control-row inline-2">
                                 <div>
-                                  <label>Outline</label>
-                                  <ColorField value={override.stroke ?? base.stroke ?? '#2563eb'} onChange={(e) => set({ stroke: e.target.value })} brandColors={brandColors} />
+                                  <label htmlFor="shape-stroke">Outline</label>
+                                  <ColorField id="shape-stroke" value={override.stroke ?? base.stroke ?? '#2563eb'} onChange={(e) => set({ stroke: e.target.value })} brandColors={brandColors} />
                                 </div>
                                 <div>
-                                  <label>Fill</label>
-                                  <ColorField value={override.fill ?? base.fill ?? '#93c5fd'} onChange={(e) => set({ fill: e.target.value })} brandColors={brandColors} />
+                                  <label htmlFor="shape-fill">Fill</label>
+                                  <ColorField id="shape-fill" value={override.fill ?? base.fill ?? '#93c5fd'} onChange={(e) => set({ fill: e.target.value })} brandColors={brandColors} />
                                 </div>
                               </div>
                               <div className="control-row inline-2">
@@ -6731,8 +6783,8 @@ export default function App({ initialAction = null }) {
                       );
                     })()}
                     <div className="control-row">
-                      <label>Fill Pattern</label>
-                      <div className="fill-pattern-picker">
+                      <span className="control-label">Fill Pattern</span>
+                      <div role="group" aria-label="Fill Pattern" className="fill-pattern-picker">
                         {[['none', 'Solid'], ['hatch', 'Hatch'], ['cross', 'Cross'], ['dots', 'Dots']].map(([val, title]) => (
                           <button
                             key={val}
@@ -7040,8 +7092,8 @@ export default function App({ initialAction = null }) {
                               </div>
                             </div>
                             <div className="control-row">
-                              <label>Style preset</label>
-                              <div className="button-row two">
+                              <span className="control-label">Style preset</span>
+                              <div role="group" aria-label="Style preset" className="button-row two">
                                 <button type="button" className="secondary-btn" onClick={() => updateCallout(callout.id, { style: { ...(callout.style || {}), background: '#ffffff', border: '#102640', textColor: '#0f172a', subtextColor: '#475569', textAlign: 'left' } })}>Card</button>
                                 <button type="button" className="secondary-btn" onClick={() => updateCallout(callout.id, { style: { ...(callout.style || {}), background: '#111827', border: '#111827', textColor: '#ffffff', subtextColor: '#e5e7eb', textAlign: 'center', fontSize: Math.max(callout.style?.fontSize || 12, 13) } })}>Banner</button>
                               </div>
@@ -7071,11 +7123,11 @@ export default function App({ initialAction = null }) {
                         <div className="control-label">Nudge</div>
                         <div className="nudge-grid">
                           <span />
-                          <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, 0, -8)}>↑</button>
+                          <button className="secondary-btn" type="button" aria-label="Move callout up" onClick={() => nudgeCallout(callout.id, 0, -8)}>↑</button>
                           <span />
-                          <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, -8, 0)}>←</button>
-                          <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, 0, 8)}>↓</button>
-                          <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, 8, 0)}>→</button>
+                          <button className="secondary-btn" type="button" aria-label="Move callout left" onClick={() => nudgeCallout(callout.id, -8, 0)}>←</button>
+                          <button className="secondary-btn" type="button" aria-label="Move callout down" onClick={() => nudgeCallout(callout.id, 0, 8)}>↓</button>
+                          <button className="secondary-btn" type="button" aria-label="Move callout right" onClick={() => nudgeCallout(callout.id, 8, 0)}>→</button>
                         </div>
                       </div>
                     )}
@@ -7218,8 +7270,8 @@ export default function App({ initialAction = null }) {
                       </div>
                     </div>
                     <div className="control-row">
-                      <label>Units</label>
-                      <div className="unit-toggle-row">
+                      <span className="control-label">Units</span>
+                      <div role="group" aria-label="Units" className="unit-toggle-row">
                         <button type="button" className={`unit-toggle-btn${!selectedEllipse.units || selectedEllipse.units === 'km' ? ' active' : ''}`} onClick={() => updateEllipse(selectedEllipse.id, { units: 'km' })}>km</button>
                         <button type="button" className={`unit-toggle-btn${selectedEllipse.units === 'mi' ? ' active' : ''}`} onClick={() => updateEllipse(selectedEllipse.id, { units: 'mi' })}>mi</button>
                       </div>
@@ -7388,8 +7440,8 @@ export default function App({ initialAction = null }) {
                       onChange={(e) => updateDistanceLine(dl.id, { color: e.target.value })} brandColors={brandColors} />
                   </div>
                   <div className="control-row">
-                    <label>Style</label>
-                    <div className="unit-toggle-row">
+                    <span className="control-label">Style</span>
+                    <div role="group" aria-label="Style" className="unit-toggle-row">
                       {[['measure', 'Measure'], ['bracket', 'Bracket']].map(([v, l]) => (
                         <button key={v} className={`unit-toggle-btn${(dl.style || 'measure') === v ? ' active' : ''}`}
                           title={v === 'bracket' ? 'Solid line with end ticks: a strike length' : 'Dashed line with the distance in the middle'}
@@ -7398,8 +7450,8 @@ export default function App({ initialAction = null }) {
                     </div>
                   </div>
                   <div className="control-row">
-                    <label>Units</label>
-                    <div className="unit-toggle-row">
+                    <span className="control-label">Units</span>
+                    <div role="group" aria-label="Units" className="unit-toggle-row">
                       {['km', 'mi'].map(u => (
                         <button key={u} className={`unit-toggle-btn${(dl.units || 'km') === u ? ' active' : ''}`}
                           onClick={() => updateDistanceLine(dl.id, { units: u })}>{u}</button>
@@ -7533,7 +7585,7 @@ export default function App({ initialAction = null }) {
           <div className="storage-warning-banner">
             Local storage is getting full.{' '}
             <strong>Sign in</strong> to save projects to the cloud.
-            <button className="storage-warning-dismiss" onClick={() => setStorageWarningDismissed(true)}>✕</button>
+            <button className="storage-warning-dismiss" aria-label="Dismiss storage warning" onClick={() => setStorageWarningDismissed(true)}>✕</button>
           </div>
         )}
         {/* Claim-set qualifications, over the map itself. These maps are placed
@@ -7701,7 +7753,7 @@ export default function App({ initialAction = null }) {
         )}
 
         {project.layout.templateId !== 'ni_43101_technical' && project.layout.showTitle !== false && <div className="template-zone" style={{ ...zoneStyle(resolvedZones.title), zIndex: 410, opacity: dragging?.id === 'title' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('title', project.layout.titleWidthPx ?? 520, project.layout.titleHeightPx ?? 92)}>
-          <button className="panel-delete-btn" title="Hide title" onClick={() => updateLayout({ showTitle: false })}>×</button>
+          <button className="panel-delete-btn" aria-label="Hide title" title="Hide title" onClick={() => updateLayout({ showTitle: false })}>×</button>
           {studio ? sc('title') : <div className={`template-card title-card${project.layout.titleTransparent ? ' panel--transparent' : ''}`}>
             {editingTitleField === 'title' ? (
               <input
@@ -7739,7 +7791,7 @@ export default function App({ initialAction = null }) {
 
         {allLegendItems.length && project.layout.showLegend !== false ? (
           <div className="template-zone" style={{ ...zoneStyle(resolvedZones.legend), opacity: dragging?.id === 'legend' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('legend', resolvedZones.legend?.width ?? project.layout.legendWidthPx ?? 300, project.layout.legendHeightPx ?? resolvedZones.legend?.height ?? 168)}>
-            <button className="panel-delete-btn" title="Hide legend" onClick={() => updateLayout({ showLegend: false })}>×</button>
+            <button className="panel-delete-btn" aria-label="Hide legend" title="Hide legend" onClick={() => updateLayout({ showLegend: false })}>×</button>
             <div className={`template-card legend-card${project.layout.legendTransparent ? ' panel--transparent' : ''}`} data-compact={project.layout.legendCompact || undefined}>
               <div className="legend-header"><h3 style={{ fontSize: Math.round(15 * (project.layout.legendFontScale ?? 1)) + 'px' }}>{project.layout.legendTitle || 'Legend'}</h3></div>
               <div className="legend-list" style={{ fontSize: Math.round(13 * (project.layout.legendFontScale ?? 1)) + 'px' }}>
@@ -7784,7 +7836,7 @@ export default function App({ initialAction = null }) {
 
         {project.layout.showNorthArrow !== false && resolvedZones.northArrow?.width > 0 && (
           <div className={`template-zone${project.layout.northArrowTransparent ? ' panel--transparent' : ''}`} style={{ ...zoneStyle(resolvedZones.northArrow), opacity: dragging?.id === 'northArrow' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('northArrow', resolvedZones.northArrow?.width ?? 80, project.layout.northArrowHeightPx ?? 100)}>
-            <button className="panel-delete-btn" title="Hide compass rose" onClick={() => updateLayout({ showNorthArrow: false })}>×</button>
+            <button className="panel-delete-btn" aria-label="Hide compass rose" title="Hide compass rose" onClick={() => updateLayout({ showNorthArrow: false })}>×</button>
             {studio ? sc('north') : <NorthArrow scale={project.layout.northArrowHeightPx ?? 100} style={project.layout.northArrowStyle || 'classic'} />}
             {makeResizeHandles(project.layout.northArrowCorner || 'br', {
               elemId: 'northArrow', startW: resolvedZones.northArrow?.width ?? 80, startH: project.layout.northArrowHeightPx ?? 100,
@@ -7795,7 +7847,7 @@ export default function App({ initialAction = null }) {
         )}
         {project.layout.insetEnabled !== false && resolvedZones.inset?.width ? (
           <div className="template-zone" style={{ ...zoneStyle(resolvedZones.inset), opacity: dragging?.id === 'inset' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('inset', project.layout.insetWidthPx ?? 244, project.layout.insetHeightPx ?? 190)}>
-            <button className="panel-delete-btn" title="Hide inset map" onClick={() => updateLayout({ insetEnabled: false })}>×</button>
+            <button className="panel-delete-btn" aria-label="Hide inset map" title="Hide inset map" onClick={() => updateLayout({ insetEnabled: false })}>×</button>
             {studio ? sc('inset') : <LocatorInset layers={project.layers} insetMode={project.layout.insetMode} insetBasemap={project.layout.insetBasemap} insetImage={project.layout.insetImage} autoInsetRegion={project.layout.autoInsetRegion} insetTitle={project.layout.insetTitle} insetLabel={project.layout.insetLabel} mode={project.layout.mode} zone={{ width: '100%', height: '100%' }} regionFill={project.layout.insetRegionFill} regionStroke={project.layout.insetRegionStroke} bgFill={project.layout.insetBgFill} markerColor={project.layout.insetMarkerColor} />}
             {makeResizeHandles(project.layout.insetCorner || 'tr', {
               elemId: 'inset', startW: project.layout.insetWidthPx ?? 244, startH: project.layout.insetHeightPx ?? 190,
@@ -7807,7 +7859,7 @@ export default function App({ initialAction = null }) {
         {project.layout.showScaleBar !== false && resolvedZones.scaleBar?.height > 0 && (
           <div className={`template-zone${project.layout.scaleBarTransparent ? ' panel--transparent' : ''}`} style={{ ...zoneStyle(resolvedZones.scaleBar), width: project.layout.scaleBarWidthPx || resolvedZones.scaleBar?.width, opacity: dragging?.id === 'scaleBar' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('scaleBar', project.layout.scaleBarWidthPx || resolvedZones.scaleBar?.width || 160, scaleBarHeight(project.layout))}>
             {studio ? sc('scale') : <ScaleBar map={leafletMapRef.current} projection={!!project.layout.showProjectionLabel} projectionName={project.layout.projectionName} />}
-            <button className="panel-delete-btn" title="Hide scale bar" onClick={() => updateLayout({ showScaleBar: false })}>×</button>
+            <button className="panel-delete-btn" aria-label="Hide scale bar" title="Hide scale bar" onClick={() => updateLayout({ showScaleBar: false })}>×</button>
             {makeResizeHandles(project.layout.scaleBarCorner || 'bl', {
               elemId: 'scaleBar', startW: project.layout.scaleBarWidthPx || resolvedZones.scaleBar?.width || 160, startH: scaleBarHeight(project.layout),
               minW: 80, maxW: 400, minH: 30, maxH: 100,
@@ -7818,7 +7870,7 @@ export default function App({ initialAction = null }) {
         {project.layout.templateId !== 'ni_43101_technical' && project.layout.footerText && project.layout.footerEnabled !== false && !noteInLegend(project.layout, allLegendItems) ? (
           <div className="template-zone" style={{ ...zoneStyle(resolvedZones.footer), zIndex: 408, height: project.layout.footerHeightPx || resolvedZones.footer?.height, opacity: dragging?.id === 'footer' ? 0.3 : 1 }} onMouseDown={makeDragHandler('footer', resolvedZones.footer?.width ?? 260, project.layout.footerHeightPx || resolvedZones.footer?.height || 28)}>
             <div className="template-card footer-card">{project.layout.footerText}</div>
-            <button className="panel-delete-btn" title="Hide disclaimer" onClick={() => updateLayout({ footerEnabled: false })}>×</button>
+            <button className="panel-delete-btn" aria-label="Hide disclaimer" title="Hide disclaimer" onClick={() => updateLayout({ footerEnabled: false })}>×</button>
             {makeResizeHandles('bl', {
               elemId: 'footer', startW: resolvedZones.footer?.width ?? 260, startH: project.layout.footerHeightPx || resolvedZones.footer?.height || 28,
               minW: 80, maxW: 600, minH: 22, maxH: 200,
@@ -7829,7 +7881,7 @@ export default function App({ initialAction = null }) {
         {project.layout.logo ? (
           <div className="template-zone" style={{ ...zoneStyle(resolvedZones.logo), opacity: dragging?.id === 'logo' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('logo', project.layout.logoWidthPx ?? 168, project.layout.logoHeightPx ?? 74)}>
             <div className={`template-card logo-card${project.layout.logoTransparent ? ' panel--transparent' : ''}`}><img src={project.layout.logo} alt="Logo" style={{ opacity: project.layout.logoOpacity ?? 1 }} /></div>
-            <button className="panel-delete-btn" title="Remove logo" onClick={() => updateLayout({ logo: null })}>×</button>
+            <button className="panel-delete-btn" aria-label="Remove logo" title="Remove logo" onClick={() => updateLayout({ logo: null })}>×</button>
             {makeResizeHandles(project.layout.logoCorner || 'tl', {
               elemId: 'logo', startW: project.layout.logoWidthPx ?? 168, startH: project.layout.logoHeightPx ?? 74,
               minW: 40, maxW: 400, minH: 20, maxH: 300,
@@ -7841,7 +7893,7 @@ export default function App({ initialAction = null }) {
           <div className="drillhole-inline-editor" style={{ left: featureEditorPoint.left, top: featureEditorPoint.top }}>
             <div className="drillhole-inline-header" onPointerDown={startFeatureEditorDrag} title="Drag to move">
               <div className="drillhole-inline-title">{selectedFeature.layerName}</div>
-              <button className="drillhole-inline-close" type="button" onClick={() => setSelectedFeature(null)}>×</button>
+              <button className="drillhole-inline-close" aria-label="Close drillhole editor" type="button" onClick={() => setSelectedFeature(null)}>×</button>
             </div>
             <div className="control-row">
               <label htmlFor="f-title-5807">Title</label>
@@ -8228,7 +8280,7 @@ export default function App({ initialAction = null }) {
       {showShareModal && (
         <div className="modal-backdrop" onClick={() => setShowShareModal(false)}>
           <div className="share-modal" onClick={e => e.stopPropagation()}>
-            <button className="export-hd-close" onClick={() => setShowShareModal(false)}>✕</button>
+            <button className="export-hd-close" aria-label="Close sharing dialog" onClick={() => setShowShareModal(false)}>✕</button>
             <div className="share-modal-icon-wrap">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>

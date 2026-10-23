@@ -7,6 +7,18 @@ export function escapeXml(value) {
     .replaceAll("'", '&apos;');
 }
 
+// An export for window.EMAP instead of a download: the Blob itself (as "blob"), its text ("text") or a data URL.
+export function blobAs(blob, as) {
+  if (as === 'blob') return Promise.resolve(blob);
+  if (as === 'text') return blob.text();
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(blob);
+  });
+}
+
 export function downloadBlob(filename, blob) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
