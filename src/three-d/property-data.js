@@ -19,13 +19,22 @@ const PAGE = 1000;
 const fmtN = (n) => Number(n || 0).toLocaleString('en-US');
 const plural = (n, one, many = `${one}s`) => `${fmtN(n)} ${n === 1 ? one : many}`;
 
-export const FILE_NAMES = { collars: 'property-collars.csv', surveys: 'property-surveys.csv', assays: 'property-assays.csv', lithology: 'property-lithology.csv' };
+export const FILE_NAMES = { collars: 'property-collars.csv', surveys: 'property-surveys.csv', assays: 'property-assays.csv', lithology: 'property-lithology.csv', alteration: 'property-alteration.csv' };
+export const GEOLOGY_SOURCES = Object.freeze(['lithology', 'alteration', 'none']);
+const sourceOf = source => {
+  if (source === undefined) return 'lithology';
+  if (!GEOLOGY_SOURCES.includes(source)) throw new Error('Choose lithology, alteration or no geology log.');
+  return source;
+};
+const selectedKinds = source => ['collars', 'surveys', 'assays', ...(source === 'none' ? [] : [source])];
+const selectedBatches = (batches, source) => batches.filter(batch => selectedKinds(source).includes(batch.kind));
 const DRILL_ROLES = ['collar', 'survey', 'assay', 'litho'];
 const TABLES = {
   collars: { select: 'hole_id,x,y,z,crs,azimuth,dip,depth,status,planned', order: ['hole_id'] },
   surveys: { select: 'hole_id,depth_m,azimuth,dip', order: ['hole_id', 'depth_m'] },
   assays: { select: 'hole_id,from_m,to_m,values,bdl,units', order: ['hole_id', 'from_m', 'to_m'] },
   lithology: { select: 'hole_id,from_m,to_m,code,description', order: ['hole_id', 'from_m', 'to_m'] },
+  alteration: { select: 'hole_id,from_m,to_m,code,description,intensity', order: ['hole_id', 'from_m', 'to_m'] },
 };
 
 // ── Rows to files (pure) ────────────────────────────────────────────────────
@@ -40,13 +49,16 @@ const gradeHeader = (el, unit) => (unit ? `${el}_${UNIT_TOKEN[unit] || String(un
 
 /**
  * The editor's files for a property's current drill rows: { collars, surveys,
- * assays, lithology } of rows as selected (TABLES). Assay columns follow the
+ * assays, lithology or alteration } of rows as selected (TABLES). One explicit
+ * geologySource selects the log category; omitted means legacy lithology.
+ * Alteration intensity stays an uninterpreted CSV column. Assay columns follow the
  * order the elements were imported in (batches' mappings, oldest first), then
  * the rest by name; one column per element and unit, so an element stored in
  * two units is never mixed.
  * @returns {{ name: string, text: string }[]} one file per kind that has rows
  */
-export function toFiles(rows, batches = []) {
+export function toFiles(rows, batches = [], { geologySource } = {}) {
+  const source = sourceOf(geologySource);
   const out = [];
   const c = rows.collars || [];
   if (c.length) {
@@ -72,8 +84,9 @@ export function toFiles(rows, batches = []) {
     const ordered = [...[...first].sort((p, q) => p - q).map((i) => a[i]), ...a.filter((_, i) => !first.has(i))];
     out.push({ name: FILE_NAMES.assays, text: csv(['HoleID', 'From', 'To', ...cols.map((k) => gradeHeader(k.el, k.unit))], ordered.map(line)) });
   }
-  const l = rows.lithology || [];
-  if (l.length) out.push({ name: FILE_NAMES.lithology, text: csv(['HoleID', 'From', 'To', 'Code', 'Description'], l.map((r) => [r.hole_id, r.from_m, r.to_m, r.code ?? r.description, r.description])) });
+  const logs = source === 'none' ? [] : rows[source] || [];
+  if (logs.length) out.push({ name: FILE_NAMES[source], text: csv(['HoleID', 'From', 'To', 'Code', 'Description', ...(source === 'alteration' ? ['Intensity'] : [])],
+    logs.map(r => [r.hole_id, r.from_m, r.to_m, r.code ?? r.description, r.description, ...(source === 'alteration' ? [r.intensity] : [])])) });
   return out;
 }
 
@@ -83,13 +96,15 @@ const at = (t) => (t ? Date.parse(t) : -Infinity);
 const latestOf = (batches) => batches.reduce((m, b) => Math.max(m, at(b.created_at), at(b.rolled_back_at)), -Infinity);
 
 /** What a figure records about the data it took: S.drillSource. */
-export function snapshotOf({ propertyId, propertyName = null }, batches, rows) {
-  const live = batches.filter((b) => !b.rolled_back_at).sort((p, q) => at(q.created_at) - at(p.created_at));
-  const t = latestOf(batches), crs = [...new Set((rows.collars || []).map((r) => r.crs).filter(Boolean))];
+export function snapshotOf({ propertyId, propertyName = null, geologySource }, batches, rows) {
+  const source = sourceOf(geologySource), relevant = selectedBatches(batches, source);
+  const live = relevant.filter((b) => !b.rolled_back_at).sort((p, q) => at(q.created_at) - at(p.created_at));
+  const t = latestOf(relevant), crs = [...new Set((rows.collars || []).map((r) => r.crs).filter(Boolean))];
   return {
     kind: 'property', propertyId, propertyName,
     latestBatchId: live[0]?.id || null, latestAt: Number.isFinite(t) ? new Date(t).toISOString() : null,
     holes: (rows.collars || []).length, assays: (rows.assays || []).length, crs: crs.length === 1 ? crs[0] : null,
+    ...(geologySource === undefined ? {} : { geologySource: source, geologyIntervals: source === 'none' ? 0 : (rows[source] || []).length }),
   };
 }
 
@@ -99,16 +114,19 @@ export function snapshotOf({ propertyId, propertyName = null }, batches, rows) {
  * rolledBack }, or null when nothing changed.
  */
 export function newerSince(ref, batches) {
+  const source = sourceOf(ref?.geologySource);
+  batches = selectedBatches(batches, source);
   const t = at(ref?.latestAt);
   const added = batches.filter((b) => !b.rolled_back_at && at(b.created_at) > t);
   const rolledBack = batches.filter((b) => b.rolled_back_at && at(b.rolled_back_at) > t && at(b.created_at) <= t).length;
   if (!added.length && !rolledBack) return null;
   const sum = (kind, f) => added.filter((b) => b.kind === kind).reduce((n, b) => n + f(b.summary || {}), 0);
-  return { imports: added.length, holes: sum('collars', (s) => +s.new || 0), assays: sum('assays', (s) => (+s.new || 0) + (+s.changed || 0)), rolledBack };
+  return { imports: added.length, holes: sum('collars', (s) => +s.new || 0), assays: sum('assays', (s) => (+s.new || 0) + (+s.changed || 0)), rolledBack,
+    ...(ref?.geologySource === undefined ? {} : { geologySource: source, geologyIntervals: source === 'none' ? 0 : sum(source, s => (+s.new || 0) + (+s.changed || 0)) }) };
 }
 
 export const noticeText = (d) => (d.imports
-  ? `New drill data since this figure (${plural(d.holes, 'new hole')}, ${plural(d.assays, 'assay')})${d.rolledBack ? `, ${plural(d.rolledBack, 'import')} rolled back` : ''}`
+  ? `New drill data since this figure (${plural(d.holes, 'new hole')}, ${plural(d.assays, 'assay')}${d.geologySource && d.geologySource !== 'none' ? `, ${plural(d.geologyIntervals, `${d.geologySource} interval`)}` : ''})${d.rolledBack ? `, ${plural(d.rolledBack, 'import')} rolled back` : ''}`
   : `Drill data changed since this figure (${plural(d.rolledBack, 'import')} rolled back)`);
 
 // ── Reading the database ────────────────────────────────────────────────────
@@ -149,7 +167,10 @@ async function readAll(sb, kind, propertyId, onPage) {
       }
     }
     const { data, error } = await q.limit(PAGE);
-    if (error) throw new Error(`Could not read the property's ${kind} (${error.message}).`);
+    if (error) {
+      if (kind === 'alteration' && ['42P01', 'PGRST205'].includes(error.code)) throw Object.assign(new Error('Alteration logs are not available on this site yet. Enable the alteration database update, or choose lithology or no geology log.'), { code: 'ALTERATION_UNAVAILABLE' });
+      throw new Error(`Could not read the property's ${kind} (${error.message}).`);
+    }
     if (!data?.length) return rows;
     cursor = order.map((k) => data.at(-1)[k]);
     const key = JSON.stringify(cursor);
@@ -175,18 +196,23 @@ export function mixedCrs(collars, name = 'This property') {
   return `${name}'s collars are in more than one coordinate system (${list}). Re-import them in one on the property page, then load again.`;
 }
 
-/** The property's current drill data as files, and the snapshot to record. sb: a Supabase client. */
-export async function pull(sb, prop, onProgress = () => {}, tries = 2) {
+/**
+ * The property's current drill data as files, and the snapshot to record. sb: a Supabase client.
+ * Keep the fourth-position retry count compatible; an optional fifth argument
+ * selects geologySource: lithology (default), alteration or none.
+ */
+export async function pull(sb, prop, onProgress = () => {}, tries = 2, { geologySource } = {}) {
+  const source = sourceOf(geologySource);
   const before = await listBatches(sb, prop.id), counts = {};
-  const rows = Object.fromEntries(await Promise.all(Object.keys(TABLES).map(async (k) => [k, await readAll(sb, k, prop.id, (n) => { counts[k] = n; onProgress(counts); })])));
+  const rows = Object.fromEntries(await Promise.all(selectedKinds(source).map(async (k) => [k, await readAll(sb, k, prop.id, (n) => { counts[k] = n; onProgress(counts); })])));
   // An import that landed while the pages were read: read again, so a figure never mixes two versions.
-  if (latestOf(await listBatches(sb, prop.id)) !== latestOf(before)) {
-    if (tries > 1) return pull(sb, prop, onProgress, tries - 1);
+  if (latestOf(selectedBatches(await listBatches(sb, prop.id), source)) !== latestOf(selectedBatches(before, source))) {
+    if (tries > 1) return pull(sb, prop, onProgress, tries - 1, { geologySource });
     throw new Error('The drill data changed while it was loading. Try again in a moment.');
   }
   const mixed = mixedCrs(rows.collars, prop.name || undefined);
   if (mixed) throw new Error(mixed);
-  return { files: toFiles(rows, before), ref: snapshotOf({ propertyId: prop.id, propertyName: prop.name }, before, rows), rows };
+  return { files: toFiles(rows, before, { geologySource }), ref: snapshotOf({ propertyId: prop.id, propertyName: prop.name, geologySource }, before, rows), rows };
 }
 
 // ── UI ──────────────────────────────────────────────────────────────────────
