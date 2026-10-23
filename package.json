@@ -31,6 +31,7 @@
     "proj4": "^2.20.8",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "read-excel-file": "9.3.12",
     "shpjs": "^4.0.4",
     "three": "0.147.0",
     "topojson-client": "^3.1.0",

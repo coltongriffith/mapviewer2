@@ -214,7 +214,10 @@ const BUDGETS = {
   // advisories GHSA-p98j-92pf-mc4p and related; the fixed release is ~0.3 kB larger.
   // 993.2 → 1009.4 (measured 1009.1): 2D labels and geology styling (above, measured 1008.4) merged over the dompurify
   // update.
-  totalAuthJsGzipKb: 1009.4,
+  // 1009.4 → 1026.3 (measured 1026.0): lazy XLSX reader (~13.8 KiB), sheet/header preview
+  // (~1.1 KiB), import wiring and numeric-format handling. Shared fflate adds ~1.2 KiB
+  // for async ZIP workers; it remains one copy with the existing draft compression.
+  totalAuthJsGzipKb: 1026.3,
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
@@ -251,7 +254,8 @@ const BUDGETS = {
   // 924.4 → 924.9 (measured 924.6): dompurify 3.4.17 security update, as totalAuthJsGzipKb above.
   // 924.9 → 940.9 (measured 940.6): 2D labels and geology styling (above, measured 940.0) merged over the dompurify
   // update.
-  totalJsGzipKb: 940.9,
+  // 940.9 → 957.8 (measured 957.5): Excel import, as totalAuthJsGzipKb above.
+  totalJsGzipKb: 957.8,
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the
   // totals above. /3d carries three.js (~109 kB gzip) and its editor.
@@ -511,15 +515,19 @@ const BUDGETS = {
   // 340.9 → 341.5 (Oct 2026, 2D labels and geology styling merged over claim-search intent, measured 341.2, 340.6 on main;
   // on its own branch 340.2 → 340.9, measured 340.6 over 339.9): App as maxJsChunkGzipKb above
   // and MapCanvas +0.31 kB (a styled layer's paths kept unseen for clicks, and the lazy hook to its canvases).
-  editorAuthJsGzipKb: 341.5,
+  // Excel import: shared fflate's async ZIP worker support adds ~1.2 KiB (342.5 measured).
+  // The XLSX parser and sheet picker remain lazy; the homepage does not load compression.
+  editorAuthJsGzipKb: 342.8,
   // 270 → 271.0 (Oct 2026, production errors, measured 270.7, 269.6 on main): the same as editorAuthJsGzipKb above.
   // 271.0 → 271.7 (Oct 2026, 2D drill plan, measured 271.4, 270.8 on main): the same as editorAuthJsGzipKb above.
   // 271.7 → 272.2 (measured 271.9, 271.4 on main): import a company figure, as editorAuthJsGzipKb above.
   // 272.2 → 272.8 (measured 272.5, 271.9 on main): claim-search intent, as editorAuthJsGzipKb above.
   // 272.8 → 273.4 (measured 273.1, 272.5 on main; on its own branch 272.2 → 272.8, measured 272.5 over 271.9): 2D labels
   // and geology styling, as editorAuthJsGzipKb above.
-  editorJsGzipKb: 273.4,
-  claimsAuthJsGzipKb: 355,
+  // Same shared compression increase as above (274.4 measured).
+  editorJsGzipKb: 274.7,
+  // Claims also restores drafts through shared compression (355.3 measured).
+  claimsAuthJsGzipKb: 355.6,
   claimsJsGzipKb: 290,
   // Stylesheet, gzipped. Today ~29 kB.
   maxCssGzipKb: 40,

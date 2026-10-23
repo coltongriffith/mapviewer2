@@ -9,8 +9,9 @@ import { ErrorNote } from './shared';
 import { lazyGuarded } from '../../utils/preloadGuard';
 
 const ResultsPanel = lazyGuarded(() => import('./ResultsPanel'));
+const ExcelSheetPicker = lazyGuarded(() => import('./ExcelSheetPicker'));
 
-// The property's drill database: what is stored, importing a CSV (columns,
+// The property's drill database: what is stored, importing CSV or XLSX (columns,
 // checks, the diff, commit) and the import history with Roll back. Loaded
 // with its tab, so neither the editor nor the other workspace screens carry it.
 
@@ -50,8 +51,9 @@ function Problems({ errors, errorCount, warnings }) {
   );
 }
 
-function Importer({ db, property, orgId, onDone }) {
+export function Importer({ db, property, orgId, onDone }) {
   const [file, setFile] = useState(null); // { name, header, rows }
+  const [workbook, setWorkbook] = useState(null);
   const [kind, setKind] = useState('assays');
   const [mapping, setMapping] = useState(null);
   const [templates, setTemplates] = useState([]);
@@ -62,26 +64,43 @@ function Importer({ db, property, orgId, onDone }) {
   const [note, setNote] = useState(null);
   const batchId = useRef(null);
   const input = useRef(null);
+  const readVersion = useRef(0);
+  useEffect(() => () => { readVersion.current++; }, []);
 
   const loadTemplates = useCallback((k) => db.templates(orgId, k).then(setTemplates).catch(() => setTemplates([])), [db, orgId]);
   useEffect(() => { if (file) loadTemplates(kind); }, [file, kind, loadTemplates]);
 
   const built = useMemo(() => (file && mapping ? buildImport(kind, file, mapping) : null), [file, kind, mapping]);
   const change = (m) => { setMapping(m); setDiff(null); batchId.current = null; };
-  const reset = () => { setFile(null); setMapping(null); setDiff(null); setTplName(''); batchId.current = null; };
+  const reset = () => { readVersion.current++; setWorkbook(null); setFile(null); setMapping(null); setDiff(null); setTplName(''); setBusy(null); batchId.current = null; };
+  const choose = (t, name, excel = null) => {
+    if (excel) setWorkbook(w => ({ ...w, selection: excel }));
+    const k = detectKind(t.header, t.rows, excel?.sheet || name) || 'assays';
+    setFile({ name, ...t, excel }); setKind(k);
+    setMapping({ ...autoMapping(k, t.header, t.rows, { name, crs: property.crs, decimalComma: excel?.decimalComma }), ...(excel ? { excel } : {}) });
+    setDiff(null); batchId.current = null;
+  };
 
   const open = async (f) => {
     setError(null); setNote(null); reset();
-    if (!/\.(csv|txt|tsv)$/i.test(f.name)) { setError('Choose a CSV file. Save Excel sheets as CSV (comma or tab separated) first.'); return; }
+    const version = readVersion.current;
+    if (/\.xls$/i.test(f.name)) { setError('This is an older .xls file. Save it as .xlsx or CSV in Excel, then try again.'); return; }
+    if (!/\.(csv|txt|tsv|xlsx)$/i.test(f.name)) { setError('Choose a CSV, tab-separated text or Excel .xlsx file.'); return; }
     if (f.size > MAX_FILE_BYTES) { setError('That file is larger than 30 MB. Split it and import each part.'); return; }
     try {
+      setBusy('read');
+      if (/\.xlsx$/i.test(f.name)) {
+        const reader = await import('../../utils/xlsxRead.js');
+        const sheets = await reader.readWorkbook(f);
+        if (version === readVersion.current) setWorkbook({ name: f.name, sheets, reader });
+        return;
+      }
       const t = await parseCsv(await f.text());
+      if (version !== readVersion.current) return;
       if (!t.header.length) throw new Error('The file is empty.');
-      const k = detectKind(t.header, t.rows, f.name) || 'assays';
-      setFile({ name: f.name, ...t });
-      setKind(k);
-      setMapping(autoMapping(k, t.header, t.rows, { name: f.name, crs: property.crs }));
-    } catch (e) { setError(e.message); }
+      choose(t, f.name);
+    } catch (e) { if (version === readVersion.current) setError(e.message); }
+    finally { if (version === readVersion.current) setBusy(null); }
   };
   const run = async (key, fn) => {
     setBusy(key); setError(null);
@@ -97,16 +116,19 @@ function Importer({ db, property, orgId, onDone }) {
     onDone();
   });
 
+  if (!file && workbook) return <Suspense fallback={<p role="status">Preparing sheet preview…</p>}><ExcelSheetPicker workbook={workbook} onCancel={reset}
+    onChoose={(table, excel) => choose(table, workbook.name, excel)} /></Suspense>;
   if (!file) {
     return (
       <div>
         {note && <p className="ws-ok" role="status" style={{ marginBottom: 10 }}>{note}</p>}
         <ErrorNote error={error} onDismiss={() => setError(null)} />
         <div className="ws-row">
-          <button type="button" className="btn primary" onClick={() => input.current?.click()}>+ Import a CSV</button>
-          <span className="dash-muted">Collars, downhole surveys, assays or lithology. Up to 20,000 rows per import (split larger files); Excel sheets saved as CSV.</span>
+          <button type="button" className="btn primary" onClick={() => input.current?.click()}>+ Import CSV or Excel</button>
+          <span className="dash-muted">Collars, downhole surveys, assays or lithology. CSV or .xlsx; up to 20,000 rows per import.</span>
         </div>
-        <input ref={input} type="file" accept=".csv,.txt,.tsv,text/csv" hidden aria-label="Drill data file"
+        {busy === 'read' && <p role="status">Reading file… <button type="button" className="btn" onClick={reset}>Cancel</button></p>}
+        <input ref={input} type="file" accept=".csv,.txt,.tsv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden aria-label="Drill data file"
           onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) open(f); }} />
       </div>
     );
@@ -121,16 +143,18 @@ function Importer({ db, property, orgId, onDone }) {
       <ErrorNote error={error} onDismiss={() => setError(null)} />
       <div className="ws-row">
         <span className="ws-list-main"><b>{file.name}</b><small>{n(file.rows.length)} rows · {file.header.length} columns</small></span>
+        {file.excel && <button type="button" className="btn" disabled={!!busy} onClick={() => { setFile(null); setMapping(null); setDiff(null); batchId.current = null; }}>Choose sheet or header</button>}
         <button type="button" className="btn" onClick={reset}>Cancel</button>
       </div>
+      {file.excel && <p className="dash-muted">Sheet: {file.excel.sheet} · header row {file.excel.headerRow} · decimal separator: {mapping.decimalComma ? 'comma' : 'point'}. Reported line numbers refer to worksheet rows.</p>}
       <div className="ws-form-grid">
         <label className="ws-field">Data
-          <select value={kind} onChange={(e) => { const k = e.target.value; setKind(k); change(autoMapping(k, file.header, file.rows, { name: file.name, crs: property.crs })); }}>
+          <select value={kind} onChange={(e) => { const k = e.target.value; setKind(k); change({ ...autoMapping(k, file.header, file.rows, { name: file.name, crs: property.crs, decimalComma: mapping.decimalComma }), ...(file.excel ? { excel: file.excel } : {}) }); }}>
             {KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
           </select>
         </label>
         <label className="ws-field">Saved columns
-          <select value="" onChange={(e) => { const t = templates.find((x) => x.id === e.target.value); if (t) change(applyTemplate(t, file.header, kind === 'assays' ? autoMapping(kind, file.header, file.rows).elements : null)); }}>
+          <select value="" onChange={(e) => { const t = templates.find((x) => x.id === e.target.value); if (t) change({ ...applyTemplate(t, file.header, kind === 'assays' ? autoMapping(kind, file.header, file.rows, { decimalComma: mapping.decimalComma }).elements : null), decimalComma: mapping.decimalComma === true, excel: file.excel || undefined }); }}>
             <option value="">{templates.length ? 'Apply a template…' : 'No templates yet'}</option>
             {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
