@@ -10,11 +10,12 @@ import { computeResults, defaultRecipe } from '../shared/drillResults.js';
 import { scaleCounts, scaleRow } from './fixtures/drill-scale-data.mjs';
 
 const args = process.argv.slice(2);
-assert(args.every((a) => a === '--smoke' || a.startsWith('--out=')), 'Only --smoke and --out=report.json are supported; remote connections are not supported.');
+assert(args.every((a) => a === '--smoke' || a === '--compare-pagination' || a.startsWith('--out=')), 'Only --smoke, --compare-pagination and --out=report.json are supported; remote connections are not supported.');
 const holes = args.includes('--smoke') ? 20 : 2000;
 const out = args.find((a) => a.startsWith('--out='))?.slice(6);
 const OWNER = '00000000-0000-4000-8000-000000000001';
 const EDITOR = '00000000-0000-4000-8000-000000000002';
+const OUTSIDER = '00000000-0000-4000-8000-000000000003';
 const measurements = [];
 const report = {
   schemaVersion: 1, startedAt: new Date().toISOString(), synthetic: true,
@@ -77,10 +78,51 @@ function localClient(as) {
   } };
 }
 
+// SQL candidates only: this does not replace the application's reader or prove
+// PostgREST filter serialization. All values remain bound parameters, including
+// hole IDs containing punctuation. Keep the real current-row/RLS predicates.
+const assaySelect = 'select hole_id,from_m,to_m,"values",units from public.drill_assays where property_id=$1 and superseded_by_batch is null';
+const assayOrder = ' order by hole_id,from_m,to_m limit $2';
+function cursorQuery(mode, property, size, cursor) {
+  const parts = {
+    tuple: '(hole_id,from_m,to_m) > ($3,$4,$5)',
+    expanded_or: '(hole_id > $3 or (hole_id = $3 and from_m > $4) or (hole_id = $3 and from_m = $4 and to_m > $5))',
+    bounded_or: 'hole_id >= $3 and (hole_id > $3 or (hole_id = $3 and from_m > $4) or (hole_id = $3 and from_m = $4 and to_m > $5))',
+  };
+  assert(parts[mode]);
+  return { sql: assaySelect + (cursor ? ` and ${parts[mode]}` : '') + assayOrder,
+    params: [property, size, ...(cursor ? [cursor.hole_id, cursor.from_m, cursor.to_m] : [])] };
+}
+async function compareCursor(as, property, expected, size = 1000) {
+  const candidates = [];
+  for (const mode of ['expanded_or', 'bounded_or', 'tuple']) {
+    let cursor = null, offset = 0;
+    const pages = [];
+    for (;;) {
+      const { sql, params } = cursorQuery(mode, property, size, cursor), start = performance.now();
+      const { rows } = await as(EDITOR, sql, params);
+      pages.push({ offset, rows: rows.length, ms: Math.round((performance.now() - start) * 100) / 100 });
+      assert.deepEqual(rows, expected.slice(offset, offset + size), `${mode}: missing, duplicated or reordered rows at ${offset}`);
+      offset += rows.length;
+      if (rows.length < size) break;
+      cursor = rows.at(-1);
+    }
+    assert.equal(offset, expected.length);
+    const last = cursorQuery(mode, property, size, expected[Math.max(0, expected.length - size - 1)]);
+    const plan = (await as(EDITOR, `explain (analyze, buffers, format json) ${last.sql}`, last.params)).rows;
+    const denied = cursorQuery(mode, property, size, expected[0]);
+    assert.deepEqual((await as(OUTSIDER, denied.sql, denied.params)).rows, [], `${mode}: outsider read`);
+    const result = { mode, count: offset, queryMs: Math.round(pages.reduce((n, p) => n + p.ms, 0) * 100) / 100, pages, lastPagePlan: plan };
+    candidates.push(result);
+    console.log(JSON.stringify({ stage: 'pagination_candidate', mode, rows: offset, queryMs: result.queryMs }));
+  }
+  return candidates;
+}
+
 let fixture;
 try {
   fixture = await timed('database_setup', () => createWorkspaceDb({
-    emails: { [OWNER]: 'owner@synthetic.test', [EDITOR]: 'editor@synthetic.test' },
+    emails: { [OWNER]: 'owner@synthetic.test', [EDITOR]: 'editor@synthetic.test', [OUTSIDER]: 'outsider@synthetic.test' },
     migrations: ['20261023100000_workspaces_properties.sql', '20261025100000_property_files.sql', '20261027100000_drill_database.sql'].map(readMigration),
   }));
   const { db, val, one, su, as } = fixture;
@@ -111,6 +153,23 @@ try {
   assert.equal(new Set(computed.results.map((r) => r.holeId)).size, holes);
   report.resultCount = computed.results.length;
   report.lastAssayPagePlan = (await as(EDITOR, 'explain (analyze, buffers, format json) select hole_id,from_m,to_m,"values",units from public.drill_assays where property_id=$1 and superseded_by_batch is null order by hole_id,from_m,to_m limit 1000 offset $2', [property, Math.max(0, holes * 100 - 1000)])).rows;
+  if (args.includes('--compare-pagination')) {
+    report.paginationCandidates = await compareCursor(as, property, loaded.rows.assays);
+    // Tiny pages force ties on the first two keys across a page boundary.
+    // A replacement import leaves a historical row that every cursor must omit.
+    const edgeProperty = (await one(EDITOR, "insert into public.properties (org_id,name) values ($1,'SYNTHETIC cursor boundaries') returning id", [org])).id;
+    const edgeRows = ['A,(x)."quoted"\\slash', 'A-10', 'A-2', 'É-1'].flatMap((hole_id) =>
+      [[0, 1], [0, 2], [0, 3], [0.1, 0.2], [0.1, 0.3]].map(([from_m, to_m]) => ({ hole_id, from_m, to_m, values: { Au: 1 }, units: { Au: 'g/t' } })));
+    const importEdges = (rows) => val(EDITOR, 'select public.drill_import_batch($1,$2,$3::jsonb,$4::jsonb,$5,$6,$7)', [edgeProperty, 'assays', JSON.stringify(rows), '{}', 'SYNTHETIC-boundaries.csv', false, null]);
+    assert.equal((await importEdges(edgeRows)).rows_written, edgeRows.length);
+    assert.equal((await importEdges([{ ...edgeRows[0], values: { Au: 9 } }])).changed, 1);
+    const expectedEdges = (await as(EDITOR, `${assaySelect} order by hole_id,from_m,to_m`, [edgeProperty])).rows;
+    assert.equal(expectedEdges.length, edgeRows.length);
+    report.paginationBoundaries = await compareCursor(as, edgeProperty, expectedEdges, 2);
+    const anonymous = cursorQuery('bounded_or', edgeProperty, 2, expectedEdges[0]);
+    await assert.rejects(as(null, anonymous.sql, anonymous.params), /permission denied/);
+    report.paginationLimitations = ['Candidates are SQL-only and run after the offset baseline in the same warm database.', 'No PostgREST serialization or concurrent-import retry acceptance is claimed for the candidates.', 'The application still uses its existing offset reader and import-change retry.'];
+  }
   report.importReferenceExceeded = measurements.filter((m) => m.stage === 'import' && m.ms >= 8000);
   report.status = report.importReferenceExceeded.length ? 'local-import-reference-exceeded' : 'local-checks-passed';
   if (report.importReferenceExceeded.length) process.exitCode = 2;

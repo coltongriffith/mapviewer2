@@ -5,6 +5,7 @@ Run from the repository root with the existing development dependencies:
 ```sh
 node scripts/benchmark-drill-scale.mjs --smoke --out=smoke-report.json
 node scripts/benchmark-drill-scale.mjs --out=scale-report.json
+node scripts/benchmark-drill-scale.mjs --compare-pagination --out=cursor-report.json
 ```
 
 The full run creates 2,000 synthetic collars, 20,000 survey stations and 200,000
@@ -52,6 +53,38 @@ rows before discarding the first 199,000. The expected partial current-row
 indexes already exist; adding duplicate indexes is not justified by this run.
 Investigate cursor pagination against this baseline before changing queries.
 These are one-run diagnostic measurements, not a formal throughput benchmark.
+
+## SQL cursor comparison
+
+`--compare-pagination` additionally reads all assays with three SQL cursor
+predicates and compares every page, in order, with the unchanged application
+reader. It records query timings and final-page plans. Two-row pages on a
+separate synthetic property exercise repeated hole/from keys, fractional
+depths, punctuation/Unicode in IDs, and a superseded historical row. Each
+candidate also checks that a nonmember receives no rows; anonymous access is
+rejected. All data and queries stay in the fresh in-memory database.
+
+One full run on 23 October 2026 returned the same 200,000 assays in 201 reads:
+
+| Query approach | Sum of assay query times |
+| --- | ---: |
+| Existing offset reader | 24.64 s |
+| Expanded lexicographic OR | 9.60 s |
+| Same OR plus `hole_id >= last_hole_id` | 2.02 s |
+| SQL row-tuple comparison | 1.81 s |
+
+The additional hole bound lets PostgreSQL seek into the existing
+`drill_assays_current_key` index; its final page took 1.45 ms in EXPLAIN versus
+sorting a large offset prefix. The tuple candidate also seeks directly and
+took 1.35 ms. There is no new index or migration. The bound may help less when
+most intervals belong to one hole; this fixture has 100 intervals per hole.
+
+These are SQL experiments, not a changed application reader. Candidates run
+after the offset baseline in the same warm database, so the timings are
+diagnostic, not a controlled speed guarantee. Before adopting a candidate,
+verify real Supabase-client filter serialization (especially quoted IDs),
+complete pagination for every table and the existing import-change retry.
+SQL parameter binding here does not validate PostgREST filter escaping.
 
 ## Remaining P2-9 acceptance
 
