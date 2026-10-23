@@ -379,7 +379,7 @@ test('alteration import: unavailable database support leaves legacy import usabl
   await page.getByLabel('Drill data file').setInputFiles({ name: 'alteration.csv', mimeType: 'text/csv', buffer: Buffer.from('HoleID,From,To,Alteration code,Intensity\nH1,0,1,03,weak') });
   const form = page.getByRole('form', { name: 'Import drill data' });
   await form.getByRole('button', { name: 'Check against stored data' }).click(); await expect(form.getByRole('alert')).toContainText('Alteration imports are not available on this site yet');
-  await form.getByLabel('Data').selectOption('lithology'); await form.getByLabel('Code', { exact: true }).selectOption('Alteration code');
+  await form.getByLabel('Data').selectOption('lithology'); await form.getByRole('combobox', { name: 'Code', exact: true }).selectOption('Alteration code');
   await form.getByRole('button', { name: 'Check against stored data' }).click(); await expect(form.getByRole('button', { name: 'Commit import' })).toBeEnabled();
   await expect(page.getByText('Alteration intervals', { exact: true })).toHaveCount(0);
 });
