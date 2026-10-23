@@ -533,6 +533,8 @@ const BUDGETS = {
   // 161.2 → 162.7 (P2-8, measured 162.2 plain / 162.4 configured): explicit
   // recipe selection, snapshot ownership, collision/edited-wording guards and
   // recipe-only update notices in property-data. No eager 3D page growth.
+  // 161.2 → 161.7 (measured configured 161.4 + 0.3): property cursor filters,
+  // quoted hole IDs and repeated-page guard; initial routes and total budgets unchanged.
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.

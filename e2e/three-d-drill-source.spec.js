@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
+import { parseDrillFilter, matchesDrillFilter } from '../tests/fixtures/drill-filter.js';
 import { defaultRecipe, computeResults } from '../shared/drillResults.js';
 
 // Exploration Maps 3D (/3d): a figure that takes its holes from a property's drill database
@@ -71,12 +72,18 @@ async function fakeSupabase(page, db) {
     }
     const table = path.slice('/rest/v1/'.length);
     if (db[table]) {
-      // Current rows only, in pages (offset/limit, as supabase-js range() sends them).
+      // The actual SDK sends an ordered key cursor and a limit, never an offset.
       expect(q.get('property_id')).toBe(`eq.${PROP}`);
       expect(q.get('superseded_by_batch')).toBe('is.null');
-      const offset = +q.get('offset'), limit = +q.get('limit');
-      fake.drillPages.push({ table, offset, limit });
-      return json(db[table].filter((r) => r.superseded_by_batch === null).slice(offset, offset + Math.min(limit, 1000)));
+      expect(q.has('offset')).toBe(false);
+      const limit = +q.get('limit'), keys = q.get('order').split(',').map((k) => k.split('.')[0]);
+      let rows = db[table].filter((r) => r.superseded_by_batch === null);
+      if (q.has('hole_id')) rows = rows.filter((r) => matchesDrillFilter(r, parseDrillFilter(`hole_id.${q.get('hole_id')}`)));
+      if (q.has('or')) rows = rows.filter((r) => matchesDrillFilter(r, parseDrillFilter(`or${q.get('or')}`)));
+      rows.sort((a, b) => { for (const k of keys) { if (a[k] < b[k]) return -1; if (a[k] > b[k]) return 1; } return 0; });
+      const data = rows.slice(0, Math.min(limit, 1000));
+      fake.drillPages.push({ table, cursor: q.has('hole_id'), rows: data.length, limit });
+      return json(data);
     }
     if (path === '/rest/v1/three_d_projects') {
       if (method === 'GET') {
@@ -170,7 +177,7 @@ test('a figure takes its holes from the property drill database, keeps them, and
   await expect(picker.getByLabel('Property')).toHaveValue(PROP);
   await picker.getByRole('button', { name: 'Load drill data' }).click();
   await expect(page.locator('#status')).toContainText('Loaded Rails from its drill database: 12 holes, 2,520 assays.');
-  expect(fake.drillPages.filter((p) => p.table === 'drill_assays')).toEqual([0, 1000, 2000].map((offset) => ({ table: 'drill_assays', offset, limit: 1000 })));
+  expect(fake.drillPages.filter((p) => p.table === 'drill_assays')).toEqual([1000, 1000, 520, 0].map((rows, i) => ({ table: 'drill_assays', cursor: i > 0, rows, limit: 1000 })));
   let st = await state(page);
   expect(st.usingSample).toBe(false);
   expect(st.files.map((f) => [f.name, f.role])).toEqual([['property-collars.csv', 'collar'], ['property-surveys.csv', 'survey'], ['property-assays.csv', 'assay'], ['property-lithology.csv', 'litho']]);

@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { inflateRawSync } from 'node:zlib';
 import { createInitialProjectState } from '../shared/projectState.js';
 import { defaultRecipe, computeResults } from '../shared/drillResults.js';
+import { parseDrillFilter, matchesDrillFilter } from '../tests/fixtures/drill-filter.js';
 
 test.skip(!process.env.E2E_ADMIN, 'Requires the configured client with isolated fixtures');
 test.skip(({ isMobile }) => isMobile, 'The 2D editor inspector is a desktop flow');
@@ -23,13 +24,20 @@ test('2D property recipes stay staged until build and persist their exact text a
   await page.route('https://example.supabase.co/**', (route) => {
     const req = route.request(), url = new URL(req.url()), path = url.pathname;
     const json = (body) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+    const drillPage = (rows) => {
+      const q = url.searchParams;
+      for (const [k, v] of q) if (k === 'hole_id') rows = rows.filter((r) => matchesDrillFilter(r, parseDrillFilter(`${k}.${v}`)));
+      if (q.has('or')) rows = rows.filter((r) => matchesDrillFilter(r, parseDrillFilter(`or${q.get('or')}`)));
+      const keys = q.get('order').split(',').map((s) => s.split('.')[0]);
+      return rows.slice().sort((a, b) => { for (const k of keys) { if (a[k] !== b[k]) return a[k] < b[k] ? -1 : 1; } return 0; }).slice(0, Number(q.get('limit')));
+    };
     if (path.endsWith('/auth/v1/user')) return json(user);
     if (path.endsWith('/auth/v1/token')) return json(session);
     if (path.endsWith('/rpc/get_my_workspaces')) return json([{ id: org, name: 'Synthetic company', slug: 'synthetic', role: 'owner' }]);
     if (path.endsWith('/rpc/drill_property_recipes')) { recipeReads++; return json([{ id: `recipe-${version}`, name: 'Default', version, recipe: { ...recipe, cutoff: version === 3 ? 0.3 : 99 } }]); }
     if (path.endsWith('/drill_import_batches')) return json([{ id: 'batch', kind: 'assays', created_at: '2026-10-22T00:00:00Z' }]);
-    if (path.endsWith('/drill_collars')) return json([{ hole_id: 'SYN-01', x: -120, y: 50, z: 1000, crs: 'EPSG:4326', azimuth: 0, dip: -60, depth: 10 }]);
-    if (path.endsWith('/drill_assays')) return json(assays);
+    if (path.endsWith('/drill_collars')) return json(drillPage([{ hole_id: 'SYN-01', x: -120, y: 50, z: 1000, crs: 'EPSG:4326', azimuth: 0, dip: -60, depth: 10 }]));
+    if (path.endsWith('/drill_assays')) return json(drillPage(assays));
     if (path.endsWith('/drill_surveys') || path.endsWith('/drill_lithology')) return json([]);
     const single = (req.headers().accept || '').includes('vnd.pgrst.object');
     if (path.endsWith('/projects')) {

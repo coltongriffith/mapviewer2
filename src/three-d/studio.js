@@ -451,7 +451,10 @@ function rebuildScene(keepCam) {
     holes.forEach((h) => { const d = surf(h.c.x, h.c.y) - h.c.z; h.path.forEach((p) => { p.z += d; }); h.c.z += d; });
     if (Math.abs(med) >= 1) terrainNote = `Holes hung from the terrain: collars moved ${med > 0 ? '+' : '−'}${Math.round(Math.abs(med))} m (median) to the DEM surface.`;
   }
-  zmin = Math.min(...holes.flatMap((h) => h.path.map((p) => p.z)));
+  // Large properties can have hundreds of thousands of path vertices. A
+  // spread call exceeds the engine's argument limit before the scene exists.
+  zmin = Infinity;
+  for (const h of holes) for (const p of h.path) zmin = Math.min(zmin, p.z);
   let zmax = -Infinity; for (const v of grid) zmax = Math.max(zmax, v);
   B.z0 = Number.isFinite(E.z0) && E.z0 < zmax - 10 ? E.z0 : zmin - Math.max(25, 0.05 * diag);
   const zref = (zmax + B.z0) / 2;
@@ -517,7 +520,12 @@ function rebuildScene(keepCam) {
   const traceSeg = [[], [], [], []]; // EXT hook: [2] planned, [3] faded previously released
   holes.forEach((h) => { h.planned = isPlanned(h); }); // EXT hook: before extFade reads the statuses
   computeCallouts(); // the key holes (EXT hook: emphasis) include the callout holes
-  holes.forEach((h) => { h.prov = isProvisional(h); if (holeOn(h)) for (let i = 0; i + 1 < h.path.length; i++) traceSeg[h.planned ? 2 : h.prov ? 1 : extFade(h) ? 3 : 0].push(V(h.path[i].x, h.path[i].y, h.path[i].z), V(h.path[i + 1].x, h.path[i + 1].y, h.path[i + 1].z)); });
+  holes.forEach((h) => {
+    h.prov = isProvisional(h); if (!holeOn(h)) return;
+    // Status/emphasis applies to the whole hole, not each two-metre segment.
+    const segs = traceSeg[h.planned ? 2 : h.prov ? 1 : extFade(h) ? 3 : 0];
+    for (let i = 0; i + 1 < h.path.length; i++) segs.push(V(h.path[i].x, h.path[i].y, h.path[i].z), V(h.path[i + 1].x, h.path[i + 1].y, h.path[i + 1].z));
+  });
   root.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(traceSeg[0]), new THREE.LineBasicMaterial({ color: '#59646a' })));
   if (traceSeg[1].length) { const dl = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(traceSeg[1]), new THREE.LineDashedMaterial({ color: '#59646a', dashSize: diag / 120, gapSize: diag / 180, transparent: true, opacity: 0.75 })); dl.computeLineDistances(); root.add(dl); }
   if (traceSeg[2].length) { const dl = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(traceSeg[2]), new THREE.LineDashedMaterial({ color: S.primary, dashSize: diag / 90, gapSize: diag / 150 })); dl.computeLineDistances(); root.add(dl); } // EXT hook
@@ -973,14 +981,19 @@ function restyle() {
   if (G.wallPrimary !== S.primary && S.wallLabels.some((L) => !L.color)) buildWallLabels();
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), col = new THREE.Color();
   const r = traceR(), n = [0, 0];
-  project.holes.forEach((h) => h.ints.forEach((it) => {
-    const v = it.vals[S.valueCol], bi = holeOn(h) && intervalShown(it) ? binIndex(v) : -1, T = h.prov ? G.tubesP : G.tubes, k = n[+h.prov]++;
-    const a = h.posAt(it.from), b = h.posAt(it.to), va = G.V(a.x, a.y, a.z), vb = G.V(b.x, b.y, b.z), dir = vb.clone().sub(va), len = dir.length();
-    q.setFromUnitVectors(up, dir.normalize());
-    const rw = r * (EXT.tags?.weight(h) ?? 1); sc.set(bi < 0 ? 0.001 : rw, Math.max(0.01, len), bi < 0 ? 0.001 : rw); // EXT hook: key holes bold
-    m.compose(va.clone().add(vb).multiplyScalar(0.5), q, sc);
-    T.setMatrixAt(k, m); col.set(BIN_COLORS[Math.max(0, bi)]); if (extFade(h)) { const gf = uses(S, 'greyFade'); col.lerp(new THREE.Color(gf ? '#b9c1c4' : '#ffffff'), gf ? 0.7 : 0.6); } T.setColorAt(k, col); // EXT hook: fade
-  }));
+  project.holes.forEach((h) => {
+    // Recompute for each restyle so edits still apply immediately, but avoid
+    // rescanning all hole IDs for every assay in this synchronous pass.
+    const on = holeOn(h), rw = r * (EXT.tags?.weight(h) ?? 1), faded = extFade(h);
+    h.ints.forEach((it) => {
+      const v = it.vals[S.valueCol], bi = on && intervalShown(it) ? binIndex(v) : -1, T = h.prov ? G.tubesP : G.tubes, k = n[+h.prov]++;
+      const a = h.posAt(it.from), b = h.posAt(it.to), va = G.V(a.x, a.y, a.z), vb = G.V(b.x, b.y, b.z), dir = vb.clone().sub(va), len = dir.length();
+      q.setFromUnitVectors(up, dir.normalize());
+      sc.set(bi < 0 ? 0.001 : rw, Math.max(0.01, len), bi < 0 ? 0.001 : rw); // EXT hook: key holes bold
+      m.compose(va.clone().add(vb).multiplyScalar(0.5), q, sc);
+      T.setMatrixAt(k, m); col.set(BIN_COLORS[Math.max(0, bi)]); if (faded) { const gf = uses(S, 'greyFade'); col.lerp(new THREE.Color(gf ? '#b9c1c4' : '#ffffff'), gf ? 0.7 : 0.6); } T.setColorAt(k, col); // EXT hook: fade
+    });
+  });
   [G.tubes, G.tubesP].forEach((T, i) => { T.count = n[i]; T.instanceMatrix.needsUpdate = true; if (T.instanceColor) T.instanceColor.needsUpdate = true; });
   styleShell();
   G.walls.forEach((w) => { w.visible = S.walls; });

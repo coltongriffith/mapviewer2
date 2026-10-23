@@ -126,16 +126,38 @@ async function listBatches(sb, propertyId) {
 }
 
 // One table's current rows, PAGE at a time in key order (the order of its current-row index).
+// PostgREST's raw OR grammar needs quoted/escaped text independently of URL encoding.
+const filterValue = (v) => typeof v === 'string' ? `"${v.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"` : String(v);
 async function readAll(sb, kind, propertyId, onPage) {
-  const { select, order } = TABLES[kind], rows = [];
+  const { select, order } = TABLES[kind], rows = [], cursors = new Set();
+  let cursor = null;
   for (;;) {
     let q = sb.from(`drill_${kind}`).select(select).eq('property_id', propertyId).is('superseded_by_batch', null);
     order.forEach((k) => { q = q.order(k, { ascending: true }); });
-    const { data, error } = await q.range(rows.length, rows.length + PAGE - 1);
+    if (cursor) {
+      if (order.length === 1) q = q.gt(order[0], filterValue(cursor[0]));
+      else {
+        const terms = order.map((k, i) => {
+          const parts = order.slice(0, i).map((p, j) => `${p}.eq.${filterValue(cursor[j])}`);
+          parts.push(`${k}.gt.${filterValue(cursor[i])}`);
+          return parts.length === 1 ? parts[0] : `and(${parts.join(',')})`;
+        });
+        // The redundant leading-key bound enables an index seek before the OR filter.
+        q = q.gte(order[0], filterValue(cursor[0])).or(terms.join(','));
+      }
+    }
+    const { data, error } = await q.limit(PAGE);
     if (error) throw new Error(`Could not read the property's ${kind} (${error.message}).`);
+    if (!data?.length) return rows;
+    cursor = order.map((k) => data.at(-1)[k]);
+    const key = JSON.stringify(cursor);
+    if (cursor.some((v, i) => i === 0 ? typeof v !== 'string' || !v.length : !Number.isFinite(v)) || cursors.has(key)) {
+      throw new Error(`Could not read the property's ${kind} (invalid or repeated page cursor).`);
+    }
+    cursors.add(key);
     for (const r of data || []) rows.push(r);
     onPage(rows.length);
-    if (!data || data.length < PAGE) return rows;
+    // Continue to an empty page even if a deployment caps responses below PAGE.
   }
 }
 

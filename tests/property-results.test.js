@@ -5,6 +5,7 @@ import { pullPropertyResults, selectRecipe, recipeChange, RESULTS_FILE } from '.
 import { parseTable, guessKind, buildPlan } from '../src/utils/drillPlanData.js';
 import { readResults, pubCols, pubCallouts, pubLines } from '../src/three-d/published-results.js';
 import { matchCols } from '../src/three-d/roles.js';
+import { parseDrillFilter, matchesDrillFilter } from './fixtures/drill-filter.js';
 
 // Entirely synthetic fixtures: these are not measured Tower positions or grades.
 const prop = { id: 'test-property', name: 'Illustrative only' };
@@ -156,14 +157,21 @@ function fixture(recipes = [saved()]) {
     }),
     from(table) {
       let start = 0, end = Infinity, fields;
+      const filters = [], order = [];
       const q = {
         select: (v) => { fields = v.split(','); return q; },
         eq: (k, v) => { expect([k, v]).toEqual(['property_id', prop.id]); return q; },
         is: (k, v) => { expect([k, v]).toEqual(['superseded_by_batch', null]); return q; },
-        order: () => q, limit: (n) => { end = n; return q; }, range: (a, b) => { start = a; end = b + 1; return q; },
+        gt: (k, v) => { filters.push(parseDrillFilter(`${k}.gt.${v}`)); return q; },
+        gte: (k, v) => { filters.push(parseDrillFilter(`${k}.gte.${v}`)); return q; },
+        or: (v) => { filters.push(parseDrillFilter(`or(${v})`)); return q; },
+        order: (k, options) => { order.push([k, options?.ascending !== false]); return q; },
+        limit: (n) => { end = n; return q; }, range: (a, b) => { start = a; end = b + 1; return q; },
         then(resolve, reject) {
-          reads.push({ table, start, fields }); db.onRead?.(table, start);
-          const data = (db[table] || []).slice(start, end).map((r) => Object.fromEntries(fields.map((f) => [f, r[f]])));
+          reads.push({ table, start, fields, cursor: filters.length > 0 }); db.onRead?.(table, start);
+          const data = (db[table] || []).filter((r) => filters.every((f) => matchesDrillFilter(r, f))).sort((a, b) => {
+            for (const [k, asc] of order) { if (a[k] !== b[k]) return (a[k] < b[k] ? -1 : 1) * (asc ? 1 : -1); } return 0;
+          }).slice(start, end).map((r) => Object.fromEntries(fields.map((f) => [f, r[f]])));
           return Promise.resolve({ data: structuredClone(data), error: db.failTable === table ? { message: 'forbidden' } : null }).then(resolve, reject);
         },
       };
@@ -224,6 +232,21 @@ describe('property recipe snapshot', () => {
     expect(loaded.files.find((f) => f.name === RESULTS_FILE).text).toContain(expected.line);
   });
 
+  it.each(['half', 'zero', 'dl'])('preserves %s BDL recipe results across an assay page boundary', async (bdl) => {
+    const { db, sb, reads } = fixture([saved('Default', 3, { bdl, cutoff: 0, minLength: 0 })]);
+    db.drill_assays = Array.from({ length: 1001 }, (_, i) => ({ hole_id: 'TEST-01', from_m: i * 2, to_m: i * 2 + 2,
+      values: { Au: i >= 999 ? null : 900 }, units: { Au: 'ppb' }, bdl: i >= 999 ? { Au: 500 } : {} }));
+    const loaded = await pullPropertyResults(sb, prop);
+    expect(loaded.rows.assays).toEqual(db.drill_assays);
+    const expected = computeResults(db.drill_assays, db.recipes[0].recipe).results;
+    const file = loaded.files.find((f) => f.name === RESULTS_FILE), parsed = await parseTable(file.text);
+    const actual = readResults(parsed.header, parsed.rows, pubCols(parsed.header, matchCols(parsed.header)), file.name);
+    expect(actual.problems).toEqual([]);
+    expect(actual.results.map((r) => [r.resultId, r.approvedText])).toEqual(expected.map((r) => [r.id, r.line]));
+    expect(reads.filter((r) => r.table === 'drill_assays').map((r) => r.cursor)).toEqual([false, true, true]);
+    expect(loaded.ref.resultsRecipe).toMatchObject({ name: 'Default', version: 3, recipe: { bdl } });
+  });
+
   it('raw-only and old pull callers do not read recipes or acquire recipe metadata', async () => {
     const { sb } = fixture();
     const raw = await pull(sb, prop);
@@ -248,7 +271,7 @@ describe('property recipe snapshot', () => {
     db.onRead = (table) => { if (table === 'drill_assays' && !changed) { changed = true; db.recipes = [saved('Default', 4, { cutoff: 99 })]; } };
     const loaded = await pullPropertyResults(sb, prop);
     expect(loaded.ref.resultsRecipe.version).toBe(4); expect(loaded.resultCount).toBe(0);
-    expect(reads.filter((r) => r.table === 'drill_assays')).toHaveLength(2);
+    expect(reads.filter((r) => r.table === 'drill_assays' && !r.cursor)).toHaveLength(2);
   });
 
   it('refuses continuously changing recipes, failed reads and unconvertible grades', async () => {
