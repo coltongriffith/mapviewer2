@@ -106,6 +106,24 @@ and 2,000 result holes passed the same checks. Assay queries took 2,115 ms,
 survey queries 173 ms and collar queries 32 ms. These separate local runs
 demonstrate the intended index use without promising hosted latency.
 
+A follow-up comparison runs the committed offset reader (`18da7ab4`) and
+cursor reader (`fee08132`) against the **same** in-memory database: 2,000
+collars, 20,000 surveys and 200,000 assays. Deep equality passes for the entire
+returned object, including ordered rows, every CSV byte and the frozen source
+snapshot. Both readers make 228 requests. The matching file SHA-256 values are:
+
+| File | Bytes | SHA-256, identical for both readers |
+| --- | ---: | --- |
+| property-collars.csv | 94,059 | `cd33173faa8e9d8493d4f1cedb5d7ca85d9b13d5b853f22a8b4a9d4f0f6d2b26` |
+| property-surveys.csv | 508,025 | `6b6a031618424afa68589289c8376a6581bb9fa161dfc867cecc597d8550a01b` |
+| property-assays.csv | 5,144,022 | `4313268a141e552f0de3e8ba80f4fd569212f939cff594df8237e58a4a6301b0` |
+
+The cursor read/CSV conversion takes 2,639 ms, followed by 26,993 ms for the
+offset reader. This sequential local comparison proves output preservation,
+not a controlled performance ratio. This fixture has no lithology rows;
+lithology pagination is covered by the client contract tests. Saved-recipe
+integration from the separate recipe PR still needs combined validation.
+
 ## Remaining P2-9 acceptance
 
 For browser measurements, build with the placeholder Supabase client and serve
