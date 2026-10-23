@@ -70,57 +70,77 @@ describe('Ahrefs Web Analytics', () => {
   });
 });
 
-// Google Analytics 4 runs from public/gtag-init.js, beside the Google Ads config (one gtag.js serves both).
-// GA4's pageview reports the page address, and some app addresses carry one-time codes: Stripe's checkout
-// return (?session_id=), the connector consent page (?authorization_id=) and sign-in links (?code=,
-// #access_token=). As public/ahrefs-pageview.js does for Ahrefs, those never leave the browser: on such an
-// address the GA4 config is given page_location with the codes removed from the query and no fragment, which
-// every GA4 event from that page load then reports (a per-event page_location still let user_engagement and
-// other events send the full address). Later events on that load keep the cleaned landing address. The init
-// file is served to every visitor, so it stays short.
-describe('Google Analytics 4', () => {
+// Google Analytics 4 and Google Ads run from public/gtag-init.js (one gtag.js serves both). Some app
+// addresses carry one-time codes: Stripe's checkout return (?session_id=), the connector consent page
+// (?authorization_id=) and sign-in links (?code=, #access_token=). As public/ahrefs-pageview.js does for
+// Ahrefs, those never reach Google:
+// - Google Ads is configured at once (the purchase conversion fires on the checkout return) with
+//   page_location and page_referrer cleaned of the codes;
+// - GA4 is configured only once the app has removed the codes from the address (it checks every 500 ms).
+//   GA4 records in-app address changes itself and reports the previous address as the referrer, ignoring a
+//   configured one, so it must never see an address with codes.
+// A referrer carrying codes (the page the app reloads to after a checkout return) is cleaned for both.
+// The init file is served to every visitor, so it stays short.
+describe('Google Analytics 4 and Google Ads', () => {
   const pages = ['index.html', '3d/index.html', ...htmlFiles('public')];
+  const o = window.location.origin;
 
-  // Runs the init at an address; returns the GA4 config parameters and the address any pageview reports.
-  const ga4 = (url) => {
+  // Runs the init at an address (and referrer); returns the config calls, and a step that moves the
+  // address and the clock on and returns the config calls made since.
+  const run = (url, referrer = '') => {
+    vi.useFakeTimers();
+    const ref = vi.spyOn(document, 'referrer', 'get').mockReturnValue(referrer);
     window.history.replaceState({}, '', url);
     window.dataLayer = [];
     new Function(readFileSync('public/gtag-init.js', 'utf8'))();
-    const calls = window.dataLayer.map((args) => Array.from(args));
-    delete window.dataLayer;
-    window.history.replaceState({}, '', '/');
-    expect(calls.some((c) => c[0] === 'config' && c[1] === 'AW-18358773663'), 'Google Ads config kept').toBe(true);
-    const config = calls.find((c) => c[0] === 'config' && c[1] === 'G-6SR34P1CR7');
-    expect(config, 'GA4 configured').toBeTruthy();
-    const manual = calls.find((c) => c[0] === 'event' && c[1] === 'page_view');
-    // Without parameters, GA4's events report the full current address.
-    const reported = config[2]?.page_location ?? `${window.location.origin}${url}`;
-    return { config: config[2], manual, reported };
+    const configs = () => window.dataLayer.map((a) => Array.from(a)).filter((c) => c[0] === 'config');
+    const first = configs();
+    const after = (nextUrl, ms = 600) => {
+      const n = window.dataLayer.length;
+      window.history.replaceState({}, '', nextUrl);
+      vi.advanceTimersByTime(ms);
+      return window.dataLayer.slice(n).map((a) => Array.from(a)).filter((c) => c[0] === 'config');
+    };
+    const done = () => { ref.mockRestore(); vi.useRealTimers(); delete window.dataLayer; window.history.replaceState({}, '', '/'); };
+    return { ads: first.find((c) => c[1] === 'AW-18358773663'), ga: first.find((c) => c[1] === 'G-6SR34P1CR7'), after, done };
   };
 
-  it('is configured in the shared gtag init, beside Google Ads, with its own pageview', () => {
-    const plain = ga4('/app?company=star%20copper&utm_source=linkedin');
-    expect(plain.config).toBeUndefined();
-    expect(plain.manual).toBeUndefined();
+  it('configures both at once on an ordinary address, with nothing overridden', () => {
+    const r = run('/app?company=star%20copper&utm_source=linkedin', 'https://www.google.com/');
+    expect(r.ads[2]).toEqual({});
+    expect(r.ga[2]).toEqual({});
+    r.done();
   });
 
-  it('never sends one-time codes to Google Analytics', () => {
-    const o = window.location.origin;
+  it('never sends one-time codes: Ads gets the cleaned address, GA4 waits until the app clears it', () => {
     const cases = [
-      ['/?billing=success&session_id=cs_live_abc', `${o}/?billing=success`],
-      ['/oauth/consent?authorization_id=diof6bw3skq5', `${o}/oauth/consent`],
-      ['/#access_token=eyJ.x.y&refresh_token=r&type=magiclink', `${o}/`],
-      ['/?code=pkce-code&utm_source=x', `${o}/?utm_source=x`],
-      ['/?token_hash=abc&type=recovery', `${o}/?type=recovery`],
-      ['/?%E0%A4%A=1&session_id=s', `${o}/?%E0%A4%A=1`],
+      ['/?billing=success&session_id=cs_live_abc', `${o}/?billing=success`, '/?billing=success'],
+      ['/oauth/consent?authorization_id=diof6bw3skq5', `${o}/oauth/consent`, '/oauth/consent'],
+      ['/#access_token=eyJ.x.y&refresh_token=r&type=magiclink', `${o}/`, '/'],
+      ['/?code=pkce-code&utm_source=x', `${o}/?utm_source=x`, '/?utm_source=x'],
+      ['/?token_hash=abc&type=recovery', `${o}/?type=recovery`, '/?type=recovery'],
+      ['/?%E0%A4%A=1&session_id=s', `${o}/?%E0%A4%A=1`, '/?%E0%A4%A=1'],
     ];
-    for (const [url, expected] of cases) {
-      const r = ga4(url);
-      // On the config, so every GA4 event from this page load (not only the pageview) gets the clean address.
-      expect(r.config, url).toEqual({ page_location: expected });
-      expect(r.manual, url).toBeUndefined();
-      expect(r.reported, url).not.toMatch(/session_id|authorization_id|code=|token/);
+    for (const [url, clean, cleared] of cases) {
+      const r = run(url);
+      expect(r.ads[2], url).toEqual({ page_location: clean, page_referrer: clean });
+      expect(r.ga, `${url}: GA4 not started while the codes are in the address`).toBeUndefined();
+      expect(r.after(url, 5000), url).toEqual([]);
+      const later = r.after(cleared);
+      expect(later, url).toEqual([['config', 'G-6SR34P1CR7', {}]]);
+      expect(JSON.stringify(later), url).not.toMatch(/session_id|authorization_id|code=|token/);
+      r.done();
     }
+  });
+
+  it('cleans a referrer that carries codes (the page the app reloads to after a checkout return)', () => {
+    const r = run('/app', `${o}/?billing=success&session_id=cs_live_abc`);
+    expect(r.ads[2]).toEqual({ page_referrer: `${o}/?billing=success` });
+    expect(r.ga[2]).toEqual({ page_referrer: `${o}/?billing=success` });
+    r.done();
+    const s = run('/?billing=success&session_id=cs_live_abc', 'https://checkout.stripe.com/c/pay/cs_live_abc#fid=x');
+    expect(s.ads[2]).toEqual({ page_location: `${o}/?billing=success`, page_referrer: 'https://checkout.stripe.com/c/pay/cs_live_abc#fid=x' });
+    s.done();
   });
 
   it('runs on every page that loads gtag.js', () => {
