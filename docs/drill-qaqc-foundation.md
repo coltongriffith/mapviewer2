@@ -1,6 +1,6 @@
 # QA/QC sample register foundation
 
-This is an additive database and client foundation for P2-3/P2-4, **not a released QA/QC screen or chart system**. The migration has not been applied. Existing `drill_assays`, import screens, results calculations and maps are unchanged. Standards and blanks commonly have no drill hole or interval; this register accepts that without inventing positions or weakening the assay table's positive-interval requirements.
+This is an additive database and client foundation for P2-3/P2-4. The optional import/register UI is documented in `drill-qaqc-ui.md`; charts are not implemented. The migration has not been applied. Existing `drill_assays`, assay import screens, results calculations and maps are unchanged. Standards and blanks commonly have no drill hole or interval; this register accepts that without inventing positions or weakening the assay table's positive-interval requirements.
 
 ## Data contract
 
@@ -22,7 +22,7 @@ Standards require `crm_id` and `crm_revision`. First import `drill_crm_values` d
 
 ## Import and rollback example
 
-The helper is available to a future UI or authenticated application integration. It is not imported by the current product UI and adds no startup bundle code. Use the normal signed-in Supabase client, never a service key.
+The helper is used by the deliberately opened QA/QC panel and is also available to authenticated application integrations. It adds no initial-route startup code. Use the normal signed-in Supabase client, never a service key.
 
 ```js
 import { importQaqc, rollbackQaqc } from './src/utils/drillQaqcDb.js';
@@ -59,7 +59,7 @@ Each committed batch stores provenance, creator/time, counts and a request finge
 
 Limits are 5,000 rows / 4 MB of row JSON / 16 KiB of provenance per request, 200,000 written rows per property including history, and the existing 70%-of-8-GiB database headroom ceiling. Imports serialize with other drill changes using the property's existing advisory lock.
 
-Every written row records its one-based `source_row` within the submitted row array. Sort a batch by this field to recover laboratory row order; it is not a worksheet line number or a claimed collection time. A future CSV mapper should keep its source-line mapping in provenance. An unchanged row retains its original writing batch and row order.
+Every written row records its one-based `source_row` within the submitted row array. Sort a batch by this field to recover laboratory row order; it is not a worksheet line number or a claimed collection time. The CSV/Excel mapper keeps physical source lines client-side for validation and stores bounded filename/hash/sheet/header metadata, not a potentially oversized line array, in provenance. An unchanged row retains its original writing batch and row order.
 
 ## Permissions and migration review
 
@@ -71,4 +71,4 @@ Deployment rollback before any data: remove the QA/QC functions/tables in depend
 
 Tests apply the migration twice, execute real role grants/RLS, validate malformed and oversized data, duplicate identifiers, retry collisions, dry-run/no-op behavior, history, pinned CRM/parent versions, cross-unit refusal, dependency rollback, property deletion guard and isolation from production assays. Security review follows the [Supabase RLS guidance](https://supabase.com/docs/guides/database/postgres/row-level-security) and [function privilege guidance](https://supabase.com/docs/guides/database/functions).
 
-Deferred: import UI/CSV mapping, register browsing, links to lab certificate files, alteration/structure tables, cross-job duplicate pairing, QA/QC charts/statistics and reports. A future chart must use the pinned versions, original lab order/provenance and explicit units/BDL rules; this foundation does not label samples pass/fail or claim scientific approval.
+The separate import/register UI includes CSV/Excel mapping and register browsing. Deferred: links to lab certificate files, alteration/structure tables, cross-job duplicate pairing, QA/QC charts/statistics and reports. A future chart must use the pinned versions, original lab order/provenance and explicit units/BDL rules; this foundation does not label samples pass/fail or claim scientific approval.

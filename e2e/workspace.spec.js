@@ -32,6 +32,90 @@ const BATCH0 = '00000000-0000-4000-8000-0000000000e0';
 const collarBatch = { id: BATCH0, kind: 'collars', filename: 'Rails collars.csv', rows: 12, rows_written: 12, summary: { new: 12, changed: 0, unchanged: 0, new_holes: 12 }, created_at: '2026-10-18T00:00:00Z', created_by_email: 'cfo@star.test', rolled_back_at: null, blocked_by: null };
 const drillSummary = () => ({ collars: 12, planned: 2, metres: 3420.5, surveys: 40, assays: 0, lithology: 0, holes: 12, elements: [], limit: 20000, batches: [{ ...collarBatch }] });
 
+test('QA/QC register: CRM then routine and dependent samples, stable retry and protected rollback', async ({ page }) => {
+  const pageErrors = []; page.on('pageerror', error => pageErrors.push(error.message));
+  await fakeSupabase(page);
+  const store = { samples: [], crms: [], batches: [] }, commits = [], results = new Map();
+  let uncertain = true;
+  for (const [table, key] of [['drill_qaqc_samples', 'samples'], ['drill_crm_values', 'crms'], ['drill_qaqc_batches', 'batches']]) {
+    await page.route(`**/rest/v1/${table}*`, route => route.fulfill({ json: store[key] }));
+  }
+  await page.route('**/rest/v1/rpc/drill_qaqc_import', route => {
+    const args = route.request().postDataJSON(), diff = { ok: true, new: args.p_rows.length, changed: 0, unchanged: 0 };
+    if (args.p_dry_run) return route.fulfill({ json: diff });
+    commits.push(args);
+    if (results.has(args.p_batch)) return route.fulfill({ json: { ...results.get(args.p_batch), replayed: true } });
+    const result = { ...diff, committed: true, batch_id: args.p_batch };
+    results.set(args.p_batch, result);
+    const dependent = args.p_kind === 'samples' && args.p_rows.some(row => row.sample_type !== 'routine');
+    store[args.p_kind].push(...args.p_rows.map((record, i) => ({ id: crypto.randomUUID(), record, batch_id: args.p_batch, source_row: i + 1 })));
+    store.batches.unshift({ id: args.p_batch, kind: args.p_kind, provenance: args.p_provenance, summary: diff, created_at: '2026-10-23T12:00:00Z', depends_on: dependent ? store.batches.map(b => b.id) : [], rolled_back_at: null });
+    if (args.p_kind === 'samples' && uncertain) { uncertain = false; return route.fulfill({ status: 500, json: { message: 'Response lost; retry this import' } }); }
+    return route.fulfill({ json: result });
+  });
+  await page.route('**/rest/v1/rpc/drill_qaqc_rollback', route => route.fulfill({ status: 400, json: { message: 'BATCH_DEPENDENCY' } }));
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold');
+  await page.getByRole('tab', { name: 'Drill data' }).click();
+  await page.getByRole('button', { name: 'Open QA/QC register' }).click();
+  const region = page.getByRole('region', { name: 'QA/QC', exact: true });
+  await region.getByRole('combobox', { name: 'Import data', exact: true }).selectOption('crms');
+  const crm = 'crm_id,revision,element,unit,expected,sd,source\nCRM-TEST,rev1,Au,g/t,1,0.05,Synthetic certificate fixture';
+  await region.getByLabel('QA/QC data file').setInputFiles({ name: 'synthetic-crm.csv', mimeType: 'text/csv', buffer: Buffer.from(crm) });
+  await region.getByRole('button', { name: 'Check QA/QC import' }).click();
+  await region.getByRole('button', { name: 'Commit QA/QC import' }).click();
+  await expect(region.getByText('Imported: 1 new, 0 changed, 0 unchanged.')).toBeVisible();
+  await region.getByLabel('Show records').selectOption('crms');
+  await expect(region.getByRole('table', { name: 'QA/QC register' }).getByRole('cell', { name: 'CRM-TEST', exact: true })).toBeVisible();
+  await region.getByLabel('Show records').selectOption('samples');
+  await expect(region.getByText('No current samples on this page.')).toBeVisible();
+  await region.getByRole('combobox', { name: 'Import data', exact: true }).selectOption('samples');
+  const sampleRows = [['lab_id', 'lab_batch_id', 'sample_id', 'sample_type', 'Au'], ['Lab-TEST', 'Job-TEST', '00001', 'routine', '<0.005']];
+  await region.getByLabel('QA/QC data file').setInputFiles({ name: 'synthetic-routine.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: Buffer.from(xlsxFixture([{ name: 'Samples', rows: sampleRows }])) });
+  await region.getByRole('button', { name: 'Use these columns' }).click();
+  await region.getByRole('checkbox', { name: 'Au', exact: true }).check();
+  await region.getByLabel('Unit for Au').fill('g/t');
+  await region.getByRole('button', { name: 'Check QA/QC import' }).click();
+  await region.getByRole('button', { name: 'Commit QA/QC import' }).click();
+  await expect(region.getByRole('alert')).toContainText('Response lost');
+  await region.getByRole('button', { name: 'Commit QA/QC import' }).click();
+  await expect(region.getByText('Previous import confirmed: 1 new, 0 changed, 0 unchanged.')).toBeVisible();
+  expect(commits[1].p_batch).toBe(commits[2].p_batch);
+  expect(commits[1].p_rows[0]).toMatchObject({ sample_id: '00001', values: { Au: null }, bdl: { Au: 0.005 }, raw_values: { Au: '<0.005' } });
+  expect(commits[1].p_provenance).toMatchObject({ filename: 'synthetic-routine.xlsx', sheet: 'Samples', header_row: 1 });
+  expect(commits[1].p_provenance.sha256).toMatch(/^[0-9a-f]{64}$/);
+  const dependent = 'lab_id,lab_batch_id,sample_id,sample_type,parent_sample_id,crm_id,crm_revision,Au\nLab-TEST,Job-TEST,STD-TEST,standard,,CRM-TEST,rev1,1.020\nLab-TEST,Job-TEST,DUP-TEST,field_dup,00001,,,0.006';
+  await region.getByLabel('QA/QC data file').setInputFiles({ name: 'synthetic-dependent.csv', mimeType: 'text/csv', buffer: Buffer.from(dependent) });
+  await region.getByRole('checkbox', { name: 'Au', exact: true }).check(); await region.getByLabel('Unit for Au').fill('g/t');
+  await region.getByRole('button', { name: 'Check QA/QC import' }).click(); await region.getByRole('button', { name: 'Commit QA/QC import' }).click();
+  await expect(region.getByText('Imported: 2 new, 0 changed, 0 unchanged.')).toBeVisible();
+  const table = region.getByRole('table', { name: 'QA/QC register' });
+  await expect(table.getByRole('cell', { name: '00001', exact: true })).toBeVisible();
+  await expect(table.getByText('Au: <0.005 g/t (below detection)', { exact: true })).toBeVisible();
+  await region.getByLabel('Show records').selectOption('crms');
+  await expect(table.getByRole('cell', { name: 'CRM-TEST', exact: true })).toBeVisible();
+  await expect(table.getByRole('cell', { name: '00001', exact: true })).toHaveCount(0);
+  await region.getByLabel('Show records').selectOption('samples');
+  await expect(table.getByRole('cell', { name: '00001', exact: true })).toBeVisible();
+  await expect(table.getByRole('cell', { name: 'CRM-TEST', exact: true })).toHaveCount(0);
+  expect(pageErrors).toEqual([]);
+  const history = region.getByRole('table', { name: 'QA/QC imports' });
+  await expect(history.getByRole('row').filter({ hasText: 'synthetic-routine.xlsx' }).getByRole('button')).toBeDisabled();
+  page.once('dialog', dialog => dialog.accept());
+  await history.getByRole('row').filter({ hasText: 'synthetic-dependent.csv' }).getByRole('button').click();
+  await expect(region.getByRole('alert')).toContainText('Roll back the dependent import first');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
+});
+
+test('QA/QC register: unavailable schema leaves ordinary imports available', async ({ page }) => {
+  await fakeSupabase(page);
+  await page.route('**/rest/v1/drill_qaqc_samples*', route => route.fulfill({ status: 404, json: { code: 'PGRST205', message: 'missing table' } }));
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold');
+  await page.getByRole('tab', { name: 'Drill data' }).click(); await page.getByRole('button', { name: 'Open QA/QC register' }).click();
+  await expect(page.getByRole('alert')).toContainText('Existing drill imports still work');
+  await expect(page.getByRole('button', { name: '+ Import CSV or Excel' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Import QA/QC CSV or Excel' })).toHaveCount(0);
+});
+
 async function fakeSupabase(page, { role = 'owner', orgs = [org(role)], properties = null } = {}) {
   const fake = { rpc: [], orgs, properties: properties || (orgs.length ? [property] : []), invites: [], files: [{ ...assays }], uploads: [], signed: [], patches: [], drill: drillSummary(), templates: [], recipes: [], assayRows: [] };
   await page.route('**/api/track', (route) => route.fulfill({ status: 204 }));
