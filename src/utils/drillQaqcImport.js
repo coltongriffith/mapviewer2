@@ -43,6 +43,7 @@ function number(raw, decimalComma) {
   const re = decimalComma ? /^\+?(?:\d+(?:,\d*)?|,\d+)(?:e[+-]?\d+)?$/i : /^\+?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i;
   if (!re.test(s)) return { error: 'Expected a numeric value with the chosen decimal separator, without thousands separators.' };
   const value = Number(decimalComma ? s.replace(',', '.') : s);
+  if (value === 0 && /[1-9]/.test(s.split(/[eE]/)[0])) return { error: 'Value is too small to represent numerically; it must not be stored as zero.' };
   return Number.isFinite(value) && value >= 0 && value < 1e12 ? { value }
     : { error: 'Value must be finite, nonnegative and below 1e12.' };
 }

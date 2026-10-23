@@ -17,7 +17,7 @@ describe('strict QA/QC measurements', () => {
   it.each(['', 'NA', 'N/A', 'IS', 'NS', '--', 'null'])('does not treat missing %j as BDL', raw => {
     expect(parseQaqcValue(raw).error).toBeTruthy();
   });
-  it.each(['-999', '-0.005', '>10', '>=10', '<=0.005', '<0', 'Infinity', 'NaN', '1e12', '1e999', '0x10', '1,000', '1 000'])('refuses unsupported result %j', raw => {
+  it.each(['-999', '-0.005', '>10', '>=10', '<=0.005', '<0', 'Infinity', 'NaN', '1e12', '1e999', '1e-999', '0x10', '1,000', '1 000'])('refuses unsupported result %j', raw => {
     expect(parseQaqcValue(raw).error).toBeTruthy();
   });
   it('changes decimal convention only by explicit choice, never guesses thousands', () => {
