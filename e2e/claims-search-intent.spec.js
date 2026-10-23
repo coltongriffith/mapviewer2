@@ -108,3 +108,50 @@ test('the existing claims link still opens an empty Quebec search', async ({ pag
   await page.waitForTimeout(500);
   expect(requests).toEqual([]);
 });
+
+// Manitoba publishes no holder, so its box offers claim numbers and area only.
+test('the Manitoba guide\'s search box runs a claim-number search in Manitoba', async ({ page }) => {
+  const requests = mockRegistry(page, () => ({
+    type: 'FeatureCollection',
+    features: [{ type: 'Feature', properties: { TAG_NUMBER: 'MB16982', CLAIM_NAME: 'SEA16982', AREA_IN_HECTARES: 208 }, geometry: square(-101.88, 55.04) }],
+    meta: {},
+  }));
+  await page.goto('/blog/how-to-search-manitoba-mining-claims/');
+  const form = page.getByRole('search', { name: /Search Manitoba mining claims/ });
+  const mode = form.getByRole('combobox', { name: 'Search by' });
+  await expect(mode.locator('option')).toHaveText(['Claim number(s)', 'Area (latitude, longitude)']);
+  await expect(form).toContainText('verify in iMaQs');
+  await form.getByRole('searchbox').fill('MB16982');
+  await form.getByRole('button', { name: 'Search claims' }).click();
+  await expect(page.getByRole('button', { name: 'Claim #' })).toHaveClass(/active/);
+  await expect.poll(() => requests.length).toBeGreaterThan(0);
+  expect(requests[0]).toMatchObject({ q: 'MB16982', type: 'number', province: 'mb' });
+});
+
+test('the Manitoba guide\'s area search loads the claims around its point', async ({ page }) => {
+  const bboxes = mockRegistry(page, () => ({ type: 'FeatureCollection', features: [], meta: {} }));
+  await page.goto('/blog/how-to-search-manitoba-mining-claims/');
+  const form = page.getByRole('search', { name: /Search Manitoba mining claims/ });
+  await form.getByRole('combobox', { name: 'Search by' }).selectOption('area');
+  await form.getByRole('searchbox').fill('54.77, -101.88');
+  await form.getByRole('button', { name: 'Search claims' }).click();
+  await expect.poll(() => bboxes.length).toBeGreaterThan(0);
+  expect(bboxes[0].province).toBe('mb');
+  const [w, s, e, n] = bboxes[0].bbox.split(',').map(Number);
+  expect((w + e) / 2).toBeCloseTo(-101.88, 3);
+  expect((s + n) / 2).toBeCloseTo(54.77, 3);
+});
+
+for (const [slug, name] of [
+  ['how-to-map-bc-mineral-claims-live-registry', /Search BC mineral claims/],
+  ['bc-mineral-titles-online-guide', /Look up a BC claim/],
+]) test(`the BC guide ${slug} searches BC owners from its search box`, async ({ page }) => {
+  const requests = mockRegistry(page, () => ({ type: 'FeatureCollection', features: [], meta: {} }));
+  await page.goto(`/blog/${slug}/`);
+  const form = page.getByRole('search', { name });
+  await expect(form).toContainText('verify in MTO');
+  await form.getByRole('searchbox').fill('Teck');
+  await form.getByRole('button', { name: 'Search claims' }).click();
+  await expect.poll(() => requests.length).toBeGreaterThan(0);
+  expect(requests[0]).toMatchObject({ q: 'Teck', type: 'company', province: 'bc' });
+});

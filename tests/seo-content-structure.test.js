@@ -49,10 +49,20 @@ describe('registry article journeys', () => {
     expect(actions.some(u=>u.searchParams.get('intent')==='claims-upload')).toBe(true);
     expect(actions.some(u=>u.searchParams.get('intent')==='claims' && u.searchParams.get('utm_content').startsWith('section-'))).toBe(true);
   });
-  it.each([
-    ['quebec', 'how-to-search-quebec-mining-claims', 'GESTIM'],
-    ['ontario', 'how-to-search-ontario-mining-claims', 'MLAS'],
-  ])('leads the %s guide with a plain search form onto the editor deep link', (region, slug, registry) => {
+  // The guides that lead with a search box, and the modes each box may offer:
+  // only the ones the region's registry search really has (Manitoba publishes
+  // no holder, so RegistrySearch gives it number search only, and the editor
+  // ignores a deep-link mode the region does not offer).
+  const SEARCH_GUIDES = [
+    ['quebec', 'how-to-search-quebec-mining-claims', 'GESTIM', ['company', 'number', 'area']],
+    ['ontario', 'how-to-search-ontario-mining-claims', 'MLAS', ['company', 'number', 'area']],
+    ['manitoba', 'how-to-search-manitoba-mining-claims', 'iMaQs', ['number', 'area']],
+    ['british-columbia', 'how-to-map-bc-mineral-claims-live-registry', 'MTO', ['company', 'number', 'area']],
+    ['british-columbia', 'bc-mineral-titles-online-guide', 'MTO', ['company', 'number', 'area']],
+  ];
+  const SEARCH_GUIDE_PATHS = new Set(SEARCH_GUIDES.map(([, slug]) => `/blog/${slug}/`));
+
+  it.each(SEARCH_GUIDES)('leads the %s guide %s with a plain search form onto the editor deep link', (region, slug, registry, modes) => {
     const html = pages.get(`/blog/${slug}/`);
     const form = /<form class="claim-search" action="\/" method="get"[^>]*>([\s\S]*?)<\/form>/.exec(html);
     expect(form, 'no search form').toBeTruthy();
@@ -60,7 +70,7 @@ describe('registry article journeys', () => {
     expect(html.indexOf('<form class="claim-search"')).toBeLessThan(html.indexOf('<h2>'));
     const hidden = Object.fromEntries([...form[1].matchAll(/<input type="hidden" name="([^"]+)" value="([^"]*)">/g)].map(m => [m[1], m[2]]));
     expect(hidden).toEqual({ intent: 'claims', region, utm_source: 'blog', utm_medium: 'cta', utm_campaign: slug, utm_content: 'search-box' });
-    expect([...form[1].matchAll(/<option value="([^"]+)"/g)].map(m => m[1])).toEqual(['company', 'number', 'area']);
+    expect([...form[1].matchAll(/<option value="([^"]+)"/g)].map(m => m[1])).toEqual(modes);
     expect(form[1]).toMatch(/<input id="claim-search-q" name="q" type="search"/);
     expect(form[1]).toMatch(/<label class="claim-search-label" for="claim-search-q">/);
     expect(form[1]).toContain(`Free · no login · public registry data (`);
@@ -75,13 +85,13 @@ describe('registry article journeys', () => {
 
   it('keeps the search-box styles off every other page', () => {
     for (const [path, html] of pages) {
-      if (/how-to-search-(quebec|ontario)-mining-claims/.test(path)) continue;
+      if (SEARCH_GUIDE_PATHS.has(path)) continue;
       expect(html.includes('.claim-search{'), path).toBe(false);
     }
   });
 
   it('keeps registry-guide images lazy, sized and described', () => {
-    for (const slug of ['how-to-search-quebec-mining-claims', 'how-to-search-ontario-mining-claims']) {
+    for (const slug of ['how-to-search-quebec-mining-claims', 'how-to-search-ontario-mining-claims', 'how-to-map-bc-mineral-claims-live-registry']) {
       const imgs = [...pages.get(`/blog/${slug}/`).matchAll(/<img [^>]+>/g)].map(m => m[0]);
       expect(imgs.length).toBeGreaterThan(0);
       for (const tag of imgs) {
@@ -103,6 +113,21 @@ describe('registry article journeys', () => {
     expect(html).not.toContain('<td>Map sheet</td>');
     expect(html).toContain('Map-sheet lookup is not available');
     expect(html).toContain('href="/tenure-monitor?utm_source=blog');
+  });
+  it('says plainly that Manitoba has no holder search, and links the registry of record', () => {
+    const html = pages.get('/blog/how-to-search-manitoba-mining-claims/');
+    expect(html).not.toMatch(/<option value="company"/);
+    expect(html).toContain('no company search');
+    expect(html).toContain('href="https://web33.gov.mb.ca/imaqs/"');
+  });
+  it('keeps the MTO guide pointing at the BC search guide rather than repeating it', () => {
+    const mto = pages.get('/blog/bc-mineral-titles-online-guide/');
+    const guide = pages.get('/blog/how-to-map-bc-mineral-claims-live-registry/');
+    expect(mto).toContain('<a href="/blog/how-to-map-bc-mineral-claims-live-registry/">BC mineral claims search guide</a>');
+    expect(guide).toContain('<a href="/blog/bc-mineral-titles-online-guide/">');
+    const h2s = (html) => new Set([...html.matchAll(/<h2>(.*?)<\/h2>/g)].map(m => m[1]).filter(h => h !== 'Related guides' && h !== 'Frequently Asked Questions'));
+    const shared = [...h2s(mto)].filter(h => h2s(guide).has(h));
+    expect(shared).toEqual([]);
   });
 });
 
@@ -373,13 +398,19 @@ describe('structured data', () => {
   it('emits FAQPage markup only where a post opts in, and only as a copy of its visible FAQ', () => {
     // Removed site-wide deliberately: Google restricted FAQ rich results to
     // authoritative government and health sites in August 2023, so on a
-    // commercial site the markup earns no rich result. The two registry-search
-    // guides opt back in (post.faqSchema) at the owner's request; the risk the
+    // commercial site the markup earns no rich result. The registry-search
+    // guides (QC, ON, MB, BC and the MTO guide) opt back in (post.faqSchema) at the owner's request; the risk the
     // removal named — a second copy drifting from the visible content — is
     // what the comparison below pins.
     const posts = JSON.parse(readFileSync(join(ROOT, 'scripts/blog-data/how-to-posts.json'), 'utf8'));
     const optedIn = new Set(posts.filter(p => p.faqSchema).map(p => `/blog/${p.slug}/`));
-    expect([...optedIn].sort()).toEqual(['/blog/how-to-search-ontario-mining-claims/', '/blog/how-to-search-quebec-mining-claims/']);
+    expect([...optedIn].sort()).toEqual([
+      '/blog/bc-mineral-titles-online-guide/',
+      '/blog/how-to-map-bc-mineral-claims-live-registry/',
+      '/blog/how-to-search-manitoba-mining-claims/',
+      '/blog/how-to-search-ontario-mining-claims/',
+      '/blog/how-to-search-quebec-mining-claims/',
+    ]);
     for (const [path, html] of pages) {
       expect(html.includes('"FAQPage"'), `${path} FAQPage markup`).toBe(optedIn.has(path));
       if (!optedIn.has(path)) continue;
