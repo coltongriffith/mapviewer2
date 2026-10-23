@@ -352,7 +352,7 @@ async function update() {
       ? await (await resultTools()).pullPropertyResults(sb, prop, { recipeName: ref.resultsRecipe.name, geologySource: ref.geologySource })
       : await pull(sb, prop, undefined, 2, { geologySource: ref.geologySource });
     if (pending !== was || !stillOurs(was)) { if (pending === was) reset(); return; } // another figure opened while it read
-    const p = em().getProject(), names = Object.entries(FILE_NAMES).filter(([k]) => ref.geologySource !== undefined || k !== 'alteration').map(([, name]) => name);
+    const p = em().getProject(), names = Object.entries(FILE_NAMES).filter(([k]) => !['lithology', 'alteration'].includes(k) || k === (ref.geologySource ?? 'lithology')).map(([, name]) => name);
     if (ref.resultsRecipe) names.push(ref.resultsRecipe.fileName);
     const keep = p.files.filter((f) => !names.includes(f.name));
     if (ref.geologySource !== undefined && keep.some((f) => f.role === 'litho')) {

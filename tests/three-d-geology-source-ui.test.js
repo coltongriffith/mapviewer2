@@ -7,7 +7,7 @@ const ref = (geologySource = 'lithology') => ({ kind: 'property', propertyId: 'p
 const file = (name, role) => ({ name, role, text: 'synthetic' });
 let project, E, say, tables, reads, figure;
 const clone = (x) => JSON.parse(JSON.stringify(x));
-const client = { from(table) { reads.push(table); const q = { select: () => q, eq: () => q, is: () => q, order: () => q, limit: () => q, then: (yes) => Promise.resolve({ data: tables[table] || [], error: null }).then(yes) }; return q; } };
+const client = { from(table) { reads.push(table); let paged = false; const q = { select: () => q, eq: () => q, is: () => q, order: () => q, gt: () => { paged = true; return q; }, limit: () => q, then: (yes) => Promise.resolve({ data: paged ? [] : tables[table] || [], error: null }).then(yes) }; return q; } };
 const change = (id, value) => { const e = document.getElementById(id); e.value = value; e.dispatchEvent(new Event('change', { bubbles: true })); };
 const clickLoad = async () => { document.getElementById('drill-load').click(); await vi.waitFor(() => expect(document.getElementById('drill-load').disabled).toBe(false)); };
 beforeEach(() => {
@@ -45,7 +45,7 @@ describe('explicit property geology source', () => {
     expect(E.clearFiles).not.toHaveBeenCalled(); expect(say).not.toHaveBeenCalled(); expect(document.getElementById('drill-load').disabled).toBe(false);
   });
   it('updates the saved alteration source while preserving custom legend labels', async () => {
-    project.settings.drillSource = ref('alteration'); project.files = [file('property-alteration.csv', 'litho'), file('property-lithology.csv', 'litho'), file('terrain.csv', 'topo')];
+    project.settings.drillSource = ref('alteration'); project.files = [file('property-alteration.csv', 'litho'), file('terrain.csv', 'topo')];
     const legend = clone(project.settings.geology.legend); await check(); document.getElementById('drill-update').click();
     await vi.waitFor(() => expect(E.loadProject).toHaveBeenCalled());
     expect(reads).toContain('drill_alteration'); expect(reads).not.toContain('drill_lithology');
@@ -56,6 +56,11 @@ describe('explicit property geology source', () => {
     project.files.push(file('user-geology.csv', 'litho')); await check(); document.getElementById('drill-update').click();
     await vi.waitFor(() => expect(say).toHaveBeenCalledWith(expect.stringContaining('uploaded geology')));
     expect(E.loadProject).not.toHaveBeenCalled(); expect(project.files.some((f) => f.name === 'user-geology.csv')).toBe(true);
+  });
+  it('refuses an uploaded log named after the opposite property source without deleting it', async () => {
+    project.files.push(file('property-alteration.csv', 'litho')); await check(); document.getElementById('drill-update').click();
+    await vi.waitFor(() => expect(say).toHaveBeenCalledWith(expect.stringContaining('uploaded geology')));
+    expect(E.loadProject).not.toHaveBeenCalled(); expect(project.files.some((f) => f.name === 'property-alteration.csv')).toBe(true);
   });
   it('keeps legacy uploaded alteration-named files on ordinary Update', async () => {
     project.settings.drillSource = ref(null); project.files.push(file('property-alteration.csv', 'litho'));
