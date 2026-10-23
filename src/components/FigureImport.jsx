@@ -3,17 +3,21 @@ import L from 'leaflet';
 import { BASEMAPS } from '../utils/basemapConfig.js';
 import { fitTransform, describeFit, formatMetres, applyFit } from '../utils/georef.js';
 import { TRACE_DEFAULTS, samplePatch } from '../utils/figureTrace.js';
+import { MARK_DEFAULTS, suggestStyle } from '../utils/figureMarks.js';
 import {
   loadFigureImage, figurePixels, makeProjector, constraintsFor, placeFigure, runTrace, unitColour, unitFill, ringsToLngLat,
   figureCreditText, figureRasterLayer, utmZoneOf, parseCoord, FIGURE_MAX_EDGE, hasBlankMargin, finishFigure,
-  tracedForUnits, reconcileFigureLayers, refitMover,
+  tracedForUnits, reconcileFigureLayers, refitMover, runMarks, marksForSets,
 } from '../utils/figureImport.js';
+import { MarksControls, MarksOverlay } from './FigureMarks.jsx';
 import { figureOverlay } from '../utils/figureOverlay.js';
 import { trackEvent } from '../utils/track';
 
 // "Import a company figure": put a figure from a news release on the map
 // (georeference it by a few known points, rotation included), trace its map
-// units by colour into polygon layers, and credit it on the export.
+// units by colour into polygon layers, trace its lines (faults, trends) and
+// point symbols (stars, diamonds, circles) by colour into line and point
+// layers after a review of each find, and credit it on the export.
 //
 // Two panes: the figure, where points and colour samples are clicked, and a
 // satellite map, where a point's position can be clicked instead of typed and
@@ -36,6 +40,8 @@ export default function FigureImport({ source, existing, map: editorMap, setProj
   const [scan, setScan] = useState({ margin: false, hide: false, crop: g?.crop || null });
   const [cropPick, setCropPick] = useState(null); // null | 'first' | { x, y }
   const [kept, setKept] = useState(null);
+  // The upload itself, for tracing from its own (not recompressed) colours.
+  const [original, setOriginal] = useState(null);
   const [error, setError] = useState('');
   const [tab, setTab] = useState('place');
   const [crs, setCrs] = useState(g?.crs || { kind: 'utm', zone: utmZoneOf(centre.lng), hemisphere: centre.lat < 0 ? 'S' : 'N', datum: 'NAD83' });
@@ -55,6 +61,15 @@ export default function FigureImport({ source, existing, map: editorMap, setProj
   const [fillPick, setFillPick] = useState(null); // the unit whose fill the next click takes
   const [trace, setTrace] = useState(null); // { results, scale, units }
   const [tracing, setTracing] = useState(false);
+  // Lines and points: the colours picked ("sets"), the last detection, and
+  // the review of its finds ({ [find id]: 'accepted' | 'rejected' }).
+  const [marks, setMarks] = useState(() => (g?.marks || []).map((m) => ({ ...m, id: m.id || uid() })));
+  const [activeMark, setActiveMark] = useState(null);
+  const [newKind, setNewKind] = useState(null); // 'line' | 'point': the next click starts a colour
+  const [markOpts, setMarkOpts] = useState(() => ({ minLength: MARK_DEFAULTS.minLength, maxGap: MARK_DEFAULTS.maxGap, minSize: 5, ...(g?.markOpts || {}) }));
+  const [detection, setDetection] = useState(null); // { sets, results, scale }
+  const [review, setReview] = useState({});
+  const [detecting, setDetecting] = useState(false);
   const [fig, setFig] = useState(() => ({ source: '', date: '', subject: '', ...(existing?.figure || {}) }));
   const [creditEdited, setCreditEdited] = useState(!!existing?.figure?.credit);
   const [keepImage, setKeepImage] = useState(true);
@@ -69,7 +84,7 @@ export default function FigureImport({ source, existing, map: editorMap, setProj
     if (!source || er) return undefined;
     let live = true;
     loadFigureImage(source.dataUri || source, source.name || 'Figure')
-      .then((img) => { if (live) setImage(img); })
+      .then((img) => { if (live) { setImage(img); setOriginal(source.dataUri || source); } })
       .catch((err) => { if (live) setError(err.message || 'Could not read the image.'); });
     return () => { live = false; };
   }, [source, er]);
@@ -127,7 +142,7 @@ export default function FigureImport({ source, existing, map: editorMap, setProj
     map.on('click', (e) => clickRef.current?.(e.latlng));
     mapRef.current = map;
     setTimeout(() => map.invalidateSize(), 0);
-    return () => { map.remove(); mapRef.current = null; overlayRef.current = null; tracedRef.current = null; };
+    return () => { map.remove(); mapRef.current = null; overlayRef.current = null; tracedRef.current = null; marksRef.current = null; };
   }, [hasImage]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pointLatLng = (p) => {
@@ -192,9 +207,27 @@ export default function FigureImport({ source, existing, map: editorMap, setProj
     ))).addTo(map);
   }, [traced]);
 
+  // Accepted lines and points in map coordinates, previewed on the map and
+  // handed back on Add. Finds not accepted are never added.
+  const marksTraced = useMemo(() => {
+    if (!placement || !detection) return [];
+    const at = (x, y) => { const [lat, lng] = projector.toLatLng(...applyFit(fit, x * detection.scale, y * detection.scale)); return [lng, lat]; };
+    return marksForSets(detection, marks, review, (kind, f) => (kind === 'line' ? f.points.map(([x, y]) => at(x, y)) : at(f.x, f.y)));
+  }, [detection, marks, review, placement, fit, projector]);
+  const marksRef = useRef(null);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (marksRef.current) { map.removeLayer(marksRef.current); marksRef.current = null; }
+    if (!marksTraced.length) return;
+    marksRef.current = L.featureGroup(marksTraced.flatMap(({ unit, features }) => features.map((c) => (unit.kind === 'line'
+      ? L.polyline(c.map(([lng, lat]) => [lat, lng]), { color: unit.colour, weight: 3, dashArray: unit.style === 'dashed' ? '8 5' : null, interactive: false })
+      : L.circleMarker([c[1], c[0]], { radius: 5, color: '#111827', weight: 1, fillColor: unit.colour, fillOpacity: 1, interactive: false }))))).addTo(map);
+  }, [marksTraced]);
+
   // ── the figure pane ───────────────────────────────────────────────────
   const getPixels = async () => {
-    if (!pixelsRef.current) pixelsRef.current = await figurePixels(shown.dataUri, image.width);
+    if (!pixelsRef.current) pixelsRef.current = await figurePixels(shown.dataUri, image.width, undefined, original);
     return pixelsRef.current;
   };
 
@@ -211,13 +244,23 @@ export default function FigureImport({ source, existing, map: editorMap, setProj
       const p = { id: uid(), kind: crs.kind === 'utm' ? nextKind : 'point', x: +x.toFixed(1), y: +y.toFixed(1), a: '', b: '' };
       setPoints((prev) => [...prev, p]);
       setFocusId(p.id);
-    } else if (tab === 'trace') {
+    } else if ((tab === 'trace' || tab === 'marks') && areaPick) {
       if (areaPick === 'first') { setAreaPick({ x, y }); return; }
-      if (areaPick) {
-        setArea({ x0: Math.min(x, areaPick.x), y0: Math.min(y, areaPick.y), x1: Math.max(x, areaPick.x), y1: Math.max(y, areaPick.y) });
-        setAreaPick(null);
-        return;
+      setArea({ x0: Math.min(x, areaPick.x), y0: Math.min(y, areaPick.y), x1: Math.max(x, areaPick.x), y1: Math.max(y, areaPick.y) });
+      setAreaPick(null);
+    } else if (tab === 'marks') {
+      const px = await getPixels();
+      const colour = samplePatch(px, x / px.scale, y / px.scale, 1);
+      if (newKind || !activeMark || !marks.some((m) => m.id === activeMark)) {
+        const kind = newKind || 'line';
+        const m = { id: uid(), kind, name: '', samples: [colour], colour: unitColour([colour]), tolerance: MARK_DEFAULTS.tolerance, style: kind === 'line' ? 'solid' : 'circle', styleAuto: true };
+        setMarks((prev) => [...prev, m]);
+        setActiveMark(m.id);
+        setNewKind(null);
+      } else {
+        setMarks((prev) => prev.map((m) => (m.id === activeMark ? { ...m, samples: [...m.samples, colour] } : m)));
       }
+    } else if (tab === 'trace') {
       const px = await getPixels();
       const colour = samplePatch(px, x / px.scale, y / px.scale, 2);
       if (fillPick) {
@@ -254,7 +297,60 @@ export default function FigureImport({ source, existing, map: editorMap, setProj
     }
   };
 
-  const autoCredit = figureCreditText({ ...fig, subject: fig.subject || (traced.length ? 'Geology (simplified)' : 'Figure') });
+  const doDetect = async () => {
+    const ready = marks.filter((m) => m.samples.length);
+    if (!ready.length) return;
+    setDetecting(true); setError('');
+    try {
+      const px = await getPixels();
+      const k = 1 / px.scale; // figure pixels → the detector's working pixels
+      const region = area ? { x0: area.x0 * k, y0: area.y0 * k, x1: area.x1 * k, y1: area.y1 * k } : null;
+      const raw = await runMarks(px, ready.map((m) => ({ kind: m.kind, samples: m.samples, tolerance: m.tolerance })), {
+        minLength: markOpts.minLength * k, maxGap: markOpts.maxGap * k, minSize: markOpts.minSize * k, region,
+      });
+      const results = raw.map((r, i) => {
+        const tag = (list) => list?.map((f, j) => ({ ...f, id: `${ready[i].id}:${j}` }));
+        return { lines: tag(r.lines), points: tag(r.points) };
+      });
+      setDetection({ sets: ready.map(({ id, kind }) => ({ id, kind })), results, scale: px.scale });
+      setReview({});
+      if (!fig.subject && !trace) setFig((f) => ({ ...f, subject: 'Structure (simplified)' }));
+    } catch (err) {
+      setError(err.message || 'Detection failed.');
+    } finally {
+      setDetecting(false);
+    }
+  };
+  // Each colour's style follows its finds (the accepted ones, once there are
+  // any) until the person picks one.
+  useEffect(() => {
+    if (!detection) return;
+    setMarks((prev) => {
+      let changed = false;
+      const next = prev.map((m) => {
+        const i = detection.sets.findIndex((d) => d.id === m.id);
+        if (i < 0 || !m.styleAuto) return m;
+        const finds = (m.kind === 'line' ? detection.results[i].lines : detection.results[i].points) || [];
+        const accepted = finds.filter((f) => review[f.id] === 'accepted');
+        const basis = accepted.length ? accepted : finds;
+        const style = suggestStyle(m.kind, basis);
+        const teeth = basis.find((f) => f.teeth)?.teeth || m.teeth;
+        if (style === m.style && teeth === m.teeth) return m;
+        changed = true;
+        return { ...m, style, teeth };
+      });
+      return changed ? next : prev;
+    });
+  }, [detection, review]);
+  const toggleFind = (id) => setReview((rv) => ({ ...rv, [id]: rv[id] === 'accepted' ? 'rejected' : 'accepted' }));
+  // Finds of the colours still listed that were neither accepted nor rejected.
+  const pendingFinds = detection ? detection.sets.reduce((n, s, i) => (marks.some((m) => m.id === s.id)
+    ? n + [...(detection.results[i].lines || []), ...(detection.results[i].points || [])].filter((f) => !review[f.id]).length : n), 0) : 0;
+  const acceptedLines = marksTraced.filter((t) => t.unit.kind === 'line').reduce((s2, t) => s2 + t.features.length, 0);
+  const acceptedPoints = marksTraced.filter((t) => t.unit.kind === 'point').reduce((s2, t) => s2 + t.features.length, 0);
+
+  const hasAcceptedMarks = acceptedLines + acceptedPoints > 0;
+  const autoCredit = figureCreditText({ ...fig, subject: fig.subject || (traced.length ? 'Geology (simplified)' : hasAcceptedMarks ? 'Structure (simplified)' : 'Figure') });
   const credit = creditEdited ? fig.credit : autoCredit;
 
   const add = async () => {
@@ -266,6 +362,7 @@ export default function FigureImport({ source, existing, map: editorMap, setProj
         crs, mode, points, area, kind: fit.kind, rms: +fit.rms.toFixed(2), work: projector.work,
         frame: { width: image.width, height: image.height }, crop: scan.crop, margins: !!(scan.margin && scan.hide),
         units: units.map(({ id, name, samples, tolerance, fill }) => ({ id, name, samples, tolerance, fill })),
+        ...(marks.length ? { marks: marks.map(({ id, kind, name, samples, tolerance, style, styleAuto, teeth, colour }) => ({ id, kind, name, samples, tolerance, style, styleAuto, teeth, colour })), markOpts } : {}),
       },
     }) : null;
     // A corrected fit moves the units traced before and not traced again:
@@ -280,7 +377,7 @@ export default function FigureImport({ source, existing, map: editorMap, setProj
         if (!oldFit.error && !same) move = refitMover(oldFit, oldProjector, fit, projector);
       } catch { /* left where they are */ }
     }
-    const fresh = traced.map((t) => ({ ...t, id: uid() }));
+    const fresh = [...traced, ...marksTraced].map((t) => ({ ...t, id: uid() }));
     // Added, or reconciled with the figure's layers on the map; an empty map
     // is framed on the figure.
     setProject((prev) => {
@@ -288,9 +385,9 @@ export default function FigureImport({ source, existing, map: editorMap, setProj
         const b = placement.bounds;
         setTimeout(() => editorMap?.fitBounds([[b.south, b.west], [b.north, b.east]]), 0);
       }
-      return { ...prev, layers: reconcileFigureLayers(prev.layers, { figure, raster, replaceId: existing?.id, traced: fresh, unitIds: new Set(units.map((u) => u.id)), move }) };
+      return { ...prev, layers: reconcileFigureLayers(prev.layers, { figure, raster, replaceId: existing?.id, traced: fresh, unitIds: new Set([...units, ...marks].map((u) => u.id)), move }) };
     });
-    if (!existing) [raster, ...fresh].filter(Boolean).forEach((l) => trackEvent('layer_added', { source: 'figure', role: l.role || 'other', kind: l.type || 'polygons', feature_count: l.polygons?.length ?? 0 }));
+    if (!existing) [raster, ...fresh].filter(Boolean).forEach((l) => trackEvent('layer_added', { source: 'figure', role: l.role || 'other', kind: l.type || (l.unit?.kind === 'line' ? 'line' : l.unit?.kind === 'point' ? 'points' : 'polygons'), feature_count: (l.polygons || l.features)?.length ?? 0 }));
     onClose(raster?.id || fresh[0]?.id);
   };
 
@@ -321,7 +418,7 @@ export default function FigureImport({ source, existing, map: editorMap, setProj
         <div className="fig-import-head">
           <h3 className="export-hd-title">Import a company figure</h3>
           <div className="fig-tabs" role="tablist">
-            {[['place', '1 · Place'], ['trace', '2 · Trace colours'], ['credit', '3 · Credit']].map(([k, label]) => (
+            {[['place', '1 · Place'], ['trace', '2 · Trace colours'], ['marks', '3 · Lines & points'], ['credit', '4 · Credit']].map(([k, label]) => (
               <button key={k} type="button" role="tab" aria-selected={tab === k} className={`fig-tab${tab === k ? ' is-active' : ''}`} disabled={!image} onClick={() => setTab(k)}>{label}</button>
             ))}
           </div>
@@ -334,7 +431,7 @@ export default function FigureImport({ source, existing, map: editorMap, setProj
               Choose a PNG or JPG figure…
               <input type="file" accept=".png,.jpg,.jpeg,.webp" hidden onChange={(e) => {
                 const f = e.target.files?.[0];
-                if (f) loadFigureImage(f).then(setImage).catch((err) => setError(err.message));
+                if (f) loadFigureImage(f).then((img) => { setImage(img); setOriginal(f); }).catch((err) => setError(err.message));
               }} />
             </label>
             <p className="small-note">Kept with the map at up to {FIGURE_MAX_EDGE} px and about 1.2 MB.</p>
@@ -358,6 +455,7 @@ export default function FigureImport({ source, existing, map: editorMap, setProj
                 >
                   <img src={shown.dataUri} alt="" draggable={false} />
                   <svg viewBox={`0 0 ${image.width} ${image.height}`} preserveAspectRatio="none">
+                    {tab === 'marks' && detection && <MarksOverlay detection={detection} marks={marks} review={review} zoom={zoom} onToggle={toggleFind} />}
                     {tab !== 'place' && tracedForUnits(trace, units).map(({ unit, result }) => result.polygons.map((p, j) => (
                       <path key={`${unit.id}-${j}`} d={[p.outer, ...p.holes].map((ring) => `M${ring.map(([x, y]) => `${(x * trace.scale).toFixed(1)},${(y * trace.scale).toFixed(1)}`).join('L')}Z`).join('')}
                         fill={unitFill(unit)} fillOpacity="0.55" fillRule="evenodd" stroke="#111827" strokeWidth={1.2 / zoom} />
@@ -497,6 +595,14 @@ export default function FigureImport({ source, existing, map: editorMap, setProj
                 </>
               )}
 
+              {tab === 'marks' && (
+                <MarksControls
+                  marks={marks} setMarks={setMarks} activeMark={activeMark} setActiveMark={setActiveMark} newKind={newKind} setNewKind={setNewKind}
+                  opts={markOpts} setOpts={setMarkOpts} detection={detection} review={review} setReview={setReview}
+                  detecting={detecting} onDetect={doDetect} area={area} areaPick={areaPick} setAreaPick={setAreaPick} setArea={setArea} error={error}
+                />
+              )}
+
               {tab === 'credit' && (
                 <>
                   <div className="fig-row">
@@ -505,7 +611,7 @@ export default function FigureImport({ source, existing, map: editorMap, setProj
                     <label htmlFor="fig-date">Date</label>
                     <input id="fig-date" placeholder="e.g. 15 Oct 2026" value={fig.date} onChange={(e) => setFig({ ...fig, date: e.target.value })} />
                     <label htmlFor="fig-subj">What was taken</label>
-                    <input id="fig-subj" placeholder={traced.length ? 'Geology (simplified)' : 'Figure'} value={fig.subject} onChange={(e) => setFig({ ...fig, subject: e.target.value })} />
+                    <input id="fig-subj" placeholder={traced.length ? 'Geology (simplified)' : hasAcceptedMarks ? 'Structure (simplified)' : 'Figure'} value={fig.subject} onChange={(e) => setFig({ ...fig, subject: e.target.value })} />
                   </div>
                   <div className="fig-row">
                     <label htmlFor="fig-credit">Credit line</label>
@@ -523,10 +629,13 @@ export default function FigureImport({ source, existing, map: editorMap, setProj
 
             <div className="fig-footer">
               <span className="small-note">
-                {traced.length ? `${traced.length} traced unit${traced.length === 1 ? '' : 's'} · ` : ''}{credit ? `Credit: ${credit}` : 'No credit line yet (Credit tab).'}
+                {traced.length ? `${traced.length} traced unit${traced.length === 1 ? '' : 's'} · ` : ''}
+                {acceptedLines || acceptedPoints ? `${acceptedLines} line${acceptedLines === 1 ? '' : 's'} and ${acceptedPoints} point${acceptedPoints === 1 ? '' : 's'} accepted · ` : ''}
+                {pendingFinds ? `${pendingFinds} find${pendingFinds === 1 ? '' : 's'} not reviewed (not added) · ` : ''}
+                {credit ? `Credit: ${credit}` : 'No credit line yet (Credit tab).'}
               </span>
               <button className="export-hd-skip fig-cancel" type="button" onClick={() => onClose()}>Cancel</button>
-              <button className="btn primary" type="button" disabled={!ok || (!keepImage && !existing && !traced.length)} onClick={add}>{existing ? 'Update map' : 'Add to map'}</button>
+              <button className="btn primary" type="button" disabled={!ok || (!keepImage && !existing && !traced.length && !hasAcceptedMarks)} onClick={add}>{existing ? 'Update map' : 'Add to map'}</button>
             </div>
           </>
         )}

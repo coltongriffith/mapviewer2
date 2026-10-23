@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { xlsxFixture } from '../tests/fixtures/xlsx.js';
 
 // Company workspaces against an in-memory Supabase (auth, REST and RPC are
 // mocked; no request leaves the browser). Needs the configured client build
@@ -243,14 +244,14 @@ test('drill data: import a CSV, map its columns, see the diff, commit and roll b
 
   // A file with an unclosed quote is refused whole, naming the line.
   const broken = page.waitForEvent('filechooser');
-  await region.getByRole('button', { name: '+ Import a CSV' }).click();
+  await region.getByRole('button', { name: '+ Import CSV or Excel' }).click();
   await (await broken).setFiles({ name: 'lith.csv', mimeType: 'text/csv', buffer: Buffer.from('HoleID,From,To,Code,Description\nR-1,0,2,QMD,"Quartz monzodiorite\nR-1,2,4,AND,Andesite\n') });
   await expect(region.getByRole('alert')).toContainText('Line 2: a quoted value starts here and is never closed');
   await expect(region.getByRole('form', { name: 'Import drill data' })).toHaveCount(0);
 
   // The kind and columns are detected; the BDL value is flagged before anything is sent.
   const chooser = page.waitForEvent('filechooser');
-  await region.getByRole('button', { name: '+ Import a CSV' }).click();
+  await region.getByRole('button', { name: '+ Import CSV or Excel' }).click();
   await (await chooser).setFiles({ name: 'assays-2026.csv', mimeType: 'text/csv', buffer: Buffer.from('HoleID,Sample,From,To,Cu_pct,Au_gpt\nR-1,A1,0,2,0.41,<0.005\nR-1,A2,2,4,0.55,0.12\nR-9,A3,0,1.5,0.2,0.03\n') });
   const form = region.getByRole('form', { name: 'Import drill data' });
   await expect(form.getByLabel('Data')).toHaveValue('assays');
@@ -290,6 +291,65 @@ test('drill data: import a CSV, map its columns, see the diff, commit and roll b
   expect(fake.rpc.find((c) => c.fn === 'drill_rollback_batch').args).toEqual({ p_batch: commit.p_batch });
 });
 
+test('drill Excel: sheet and header preview, decimal text, mapping and commit', async ({ page }) => {
+  const fake = await fakeSupabase(page, { role: 'editor' });
+  const requests = []; page.on('request', r => requests.push(r.url()));
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold');
+  await page.getByRole('tab', { name: 'Drill data' }).click();
+  const region = page.getByRole('region', { name: 'Drill data' });
+  await expect(region.getByRole('button', { name: '+ Import CSV or Excel' })).toBeVisible();
+  expect(requests.some(u => /xlsxRead-/.test(u))).toBe(false);
+  const bytes = xlsxFixture([
+    { name: 'Notes', rows: [['Illustrative fixture; no real drill locations']] },
+    { name: 'Assays', merge: 'A1:E1', rows: [['Illustrative assay workbook'], [], ['HoleID', 'From', 'To', 'Au_ppm', 'Sample_ID'], ['TEST-01', '0,5', '1,5', '<0,005', '000123']] },
+  ]);
+  await region.getByLabel('Drill data file').setInputFiles({ name: 'assays.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: Buffer.from(bytes) });
+  const picker = region.getByRole('region', { name: 'Choose Excel sheet' });
+  await expect(picker.getByRole('button', { name: 'Use these columns' })).toBeDisabled();
+  await picker.getByRole('combobox', { name: 'Sheet', exact: true }).selectOption({ label: 'Assays' });
+  await expect(picker.getByLabel('Header row')).toHaveValue('3');
+  await picker.getByLabel('Header row').fill('1');
+  await expect(picker.getByRole('button', { name: 'Use these columns' })).toBeDisabled();
+  await picker.getByLabel('Header row').fill('3');
+  await picker.getByLabel('Decimal separator in text values').selectOption('comma');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
+  await picker.getByRole('button', { name: 'Use these columns' }).click();
+  const form = region.getByRole('form', { name: 'Import drill data' });
+  await expect(form.getByLabel('Import Au_ppm', { exact: true })).toBeChecked();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
+  await form.getByRole('button', { name: 'Choose sheet or header' }).click();
+  await expect(picker.getByLabel('Header row')).toHaveValue('3');
+  await expect(picker.getByLabel('Decimal separator in text values')).toHaveValue('comma');
+  await picker.getByRole('button', { name: 'Use these columns' }).click();
+  await form.getByRole('button', { name: 'Check against stored data' }).click();
+  await expect(form.getByRole('button', { name: 'Commit import' })).toBeEnabled();
+  const dry = fake.rpc.find(c => c.fn === 'drill_import_batch').args;
+  expect(dry.p_rows[0]).toEqual({ hole_id: 'TEST-01', sample_id: '000123', from_m: 0.5, to_m: 1.5, values: { Au: 0.0025 }, bdl: { Au: 0.005 }, units: { Au: 'ppm' } });
+  expect(dry.p_mapping).toMatchObject({ decimalComma: true, excel: { sheet: 'Assays', headerRow: 3 } });
+  await form.getByRole('button', { name: 'Commit import' }).click();
+  await expect(region.getByText(/Imported assays.xlsx:/)).toBeVisible();
+  expect(fake.rpc.filter(c => c.fn === 'drill_import_batch')[1].args.p_rows).toEqual(dry.p_rows);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
+});
+
+test('drill Excel: legacy errors, large workbook workers and the row cap', async ({ page }) => {
+  await fakeSupabase(page, { role: 'editor' });
+  await page.addInitScript(() => { window.workerViolations = []; document.addEventListener('securitypolicyviolation', e => { if (e.effectiveDirective === 'worker-src') window.workerViolations.push(e.blockedURI); }); });
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold');
+  await page.getByRole('tab', { name: 'Drill data' }).click();
+  const region = page.getByRole('region', { name: 'Drill data' });
+  await region.getByLabel('Drill data file').setInputFiles({ name: 'old.xls', mimeType: 'application/vnd.ms-excel', buffer: Buffer.from([0xd0, 0xcf]) });
+  await expect(region.getByRole('alert')).toContainText('older .xls');
+  const rows = [['HoleID', 'From', 'To', 'Au_ppm'], ...Array.from({ length: 20001 }, (_, i) => [`TEST-${i}`, 0, 1, 0.52])];
+  await region.getByLabel('Drill data file').setInputFiles({ name: 'large.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: Buffer.from(xlsxFixture([{ name: 'Assays', rows }])) });
+  const picker = region.getByRole('region', { name: 'Choose Excel sheet' });
+  await expect(picker.getByRole('alert')).toContainText('more than 20,000', { timeout: 20000 });
+  await expect(picker.getByRole('button', { name: 'Use these columns' })).toBeDisabled();
+  expect(await page.evaluate(() => window.workerViolations)).toEqual([]);
+  await picker.getByRole('button', { name: 'Cancel' }).click();
+  await expect(region.getByRole('button', { name: '+ Import CSV or Excel' })).toBeVisible();
+});
+
 // Assays as the drill database returns them: 2 m samples, 122 m of mineralisation from 34 m with an 18 m core.
 const assayRows = (hole) => Array.from({ length: 100 }, (_, i) => {
   const d = i * 2, v = d < 34 || d >= 156 ? { Cu: 0.02, Au: 0.01 } : d >= 80 && d < 98 ? { Cu: 1.0, Au: 0.42 } : { Cu: 0.355, Au: 0.174 };
@@ -301,7 +361,12 @@ const withAssays = (fake) => { fake.drill = { ...fake.drill, assays: 200, holes:
 test('drill results: the recipe, the release table, copies and downloads, then saved for 3D', async ({ page }, testInfo) => {
   const fake = await fakeSupabase(page, { role: 'editor' });
   withAssays(fake);
-  await page.addInitScript(() => { navigator.clipboard.writeText = async (t) => { window.__copied = t; }; });
+  await page.addInitScript(() => {
+    navigator.clipboard.writeText = async (t) => { window.__copied = t; };
+    navigator.clipboard.write = async ([item]) => {
+      window.__formattedCopy = Object.fromEntries(await Promise.all(item.types.map(async (type) => [type, await (await item.getType(type)).text()])));
+    };
+  });
   await page.goto('/workspace/star-copper-corp/p/rails-copper-gold');
   await page.getByRole('tab', { name: 'Drill data' }).click();
   const region = page.getByRole('region', { name: 'Results' });
@@ -332,6 +397,27 @@ test('drill results: the recipe, the release table, copies and downloads, then s
   const file = await csv;
   expect(file.suggestedFilename()).toBe('rails-copper-gold-results.csv');
 
+  await region.getByLabel('Table format').selectOption('html');
+  await region.getByRole('button', { name: 'Copy formatted table' }).click();
+  await expect(region.getByRole('status')).toHaveText('Copied the formatted table and recipe notes.');
+  const formatted = await page.evaluate(() => window.__formattedCopy);
+  expect(formatted['text/plain']).toContain('Unsaved recipe: Default. Calculated from current assays.');
+  expect(formatted['text/plain']).toContain('True widths are not yet known.');
+  const htmlDownload = page.waitForEvent('download');
+  await region.getByRole('button', { name: 'Download HTML' }).click();
+  const htmlFile = await htmlDownload;
+  expect(htmlFile.suggestedFilename()).toBe('rails-copper-gold-results.html');
+  const html = await new Promise((resolve) => { let t = ''; htmlFile.createReadStream().then((st) => { st.on('data', (c) => { t += c; }); st.on('end', () => resolve(t)); }); });
+  expect(html).toBe(formatted['text/html']);
+  const exported = await page.context().newPage();
+  await exported.setContent(html);
+  await expect(exported.getByRole('row')).toHaveCount(5);
+  await expect(exported.getByRole('cell', { name: RESULT.split(', incl.')[0], exact: true })).toHaveCount(2);
+  await expect(exported.getByText('True widths are not yet known.')).toBeVisible();
+  await exported.screenshot({ path: testInfo.outputPath('drill-results-html.png'), fullPage: true });
+  await exported.close();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
+
   // Results for 3D come from a saved recipe only.
   const for3d = region.getByRole('button', { name: 'Download for 3D figures' });
   await expect(for3d).toBeDisabled();
@@ -341,6 +427,13 @@ test('drill results: the recipe, the release table, copies and downloads, then s
   expect(saved).toMatchObject({ p_property: PROP, p_name: 'Default', p_base_version: 0, p_recipe: { primary: 'Cu', equivalent: true, cutoff: 0.2, inclCutoff: 1, trueWidth: 'True widths are not yet known.' } });
   expect(saved.p_recipe.elements).toEqual([{ name: 'Cu', unit: '%', price: 4.5, recovery: 90 }, { name: 'Au', unit: 'g/t', price: 3000, recovery: 70 }]);
   await expect(region.getByText(/Default, version 1 · saved/)).toBeVisible();
+  await region.getByRole('button', { name: 'Copy formatted table' }).click();
+  await expect(region.getByRole('status')).toHaveText('Copied the formatted table and recipe notes.');
+  expect((await page.evaluate(() => window.__formattedCopy))['text/plain']).toContain('Saved recipe: Default, version 1. Calculated from current assays.');
+  await page.evaluate(() => { navigator.clipboard.write = async () => { throw new Error('Denied'); }; });
+  await region.getByRole('button', { name: 'Copy formatted table' }).click();
+  await expect(region.getByText('Copying a formatted table was blocked or is not supported by this browser. Download HTML instead.')).toBeVisible();
+  await expect(region.getByRole('button', { name: 'Download HTML' })).toBeEnabled();
   const pub = page.waitForEvent('download');
   await for3d.click();
   const pf = await pub;
@@ -409,7 +502,7 @@ test('a viewer gets the same pages without editing controls', async ({ page }) =
   await expect(page.getByRole('button', { name: /^Delete / })).toHaveCount(0);
   await page.getByRole('tab', { name: 'Drill data' }).click();
   await expect(page.getByRole('table', { name: 'Import history' }).getByRole('row', { name: /Rails collars\.csv.*12 new holes/ })).toBeVisible();
-  await expect(page.getByRole('button', { name: '+ Import a CSV' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '+ Import CSV or Excel' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: /^Roll back/ })).toHaveCount(0);
 });
 

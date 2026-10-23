@@ -93,7 +93,12 @@ const BUDGETS = {
   // editor hand-offs (the band's default and options, the "layers" export, the lazy ExportExtras chunk) are paid for
   // by the nearby-claims export preparation moving out of App into utils/nearbyClaims.js (one copy for the export,
   // the share and the package instead of two inline).
-  maxJsChunkGzipKb: 152.7,
+  // 152.7 to 153.8 (Oct 2026): 2D agent API bridge and accessible editor controls; measured 153.5 configured.
+  // API review fixes: explicit project-action outcomes and PNG aspect-ratio validation in App,
+  // plus rejection handling/help in the lazy API. Measured +0.6 kB total / +0.3 kB editor;
+  // configured App 153.8, editor 342.6, claims 355.3, total 1040.6; plain editor 274.6,
+  // total 972.0. Related limits below retain about 0.3 kB headroom; homepage unchanged.
+  maxJsChunkGzipKb: 154.1,
   initialJsGzipKb: 75,
   initialAuthJsGzipKb: 135,
   // The former configured check omitted VITE_ADMIN_EMAIL, which pruned the
@@ -226,7 +231,28 @@ const BUDGETS = {
   // shared by three lazy exporters), renderScene's map / annotations layers (+0.1 kB), exportPNG/SVG/PDF's band hooks
   // and the PDF page helper and white backing (+0.42 kB), ReadOnlyMapStage's renderCanvas and nearby claims
   // (+0.17 kB) and the dashboard's button (+0.11 kB). App is unchanged (see maxJsChunkGzipKb above).
-  totalAuthJsGzipKb: 1018.1,
+  // 1018.1 to 1040.4 (Oct 2026): 2D agent API and sectional help (~21 kB lazy), plus editor bridge and names; measured 1040.1 configured.
+  // 1009.4 → 1021.8 (Oct 2026, import a company figure: lines and points, measured 1021.5, +12.3 kB over main's 1009.2):
+  // all lazy, loaded only when the figure dialog opens and on the first Detect. The tracer's worker gains the line and
+  // symbol detector (utils/figureMarks.js, +8.35 kB in figureTrace.worker: Lab colour mask, Zhang–Suen skeleton cut at
+  // junctions, dash and dot chaining, dashes read along a line, the lettering and frame filters, shape by the outline's
+  // harmonics); the FigureImport chunk gains the "Lines & points" step with its review (FigureMarks.jsx, the line and
+  // point layers, the accepted finds on the preview map, tracing from the upload's own colours; +3.97 kB). App, the
+  // editor's initial JS and the exporters are unchanged.
+  // Combined Tower acceptance: export/API plus figure import; measured 1053.0 configured.
+  // Combined Tower + Phase 2 release: fonts, XLSX, recipes, cursors and HTML tables;
+  // measured 1073.4 configured. Feature costs/reasons are retained below.
+  totalAuthJsGzipKb: 1073.7,
+  // 1009.4 → 1026.3 (measured 1026.0): lazy XLSX reader (~13.8 KiB), sheet/header preview
+  // (~1.1 KiB), import wiring and numeric-format handling. Shared fflate adds ~1.2 KiB
+  // for async ZIP workers; it remains one copy with the existing draft compression.
+  // 1009.4 → 1012.0 (P2-8, measured 1011.7): opt-in property recipe snapshots.
+  // The shared loader (~1.0 kB) and staged 2D recipe picker (~1.3 kB added) are
+  // lazy; 3D-only picker/update code is counted separately below. Initial
+  // homepage, editor and claims route budgets stay unchanged.
+  // 1012.0 → 1012.9 (P2-7 HTML table, measured 1012.6): escaped standalone
+  // table, provenance/notes and rich clipboard support in the lazy ResultsPanel.
+  // No initial-route or 3D budget change; no additional dependency.
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
@@ -264,7 +290,16 @@ const BUDGETS = {
   // 924.9 → 940.9 (measured 940.6): 2D labels and geology styling (above, measured 940.0) merged over the dompurify
   // update.
   // 940.9 → 949.7 (measured 949.4, 940.8 on main): 2D export package, as totalAuthJsGzipKb above.
-  totalJsGzipKb: 949.7,
+  // 949.7 to 971.8 (Oct 2026): 2D agent API/help and accessible controls, as configured above; measured 971.5 plain.
+  // 940.9 → 953.4 (Oct 2026, measured 953.1, +12.3 kB over main's 940.8): import a company figure, lines and points, as
+  // totalAuthJsGzipKb above.
+  // Combined Tower acceptance: same lazy features together; measured 984.6 plain.
+  // Same combined release, measured 1006.3 plain; mostly lazy feature chunks.
+  totalJsGzipKb: 1006.6,
+  // 940.9 → 957.8 (measured 957.5): Excel import, as totalAuthJsGzipKb above.
+  // 940.9 → 944.8 (P2-8, measured 944.6): the same lazy property recipe path
+  // in the unconfigured build. Its initial route budgets also stay unchanged.
+  // 944.8 → 945.9 (P2-7 HTML table, measured 945.6): same lazy results export.
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the
   // totals above. /3d carries three.js (~109 kB gzip) and its editor.
@@ -498,7 +533,16 @@ const BUDGETS = {
   // data dropped rather than refused (+0.4 kB).
   // 156.5 → 161.2 (round 5H merged over the true-scale crew (b55edc19), measured 160.7, configured 160.9, + 0.3):
   // round 5H's +4.7 kB above on top of the crew's +1.6 kB; the two touch different chunks (block.js and tags.js; crew.js).
-  threeDLazyJsGzipKb: 161.2,
+  // 161.2 → 161.3: the existing configured bundle is 161.187 KiB; XLSX shared-import
+  // hash churn moves it to 161.194 locally and 161.201 with CI's commit stamp. Keep 0.1 KiB
+  // of headroom for those hashes; no new /3d module or XLSX reader enters this graph.
+  // Recipe/cursor composition plus result-ownership guard: 162.5 plain / 162.7 configured.
+  threeDLazyJsGzipKb: 163.0,
+  // 161.2 → 162.7 (P2-8, measured 162.2 plain / 162.4 configured): explicit
+  // recipe selection, snapshot ownership, collision/edited-wording guards and
+  // recipe-only update notices in property-data. No eager 3D page growth.
+  // 161.2 → 161.7 (measured configured 161.4 + 0.3): property cursor filters,
+  // quoted hole IDs and repeated-page guard; initial routes and total budgets unchanged.
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.
@@ -525,7 +569,11 @@ const BUDGETS = {
   // on its own branch 340.2 → 340.9, measured 340.6 over 339.9): App as maxJsChunkGzipKb above
   // and MapCanvas +0.31 kB (a styled layer's paths kept unseen for clicks, and the lazy hook to its canvases).
   // Unchanged by the 2D export package (measured 341.3, as on main): App as maxJsChunkGzipKb above.
-  editorAuthJsGzipKb: 341.5,
+  // 341.5 to 342.6 (Oct 2026): 2D API bridge and accessible control names; API/help load after editor startup; measured 342.3 configured.
+  // Combined API bridge + shared XLSX compression support, measured 343.8 configured.
+  editorAuthJsGzipKb: 344.1,
+  // Excel import: shared fflate's async ZIP worker support adds ~1.2 KiB (342.5 measured).
+  // The XLSX parser and sheet picker remain lazy; the homepage does not load compression.
   // 270 → 271.0 (Oct 2026, production errors, measured 270.7, 269.6 on main): the same as editorAuthJsGzipKb above.
   // 271.0 → 271.7 (Oct 2026, 2D drill plan, measured 271.4, 270.8 on main): the same as editorAuthJsGzipKb above.
   // 271.7 → 272.2 (measured 271.9, 271.4 on main): import a company figure, as editorAuthJsGzipKb above.
@@ -533,8 +581,14 @@ const BUDGETS = {
   // 272.8 → 273.4 (measured 273.1, 272.5 on main; on its own branch 272.2 → 272.8, measured 272.5 over 271.9): 2D labels
   // and geology styling, as editorAuthJsGzipKb above.
   // Unchanged by the 2D export package (measured 273.2, 273.2 on main): as editorAuthJsGzipKb above.
-  editorJsGzipKb: 273.4,
-  claimsAuthJsGzipKb: 355,
+  // 273.4 to 274.5 (Oct 2026): Same bridge and control names; measured 274.2 plain.
+  // Same combined bridge/compression support, measured 275.7 plain.
+  editorJsGzipKb: 276.0,
+  // 355 to 355.3 (Oct 2026): claims shares the editor API bridge/control names; measured 355.0 in CI.
+  // Same shared compression increase as above (274.4 measured).
+  // Claims also restores drafts through shared compression (355.3 measured).
+  // Claims shares that editor/compression graph, measured 356.5 configured.
+  claimsAuthJsGzipKb: 356.8,
   claimsJsGzipKb: 290,
   // Stylesheet, gzipped. Today ~29 kB.
   maxCssGzipKb: 40,

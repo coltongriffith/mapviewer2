@@ -15,6 +15,7 @@ export default function InspectorGroup({ id, title, summary, open, onToggle, gro
           className="section-toggle-btn"
           aria-expanded={open}
           aria-controls={`group-${id}`}
+          data-em={`group-${id}`}
           onClick={onToggle}
         >
           <span className="ins-acc-title">{title}</span>

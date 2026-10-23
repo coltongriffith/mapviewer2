@@ -82,7 +82,8 @@ export function withWatermarkBand(figure, opts = {}) {
 // ── The same band as SVG (the 2D SVG export), text kept as text ──────────────────────────────────────────────
 // Laid out as drawWatermarkBand lays it out: the text is measured on a scratch canvas in the same fonts, so the
 // rule and the fitted status line land where the PNG puts them. "Maps" follows "Exploration" in the text flow, so
-// a viewer without Source Sans 3 (the font is named, not embedded) still sets the wordmark without overlap.
+// a viewer that cannot use the embedded font still sets the wordmark without overlap. The SVG exporter embeds
+// the branding fonts alongside the map's fonts; this synchronous drawing helper only names them.
 const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const n = (v) => +v.toFixed(2);
 function markSvg(x, y, size, c, id) {

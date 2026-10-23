@@ -1,6 +1,6 @@
 import JSZip from 'jszip';
 import { renderSceneToSvg, downloadSvg } from "./renderScene";
-import { downloadBlob } from '../utils/svg';
+import { downloadBlob, blobAs } from '../utils/svg';
 
 export async function exportSVG(scene, options = {}) {
   if (!scene?.container || !scene?.map) {
@@ -17,6 +17,8 @@ export async function exportSVG(scene, options = {}) {
     if (options.draftOverlay) svg = band.withDraftOverlaySvg(svg);
     if (options.watermarkBand) svg = band.withWatermarkBandSvg(svg, options.watermarkBand);
   }
+  // options.as (window.EMAP): the SVG as the download holds it, returned instead.
+  if (options.as) return blobAs(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }), options.as);
 
   if (options.illustratorMode) {
     // Extract the basemap data URI so Illustrator can link it as an external image

@@ -99,7 +99,7 @@ test('a company figure is placed by points, traced by colour, credited and kept'
   await expect(dialog.getByText('1 area', { exact: true })).toBeVisible({ timeout: 30_000 });
 
   // The credit line follows the source and date.
-  await dialog.getByRole('tab', { name: '3 · Credit' }).click();
+  await dialog.getByRole('tab', { name: '4 · Credit' }).click();
   await dialog.getByLabel('Source').fill('Test Fig. 1');
   await dialog.getByLabel('Date').fill('15 Oct 2026');
   const credit = 'Geology (simplified) after Test Fig. 1 (15 Oct 2026)';

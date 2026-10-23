@@ -73,13 +73,26 @@ function pixelsOf(img, w, h) {
 /**
  * The figure's pixels at the tracer's working size. `frameWidth` is the width
  * the fit's pixel coordinates are measured in (the picture as first loaded),
- * so `scale` takes a working pixel back to them.
+ * so `scale` takes a working pixel back to them. With the `original` upload
+ * (a File or data URL) its colours are used, under the kept picture's
+ * transparency: the kept picture is compressed, which blurs thin lines and
+ * the gaps of a dashed one into their surroundings.
  */
-export async function figurePixels(dataUri, frameWidth, maxEdge = TRACE_MAX_EDGE) {
+export async function figurePixels(dataUri, frameWidth, maxEdge = TRACE_MAX_EDGE, original = null) {
   const img = await loadImageEl(dataUri);
   const s = Math.min(1, maxEdge / Math.max(img.naturalWidth, img.naturalHeight));
   const w = Math.round(img.naturalWidth * s), h = Math.round(img.naturalHeight * s);
   const { data } = pixelsOf(img, w, h).px;
+  if (original) {
+    const url = typeof original === 'string' ? original : URL.createObjectURL(original);
+    try {
+      const o = pixelsOf(await loadImageEl(url), w, h).px.data;
+      // transparent in the upload: white, as the kept picture has it
+      for (let i = 0; i < data.length; i += 4) for (let k = 0; k < 3; k += 1) data[i + k] = o[i + 3] < 128 ? 255 : o[i + k];
+    } catch { /* the kept picture's own colours */ } finally {
+      if (typeof original !== 'string') URL.revokeObjectURL(url);
+    }
+  }
   return { data, width: w, height: h, scale: (frameWidth || img.naturalWidth) / w };
 }
 
@@ -178,8 +191,9 @@ export function placeFigure(fit, width, height, projector) {
 // ── tracing ───────────────────────────────────────────────────────────────
 let worker = null;
 let seq = 0;
-/** Runs the tracer in a Web Worker, so the dialog stays responsive (and the tracer is not in its chunk). */
-export function runTrace(image, units, options) {
+// The tracer's Web Worker (figureTrace.worker.js): the dialog stays
+// responsive, and the tracers are not in its chunk.
+function inWorker(kind, image, units, options) {
   const id = ++seq;
   if (typeof Worker === 'undefined') return Promise.reject(new Error('This browser cannot trace figures (no Web Workers).'));
   if (!worker) worker = new Worker(new URL('./figureTrace.worker.js', import.meta.url), { type: 'module' });
@@ -197,9 +211,13 @@ export function runTrace(image, units, options) {
     w.addEventListener('error', onError);
     // The pixels are copied, not transferred: the dialog traces again with
     // other settings from the same buffer.
-    w.postMessage({ id, image: { data: image.data, width: image.width, height: image.height }, units, options });
+    w.postMessage({ id, kind, image: { data: image.data, width: image.width, height: image.height }, units, options });
   });
 }
+/** Units traced by colour into polygons (figureTrace.js). */
+export const runTrace = (image, units, options) => inWorker('units', image, units, options);
+/** Lines and point symbols found by colour (figureMarks.js). */
+export const runMarks = (image, sets, options) => inWorker('marks', image, sets, options);
 
 const hex = (rgb) => `#${rgb.map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('')}`;
 
@@ -267,12 +285,74 @@ export function tracedLayer({ id, unit, polygons, figure }) {
   };
 }
 
+// ── lines and points ──────────────────────────────────────────────────────
+// A colour picked for lines or points ("set") becomes one layer: its finds the
+// person accepted, in the style chosen for it (suggested from the finds).
+export const LINE_STYLES = [['solid', 'Solid'], ['dashed', 'Dashed'], ['thrust', 'Thrust (teeth)']];
+export const POINT_STYLES = [['star', 'Star'], ['diamond', 'Diamond'], ['circle', 'Circle'], ['square', 'Square'], ['triangle', 'Triangle ▲'], ['triangle_down', 'Triangle ▼']];
+
+/** A set's layer: `features` are [[lng, lat]…] lines or [lng, lat] points. */
+export function markLayer({ id, set, features, figure }) {
+  const line = set.kind === 'line';
+  const colour = /^#[0-9a-f]{6}$/i.test(set.colour || '') ? set.colour : '#111111';
+  const name = String(set.name || '').trim() || (line ? 'Traced line' : 'Traced points');
+  const styleKey = line ? (LINE_STYLES.some(([k]) => k === set.style) ? set.style : 'solid') : (POINT_STYLES.some(([k]) => k === set.style) ? set.style : 'circle');
+  const thrust = line && styleKey === 'thrust';
+  const style = line
+    ? { stroke: colour, strokeWidth: Math.max(1.5, Math.min(4, set.width || 2)), ...(styleKey === 'dashed' ? { dashArray: '8 5' } : {}) }
+    : { markerShape: styleKey, markerFill: colour, markerColor: darker(colour, 0.45), markerSize: set.size || (styleKey === 'star' ? 16 : 10) };
+  return {
+    id,
+    name,
+    sourceName: figure.source || 'Imported figure',
+    dataSource: 'figure',
+    displayName: name,
+    type: line ? 'line' : 'points',
+    visible: true,
+    role: 'other',
+    userStyled: true,
+    geojson: {
+      type: 'FeatureCollection',
+      features: features.map((coordinates) => ({ type: 'Feature', properties: { name }, geometry: { type: line ? 'LineString' : 'Point', coordinates } })),
+    },
+    style,
+    ...(thrust ? { fx: { lineType: 'thrust', teeth: set.teeth === 'right' ? 'right' : 'left' } } : {}),
+    legend: { enabled: true, label: name, group: line ? 'Structure' : 'Symbols' },
+    figure,
+    figureUnit: set.id,
+    figureStyle: thrust ? `thrust:${set.teeth === 'right' ? 'right' : 'left'}` : styleKey,
+    figureColour: colour,
+  };
+}
+
+/**
+ * The accepted finds of the last detection, per set still in the dialog:
+ * [{ unit: set, features }]. `review` maps a find's id to 'accepted' or
+ * 'rejected' (unreviewed finds are not added); `toLngLat(kind, find)` maps it.
+ */
+export function marksForSets(detection, sets, review, toLngLat) {
+  if (!detection) return [];
+  return detection.sets.map((s, i) => ({ set: sets.find((x) => x.id === s.id), result: detection.results[i] }))
+    .filter((t) => t.set && t.result)
+    .map(({ set, result }) => {
+      const finds = (set.kind === 'line' ? result.lines : result.points) || [];
+      const accepted = finds.filter((f) => review[f.id] === 'accepted');
+      const teeth = accepted.filter((f) => f.teeth);
+      const side = teeth.length ? (teeth.filter((f) => f.teeth === 'right').length > teeth.length / 2 ? 'right' : 'left') : null;
+      return { unit: { ...set, teeth: set.teeth || side }, features: accepted.map((f) => toLngLat(set.kind, f)) };
+    }); // Keep empty detections so reconciliation can remove previously accepted features.
+}
+
 /** The last trace's results for the units still in the dialog (a removed unit's polygons are not imported). */
 export function tracedForUnits(trace, units) {
   if (!trace) return [];
   return trace.units.map((t, i) => ({ unit: units.find((u) => u.id === t.id), result: trace.results[i] }))
     .filter((t) => t.unit && t.result);
 }
+
+// A traced unit's polygon layer, or a set's line or point layer.
+const layerOf = (id, t, figure) => (t.unit.kind ? markLayer({ id, set: t.unit, features: t.features, figure }) : tracedLayer({ id, unit: t.unit, polygons: t.polygons, figure }));
+const emptyMarks = (t) => t.unit.kind && !t.features.length;
 
 const mapCoords = (c, move) => (typeof c[0] === 'number' ? move(c) : c.map((x) => mapCoords(x, move)));
 
@@ -287,6 +367,9 @@ const mapCoords = (c, move) => (typeof c[0] === 'number' ? move(c) : c.map((x) =
  */
 export function reconcileFigureLayers(layers, { figure, raster, replaceId, traced, unitIds, move }) {
   const byUnit = new Map(traced.map((t) => [t.unit.id, t]));
+  // Older imported layers have no figureColour; their raster retains the last dialog colour.
+  const previousMarks = new Map(layers.filter((l) => l.figure?.id === figure.id)
+    .flatMap((l) => l.raster?.georef?.marks || []).map((m) => [m.id, m]));
   const done = new Set();
   const out = [];
   for (const l of layers) {
@@ -296,16 +379,33 @@ export function reconcileFigureLayers(layers, { figure, raster, replaceId, trace
     if (unitId && unitIds && !unitIds.has(unitId)) continue;
     const t = unitId && byUnit.get(unitId);
     if (t) {
-      const fresh = tracedLayer({ id: l.id, unit: t.unit, polygons: t.polygons, figure });
-      const renamed = (l.displayName || l.name) !== l.name;
-      out.push({ ...l, geojson: fresh.geojson, figure, ...(renamed ? {} : { name: fresh.name, displayName: fresh.displayName, legend: { ...l.legend, label: fresh.name } }) });
       done.add(unitId);
+      if (emptyMarks(t)) continue;
+      const fresh = layerOf(l.id, t, figure);
+      const renamed = (l.displayName || l.name) !== l.name;
+      let next = { ...l, geojson: fresh.geojson, figure, ...(renamed ? {} : { name: fresh.name, displayName: fresh.displayName, legend: { ...l.legend, label: fresh.name } }) };
+      // Lines and points take the style chosen in the dialog when it changed
+      // there; otherwise the layer keeps its own.
+      if (t.unit.kind && fresh.figureStyle !== l.figureStyle) {
+        const { fx: _fx, ...rest } = next;
+        next = { ...rest, style: fresh.style, figureStyle: fresh.figureStyle, ...(fresh.fx ? { fx: fresh.fx } : {}) };
+      }
+      if (t.unit.kind) {
+        const previousColour = l.figureColour ?? previousMarks.get(unitId)?.colour ?? fresh.figureColour;
+        if (previousColour.toLowerCase() !== fresh.figureColour.toLowerCase()) {
+          const colourStyle = t.unit.kind === 'line' ? { stroke: fresh.style.stroke }
+            : { markerFill: fresh.style.markerFill, markerColor: fresh.style.markerColor };
+          next = { ...next, style: { ...next.style, ...colourStyle } };
+        }
+        next.figureColour = fresh.figureColour;
+      }
+      out.push(next);
     } else {
       out.push({ ...l, figure, ...(move && l.geojson ? { geojson: { ...l.geojson, features: l.geojson.features.map((f) => (f.geometry ? { ...f, geometry: { ...f.geometry, coordinates: mapCoords(f.geometry.coordinates, move) } } : f)) } } : {}) });
     }
   }
   if (raster && !replaceId) out.push(raster);
-  return [...out, ...traced.filter((t) => !done.has(t.unit.id)).map((t) => tracedLayer({ id: t.id, unit: t.unit, polygons: t.polygons, figure }))];
+  return [...out, ...traced.filter((t) => !done.has(t.unit.id) && !emptyMarks(t)).map((t) => layerOf(t.id, t, figure))];
 }
 
 /** [lng, lat] under the old fit → the same figure pixel under the new fit. */

@@ -4,6 +4,7 @@ import { drillResultsDb, storedElements, MAX_ASSAYS } from '../../utils/drillRes
 import { computeResults, defaultRecipe, checkRecipe, notes, resultsText, tableRows, toTsv, toCsv, toPublishedFile, UNITS, BDL_RULES } from '../../../shared/drillResults.js';
 import { priceUnit, defaultUnit, METAL_DEFAULTS } from '../../../shared/metalEq.js';
 import { formatWhen } from '../../utils/workspace';
+import { resultsTableDocument } from '../../../shared/drillResultsHtml.js';
 import { ErrorNote } from './shared';
 
 // The property's results: the recipe (metal equivalent, cut-offs, dilution, rounding; editors change it,
@@ -99,6 +100,7 @@ export default function ResultsPanel({ property, perms, revision = 0 }) {
   const [error, setError] = useState(null);
   const [note, setNote] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [tableFormat, setTableFormat] = useState('csv');
 
   // keepDraft: an import or roll-back reloads the assays and recipes, keeping the recipe being edited.
   const load = async (keep, keepDraft) => {
@@ -139,6 +141,24 @@ export default function ResultsPanel({ property, perms, revision = 0 }) {
   const base = slug(property.name);
   const source = current && `Property results: ${current.name} v${current.version}`;
   const recipeProblems = checkRecipe(recipe);
+  const formattedTable = () => resultsTableDocument(out, recipe, {
+    propertyName: property.name, recipeName: name, recipeVersion: current?.version, unsaved: !current || dirty,
+    warnings: data.capped ? [`Incomplete assay load: only the first ${MAX_ASSAYS.toLocaleString('en-US')} assays are included.`] : [],
+  });
+  const copyFormattedTable = async () => {
+    setError(null);
+    try {
+      const file = formattedTable();
+      await navigator.clipboard.write([new ClipboardItem({
+        'text/html': new Blob([file.html], { type: 'text/html' }),
+        'text/plain': new Blob([file.text], { type: 'text/plain' }),
+      })]);
+      setNote('Copied the formatted table and recipe notes.');
+    } catch {
+      setNote(null);
+      setError('Copying a formatted table was blocked or is not supported by this browser. Download HTML instead.');
+    }
+  };
   return (
     <div className="ws-stack" aria-label="Results recipe and table" role="group">
       <ErrorNote error={error} onDismiss={() => setError(null)} />
@@ -183,8 +203,16 @@ export default function ResultsPanel({ property, perms, revision = 0 }) {
       {results.length > 0 && (
         <div className="ws-row">
           <button type="button" className="btn" onClick={() => copy(resultsText(results, recipe), 'results as text')}>Copy as text</button>
-          <button type="button" className="btn" onClick={() => copy(toTsv(rows), 'table')}>Copy table (TSV)</button>
-          <button type="button" className="btn" onClick={() => download(`${base}-results.csv`, toCsv(rows))}>Download CSV</button>
+          <label className="ws-field">Table format
+            <select value={tableFormat} onChange={(e) => setTableFormat(e.target.value)}>
+              <option value="csv">Spreadsheet (CSV / TSV)</option>
+              <option value="html">Formatted table (HTML)</option>
+            </select>
+          </label>
+          <button type="button" className="btn" onClick={() => tableFormat === 'html' ? copyFormattedTable() : copy(toTsv(rows), 'table')}>{tableFormat === 'html' ? 'Copy formatted table' : 'Copy table (TSV)'}</button>
+          <button type="button" className="btn" onClick={() => tableFormat === 'html'
+            ? download(`${base}-results.html`, formattedTable().html, 'text/html')
+            : download(`${base}-results.csv`, toCsv(rows))}>{tableFormat === 'html' ? 'Download HTML' : 'Download CSV'}</button>
           <button type="button" className="btn" disabled={!current || dirty} title={!current || dirty ? 'Save the recipe first' : undefined}
             onClick={() => { const f = toPublishedFile(results, out.columns, source, `${base}-published-results.csv`); download(f.name, f.text); }}>Download for 3D figures</button>
         </div>

@@ -10,6 +10,7 @@ import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
  */
 export default function Menu({
   label,
+  dataEm,
   title,
   align = 'left',
   className = '',
@@ -46,6 +47,7 @@ export default function Menu({
     <div className={`ui-menu-wrap ${className}`} ref={wrapRef}>
       <button
         ref={triggerRef}
+        data-em={dataEm}
         type="button"
         className={triggerClassName}
         title={title}

@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
+import { parseDrillFilter, matchesDrillFilter } from '../tests/fixtures/drill-filter.js';
+import { defaultRecipe, computeResults } from '../shared/drillResults.js';
 
 // Exploration Maps 3D (/3d): a figure that takes its holes from a property's drill database
 // (src/three-d/property-data.js), against an in-memory Supabase (auth, REST and storage mocked; no request
@@ -61,6 +63,7 @@ async function fakeSupabase(page, db) {
       return json({});
     }
     if (path === '/rest/v1/rpc/get_my_workspaces') return json([{ id: ORG, name: 'Star Copper Corp.', slug: 'star-copper-corp', role: 'viewer' }]);
+    if (path === '/rest/v1/rpc/drill_property_recipes') return json(db.recipes || []);
     if (path.startsWith('/rest/v1/rpc/')) return json(null);
     if (path === '/rest/v1/properties') return json([{ id: PROP, name: 'Rails', slug: 'rails', org_id: ORG }]);
     if (path === '/rest/v1/drill_import_batches') {
@@ -69,12 +72,18 @@ async function fakeSupabase(page, db) {
     }
     const table = path.slice('/rest/v1/'.length);
     if (db[table]) {
-      // Current rows only, in pages (offset/limit, as supabase-js range() sends them).
+      // The actual SDK sends an ordered key cursor and a limit, never an offset.
       expect(q.get('property_id')).toBe(`eq.${PROP}`);
       expect(q.get('superseded_by_batch')).toBe('is.null');
-      const offset = +q.get('offset'), limit = +q.get('limit');
-      fake.drillPages.push({ table, offset, limit });
-      return json(db[table].filter((r) => r.superseded_by_batch === null).slice(offset, offset + Math.min(limit, 1000)));
+      expect(q.has('offset')).toBe(false);
+      const limit = +q.get('limit'), keys = q.get('order').split(',').map((k) => k.split('.')[0]);
+      let rows = db[table].filter((r) => r.superseded_by_batch === null);
+      if (q.has('hole_id')) rows = rows.filter((r) => matchesDrillFilter(r, parseDrillFilter(`hole_id.${q.get('hole_id')}`)));
+      if (q.has('or')) rows = rows.filter((r) => matchesDrillFilter(r, parseDrillFilter(`or${q.get('or')}`)));
+      rows.sort((a, b) => { for (const k of keys) { if (a[k] < b[k]) return -1; if (a[k] > b[k]) return 1; } return 0; });
+      const data = rows.slice(0, Math.min(limit, 1000));
+      fake.drillPages.push({ table, cursor: q.has('hole_id'), rows: data.length, limit });
+      return json(data);
     }
     if (path === '/rest/v1/three_d_projects') {
       if (method === 'GET') {
@@ -112,6 +121,47 @@ async function open3d(page, path = '/3d') {
 const state = (page) => page.evaluate(() => window.EM3D.getState());
 const exportBoth = (page) => page.evaluate(async () => { await window.EM3D.layersReady(); return [window.EM3D.exportPNG({ view: '3d' }), window.EM3D.exportPNG({ view: 'section' })]; });
 
+test('saved property recipes supply callouts and offer recipe-only updates without changing the saved figure', async ({ page }) => {
+  const db = drillData();
+  db.drill_collars = db.drill_collars.slice(0, 1); db.drill_surveys = []; db.drill_lithology = [];
+  db.drill_assays = [0.5, 0.9].map((v, i) => ({ ...db.drill_assays[0], from_m: i * 2, to_m: i * 2 + 2, values: { Au: v }, units: { Au: 'g/t' }, bdl: {} }));
+  const recipe = { ...defaultRecipe(['Au'], { Au: 'g/t' }), inclCutoff: null };
+  db.recipes = [{ id: 'recipe-3', name: 'Default', version: 3, recipe }];
+  const expected = computeResults(db.drill_assays, recipe).results[0];
+  const fake = await fakeSupabase(page, db);
+  await page.addInitScript(([k, s]) => localStorage.setItem(k, JSON.stringify(s)), [AUTH_KEY, session]);
+  await open3d(page);
+  await page.getByRole('button', { name: 'From property drill database' }).click();
+  await expect(page.locator('#drill-recipe')).toHaveValue('r:Default');
+  await page.locator('#drill-load').click();
+  await expect(page.locator('#status')).toContainText('Results calculated with Default v3');
+  await expect.poll(async () => (await state(page)).callouts.shown[0]?.line1).toBe(expected.line);
+  expect((await state(page)).callouts.mode).toBe('published');
+  const file = await page.evaluate(() => window.EM3D.getProject().files.find((f) => f.name === 'property-recipe-results.csv'));
+  expect(file.role).toBe('published'); expect(file.text).toContain(expected.id);
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Save to your account' });
+  await dialog.getByLabel('Name').fill('Illustrative recipe test');
+  await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect.poll(() => fake.upserts.length).toBe(1);
+  const saved = fake.upserts[0];
+  expect(saved.settings.settings.drillSource.resultsRecipe.version).toBe(3);
+  db.recipes = [{ id: 'recipe-4', name: 'Default', version: 4, recipe: { ...recipe, cutoff: 99 } }];
+  await open3d(page, `/3d?project=${saved.id}`);
+  await expect(page.locator('#drill-notice')).toBeVisible({ timeout: 60_000 });
+  await expect(page.locator('#drill-notice')).toContainText('Default changed from v3 to v4');
+  expect((await state(page)).drillSource.resultsRecipe.version).toBe(3);
+  expect((await state(page)).callouts.shown[0].line1).toBe(expected.line);
+  await page.locator('#drill-update').click();
+  await expect(page.locator('#drill-notice')).toBeHidden();
+  await expect.poll(async () => (await state(page)).drillSource.resultsRecipe.version).toBe(4);
+  await expect(page.locator('#status')).toContainText('Results calculated with Default v4');
+  expect((await state(page)).callouts.shown).toEqual([]);
+  expect((await state(page)).callouts.mode).toBe('published');
+  expect(fake.upserts).toHaveLength(1); // update is an unsaved edit until the user saves
+  expect(saved.settings.settings.drillSource.resultsRecipe.version).toBe(3);
+});
+
 test('a figure takes its holes from the property drill database, keeps them, and updates only when asked', async ({ page }) => {
   const errors = [], chunks = [];
   page.on('pageerror', (e) => errors.push(e.message));
@@ -127,7 +177,7 @@ test('a figure takes its holes from the property drill database, keeps them, and
   await expect(picker.getByLabel('Property')).toHaveValue(PROP);
   await picker.getByRole('button', { name: 'Load drill data' }).click();
   await expect(page.locator('#status')).toContainText('Loaded Rails from its drill database: 12 holes, 2,520 assays.');
-  expect(fake.drillPages.filter((p) => p.table === 'drill_assays')).toEqual([0, 1000, 2000].map((offset) => ({ table: 'drill_assays', offset, limit: 1000 })));
+  expect(fake.drillPages.filter((p) => p.table === 'drill_assays')).toEqual([1000, 1000, 520, 0].map((rows, i) => ({ table: 'drill_assays', cursor: i > 0, rows, limit: 1000 })));
   let st = await state(page);
   expect(st.usingSample).toBe(false);
   expect(st.files.map((f) => [f.name, f.role])).toEqual([['property-collars.csv', 'collar'], ['property-surveys.csv', 'survey'], ['property-assays.csv', 'assay'], ['property-lithology.csv', 'litho']]);

@@ -3,6 +3,7 @@ import { direction, minCurvature, offsetAt, desurveyPath } from '../shared/desur
 import { toFiles, snapshotOf, newerSince, noticeText, pull, mixedCrs, init, check, reset, FILE_NAMES } from '../src/three-d/property-data.js';
 import { matchCols, roleOf, refineRole } from '../src/three-d/roles.js';
 import { parseCsv } from '../src/utils/drillDb.js';
+import { parseDrillFilter, matchesDrillFilter } from './fixtures/drill-filter.js';
 
 const close = (a, b, eps = 1e-6) => expect(Math.abs(a - b)).toBeLessThan(eps);
 
@@ -133,14 +134,20 @@ function fakeSb(db, onRead = () => {}) {
   return {
     reads,
     from(table) {
-      const q = { table, eq: {}, is: {}, range: null, limit: null };
+      const q = { table, eq: {}, is: {}, range: null, limit: null, order: [], filters: [] };
       const api = {
-        select: () => api, order: () => api,
+        select: () => api, order: (k) => { q.order.push(k); return api; },
         eq: (k, v) => { q.eq[k] = v; return api; }, is: (k, v) => { q.is[k] = v; return api; },
+        gt: (k, v) => { q.filters.push(parseDrillFilter(`${k}.gt.${v}`)); return api; },
+        gte: (k, v) => { q.filters.push(parseDrillFilter(`${k}.gte.${v}`)); return api; },
+        or: (v) => { q.filters.push(parseDrillFilter(`or(${v})`)); return api; },
         limit: (n) => { q.limit = n; return api; }, range: (a, b) => { q.range = [a, b]; return api; },
         then(res, rej) {
           reads.push(q); onRead(q);
           let rows = (db[table] || []).filter((r) => Object.entries(q.eq).every(([k, v]) => r[k] === v) && Object.keys(q.is).every((k) => r[k] == null));
+          rows = rows.filter((r) => q.filters.every((f) => matchesDrillFilter(r, f))).sort((a, b) => {
+            for (const k of q.order) { if (a[k] < b[k]) return -1; if (a[k] > b[k]) return 1; } return 0;
+          });
           if (q.range) rows = rows.slice(q.range[0], Math.min(q.range[1] + 1, q.range[0] + 1000));
           if (q.limit) rows = rows.slice(0, q.limit);
           return Promise.resolve({ data: structuredClone(rows), error: null }).then(res, rej);
@@ -171,7 +178,8 @@ describe('reading a property\'s drill database', () => {
     expect(rows.assays.some((r) => r.values.Cu === 9)).toBe(false);
     const pages = sb.reads.filter((q) => q.table === 'drill_assays');
     expect(pages).toHaveLength(51); // 50 full pages and the empty one that ends it
-    expect(pages.every((q) => q.range[1] - q.range[0] === 999 && q.eq.property_id === 'p1' && 'superseded_by_batch' in q.is)).toBe(true);
+    expect(pages.every((q) => q.range === null && q.limit === 1000 && q.eq.property_id === 'p1' && 'superseded_by_batch' in q.is)).toBe(true);
+    expect(pages.slice(1).every((q) => q.filters.length === 2)).toBe(true);
     expect(Math.max(...seen)).toBe(50000);
     expect(ref).toMatchObject({ holes: 250, assays: 50000, latestBatchId: 'b3' });
     expect(files.find((f) => f.name === FILE_NAMES.assays).text.split('\n')).toHaveLength(50002); // header, rows, final newline
@@ -179,9 +187,9 @@ describe('reading a property\'s drill database', () => {
 
   it('reads again when an import lands while the pages are read, so the figure never mixes versions', async () => {
     const db = big();
-    let landed = false;
+    let landed = false, assayPages = 0;
     const sb = fakeSb(db, (q) => {
-      if (!landed && q.table === 'drill_assays' && q.range?.[0] === 10000) {
+      if (!landed && q.table === 'drill_assays' && ++assayPages === 11) {
         landed = true;
         db.drill_import_batches.unshift({ property_id: 'p1', id: 'b9', kind: 'collars', created_at: '2026-10-21T10:00:00.000Z', rolled_back_at: null, summary: { new: 1 } });
       }
