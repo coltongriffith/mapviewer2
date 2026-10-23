@@ -242,7 +242,8 @@ const BUDGETS = {
   // Combined Tower acceptance: export/API plus figure import; measured 1053.0 configured.
   // Combined Tower + Phase 2 release: fonts, XLSX, recipes, cursors and HTML tables;
   // measured 1073.4 configured. Feature costs/reasons are retained below.
-  totalAuthJsGzipKb: 1073.7,
+  // Excel results export: lazy writer/table snapshot adds ~16 KiB; measured 1089.4 configured.
+  totalAuthJsGzipKb: 1089.7,
   // 1009.4 → 1026.3 (measured 1026.0): lazy XLSX reader (~13.8 KiB), sheet/header preview
   // (~1.1 KiB), import wiring and numeric-format handling. Shared fflate adds ~1.2 KiB
   // for async ZIP workers; it remains one copy with the existing draft compression.
@@ -295,7 +296,8 @@ const BUDGETS = {
   // totalAuthJsGzipKb above.
   // Combined Tower acceptance: same lazy features together; measured 984.6 plain.
   // Same combined release, measured 1006.3 plain; mostly lazy feature chunks.
-  totalJsGzipKb: 1006.6,
+  // Same lazy Excel results writer; measured 1022.2 plain.
+  totalJsGzipKb: 1022.5,
   // 940.9 → 957.8 (measured 957.5): Excel import, as totalAuthJsGzipKb above.
   // 940.9 → 944.8 (P2-8, measured 944.6): the same lazy property recipe path
   // in the unconfigured build. Its initial route budgets also stay unchanged.
@@ -571,7 +573,8 @@ const BUDGETS = {
   // Unchanged by the 2D export package (measured 341.3, as on main): App as maxJsChunkGzipKb above.
   // 341.5 to 342.6 (Oct 2026): 2D API bridge and accessible control names; API/help load after editor startup; measured 342.3 configured.
   // Combined API bridge + shared XLSX compression support, measured 343.8 configured.
-  editorAuthJsGzipKb: 344.1,
+  // XLSX writing uses shared fflate async zip support (+~0.5 KiB); writer remains lazy. Measured 344.3.
+  editorAuthJsGzipKb: 344.6,
   // Excel import: shared fflate's async ZIP worker support adds ~1.2 KiB (342.5 measured).
   // The XLSX parser and sheet picker remain lazy; the homepage does not load compression.
   // 270 → 271.0 (Oct 2026, production errors, measured 270.7, 269.6 on main): the same as editorAuthJsGzipKb above.
@@ -583,12 +586,14 @@ const BUDGETS = {
   // Unchanged by the 2D export package (measured 273.2, 273.2 on main): as editorAuthJsGzipKb above.
   // 273.4 to 274.5 (Oct 2026): Same bridge and control names; measured 274.2 plain.
   // Same combined bridge/compression support, measured 275.7 plain.
-  editorJsGzipKb: 276.0,
+  // Same shared async zip support; measured 276.3 plain.
+  editorJsGzipKb: 276.6,
   // 355 to 355.3 (Oct 2026): claims shares the editor API bridge/control names; measured 355.0 in CI.
   // Same shared compression increase as above (274.4 measured).
   // Claims also restores drafts through shared compression (355.3 measured).
   // Claims shares that editor/compression graph, measured 356.5 configured.
-  claimsAuthJsGzipKb: 356.8,
+  // Same shared async zip support; measured 357.0 configured.
+  claimsAuthJsGzipKb: 357.3,
   claimsJsGzipKb: 290,
   // Stylesheet, gzipped. Today ~29 kB.
   maxCssGzipKb: 40,

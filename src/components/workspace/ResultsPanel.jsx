@@ -14,7 +14,7 @@ import { ErrorNote } from './shared';
 const numOr = (v) => (v === '' ? '' : Number.isFinite(+v) ? +v : v);
 const slug = (t) => String(t || 'property').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'property';
 function download(name, text, type = 'text/csv') {
-  const url = URL.createObjectURL(new Blob([text], { type: `${type};charset=utf-8` }));
+  const url = URL.createObjectURL(text instanceof Blob ? text : new Blob([text], { type: `${type};charset=utf-8` }));
   const a = Object.assign(document.createElement('a'), { href: url, download: name });
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
@@ -101,6 +101,7 @@ export default function ResultsPanel({ property, perms, revision = 0 }) {
   const [note, setNote] = useState(null);
   const [busy, setBusy] = useState(false);
   const [tableFormat, setTableFormat] = useState('csv');
+  const [exporting, setExporting] = useState(false);
 
   // keepDraft: an import or roll-back reloads the assays and recipes, keeping the recipe being edited.
   const load = async (keep, keepDraft) => {
@@ -141,10 +142,23 @@ export default function ResultsPanel({ property, perms, revision = 0 }) {
   const base = slug(property.name);
   const source = current && `Property results: ${current.name} v${current.version}`;
   const recipeProblems = checkRecipe(recipe);
-  const formattedTable = () => resultsTableDocument(out, recipe, {
+  const tableOptions = {
     propertyName: property.name, recipeName: name, recipeVersion: current?.version, unsaved: !current || dirty,
     warnings: data.capped ? [`Incomplete assay load: only the first ${MAX_ASSAYS.toLocaleString('en-US')} assays are included.`] : [],
-  });
+  };
+  const formattedTable = () => resultsTableDocument(out, recipe, tableOptions);
+  const downloadTable = async () => {
+    setError(null); setNote(null);
+    if (tableFormat === 'html') return download(`${base}-results.html`, formattedTable().html, 'text/html');
+    if (tableFormat === 'csv') return download(`${base}-results.csv`, toCsv(rows));
+    setExporting(true);
+    try {
+      const { resultsTableXlsx } = await import('../../utils/drillResultsXlsx.js');
+      download(`${base}-results.xlsx`, await resultsTableXlsx(out, recipe, tableOptions));
+      setNote('Downloaded the Excel table and recipe notes.');
+    } catch (e) { setError(e.message?.includes('too long for Excel') ? e.message : 'Excel export failed. Try again or download HTML.'); }
+    finally { setExporting(false); }
+  };
   const copyFormattedTable = async () => {
     setError(null);
     try {
@@ -207,12 +221,11 @@ export default function ResultsPanel({ property, perms, revision = 0 }) {
             <select value={tableFormat} onChange={(e) => setTableFormat(e.target.value)}>
               <option value="csv">Spreadsheet (CSV / TSV)</option>
               <option value="html">Formatted table (HTML)</option>
+              <option value="xlsx">Excel workbook (XLSX)</option>
             </select>
           </label>
           <button type="button" className="btn" onClick={() => tableFormat === 'html' ? copyFormattedTable() : copy(toTsv(rows), 'table')}>{tableFormat === 'html' ? 'Copy formatted table' : 'Copy table (TSV)'}</button>
-          <button type="button" className="btn" onClick={() => tableFormat === 'html'
-            ? download(`${base}-results.html`, formattedTable().html, 'text/html')
-            : download(`${base}-results.csv`, toCsv(rows))}>{tableFormat === 'html' ? 'Download HTML' : 'Download CSV'}</button>
+          <button type="button" className="btn" disabled={exporting} onClick={downloadTable}>{exporting ? 'Preparing Excel…' : tableFormat === 'xlsx' ? 'Download Excel' : tableFormat === 'html' ? 'Download HTML' : 'Download CSV'}</button>
           <button type="button" className="btn" disabled={!current || dirty} title={!current || dirty ? 'Save the recipe first' : undefined}
             onClick={() => { const f = toPublishedFile(results, out.columns, source, `${base}-published-results.csv`); download(f.name, f.text); }}>Download for 3D figures</button>
         </div>
