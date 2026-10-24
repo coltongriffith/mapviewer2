@@ -3,6 +3,9 @@ import { discoverDuplicateGroups, loadDuplicateSnapshot } from '../../utils/dril
 import { analyzeDuplicateSnapshot } from '../../../shared/qaqcDuplicates';
 
 const TYPES = { field_dup: 'Field duplicates', coarse_dup: 'Coarse duplicates', pulp_dup: 'Pulp duplicates' };
+import QaqcChartDownload from './QaqcChartDownload';
+import { chartProvenance } from '../../utils/qaqcChartPng';
+
 const number = value => value == null ? '—' : value !== 0 && (Math.abs(value) < 0.001 || Math.abs(value) >= 1e6) ? value.toExponential(3) : Number(value).toLocaleString(undefined, { maximumSignificantDigits: 5 });
 const short = group => `${TYPES[group.sampleType]} · ${group.labId} / ${group.labBatchId} · ${group.element} (${group.unit})`;
 const chartStyle = { display: 'block', width: '100%', maxWidth: 460, margin: '0 auto' };
@@ -33,8 +36,8 @@ function Scatter({ points, unit }) {
       <line x1="55" y1="325" x2="355" y2="25" stroke="currentColor" strokeWidth="1.5" />
       {positive.map(point => <circle key={point.id} cx={x(point.x)} cy={y(point.y)} r="3" fill="#2563eb" fillOpacity="0.65"><title>{point.sampleId}: original {point.original.raw}, duplicate {point.duplicate.raw} {unit}; HARD {number(point.hard)}%</title></circle>)}
     </g>
-    <text x="205" y="372" textAnchor="middle" fill="currentColor" fontSize="12">Original ({unit}, log scale)</text>
-    <text transform="translate(13 175) rotate(-90)" textAnchor="middle" fill="currentColor" fontSize="12">Duplicate ({unit}, log scale)</text>
+    <text x="205" y="372" textAnchor="middle" fill="currentColor" fontSize="12" data-export-label={unit.length > 20 ? "Original (log scale; unit below)" : undefined}>Original ({unit}, log scale)</text>
+    <text transform="translate(13 175) rotate(-90)" textAnchor="middle" fill="currentColor" fontSize="12" data-export-label={unit.length > 20 ? "Duplicate (log scale; unit below)" : undefined}>Duplicate ({unit}, log scale)</text>
   </svg>;
 }
 
@@ -49,18 +52,20 @@ function Ranked({ points }) {
   </svg>;
 }
 
-function Results({ snapshot }) {
+function Results({ snapshot, propertyName, captureCurrent }) {
   const analysis = useMemo(() => analyzeDuplicateSnapshot(snapshot), [snapshot]);
   const [page, setPage] = useState(0);
   const rows = useMemo(() => [...analysis.points, ...analysis.excluded].sort((a, b) => a.sourceRow - b.sourceRow || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)), [analysis]);
   const manifest = snapshot.manifest;
+  const provenance = chartProvenance(analysis, manifest, propertyName);
+  const chart = useRef(null), rankedChart = useRef(null);
   return <div className="ws-stack">
     <p><strong>{analysis.eligibleCount} eligible / {analysis.selectedCount} selected pairs</strong> · {analysis.excludedCount} unassessed. Log scatter: {analysis.summaries.logCount} pairs; {analysis.summaries.logExcludedCount} eligible pairs omitted from log axes because of zero values.</p>
     <p>{manifest.submittedCount} rows submitted; {manifest.loadedWrittenCount} records written by this import. {manifest.rolledBackAt ? 'This import has been rolled back; these are its historical records.' : 'Historical import snapshot; newer versions may exist.'}</p>
     <p className="dash-muted">Agreement is descriptive, not pass/fail. Laboratory method is not recorded. Exact reported units and pinned original versions are used.</p>
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))', gap: 16 }}>
-      <figure style={{ margin: 0 }}><h4>Original vs duplicate</h4><Scatter points={analysis.points} unit={analysis.scope.unit} /><figcaption>Equal log scales. Solid line: 1:1. Dashed bands: ±10%, ±20%, ±30% of the original (short to long dashes), not HARD thresholds.</figcaption></figure>
-      <figure style={{ margin: 0 }}><h4>Ranked HARD</h4><Ranked points={analysis.ranked} /><figcaption>HARD = 100 × |original − duplicate| / (original + duplicate). Equal HARD values use stable record-ID order.</figcaption></figure>
+      <figure ref={chart} style={{ margin: 0 }}><h4>Original vs duplicate</h4><Scatter points={analysis.points} unit={analysis.scope.unit} /><figcaption>Equal log scales. Solid line: 1:1. Dashed bands: ±10%, ±20%, ±30% of the original (short to long dashes), not HARD thresholds.</figcaption><QaqcChartDownload chart={chart} available={analysis.summaries.logCount > 0} title="Original vs duplicate" filename={`qaqc-scatter-${analysis.scope.batchId}.png`} captureCurrent={captureCurrent} lines={[`${analysis.summaries.logCount} positive pairs plotted; ${analysis.summaries.logExcludedCount} otherwise eligible zero-value pairs omitted from log axes.`, 'Equal log scales; solid 1:1 line. Short to long dashes: ±10%, ±20%, ±30% of the original, not HARD thresholds. Descriptive agreement, not pass/fail; laboratory method is not recorded.', ...provenance]} /></figure>
+      <figure ref={rankedChart} style={{ margin: 0 }}><h4>Ranked HARD</h4><Ranked points={analysis.ranked} /><figcaption>HARD = 100 × |original − duplicate| / (original + duplicate). Equal HARD values use stable record-ID order.</figcaption><QaqcChartDownload chart={rankedChart} available={analysis.eligibleCount > 0} title="Ranked HARD" filename={`qaqc-hard-${analysis.scope.batchId}.png`} captureCurrent={captureCurrent} lines={['HARD = 100 × |original − duplicate| / (original + duplicate). Stable record-ID tie order. Descriptive agreement, not pass/fail; laboratory method is not recorded.', `Cumulative denominator: ${analysis.eligibleCount} eligible pairs, including eligible zero-value pairs. HARD ≤10%: ${analysis.summaries.within10.count}/${analysis.summaries.within10.total}; HARD ≤20%: ${analysis.summaries.within20.count}/${analysis.summaries.within20.total}.`, ...provenance]} /></figure>
     </div>
     <p>HARD ≤10%: {analysis.summaries.within10.count}/{analysis.summaries.within10.total} ({number(analysis.summaries.within10.percent)}%). HARD ≤20%: {analysis.summaries.within20.count}/{analysis.summaries.within20.total} ({number(analysis.summaries.within20.percent)}%). {analysis.eligibleCount === 0 && 'No eligible pairs; percentages are unavailable.'}</p>
     {analysis.excludedCount > 0 && <details><summary>Why {analysis.excludedCount} pairs are unassessed</summary><ul>{Object.entries(analysis.excludedByReason).filter(([, count]) => count).map(([reason, count]) => <li key={reason}>{analysis.excluded.find(row => row.reason === reason).message} ({count})</li>)}</ul></details>}
@@ -76,7 +81,7 @@ function Results({ snapshot }) {
   </div>;
 }
 
-function Comparison({ client, propertyId, batchId, onClose }) {
+function Comparison({ client, propertyId, propertyName, batchId, onClose }) {
   const [discovery, setDiscovery] = useState(null), [choice, setChoice] = useState('');
   const [snapshot, setSnapshot] = useState(null), [error, setError] = useState(''), [loading, setLoading] = useState(true), [sessionRevision, setSessionRevision] = useState(0);
   const heading = useRef(null), alive = useRef(true), generation = useRef(0);
@@ -110,13 +115,13 @@ function Comparison({ client, propertyId, batchId, onClose }) {
     return () => { active = false; controller.abort(); };
   }, [client, discovery, choice]);
   return <section className="ws-stack" aria-label="Duplicate comparisons">
-    <button type="button" className="btn" onClick={onClose}>Back to QA/QC</button>
+    <button type="button" className="btn" onClick={() => { generation.current++; onClose(); }}>Back to QA/QC</button>
     <h3 ref={heading} tabIndex="-1" style={{ margin: 0 }}>Compare duplicates</h3>
     <p>Import snapshot: records written by this import.</p>
-    {discovery && (discovery.groups.length ? <label className="ws-field">Comparison group<select style={{ maxWidth: '100%' }} value={choice} onChange={event => { setSnapshot(null); setError(''); setLoading(event.target.value !== ''); setChoice(event.target.value); }}><option value="">Choose duplicate type, lab job and element</option>{discovery.groups.map((group, index) => <option key={index} value={index}>{short(group)}</option>)}</select></label> : <p>No duplicate comparison groups were written by this import.</p>)}
+    {discovery && (discovery.groups.length ? <label className="ws-field">Comparison group<select style={{ maxWidth: '100%' }} value={choice} onChange={event => { generation.current++; setSnapshot(null); setError(''); setLoading(event.target.value !== ''); setChoice(event.target.value); }}><option value="">Choose duplicate type, lab job and element</option>{discovery.groups.map((group, index) => <option key={index} value={index}>{short(group)}</option>)}</select></label> : <p>No duplicate comparison groups were written by this import.</p>)}
     {loading && <p role="status">Loading comparison snapshot…</p>}
     {error && <p className="ws-error" role="alert">{error} No comparison is shown. Go back and reopen to retry.</p>}
-    {snapshot && <Results key={choice} snapshot={snapshot} />}
+    {snapshot && <Results key={choice} snapshot={snapshot} propertyName={propertyName} captureCurrent={() => { const version = generation.current; return () => alive.current && version === generation.current; }} />}
   </section>;
 }
 

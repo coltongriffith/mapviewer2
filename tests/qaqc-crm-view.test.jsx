@@ -3,7 +3,8 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { beforeEach, expect, it, vi } from 'vitest';
 import QaqcCrmView from '../src/components/workspace/QaqcCrmView';
 import QaqcPanel from '../src/components/workspace/QaqcPanel';
-const { load, discover, records, batches } = vi.hoisted(() => ({ load: vi.fn(), discover: vi.fn(), records: vi.fn(), batches: vi.fn() }));
+const { load, discover, records, batches, capture, png } = vi.hoisted(() => ({ load: vi.fn(), discover: vi.fn(), records: vi.fn(), batches: vi.fn(), capture: vi.fn(), png: vi.fn() }));
+vi.mock('../src/utils/qaqcChartPng', async original => ({ ...(await original()), captureChartPng: capture, downloadChartPng: png }));
 vi.mock('../src/utils/drillQaqcSnapshot', () => ({ loadCrmSnapshot: load, discoverCrmGroups: discover }));
 vi.mock('../src/utils/drillQaqcDb', async original => ({ ...(await original()), listQaqcRecords: records, listQaqcBatches: batches }));
 vi.mock('../src/lib/supabase', () => ({ supabase: null }));
@@ -84,6 +85,7 @@ it('keeps zero-denominator percentages unavailable and explains numerical precis
   const data = snapshot(1); data.records[0].record.values.Au = 1e-320; data.crms[0].record.expected = 0; data.crms[0].record.sd = 1e10;
   load.mockResolvedValue(data); render(view()); await choose(); await screen.findByText('0 assessed / 1 selected standards');
   expect(screen.getAllByText(/0\/0 \(percentage unavailable\)/)).toHaveLength(3);
+  expect(screen.getByRole('button', { name: 'Download CRM reference comparison PNG' })).toBeDisabled();
   expect(screen.queryByRole('img')).toBeNull(); expect(within(screen.getByRole('table')).getByText(/Unassessed: The score or reference bands cannot be represented/)).toBeTruthy();
 });
 
@@ -107,4 +109,48 @@ it('offers both comparison types to viewers and restores focus to the standards 
   expect(screen.queryByRole('button', { name: 'Roll back QA/QC import' })).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: 'Back to QA/QC' }));
   expect(await screen.findByRole('button', { name: 'Compare standards' })).toHaveFocus();
+});
+
+
+it('captures the selected chart and invalidates PNG export immediately on auth change, before React commits', async () => {
+  let auth, resolve; const signedIn = { auth: { onAuthStateChange: cb => { auth = cb; return { data: { subscription: { unsubscribe() {} } } }; } } };
+  const frozen = { svg: 'frozen', filename: 'chart.png' }; capture.mockReturnValue(frozen); png.mockReturnValue(new Promise(r => { resolve = r; }));
+  render(view({ client: signedIn, propertyName: 'Synthetic property' })); await choose(); await screen.findByRole('table');
+  fireEvent.click(screen.getByRole('button', { name: 'Download CRM reference comparison PNG' }));
+  expect(capture.mock.calls[0][0]).toBe(screen.getByRole('img')); expect(capture.mock.calls[0][1].lines.join(' ')).toContain('Property: Synthetic property | ID: p');
+  expect(capture.mock.calls[0][1].lines.join(' ')).toContain('3 assessed / 4 selected; 1 unassessed');
+  expect(png.mock.calls[0][0]).toBe(frozen); const current = png.mock.calls[0][1]; expect(current()).toBe(true);
+  act(() => { auth('SIGNED_OUT'); expect(current()).toBe(false); });
+  await act(async () => resolve()); expect(screen.queryByRole('table')).toBeNull();
+});
+
+it.each(['group', 'property', 'close'])('invalidates pending PNG on %s changes', async mode => {
+  let resolve; capture.mockReturnValue({ svg: 'frozen' }); png.mockReturnValue(new Promise(r => { resolve = r; }));
+  const ui = render(view()); await choose(); await screen.findByRole('table');
+  fireEvent.click(screen.getByRole('button', { name: 'Download CRM reference comparison PNG' })); const current = png.mock.calls[0][1];
+  if (mode === 'group') await choose('');
+  if (mode === 'property') ui.rerender(view({ propertyId: 'next' }));
+  if (mode === 'close') fireEvent.click(screen.getByRole('button', { name: 'Back to QA/QC' }));
+  expect(current()).toBe(false); await act(async () => resolve());
+});
+
+
+it('keeps exact long units in PNG metadata while shortening only the exported axis label', async () => {
+  const unit = 'unit-' + 'u'.repeat(115), data = snapshot(1); data.scope = { ...scope, unit };
+  data.records[0].record.units.Au = unit; data.crms[0].record.unit = unit;
+  discover.mockResolvedValue({ complete: true, groups: [data.scope] }); load.mockResolvedValue(data); capture.mockReturnValue({ svg: 'frozen' }); png.mockResolvedValue();
+  render(view()); await choose(); await screen.findByRole('table');
+  const axis = screen.getByRole('img').querySelector('[data-export-label]');
+  expect(axis.textContent).toBe(`Reported value (${unit})`); expect(axis.dataset.exportLabel).toBe('Reported value (unit below)');
+  fireEvent.click(screen.getByRole('button', { name: 'Download CRM reference comparison PNG' }));
+  expect(capture.mock.calls[0][1].lines.join(' ')).toContain(`exact unit ${unit}`);
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Download CRM reference comparison PNG' })).toBeEnabled());
+});
+
+it('shows a failed PNG encode and allows retry while preserving raw evidence', async () => {
+  capture.mockReturnValue({ svg: 'frozen' }); png.mockRejectedValueOnce(new Error('Could not encode this chart as PNG.')).mockResolvedValueOnce();
+  render(view()); await choose(); await screen.findByRole('table');
+  const button = screen.getByRole('button', { name: 'Download CRM reference comparison PNG' }); fireEvent.click(button);
+  expect(await screen.findByRole('alert')).toHaveTextContent('Could not encode'); expect(screen.getByRole('table')).toBeTruthy();
+  fireEvent.click(button); await waitFor(() => expect(button).toBeEnabled()); expect(screen.queryByRole('alert')).toBeNull(); expect(png).toHaveBeenCalledTimes(2);
 });

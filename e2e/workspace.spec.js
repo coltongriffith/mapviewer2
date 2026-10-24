@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { xlsxFixture } from '../tests/fixtures/xlsx.js';
 import readExcelFile from 'read-excel-file/node';
 import { unzipSync } from 'fflate';
+import { readFile } from 'node:fs/promises';
 
 // Company workspaces against an in-memory Supabase (auth, REST and RPC are
 // mocked; no request leaves the browser). Needs the configured client build
@@ -31,6 +32,42 @@ const assays = { id: FILE, name: 'assays.csv', kind: 'drill', role: 'assays', ve
 const BATCH0 = '00000000-0000-4000-8000-0000000000e0';
 const collarBatch = { id: BATCH0, kind: 'collars', filename: 'Rails collars.csv', rows: 12, rows_written: 12, summary: { new: 12, changed: 0, unchanged: 0, new_holes: 12 }, created_at: '2026-10-18T00:00:00Z', created_by_email: 'cfo@star.test', rolled_back_at: null, blocked_by: null };
 const drillSummary = () => ({ collars: 12, planned: 2, metres: 3420.5, surveys: 40, assays: 0, lithology: 0, holes: 12, elements: [], limit: 20000, batches: [{ ...collarBatch }] });
+
+// Observe the browser's locally generated SVG; download and decode the actual PNG.
+async function checkChartDownload(page, testInfo, title, filename, expected) {
+  await page.evaluate(() => {
+    window.__chartSvg = [];
+    const original = URL.createObjectURL;
+    URL.createObjectURL = function (blob) {
+      if (blob.type.startsWith('image/svg+xml')) window.__chartSvg.push(blob.text());
+      return original.call(this, blob);
+    };
+  });
+  const pending = page.waitForEvent('download');
+  await page.getByRole('button', { name: `Download ${title} PNG` }).click();
+  const download = await pending; expect(download.suggestedFilename()).toBe(filename);
+  const path = testInfo.outputPath(filename); await download.saveAs(path);
+  const bytes = await readFile(path);
+  expect(bytes.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
+  expect(bytes.readUInt32BE(16)).toBe(1920); expect(bytes.readUInt32BE(20)).toBeLessThanOrEqual(4096);
+  const labels = await page.evaluate(async () => {
+    const text = await Promise.all(window.__chartSvg);
+    return text.map(svg => new DOMParser().parseFromString(svg, 'image/svg+xml').documentElement.textContent).join('');
+  });
+  for (const text of expected) expect(labels).toContain(text);
+  expect(labels).toContain('Rails Copper-Gold'); expect(labels).toContain('Historical written-import subset only');
+  expect(labels).toContain('not a full-file, whole-job or current-property report');
+  const pixels = await page.evaluate(async data => {
+    const image = new Image(); image.src = `data:image/png;base64,${data}`; await image.decode();
+    const canvas = document.createElement('canvas'); canvas.width = image.width; canvas.height = image.height;
+    const ctx = canvas.getContext('2d'); ctx.drawImage(image, 0, 0);
+    const values = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    let blue = 0, dark = 0;
+    for (let i = 0; i < values.length; i += 4) { if (values[i+2] > 100 && values[i+2] > values[i] * 2) blue++; if (values[i] < 100 && values[i+1] < 100 && values[i+2] < 100) dark++; }
+    return { blue, dark, corner: [...values.slice(0, 4)] };
+  }, bytes.toString('base64'));
+  expect(pixels.blue).toBeGreaterThan(30); expect(pixels.dark).toBeGreaterThan(2000); expect(pixels.corner).toEqual([255, 255, 255, 255]);
+}
 
 test('QA/QC duplicate comparisons: scoped historical charts, raw exclusions and read-only return', async ({ page }, testInfo) => {
   const errors = []; page.on('pageerror', error => errors.push(error.message));
@@ -65,6 +102,8 @@ test('QA/QC duplicate comparisons: scoped historical charts, raw exclusions and 
   await expect(page.getByText(/HARD ≤10%: 1\/2 \(50%\)/)).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('duplicate-comparison.png'), fullPage: true });
+  await checkChartDownload(page, testInfo, 'Original vs duplicate', `qaqc-scatter-${batch.id}.png`, ['1 positive pairs plotted', '1 otherwise eligible zero-value pairs', '2 assessed / 4 selected; 2 unassessed', 'not HARD thresholds', batch.id]);
+  await checkChartDownload(page, testInfo, 'Ranked HARD', `qaqc-hard-${batch.id}.png`, ['Cumulative denominator: 2 eligible pairs', 'HARD = 100', 'HARD ≤10%: 1/2', 'Rolled back:']);
   await page.getByRole('button', { name: 'Back to QA/QC' }).click();
   await expect(page.getByRole('button', { name: 'Compare duplicates' })).toBeFocused();
   await expect(page.getByRole('button', { name: 'Roll back QA/QC import' })).toHaveCount(0);
@@ -120,6 +159,7 @@ test('QA/QC standard comparisons: pinned supplied references, zero and censored 
   await expect(table).toContainText(`Pinned CRM: ${crm.id}`); await expect(table).toContainText('Synthetic supplied certificate only');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('standards-comparison.png'), fullPage: true });
+  await checkChartDownload(page, testInfo, 'CRM reference comparison', `qaqc-standards-${batch.id}.png`, ['Supplied expected value: 10; supplied SD: 2 g/t.', 'CRM CRM-TEST | revision rev-01', '3 assessed / 4 selected; 1 unassessed', 'Outside ±3 supplied SD: 2/3.', 'no analytical order or trend implied', 'synthetic-standards-request', batch.id]);
   await page.getByRole('button', { name: 'Back to QA/QC' }).click(); await expect(page.getByRole('button', { name: 'Compare standards' })).toBeFocused();
   await expect(page.getByRole('button', { name: 'Roll back QA/QC import' })).toHaveCount(0);
   failReferences = true; await page.getByRole('button', { name: 'Compare standards' }).click(); await page.getByLabel('Comparison group').selectOption('0');

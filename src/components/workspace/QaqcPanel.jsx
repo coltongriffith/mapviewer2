@@ -78,7 +78,7 @@ function Register({ property, perms, client }) {
   };
   if (comparison) {
     const View = comparison.kind === 'standards' ? QaqcCrmView : QaqcDuplicateView;
-    return <Suspense fallback={<p role="status">Loading comparisons…</p>}><View client={client} propertyId={property.id} batchId={comparison.batchId} onClose={() => setComparison(null)} /></Suspense>;
+    return <Suspense fallback={<p role="status">Loading comparisons…</p>}><View client={client} propertyId={property.id} propertyName={property.name} batchId={comparison.batchId} onClose={() => setComparison(null)} /></Suspense>;
   }
   return <div className="ws-stack">
     <p className="dash-muted">Import CRM definitions before standards, and routine samples before their duplicates. Values stay as reported; this register does not judge pass/fail.</p>

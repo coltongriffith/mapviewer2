@@ -2,6 +2,9 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { discoverCrmGroups, loadCrmSnapshot } from '../../utils/drillQaqcSnapshot';
 import { analyzeCrmSnapshot } from '../../../shared/qaqcCrms';
 
+import QaqcChartDownload from './QaqcChartDownload';
+import { chartProvenance } from '../../utils/qaqcChartPng';
+
 const number = value => value == null ? '—' : value !== 0 && (Math.abs(value) < 0.001 || Math.abs(value) >= 1e6) ? value.toExponential(3) : Number(value).toLocaleString(undefined, { maximumSignificantDigits: 5 });
 const short = group => `${group.crmId} (${group.crmRevision}) · ${group.labId} / ${group.labBatchId} · ${group.element} (${group.unit})`;
 const categories = { within2: 'Within/on ±2 supplied SD', outside2Within3: 'Outside ±2, within/on ±3 supplied SD', outside3: 'Outside ±3 supplied SD' };
@@ -31,20 +34,22 @@ function ReferencePlot({ points, unit, rows }) {
     {Object.entries(bands).map(([key, value]) => <g key={key}><line x1="75" x2="405" y1={y(value)} y2={y(value)} stroke={key === 'expected' ? 'currentColor' : '#64748b'} strokeDasharray={key === 'expected' ? undefined : key.endsWith('2') ? '3 3' : '8 4'} /><title>{key}: {value} {unit}</title></g>)}
     {points.map(p => <circle key={p.id} cx={x(p.sourceRow)} cy={y(p.observed.value)} r="3.5" fill="#2563eb" fillOpacity="0.7"><title>{p.sampleId}: {p.observed.raw} {unit}; z {number(p.z)}; {categories[p.category]}</title></circle>)}
     <text x="240" y="345" textAnchor="middle" fill="currentColor" fontSize="12">Submitted row (not analysis order)</text>
-    <text transform="translate(15 160) rotate(-90)" textAnchor="middle" fill="currentColor" fontSize="12">Reported value ({unit})</text>
+    <text transform="translate(15 160) rotate(-90)" textAnchor="middle" fill="currentColor" fontSize="12" data-export-label={unit.length > 20 ? "Reported value (unit below)" : undefined}>Reported value ({unit})</text>
   </svg>;
 }
 
-function Results({ snapshot }) {
+function Results({ snapshot, propertyName, captureCurrent }) {
   const analysis = useMemo(() => analyzeCrmSnapshot(snapshot), [snapshot]);
   const [page, setPage] = useState(0);
   const rows = useMemo(() => [...analysis.points, ...analysis.excluded].sort((a, b) => a.sourceRow - b.sourceRow || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)), [analysis]);
   const manifest = snapshot.manifest;
+  const provenance = chartProvenance(analysis, manifest, propertyName);
+  const chart = useRef(null);
   return <div className="ws-stack">
     <p><strong>{analysis.eligibleCount} assessed / {analysis.selectedCount} selected standards</strong> · {analysis.excludedCount} unassessed.</p>
     <p>{manifest.submittedCount} rows submitted; {manifest.loadedWrittenCount} records written by this import. {manifest.rolledBackAt ? 'This import has been rolled back; these are its historical records.' : 'Historical import snapshot; newer versions may exist.'}</p>
     <p className="dash-muted">Reference comparisons use supplied SD and exact pinned definitions. They do not verify the certificate or laboratory method, or assess consecutive results.</p>
-    <figure style={{ margin: 0 }}><h4>CRM reference comparison</h4><ReferencePlot points={analysis.points} rows={rows} unit={analysis.scope.unit} /><figcaption>Solid line: supplied expected value. Short dashes: ±2 supplied SD. Long dashes: ±3 supplied SD. Points retain submitted-row gaps; no analytical trend is implied. Zero observations and negative mathematical reference lines use a linear scale.</figcaption></figure>
+    <figure ref={chart} style={{ margin: 0 }}><h4>CRM reference comparison</h4><ReferencePlot points={analysis.points} rows={rows} unit={analysis.scope.unit} /><figcaption>Solid line: supplied expected value. Short dashes: ±2 supplied SD. Long dashes: ±3 supplied SD. Points retain submitted-row gaps; no analytical trend is implied. Zero observations and negative mathematical reference lines use a linear scale.</figcaption><QaqcChartDownload chart={chart} available={analysis.points.length > 0 && new Set(analysis.points.map(p => JSON.stringify(p.bands))).size === 1} title="CRM reference comparison" filename={`qaqc-standards-${analysis.scope.batchId}.png`} captureCurrent={captureCurrent} lines={[`Supplied expected value: ${analysis.points[0]?.reference.expected}; supplied SD: ${analysis.points[0]?.reference.sd} ${analysis.scope.unit}.`, 'Linear scale. Solid: supplied expected value; short dashes: ±2 supplied SD; long dashes: ±3 supplied SD. Submitted-row gaps retained; no analytical order or trend implied.', 'Supplied SD and exact pinned definitions; certificate and laboratory method not independently verified. Descriptive comparisons, not pass/fail or consecutive-result assessment.', ...Object.entries(analysis.summaries).map(([key, summary]) => `${categories[key]}: ${summary.count}/${summary.total}.`), ...provenance]} /></figure>
     <ul>{Object.entries(analysis.summaries).map(([key, summary]) => <li key={key}>{categories[key]}: {summary.count}/{summary.total}{summary.percent == null ? ' (percentage unavailable)' : ` (${number(summary.percent)}%)`}</li>)}</ul>
     <p className="dash-muted">These three categories do not overlap. Being within a band is not approval of a laboratory job.</p>
     {analysis.excludedCount > 0 && <details><summary>Why {analysis.excludedCount} standards are unassessed</summary><ul>{Object.entries(analysis.excludedByReason).filter(([, count]) => count).map(([reason, count]) => <li key={reason}>{analysis.excluded.find(row => row.reason === reason).message} ({count})</li>)}</ul></details>}
@@ -63,7 +68,7 @@ function Results({ snapshot }) {
   </div>;
 }
 
-function Comparison({ client, propertyId, batchId, onClose }) {
+function Comparison({ client, propertyId, propertyName, batchId, onClose }) {
   const [discovery, setDiscovery] = useState(null), [choice, setChoice] = useState('');
   const [snapshot, setSnapshot] = useState(null), [error, setError] = useState(''), [loading, setLoading] = useState(true), [sessionRevision, setSessionRevision] = useState(0);
   const heading = useRef(null), alive = useRef(true), generation = useRef(0);
@@ -97,13 +102,13 @@ function Comparison({ client, propertyId, batchId, onClose }) {
     return () => { active = false; controller.abort(); };
   }, [client, discovery, choice]);
   return <section className="ws-stack" aria-label="Standard comparisons">
-    <button type="button" className="btn" onClick={onClose}>Back to QA/QC</button>
+    <button type="button" className="btn" onClick={() => { generation.current++; onClose(); }}>Back to QA/QC</button>
     <h3 ref={heading} tabIndex="-1" style={{ margin: 0 }}>Compare standards</h3>
     <p>Import snapshot: records written by this import.</p>
-    {discovery && (discovery.groups.length ? <label className="ws-field">Comparison group<select style={{ maxWidth: '100%' }} value={choice} onChange={event => { setSnapshot(null); setError(''); setLoading(event.target.value !== ''); setChoice(event.target.value); }}><option value="">Choose CRM revision, lab job and element</option>{discovery.groups.map((group, index) => <option key={index} value={index}>{short(group)}</option>)}</select></label> : <p>No standard comparison groups were written by this import.</p>)}
+    {discovery && (discovery.groups.length ? <label className="ws-field">Comparison group<select style={{ maxWidth: '100%' }} value={choice} onChange={event => { generation.current++; setSnapshot(null); setError(''); setLoading(event.target.value !== ''); setChoice(event.target.value); }}><option value="">Choose CRM revision, lab job and element</option>{discovery.groups.map((group, index) => <option key={index} value={index}>{short(group)}</option>)}</select></label> : <p>No standard comparison groups were written by this import.</p>)}
     {loading && <p role="status">Loading comparison snapshot…</p>}
     {error && <p className="ws-error" role="alert">{error} No comparison is shown. Go back and reopen to retry.</p>}
-    {snapshot && <Results key={choice} snapshot={snapshot} />}
+    {snapshot && <Results key={choice} snapshot={snapshot} propertyName={propertyName} captureCurrent={() => { const version = generation.current; return () => alive.current && version === generation.current; }} />}
   </section>;
 }
 
