@@ -251,7 +251,10 @@ const BUDGETS = {
   // Explicitly opened duplicate comparison: bounded historical loader, shared
   // statistics, SVG charts and accessible table (~8.4 KiB lazy); measured 1110.8.
   // No new dependency and no startup-route budget changes.
-  totalAuthJsGzipKb: 1111.2,
+  // Explicitly opened CRM comparison: scoped historical definitions, supplied-SD
+  // statistics, native SVG and raw evidence table (~7.0 KiB lazy); measured1117.8.
+  // No added dependency; all startup-route budgets remain unchanged.
+  totalAuthJsGzipKb: 1118.2,
   // 1009.4 → 1026.3 (measured 1026.0): lazy XLSX reader (~13.8 KiB), sheet/header preview
   // (~1.1 KiB), import wiring and numeric-format handling. Shared fflate adds ~1.2 KiB
   // for async ZIP workers; it remains one copy with the existing draft compression.
@@ -310,7 +313,8 @@ const BUDGETS = {
   // Combined Excel + page exports + GA4, as configured above.
   // Same lazy QA/QC controls; measured 1035.0 KiB plain.
   // Same lazy duplicate comparison; measured 1043.4 KiB plain.
-  totalJsGzipKb: 1043.9,
+  // Same lazy CRM comparison; measured1050.5 KiB plain.
+  totalJsGzipKb: 1050.9,
   // 940.9 → 957.8 (measured 957.5): Excel import, as totalAuthJsGzipKb above.
   // 940.9 → 944.8 (P2-8, measured 944.6): the same lazy property recipe path
   // in the unconfigured build. Its initial route budgets also stay unchanged.

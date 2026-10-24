@@ -4,6 +4,7 @@ import { listQaqcRecords, listQaqcBatches, rollbackQaqc, qaqcError } from '../..
 import { formatWhen } from '../../utils/workspace';
 import QaqcImporter from './QaqcImporter';
 const QaqcDuplicateView = lazy(() => import('./QaqcDuplicateView'));
+const QaqcCrmView = lazy(() => import('./QaqcCrmView'));
 
 function Pager({ next, pages, setPages, disabled, label }) {
   return <div className="ws-row" aria-label={label}>
@@ -75,7 +76,10 @@ function Register({ property, perms, client }) {
     } catch (e) { if (version === epoch.current) setError(qaqcError(e)); }
     finally { if (version === epoch.current) setBusy(null); }
   };
-  if (comparison) return <Suspense fallback={<p role="status">Loading duplicate comparisons…</p>}><QaqcDuplicateView client={client} propertyId={property.id} batchId={comparison} onClose={() => setComparison(null)} /></Suspense>;
+  if (comparison) {
+    const View = comparison.kind === 'standards' ? QaqcCrmView : QaqcDuplicateView;
+    return <Suspense fallback={<p role="status">Loading comparisons…</p>}><View client={client} propertyId={property.id} batchId={comparison.batchId} onClose={() => setComparison(null)} /></Suspense>;
+  }
   return <div className="ws-stack">
     <p className="dash-muted">Import CRM definitions before standards, and routine samples before their duplicates. Values stay as reported; this register does not judge pass/fail.</p>
     {error && <p className="ws-error" role="alert">{error}</p>}
@@ -91,7 +95,7 @@ function Register({ property, perms, client }) {
         <thead><tr><th>When / source</th><th>Data</th><th>Change</th><th>Status</th></tr></thead>
         <tbody>{history.rows.map(batch => <tr key={batch.id}><td>{formatWhen(batch.created_at)}<br />{batch.provenance.filename || 'Unnamed source'}
           <details><summary>Provenance</summary><p style={{ overflowWrap: 'anywhere' }}>Import {batch.id}<br />SHA-256: {batch.provenance.sha256 || 'Not recorded'}<br />{batch.provenance.sheet ? `Sheet ${batch.provenance.sheet}, header row ${batch.provenance.header_row}` : ''}</p><p className="dash-muted">The hash identifies the imported bytes. The original file is not attached here; retain it in the property library.</p></details>
-        </td><td>{batch.kind === 'samples' ? <><span>Samples</span><br /><button type="button" className="dash-link" disabled={!!busy} ref={node => { if (batch.id === comparisonId.current) comparisonTrigger.current = node; }} onClick={() => { comparisonId.current = batch.id; setComparison(batch.id); }}>Compare duplicates</button></> : 'CRM definitions'}</td><td>{batch.summary.new} new, {batch.summary.changed} changed</td><td>{batch.rolled_back_at ? `Rolled back ${formatWhen(batch.rolled_back_at)}` : perms.edit ? <>
+        </td><td>{batch.kind === 'samples' ? <><span>Samples</span>{['duplicates', 'standards'].map(kind => <React.Fragment key={kind}><br /><button type="button" className="dash-link" disabled={!!busy} ref={node => { if (`${batch.id}:${kind}` === comparisonId.current) comparisonTrigger.current = node; }} onClick={() => { comparisonId.current = `${batch.id}:${kind}`; setComparison({ batchId: batch.id, kind }); }}>Compare {kind}</button></React.Fragment>)}</> : 'CRM definitions'}</td><td>{batch.summary.new} new, {batch.summary.changed} changed</td><td>{batch.rolled_back_at ? `Rolled back ${formatWhen(batch.rolled_back_at)}` : perms.edit ? <>
           <button type="button" className="dash-link" disabled={!!busy || blocked.has(batch.id)} onClick={() => back(batch)}>Roll back QA/QC import</button>
           {blocked.has(batch.id) && <small className="dash-muted">A later import depends on this one.</small>}
         </> : 'Current'}</td></tr>)}</tbody>

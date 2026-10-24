@@ -76,6 +76,57 @@ test('QA/QC duplicate comparisons: scoped historical charts, raw exclusions and 
   expect(errors).toEqual([]);
 });
 
+test('QA/QC standard comparisons: pinned supplied references, zero and censored evidence, denied retry', async ({ page }, testInfo) => {
+  const errors = []; page.on('pageerror', error => errors.push(error.message));
+  await fakeSupabase(page, { role: 'viewer' });
+  const id = n => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+  const batch = { id: id(30), property_id: PROP, kind: 'samples', row_count: 9, rows_written: 4, request_hash: 'synthetic-standards-request',
+    provenance: { filename: 'synthetic-standards.csv', sha256: 'b'.repeat(64) }, summary: { new: 4, changed: 0 }, created_at: '2026-10-23T12:00:00Z', rolled_back_at: '2026-10-23T13:00:00Z', depends_on: [] };
+  const crm = { id: id(29), property_id: PROP, batch_id: id(28), source_row: 2, superseded_by_batch: id(99),
+    record: { crm_id: 'CRM-TEST', revision: 'rev-01', element: 'Au', unit: 'g/t', expected: 10, sd: 2, source: 'Synthetic supplied certificate only' } };
+  const standards = [15, 0, null, 17].map((value, i) => ({ id: id(300 + i), property_id: PROP, batch_id: batch.id, source_row: 2 * i + 1, crm_version_ids: [crm.id],
+    record: { sample_id: `STD-00${i}`, sample_type: 'standard', lab_id: 'Lab-A', lab_batch_id: 'Job-1', crm_id: 'CRM-TEST', crm_revision: 'rev-01',
+      values: { Au: value }, units: { Au: 'g/t' }, raw_values: { Au: value === null ? 'ND' : value.toFixed(3) }, bdl: value === null ? { Au: 0.005 } : {} } }));
+  let failReferences = false;
+  await page.route('**/rest/v1/drill_qaqc_batches*', route => route.fulfill({ json: [batch] }));
+  await page.route('**/rest/v1/drill_qaqc_samples*', route => {
+    const q = new URL(route.request().url()).searchParams;
+    expect(q.get('property_id')).toBe(`eq.${PROP}`);
+    if (q.has('superseded_by_batch')) return route.fulfill({ json: [] });
+    expect(q.get('batch_id')).toBe(`eq.${batch.id}`);
+    return route.fulfill({ json: q.has('or') ? [] : standards });
+  });
+  await page.route('**/rest/v1/drill_crm_values*', route => {
+    const q = new URL(route.request().url()).searchParams;
+    expect(q.get('property_id')).toBe(`eq.${PROP}`); expect(q.get('record->>crm_id')).toBe('eq.CRM-TEST');
+    expect(q.get('record->>revision')).toBe('eq.rev-01'); expect(q.get('record->>element')).toBe('eq.Au'); expect(q.get('record->>unit')).toBe('eq.g/t');
+    expect(q.has('superseded_by_batch')).toBe(false); expect(q.getAll('id').some(value => value.startsWith('in.'))).toBe(true);
+    if (failReferences) return route.fulfill({ status: 403, json: { message: 'Denied synthetic reference read' } });
+    return route.fulfill({ json: q.getAll('id').some(value => value.startsWith('gt.')) ? [] : [crm] });
+  });
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold');
+  await page.getByRole('tab', { name: 'Drill data' }).click(); await page.getByRole('button', { name: 'Open QA/QC register' }).click();
+  await page.getByRole('button', { name: 'Compare standards' }).click();
+  await expect(page.getByRole('table', { name: 'Standards comparison data' })).toHaveCount(0);
+  await page.getByLabel('Comparison group').selectOption('0');
+  await expect(page.getByText('3 assessed / 4 selected standards')).toBeVisible();
+  await expect(page.getByText(/9 rows submitted; 4 records written/)).toHaveText(/rolled back/);
+  const plot = page.getByRole('img', { name: /CRM reference plot, 3 assessed/ }); await expect(plot).toBeVisible();
+  expect(await plot.locator('polyline').count()).toBe(0); expect(await plot.locator('circle').count()).toBe(3);
+  const table = page.getByRole('table', { name: 'Standards comparison data' });
+  await expect(table).toContainText('ND g/t (below detection; recorded limit 0.005 g/t)'); await expect(table).toContainText('0.000 g/t');
+  await expect(page.getByText('Outside ±3 supplied SD: 2/3 (66.667%)')).toBeVisible();
+  await table.locator('summary').filter({ hasText: 'Record provenance' }).first().click();
+  await expect(table).toContainText(`Pinned CRM: ${crm.id}`); await expect(table).toContainText('Synthetic supplied certificate only');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('standards-comparison.png'), fullPage: true });
+  await page.getByRole('button', { name: 'Back to QA/QC' }).click(); await expect(page.getByRole('button', { name: 'Compare standards' })).toBeFocused();
+  await expect(page.getByRole('button', { name: 'Roll back QA/QC import' })).toHaveCount(0);
+  failReferences = true; await page.getByRole('button', { name: 'Compare standards' }).click(); await page.getByLabel('Comparison group').selectOption('0');
+  await expect(page.getByRole('alert')).toContainText('No comparison is shown'); await expect(table).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
 test('QA/QC register: CRM then routine and dependent samples, stable retry and protected rollback', async ({ page }) => {
   const pageErrors = []; page.on('pageerror', error => pageErrors.push(error.message));
   await fakeSupabase(page);
