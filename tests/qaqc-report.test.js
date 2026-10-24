@@ -112,6 +112,17 @@ describe('selected comparison evidence capture', () => {
     const s = standards(); s.records[0].crm_version_ids = Array.from({ length: 65 }, (_, i) => `pin-${i}`);
     expect(() => buildQaqcReport(input(s, 'standards'))).toThrow(QAQC_REPORT_LIMIT_MESSAGE);
   });
+  it('bounds aggregate candidate IDs even when each selected standard is within its per-row limit', () => {
+    const s = standards(), template = s.records[0];
+    s.records = Array.from({ length: 80 }, (_, i) => ({ ...template, id: `standard-${i}`, source_row: i + 1,
+      crm_version_ids: ['crm-old', ...Array.from({ length: 63 }, (_, j) => `other-${i}-${j}`)] }));
+    expect(() => buildQaqcReport(input(s, 'standards'))).toThrow(/More than 5,000 requested/);
+  });
+  it('bounds total captured text independently of individual field and source row limits', () => {
+    const s = duplicates(120);
+    s.records.forEach(row => { row.record.raw_values.Au = '0'.repeat(20000); });
+    expect(() => buildQaqcReport(input(s))).toThrow(/Evidence text is too large/);
+  });
 });
 
 describe('complete measured landscape-letter layout', () => {
