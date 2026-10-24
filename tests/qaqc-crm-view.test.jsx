@@ -154,3 +154,12 @@ it('shows a failed PNG encode and allows retry while preserving raw evidence', a
   expect(await screen.findByRole('alert')).toHaveTextContent('Could not encode'); expect(screen.getByRole('table')).toBeTruthy();
   fireEvent.click(button); await waitFor(() => expect(button).toBeEnabled()); expect(screen.queryByRole('alert')).toBeNull(); expect(png).toHaveBeenCalledTimes(2);
 });
+
+
+it('refuses a new PNG click on stale rendered data between auth invalidation and React commit', async () => {
+  let auth; const signedIn = { auth: { onAuthStateChange: cb => { auth = cb; return { data: { subscription: { unsubscribe() {} } } }; } } };
+  render(view({ client: signedIn })); await choose(); await screen.findByRole('table');
+  const button = screen.getByRole('button', { name: 'Download CRM reference comparison PNG' });
+  act(() => { auth('SIGNED_OUT'); button.click(); });
+  expect(capture).not.toHaveBeenCalled(); expect(png).not.toHaveBeenCalled();
+});

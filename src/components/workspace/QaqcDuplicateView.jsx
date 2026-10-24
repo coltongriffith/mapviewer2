@@ -114,6 +114,7 @@ function Comparison({ client, propertyId, propertyName, batchId, onClose }) {
       .finally(() => { if (current()) setLoading(false); });
     return () => { active = false; controller.abort(); };
   }, [client, discovery, choice]);
+  const reportVersion = generation.current;
   return <section className="ws-stack" aria-label="Duplicate comparisons">
     <button type="button" className="btn" onClick={() => { generation.current++; onClose(); }}>Back to QA/QC</button>
     <h3 ref={heading} tabIndex="-1" style={{ margin: 0 }}>Compare duplicates</h3>
@@ -121,7 +122,7 @@ function Comparison({ client, propertyId, propertyName, batchId, onClose }) {
     {discovery && (discovery.groups.length ? <label className="ws-field">Comparison group<select style={{ maxWidth: '100%' }} value={choice} onChange={event => { generation.current++; setSnapshot(null); setError(''); setLoading(event.target.value !== ''); setChoice(event.target.value); }}><option value="">Choose duplicate type, lab job and element</option>{discovery.groups.map((group, index) => <option key={index} value={index}>{short(group)}</option>)}</select></label> : <p>No duplicate comparison groups were written by this import.</p>)}
     {loading && <p role="status">Loading comparison snapshot…</p>}
     {error && <p className="ws-error" role="alert">{error} No comparison is shown. Go back and reopen to retry.</p>}
-    {snapshot && <Results key={choice} snapshot={snapshot} propertyName={propertyName} captureCurrent={() => { const version = generation.current; return () => alive.current && version === generation.current; }} />}
+    {snapshot && <Results key={choice} snapshot={snapshot} propertyName={propertyName} captureCurrent={() => () => alive.current && reportVersion === generation.current} />}
   </section>;
 }
 
