@@ -19,13 +19,22 @@ const PAGE = 1000;
 const fmtN = (n) => Number(n || 0).toLocaleString('en-US');
 const plural = (n, one, many = `${one}s`) => `${fmtN(n)} ${n === 1 ? one : many}`;
 
-export const FILE_NAMES = { collars: 'property-collars.csv', surveys: 'property-surveys.csv', assays: 'property-assays.csv', lithology: 'property-lithology.csv' };
+export const FILE_NAMES = { collars: 'property-collars.csv', surveys: 'property-surveys.csv', assays: 'property-assays.csv', lithology: 'property-lithology.csv', alteration: 'property-alteration.csv' };
+export const GEOLOGY_SOURCES = Object.freeze(['lithology', 'alteration', 'none']);
+const sourceOf = source => {
+  if (source === undefined) return 'lithology';
+  if (!GEOLOGY_SOURCES.includes(source)) throw new Error('Choose lithology, alteration or no geology log.');
+  return source;
+};
+const selectedKinds = source => ['collars', 'surveys', 'assays', ...(source === 'none' ? [] : [source])];
+const selectedBatches = (batches, source) => batches.filter(batch => selectedKinds(source).includes(batch.kind));
 const DRILL_ROLES = ['collar', 'survey', 'assay', 'litho'];
 const TABLES = {
   collars: { select: 'hole_id,x,y,z,crs,azimuth,dip,depth,status,planned', order: ['hole_id'] },
   surveys: { select: 'hole_id,depth_m,azimuth,dip', order: ['hole_id', 'depth_m'] },
   assays: { select: 'hole_id,from_m,to_m,values,bdl,units', order: ['hole_id', 'from_m', 'to_m'] },
   lithology: { select: 'hole_id,from_m,to_m,code,description', order: ['hole_id', 'from_m', 'to_m'] },
+  alteration: { select: 'hole_id,from_m,to_m,code,description,intensity', order: ['hole_id', 'from_m', 'to_m'] },
 };
 
 // ── Rows to files (pure) ────────────────────────────────────────────────────
@@ -40,13 +49,16 @@ const gradeHeader = (el, unit) => (unit ? `${el}_${UNIT_TOKEN[unit] || String(un
 
 /**
  * The editor's files for a property's current drill rows: { collars, surveys,
- * assays, lithology } of rows as selected (TABLES). Assay columns follow the
+ * assays, lithology or alteration } of rows as selected (TABLES). One explicit
+ * geologySource selects the log category; omitted means legacy lithology.
+ * Alteration intensity stays an uninterpreted CSV column. Assay columns follow the
  * order the elements were imported in (batches' mappings, oldest first), then
  * the rest by name; one column per element and unit, so an element stored in
  * two units is never mixed.
  * @returns {{ name: string, text: string }[]} one file per kind that has rows
  */
-export function toFiles(rows, batches = []) {
+export function toFiles(rows, batches = [], { geologySource } = {}) {
+  const source = sourceOf(geologySource);
   const out = [];
   const c = rows.collars || [];
   if (c.length) {
@@ -72,8 +84,9 @@ export function toFiles(rows, batches = []) {
     const ordered = [...[...first].sort((p, q) => p - q).map((i) => a[i]), ...a.filter((_, i) => !first.has(i))];
     out.push({ name: FILE_NAMES.assays, text: csv(['HoleID', 'From', 'To', ...cols.map((k) => gradeHeader(k.el, k.unit))], ordered.map(line)) });
   }
-  const l = rows.lithology || [];
-  if (l.length) out.push({ name: FILE_NAMES.lithology, text: csv(['HoleID', 'From', 'To', 'Code', 'Description'], l.map((r) => [r.hole_id, r.from_m, r.to_m, r.code ?? r.description, r.description])) });
+  const logs = source === 'none' ? [] : rows[source] || [];
+  if (logs.length) out.push({ name: FILE_NAMES[source], text: csv(['HoleID', 'From', 'To', 'Code', 'Description', ...(source === 'alteration' ? ['Intensity'] : [])],
+    logs.map(r => [r.hole_id, r.from_m, r.to_m, r.code ?? r.description, r.description, ...(source === 'alteration' ? [r.intensity] : [])])) });
   return out;
 }
 
@@ -83,13 +96,15 @@ const at = (t) => (t ? Date.parse(t) : -Infinity);
 const latestOf = (batches) => batches.reduce((m, b) => Math.max(m, at(b.created_at), at(b.rolled_back_at)), -Infinity);
 
 /** What a figure records about the data it took: S.drillSource. */
-export function snapshotOf({ propertyId, propertyName = null }, batches, rows) {
-  const live = batches.filter((b) => !b.rolled_back_at).sort((p, q) => at(q.created_at) - at(p.created_at));
-  const t = latestOf(batches), crs = [...new Set((rows.collars || []).map((r) => r.crs).filter(Boolean))];
+export function snapshotOf({ propertyId, propertyName = null, geologySource }, batches, rows) {
+  const source = sourceOf(geologySource), relevant = selectedBatches(batches, source);
+  const live = relevant.filter((b) => !b.rolled_back_at).sort((p, q) => at(q.created_at) - at(p.created_at));
+  const t = latestOf(relevant), crs = [...new Set((rows.collars || []).map((r) => r.crs).filter(Boolean))];
   return {
     kind: 'property', propertyId, propertyName,
     latestBatchId: live[0]?.id || null, latestAt: Number.isFinite(t) ? new Date(t).toISOString() : null,
     holes: (rows.collars || []).length, assays: (rows.assays || []).length, crs: crs.length === 1 ? crs[0] : null,
+    ...(geologySource === undefined ? {} : { geologySource: source, geologyIntervals: source === 'none' ? 0 : (rows[source] || []).length }),
   };
 }
 
@@ -99,16 +114,19 @@ export function snapshotOf({ propertyId, propertyName = null }, batches, rows) {
  * rolledBack }, or null when nothing changed.
  */
 export function newerSince(ref, batches) {
+  const source = sourceOf(ref?.geologySource);
+  batches = selectedBatches(batches, source);
   const t = at(ref?.latestAt);
   const added = batches.filter((b) => !b.rolled_back_at && at(b.created_at) > t);
   const rolledBack = batches.filter((b) => b.rolled_back_at && at(b.rolled_back_at) > t && at(b.created_at) <= t).length;
   if (!added.length && !rolledBack) return null;
   const sum = (kind, f) => added.filter((b) => b.kind === kind).reduce((n, b) => n + f(b.summary || {}), 0);
-  return { imports: added.length, holes: sum('collars', (s) => +s.new || 0), assays: sum('assays', (s) => (+s.new || 0) + (+s.changed || 0)), rolledBack };
+  return { imports: added.length, holes: sum('collars', (s) => +s.new || 0), assays: sum('assays', (s) => (+s.new || 0) + (+s.changed || 0)), rolledBack,
+    ...(ref?.geologySource === undefined ? {} : { geologySource: source, geologyIntervals: source === 'none' ? 0 : sum(source, s => (+s.new || 0) + (+s.changed || 0)) }) };
 }
 
 export const noticeText = (d) => (d.imports
-  ? `New drill data since this figure (${plural(d.holes, 'new hole')}, ${plural(d.assays, 'assay')})${d.rolledBack ? `, ${plural(d.rolledBack, 'import')} rolled back` : ''}`
+  ? `New drill data since this figure (${plural(d.holes, 'new hole')}, ${plural(d.assays, 'assay')}${d.geologySource && d.geologySource !== 'none' ? `, ${plural(d.geologyIntervals, `${d.geologySource} interval`)}` : ''})${d.rolledBack ? `, ${plural(d.rolledBack, 'import')} rolled back` : ''}`
   : `Drill data changed since this figure (${plural(d.rolledBack, 'import')} rolled back)`);
 
 // ── Reading the database ────────────────────────────────────────────────────
@@ -149,7 +167,10 @@ async function readAll(sb, kind, propertyId, onPage) {
       }
     }
     const { data, error } = await q.limit(PAGE);
-    if (error) throw new Error(`Could not read the property's ${kind} (${error.message}).`);
+    if (error) {
+      if (kind === 'alteration' && ['42P01', 'PGRST205'].includes(error.code)) throw Object.assign(new Error('Alteration logs are not available on this site yet. Enable the alteration database update, or choose lithology or no geology log.'), { code: 'ALTERATION_UNAVAILABLE' });
+      throw new Error(`Could not read the property's ${kind} (${error.message}).`);
+    }
     if (!data?.length) return rows;
     cursor = order.map((k) => data.at(-1)[k]);
     const key = JSON.stringify(cursor);
@@ -175,18 +196,23 @@ export function mixedCrs(collars, name = 'This property') {
   return `${name}'s collars are in more than one coordinate system (${list}). Re-import them in one on the property page, then load again.`;
 }
 
-/** The property's current drill data as files, and the snapshot to record. sb: a Supabase client. */
-export async function pull(sb, prop, onProgress = () => {}, tries = 2) {
+/**
+ * The property's current drill data as files, and the snapshot to record. sb: a Supabase client.
+ * Keep the fourth-position retry count compatible; an optional fifth argument
+ * selects geologySource: lithology (default), alteration or none.
+ */
+export async function pull(sb, prop, onProgress = () => {}, tries = 2, { geologySource } = {}) {
+  const source = sourceOf(geologySource);
   const before = await listBatches(sb, prop.id), counts = {};
-  const rows = Object.fromEntries(await Promise.all(Object.keys(TABLES).map(async (k) => [k, await readAll(sb, k, prop.id, (n) => { counts[k] = n; onProgress(counts); })])));
+  const rows = Object.fromEntries(await Promise.all(selectedKinds(source).map(async (k) => [k, await readAll(sb, k, prop.id, (n) => { counts[k] = n; onProgress(counts); })])));
   // An import that landed while the pages were read: read again, so a figure never mixes two versions.
-  if (latestOf(await listBatches(sb, prop.id)) !== latestOf(before)) {
-    if (tries > 1) return pull(sb, prop, onProgress, tries - 1);
+  if (latestOf(selectedBatches(await listBatches(sb, prop.id), source)) !== latestOf(selectedBatches(before, source))) {
+    if (tries > 1) return pull(sb, prop, onProgress, tries - 1, { geologySource });
     throw new Error('The drill data changed while it was loading. Try again in a moment.');
   }
   const mixed = mixedCrs(rows.collars, prop.name || undefined);
   if (mixed) throw new Error(mixed);
-  return { files: toFiles(rows, before), ref: snapshotOf({ propertyId: prop.id, propertyName: prop.name }, before, rows), rows };
+  return { files: toFiles(rows, before, { geologySource }), ref: snapshotOf({ propertyId: prop.id, propertyName: prop.name, geologySource }, before, rows), rows };
 }
 
 // ── UI ──────────────────────────────────────────────────────────────────────
@@ -196,13 +222,14 @@ export function reset() { hideNotice(); pending = null; pickEpoch++; }
 // The pending update still belongs to the figure on screen: the same saved figure and property.
 const stillOurs = (p) => !!p?.figureId && host.current()?.id === p.figureId
   && JSON.stringify(em().getState().drillSource) === JSON.stringify(p.ref);
-const progressText = (n) => `Loading… ${['collars', 'surveys', 'assays', 'lithology'].filter((k) => n[k]).map((k) => `${fmtN(n[k])} ${k}`).join(', ')}`;
+const progressText = (n) => `Loading… ${['collars', 'surveys', 'assays', 'lithology', 'alteration'].filter((k) => n[k]).map((k) => `${fmtN(n[k])} ${k}`).join(', ')}`;
 
 export function init(h) {
   host = h;
   $('drill-pick').addEventListener('click', (e) => { if (e.target.id === 'drill-load') load(); });
   $('drill-pick').addEventListener('change', (e) => {
     if (e.target.id === 'drill-prop') pickRecipes();
+    if (e.target.id === 'drill-geology') { pickEpoch++; $('drill-load').disabled = !$('drill-recipe').value; }
     if (e.target.id === 'drill-recipe') { pickEpoch++; $('drill-load').disabled = !e.target.value; }
   });
   $('drill-update').addEventListener('click', update);
@@ -220,8 +247,11 @@ export async function toggle() {
   if (epoch !== pickEpoch) return;
   if (!props.length) { body.innerHTML = '<p class="muted">You are not a member of a company property yet.</p>'; return; }
   const pick = em().getState().drillSource?.propertyId || host.current()?.home?.propertyId;
+  const geologySource = em().getState().drillSource?.geologySource || 'lithology';
   body.innerHTML = `<label class="field"><span>Property</span><select id="drill-prop">${props.map((p) => `<option value="${esc(p.id)}"${p.id === pick ? ' selected' : ''}>${esc(p.name)} · ${esc(p.orgName)}</option>`).join('')}</select></label>
-    <p class="muted">Its current collars, surveys, assays and lithology replace the figure's drill files. The figure keeps this data until you choose to update it.</p>
+    <label class="field"><span>Geology source</span><select id="drill-geology">${['lithology', 'alteration', 'none'].map((v) => `<option value="${v}"${v === geologySource ? ' selected' : ''}>${v === 'none' ? 'No geology' : v[0].toUpperCase() + v.slice(1)}</option>`).join('')}</select></label>
+    <p class="muted">Load replaces the figure's drill files with current collars, surveys, assays and the selected geology. It resets custom geology labels; changing geology source also removes uploaded geology legends. Saved figures keep their data until you choose Update.</p>
+    <p class="muted">Alteration uses category colours. Intensity stays descriptive; it is not modelled.</p>
     <label class="field"><span>Results</span><select id="drill-recipe" disabled><option value="">Loading saved recipes…</option></select></label>
     <p class="muted">Recipe results are calculated from the property data, not evidence of publication or QP approval. Raw data keeps figure-specific callout controls.</p>
     <div class="row"><button class="btn primary" type="button" id="drill-load" disabled>Load drill data</button></div><p class="muted" id="drill-progress" role="status"></p>`;
@@ -230,7 +260,7 @@ export async function toggle() {
 
 async function pickRecipes() {
   const epoch = ++pickEpoch, id = $('drill-prop').value, select = $('drill-recipe'), btn = $('drill-load'), out = $('drill-progress');
-  btn.disabled = select.disabled = true; out.textContent = 'Loading saved recipes…';
+  btn.disabled = select.disabled = $('drill-geology').disabled = true; out.textContent = 'Loading saved recipes…';
   const raw = '<option value="raw">Raw drill data only</option>';
   try {
     const { listRecipes, selectRecipe } = await resultTools();
@@ -247,13 +277,13 @@ async function pickRecipes() {
     select.innerHTML = '<option value="" disabled selected>Choose results…</option>' + raw;
     out.textContent = `Could not read saved recipes (${err.message}). You can choose raw drill data only.`;
   } finally {
-    if (epoch === pickEpoch) { select.disabled = false; btn.disabled = !select.value; }
+    if (epoch === pickEpoch) { select.disabled = $('drill-geology').disabled = false; btn.disabled = !select.value; }
   }
 }
 
 async function load() {
   const prop = props.find((p) => p.id === $('drill-prop').value), btn = $('drill-load'), out = $('drill-progress');
-  const choice = $('drill-recipe').value;
+  const choice = $('drill-recipe').value, geologySource = $('drill-geology').value;
   if (!prop || !choice) return;
   const epoch = pickEpoch, figureId = host.current()?.id || null;
   const current = () => epoch === pickEpoch && (host.current()?.id || null) === figureId;
@@ -261,18 +291,19 @@ async function load() {
   btn.disabled = true; out.textContent = 'Loading…';
   try {
     const { pullPropertyResults } = await resultTools();
-    const { files, ref } = await pullPropertyResults(await host.client(), prop, { recipeName: choice === 'raw' ? null : choice.slice(2), onProgress: (n) => { if (current()) out.textContent = progressText(n); } });
+    const { files, ref } = await pullPropertyResults(await host.client(), prop, { recipeName: choice === 'raw' ? null : choice.slice(2), geologySource, onProgress: (n) => { if (current()) out.textContent = progressText(n); } });
     if (!current()) return;
     if (!ref.holes) throw new Error(`${prop.name} has no collars in its drill database yet. Import them on the property page (Drill data).`);
     const E = em(), st = E.getState(), crs = st.terrain.crs;
     // A new data set (as when the sample is replaced): the property's data replaces the figure's drill files;
     // topography, models, overlays and geophysics stay.
     const prior = E.getProject(), managed = st.drillSource?.resultsRecipe?.fileName;
-    const keep = st.usingSample ? [] : prior.files.filter((f) => !DRILL_ROLES.includes(f.role) && !Object.values(FILE_NAMES).includes(f.name) && f.name !== managed);
+    const changedGeology = geologySource !== (st.drillSource?.geologySource || 'lithology');
+    const keep = st.usingSample ? [] : prior.files.filter((f) => !(changedGeology && f.role === 'lithlegend') && !DRILL_ROLES.includes(f.role) && !Object.values(FILE_NAMES).includes(f.name) && f.name !== managed);
     if (ref.resultsRecipe && keep.some((f) => f.role === 'published' || f.name === ref.resultsRecipe.fileName)) throw new Error('This figure already has uploaded results. Choose raw drill data only to keep them, or remove that results file before using a property recipe.');
     backup = prior;
     if (!st.usingSample) E.clearFiles();
-    E.addFiles([...keep, ...files], { drillSource: ref });
+    E.addFiles([...keep, ...files], { drillSource: ref, ...(changedGeology ? { geologyTitle: geologySource === 'alteration' ? 'Alteration' : 'Lithology' } : {}) });
     if (ref.resultsRecipe) E.setStyle({ calloutMode: 'published' });
     // The property's coordinate system when it has one; the figure's earlier one otherwise.
     if (ref.crs || crs) await E.setCRS(ref.crs || crs).catch(() => {});
@@ -317,12 +348,15 @@ async function update() {
     }
     const sb = await host.client(), prop = { id: ref.propertyId, name: ref.propertyName };
     const { files, ref: now } = ref.resultsRecipe
-      ? await (await resultTools()).pullPropertyResults(sb, prop, { recipeName: ref.resultsRecipe.name })
-      : await pull(sb, prop);
+      ? await (await resultTools()).pullPropertyResults(sb, prop, { recipeName: ref.resultsRecipe.name, geologySource: ref.geologySource })
+      : await pull(sb, prop, undefined, 2, { geologySource: ref.geologySource });
     if (pending !== was || !stillOurs(was)) { if (pending === was) reset(); return; } // another figure opened while it read
-    const p = em().getProject(), names = Object.values(FILE_NAMES);
+    const p = em().getProject(), names = Object.entries(FILE_NAMES).filter(([k]) => !['lithology', 'alteration'].includes(k) || k === (ref.geologySource ?? 'lithology')).map(([, name]) => name);
     if (ref.resultsRecipe) names.push(ref.resultsRecipe.fileName);
     const keep = p.files.filter((f) => !names.includes(f.name));
+    if (ref.geologySource !== undefined && keep.some((f) => f.role === 'litho')) {
+      throw new Error('This figure has uploaded geology alongside its property data. Remove that uploaded geology file before updating, or use Load drill data to explicitly replace the drill files.');
+    }
     if (now.resultsRecipe && keep.some((f) => f.role === 'published' || f.name === now.resultsRecipe.fileName)) {
       throw new Error('This figure has uploaded results alongside its property recipe. Remove that uploaded results file before updating the recipe, or keep the saved figure.');
     }
