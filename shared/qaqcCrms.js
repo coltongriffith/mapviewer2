@@ -24,8 +24,8 @@ const matching = (r, scope) => object(r) && r.crm_id === scope.crmId && r.revisi
 /**
  * Boundary allowance: four relative machine epsilons of the supplied reference
  * scale. This handles decimal arithmetic, not assay uncertainty or display
- * rounding. Reject scales where that allowance reaches one quarter of one SD,
- * so numerical boundary neighbourhoods cannot swallow the separation of bands.
+ * rounding. Reject scales where that allowance exceeds sqrt(machine epsilon)
+ * of one SD, so reference-scale rounding cannot hide a material SD excursion.
  */
 export function crmReferenceComparison(observed, expected, sd) {
   if (!value(observed) || !value(expected) || !value(sd) || sd === 0) return null;
@@ -33,9 +33,9 @@ export function crmReferenceComparison(observed, expected, sd) {
     upper2: expected + 2 * sd, upper3: expected + 3 * sd };
   const z = (observed - expected) / sd;
   const tolerance = 4 * Number.EPSILON * Math.max(Math.abs(bands.lower3), Math.abs(bands.upper3), sd);
-  if (!Number.isFinite(z) || !Object.values(bands).every(Number.isFinite)
+  if (!Number.isFinite(z) || (z === 0 && observed !== expected) || !Object.values(bands).every(Number.isFinite)
     || !(bands.lower3 < bands.lower2 && bands.lower2 < expected && expected < bands.upper2 && bands.upper2 < bands.upper3)
-    || tolerance >= sd / 4) return null;
+    || tolerance / sd > Math.sqrt(Number.EPSILON)) return null;
   const outside = (lower, upper) => observed < lower && lower - observed > tolerance
     || observed > upper && observed - upper > tolerance;
   const category = outside(bands.lower3, bands.upper3) ? 'outside3'

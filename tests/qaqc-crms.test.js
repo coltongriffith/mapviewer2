@@ -52,6 +52,13 @@ describe('supplied CRM reference arithmetic', () => {
       expect(crmReferenceComparison(x, mu, sd)).toBeNull();
     }
     expect(crmReferenceComparison(1e-200, 2e-200, 1e-201)).not.toBeNull();
+    expect(crmReferenceComparison(1e-320, 0, 1e10)).toBeNull();
+    expect(crmReferenceComparison(0, 1e-320, 1e10)).toBeNull();
+    expect(crmReferenceComparison(1e-320, 1e-320, 1e10).z).toBe(0);
+    for (const scale of [1e-8, 1]) {
+      expect(crmReferenceComparison(100000000000.00085 * scale, 100000000000 * scale, 0.0004 * scale)).toBeNull();
+      expect(crmReferenceComparison(99999999999.99915 * scale, 100000000000 * scale, 0.0004 * scale)).toBeNull();
+    }
   });
 });
 
