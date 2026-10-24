@@ -105,3 +105,13 @@ it('allows read-only sample history comparison and returns keyboard focus to its
   fireEvent.click(screen.getByRole('button', { name: 'Back to QA/QC' }));
   expect(await screen.findByRole('button', { name: 'Compare duplicates' })).toHaveFocus();
 });
+
+
+it('disables only scatter PNG when eligible pairs contain zero, and both downloads when no pairs qualify', async () => {
+  const data = snapshot(1); data.records[0].record.values.Au = 0; data.records[0].record.raw_values.Au = '0.00';
+  load.mockResolvedValue(data); const ui = render(view()); await choose(); await screen.findByText('1 eligible / 1 selected pairs');
+  expect(screen.getByRole('button', { name: 'Download Original vs duplicate PNG' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Download Ranked HARD PNG' })).toBeEnabled();
+  ui.unmount(); data.parents[0].record.values.Au = 0; load.mockResolvedValue(data); render(view()); await choose(); await screen.findByText('0 eligible / 1 selected pairs');
+  expect(screen.getByRole('button', { name: 'Download Ranked HARD PNG' })).toBeDisabled();
+});
