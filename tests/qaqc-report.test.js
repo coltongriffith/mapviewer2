@@ -177,4 +177,17 @@ describe('complete measured landscape-letter layout', () => {
     expect(commands.map(c => c.key)).toEqual(['scatter', 'hard']);
     commands.forEach(c => { expect(c.width / c.height).toBeCloseTo(charts[c.key].width / charts[c.key].height, 12); expect(c.height).toBeLessThanOrEqual(300); });
   });
+  it('keeps entire chart captions and supplied expected/SD together with the chart on one page', () => {
+    for (const report of [buildQaqcReport(input()), buildQaqcReport(input(standards(), 'standards'))]) {
+      const result = layout(report);
+      for (const chart of report.charts) {
+        const page = result.pages.find(p => p.commands.some(c => c.kind === 'chart' && c.key === chart.key));
+        const text = page.commands.filter(c => c.kind === 'text').map(c => c.text).join('');
+        expect(text).toContain(chart.title);
+        chart.caption.forEach(caption => expect(text).toContain(caption));
+      }
+    }
+    const oversized = buildQaqcReport(input()); oversized.charts[0].caption.push('Full caption '.repeat(400));
+    expect(() => layout(oversized)).toThrow(/chart and its complete caption/);
+  });
 });

@@ -204,15 +204,23 @@ export function layoutQaqcReport(report, { measureText } = {}) {
   section('Population and interpretation'); report.limitations.forEach(text => paragraph(text));
   section('Summary'); report.summary.forEach(text => paragraph(text));
   for (const chart of report.charts) {
+    const heading = wrap(chart.title, 14, true);
+    const caption = [...(chart.available ? [] : [chart.unavailableReason]), ...chart.caption].flatMap(text => wrap(text));
+    let w = 0, h = 0;
     if (chart.available) {
-      const scale = Math.min(bodyWidth / chart.width, 300 / chart.height), w = chart.width * scale, h = chart.height * scale;
+      const scale = Math.min(bodyWidth / chart.width, 300 / chart.height);
+      w = chart.width * scale; h = chart.height * scale;
       if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) invalid('chart dimensions are invalid.');
-      const headingHeight = 14 + wrap(chart.title, 14, true).length * lineHeight;
-      if (h + headingHeight + lineHeight > bottom - top) fail('A chart cannot fit at the permitted size.');
-      ensure(h + headingHeight + lineHeight); section(chart.title);
+    }
+    // Captions contain denominators and supplied reference values. Keep them
+    // with their chart instead of orphaning a value on the following page.
+    const blockHeight = 14 + (heading.length + caption.length) * lineHeight + (chart.available ? h + 8 : 0);
+    if (blockHeight > bottom - top) fail('A chart and its complete caption cannot fit at readable size.');
+    ensure(blockHeight); y += 8; heading.forEach(text => command(text, 14, true)); y += 6;
+    if (chart.available) {
       page.commands.push({ kind: 'chart', key: chart.key, x: margin + (bodyWidth - w) / 2, y, width: w, height: h }); y += h + 8;
-    } else { section(chart.title); paragraph(chart.unavailableReason); }
-    chart.caption.forEach(text => paragraph(text));
+    }
+    caption.forEach(text => command(text));
   }
   const blocks = (heading, rows) => {
     section(heading);
