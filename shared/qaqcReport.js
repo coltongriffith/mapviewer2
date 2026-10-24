@@ -8,6 +8,7 @@ const fail = detail => { throw new Error(`${detail} ${QAQC_REPORT_LIMIT_MESSAGE}
 const invalid = detail => { throw new Error(`Cannot create this comparison PDF: ${detail}`); };
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const count = value => Number.isInteger(value) && value >= 0;
+const CRM_CATEGORIES = Object.freeze({ within2: 'Within/on ±2 supplied SD', outside2Within3: 'Outside ±2, within/on ±3 supplied SD', outside3: 'Outside ±3 supplied SD' });
 const order = (a, b) => a.sourceRow - b.sourceRow || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 function equal(a, b) {
   if (Object.is(a, b)) return true;
@@ -129,7 +130,7 @@ export function buildQaqcReport({ kind, propertyName, snapshot, analysis, genera
       lines.push('Requested candidate CRM versions (may include other elements; not a list of missing selected-element definitions):',
         ...(candidates?.length ? candidates.map(id => line('Candidate version', id)) : ['Unavailable']),
         line('Validated selected-tuple definition (reference appendix)', reference(row.reference, 'crm')));
-      if (row.status !== 'unassessed') lines.push(line('Exact z score', row.z), line('Descriptive category', row.category),
+      if (row.status !== 'unassessed') lines.push(line('Exact z score', row.z), line('Descriptive category', CRM_CATEGORIES[row.category]),
         ...Object.entries(row.bands).map(([key, value]) => line(`Reference line — ${key}`, value)));
     }
     lines.push(row.status === 'unassessed' ? `Unassessed — ${text(row.reason)}: ${text(row.message)}` : 'Assessed descriptive comparison.');

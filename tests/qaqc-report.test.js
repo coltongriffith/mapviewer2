@@ -84,7 +84,7 @@ describe('selected comparison evidence capture', () => {
     expect(text).toContain('Numeric value: 0'); expect(text).toContain('Exact z score: 0'); expect(text).toContain('Reference line — lower3: -6');
     expect(text).toContain('Candidate version: other-element'); expect(text).toContain('not a list of missing selected-element definitions');
     expect(report.references.map(r => r.id)).toEqual(['crm-old']); expect(text).toContain('Supplied reference source: Supplied synthetic definition');
-    expect(text).toContain('within2'); expect(text).not.toContain('pass:');
+    expect(text).toContain('Descriptive category: Within/on ±2 supplied SD'); expect(text).not.toContain('pass:');
   });
   it('keeps ambiguous/foreign CRM pins as unassessed without source text; no chart for disagreeing approved definitions', () => {
     const s = standards(); s.crms[0].property_id = 'foreign'; s.crms[0].record.source = 'FOREIGN-SECRET';
@@ -152,9 +152,11 @@ describe('complete measured landscape-letter layout', () => {
     const s = standards(); const literal = '地質<script> & 🧪  '.repeat(100);
     s.crms[0].record.source = literal;
     const report = buildQaqcReport(input(s, 'standards'));
-    const result = layout(report), appendix = result.pages.flatMap(p => p.commands).filter(c => c.kind === 'text').map(c => c.text);
+    const result = layout(report), appendix = result.pages.flatMap(p => p.commands)
+      .filter(c => c.kind === 'text' && !c.bold && !/^Page \d+ of \d+$/.test(c.text)).map(c => c.text);
     expect(appendix.join('')).toContain('Supplied reference source: ' + literal);
     expect(report.references[0].lines.at(-1)).toBe('Supplied reference source: ' + literal);
+    expect(result.pages.some(page => page.commands.some(c => c.text === 'CRM definition version: crm-old (continued)'))).toBe(true);
   });
   it('accepts exactly100pages and rejects101 before returning any partial layout', () => {
     // One measured line per large evidence record, tuned to a single page each;
