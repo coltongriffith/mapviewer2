@@ -28,6 +28,9 @@ export function captureChartPng(svg, { title, lines, filename }) {
   if (!svg || svg.tagName.toLowerCase() !== 'svg') throw new Error('No chart is available to download.');
   const box = svg.getAttribute('viewBox')?.trim().split(/\s+/).map(Number);
   if (box?.length !== 4 || !box.every(Number.isFinite) || box[2] <= 0 || box[3] <= 0) throw new Error('Chart dimensions are unavailable.');
+  // The compact live duplicate plot has little space between long tick labels
+  // and the vertical axis title. Add export-only margin, never move its data.
+  if (svg.querySelector('[data-export-transform]')) { box[0] -= 24; box[2] += 24; }
   const measure = document.createElement('canvas').getContext('2d');
   if (!measure) throw new Error('PNG downloads are unavailable in this browser.');
   measure.font = '16px Arial';
@@ -57,12 +60,14 @@ export function captureChartPng(svg, { title, lines, filename }) {
   const background = document.createElementNS(NS, 'rect');
   background.setAttribute('width', '100%'); background.setAttribute('height', '100%'); background.setAttribute('fill', '#fff'); root.append(background);
   const clone = svg.cloneNode(true);
+  clone.setAttribute('viewBox', box.join(' '));
   clone.removeAttribute('style'); clone.setAttribute('x', (WIDTH - chartWidth) / 2); clone.setAttribute('y', '24');
   clone.setAttribute('width', chartWidth); clone.setAttribute('height', chartHeight);
   clone.setAttribute('color', '#172033'); clone.setAttribute('font-family', 'Arial, sans-serif');
   // Long exact units live in wrapped provenance; keep the axes legible without
   // changing coordinates, points or reference lines.
   clone.querySelectorAll('[data-export-label]').forEach(node => { node.textContent = node.getAttribute('data-export-label'); });
+  clone.querySelectorAll('[data-export-transform]').forEach(node => { node.setAttribute('transform', node.getAttribute('data-export-transform')); });
   root.append(clone);
   wrapped.forEach((line, i) => {
     const text = document.createElementNS(NS, 'text'); text.setAttribute('x', '32'); text.setAttribute('y', 48 + chartHeight + i * 22);

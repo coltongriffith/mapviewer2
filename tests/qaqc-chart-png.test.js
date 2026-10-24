@@ -65,3 +65,14 @@ it('reports image and encoding failures without downloading', async () => {
   promise = downloadChartPng(capture()); const second = expect(promise).rejects.toThrow('Could not encode'); images[1].onload(); await Promise.resolve(); encode.cb(null); await second;
   expect(download).not.toHaveBeenCalled(); expect(encode.canvas.width).toBe(0);
 });
+
+
+it('pads crowded vertical titles only in the PNG without moving live or captured data', () => {
+  const svg = chart(), label = svg.querySelector('text'); label.setAttribute('transform', 'translate(13 175) rotate(-90)'); label.setAttribute('data-export-transform', 'translate(-8 175) rotate(-90)');
+  const captured = captureChartPng(svg, { title: 'Scatter', lines: [], filename: 'scatter.png' });
+  const doc = new DOMParser().parseFromString(captured.svg, 'image/svg+xml');
+  expect(svg.getAttribute('viewBox')).toBe('0 0 405 385'); expect(label.getAttribute('transform')).toBe('translate(13 175) rotate(-90)');
+  expect(doc.querySelector('svg svg').getAttribute('viewBox')).toBe('-24 0 429 385');
+  expect(doc.querySelector('[data-export-transform]').getAttribute('transform')).toBe('translate(-8 175) rotate(-90)');
+  expect(doc.querySelector('circle').getAttribute('cx')).toBe('200'); expect(doc.querySelector('line').getAttribute('y1')).toBe('325');
+});

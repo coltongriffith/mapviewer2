@@ -37,7 +37,7 @@ function Scatter({ points, unit }) {
       {positive.map(point => <circle key={point.id} cx={x(point.x)} cy={y(point.y)} r="3" fill="#2563eb" fillOpacity="0.65"><title>{point.sampleId}: original {point.original.raw}, duplicate {point.duplicate.raw} {unit}; HARD {number(point.hard)}%</title></circle>)}
     </g>
     <text x="205" y="372" textAnchor="middle" fill="currentColor" fontSize="12" data-export-label={unit.length > 20 ? "Original (log scale; unit below)" : undefined}>Original ({unit}, log scale)</text>
-    <text transform="translate(13 175) rotate(-90)" textAnchor="middle" fill="currentColor" fontSize="12" data-export-label={unit.length > 20 ? "Duplicate (log scale; unit below)" : undefined}>Duplicate ({unit}, log scale)</text>
+    <text transform="translate(13 175) rotate(-90)" data-export-transform="translate(-8 175) rotate(-90)" textAnchor="middle" fill="currentColor" fontSize="12" data-export-label={unit.length > 20 ? "Duplicate (log scale; unit below)" : undefined}>Duplicate ({unit}, log scale)</text>
   </svg>;
 }
 
@@ -48,7 +48,7 @@ function Ranked({ points }) {
     {[0, 25, 50, 75, 100].map(tick => <g key={tick} fill="currentColor" fontSize="11"><text x={55 + tick * 3} y="344" textAnchor="middle">{tick}</text><text x="49" y={329 - tick * 3} textAnchor="end">{tick}%</text></g>)}
     <polyline points={points.map(point => `${55 + point.hard * 3},${325 - point.cumulativePercent * 3}`).join(' ')} fill="none" stroke="#2563eb" strokeWidth="1.5" />
     {points.map(point => <circle key={point.id} cx={55 + point.hard * 3} cy={325 - point.cumulativePercent * 3} r="2.5" fill="#2563eb"><title>{point.sampleId}: HARD {number(point.hard)}%; rank {point.rank} of {points.length}</title></circle>)}
-    <text x="205" y="372" textAnchor="middle" fill="currentColor" fontSize="12">HARD (%)</text><text transform="translate(13 175) rotate(-90)" textAnchor="middle" fill="currentColor" fontSize="12">Cumulative percentage of eligible pairs</text>
+    <text x="205" y="372" textAnchor="middle" fill="currentColor" fontSize="12">HARD (%)</text><text transform="translate(13 175) rotate(-90)" data-export-transform="translate(-8 175) rotate(-90)" textAnchor="middle" fill="currentColor" fontSize="12">Cumulative percentage of eligible pairs</text>
   </svg>;
 }
 
