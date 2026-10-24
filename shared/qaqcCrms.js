@@ -32,7 +32,7 @@ export function crmReferenceComparison(observed, expected, sd) {
   const bands = { lower3: expected - 3 * sd, lower2: expected - 2 * sd, expected,
     upper2: expected + 2 * sd, upper3: expected + 3 * sd };
   const z = (observed - expected) / sd;
-  const tolerance = 4 * Number.EPSILON * Math.max(Math.abs(bands.lower3), Math.abs(bands.upper3), sd);
+  const tolerance = Math.max(Number.MIN_VALUE, 4 * Number.EPSILON * Math.max(Math.abs(bands.lower3), Math.abs(bands.upper3), sd));
   if (!Number.isFinite(z) || (z === 0 && observed !== expected) || !Object.values(bands).every(Number.isFinite)
     || !(bands.lower3 < bands.lower2 && bands.lower2 < expected && expected < bands.upper2 && bands.upper2 < bands.upper3)
     || tolerance / sd > Math.sqrt(Number.EPSILON)) return null;
