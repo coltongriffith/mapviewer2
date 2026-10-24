@@ -98,8 +98,8 @@ test('QA/QC standard comparisons: pinned supplied references, zero and censored 
   });
   await page.route('**/rest/v1/drill_crm_values*', route => {
     const q = new URL(route.request().url()).searchParams;
-    expect(q.get('property_id')).toBe(`eq.${PROP}`); expect(q.get('crm_id')).toBe('eq.CRM-TEST');
-    expect(q.get('revision')).toBe('eq.rev-01'); expect(q.get('element')).toBe('eq.Au'); expect(q.get('unit')).toBe('eq.g/t');
+    expect(q.get('property_id')).toBe(`eq.${PROP}`); expect(q.get('record->>crm_id')).toBe('eq.CRM-TEST');
+    expect(q.get('record->>revision')).toBe('eq.rev-01'); expect(q.get('record->>element')).toBe('eq.Au'); expect(q.get('record->>unit')).toBe('eq.g/t');
     expect(q.has('superseded_by_batch')).toBe(false); expect(q.getAll('id').some(value => value.startsWith('in.'))).toBe(true);
     if (failReferences) return route.fulfill({ status: 403, json: { message: 'Denied synthetic reference read' } });
     return route.fulfill({ json: q.getAll('id').some(value => value.startsWith('gt.')) ? [] : [crm] });
