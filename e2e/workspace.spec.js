@@ -69,6 +69,36 @@ async function checkChartDownload(page, testInfo, title, filename, expected) {
   expect(pixels.blue).toBeGreaterThan(30); expect(pixels.dark).toBeGreaterThan(2000); expect(pixels.corner).toEqual([255, 255, 255, 255]);
 }
 
+// The PDF is intentionally raster-based. Inspect all page text at its draw
+// boundary as well as the actual file/page structure; local release validation
+// also renders representative downloaded pages with PyMuPDF.
+async function checkComparisonPdf(page, testInfo, filename, expected, artifactPrefix = '') {
+  await page.evaluate(() => {
+    window.__pdfText = [];
+    if (!window.__pdfTextHook) {
+      window.__pdfTextHook = true;
+      const original = CanvasRenderingContext2D.prototype.fillText;
+      CanvasRenderingContext2D.prototype.fillText = function (text, ...rest) {
+        if (this.canvas.width === 1584 && this.canvas.height === 1224) window.__pdfText.push(text);
+        return original.call(this, text, ...rest);
+      };
+    }
+  });
+  const pending = page.waitForEvent('download'); await page.getByRole('button', { name: 'Download comparison PDF', exact: true }).click();
+  const download = await pending; expect(download.suggestedFilename()).toBe(filename);
+  const path = testInfo.outputPath(artifactPrefix + filename); await download.saveAs(path); const bytes = await readFile(path);
+  expect(bytes.subarray(0, 5).toString()).toBe('%PDF-'); expect(bytes.length).toBeLessThanOrEqual(32 * 1024 * 1024);
+  const pdf = bytes.toString('latin1'), pages = [...pdf.matchAll(/\/Type\s*\/Page\b/g)].length;
+  expect(pages).toBeGreaterThan(1); expect(pages).toBeLessThanOrEqual(100);
+  const boxes = [...pdf.matchAll(/\/MediaBox\s*\[([^\]]+)\]/g)].map(match => match[1].trim().split(/\s+/).map(Number));
+  expect(boxes.length).toBe(pages); expect(boxes.every(box => JSON.stringify(box) === '[0,0,792,612]')).toBe(true);
+  const text = await page.evaluate(() => window.__pdfText.join('\n'));
+  for (const value of expected) expect(text).toContain(value);
+  expect(text).toContain('Rails Copper-Gold'); expect(text).toContain('Page');
+  await expect(page.getByRole('button', { name: 'Download comparison PDF', exact: true })).toBeEnabled();
+  return { pages, bytes: bytes.length, text };
+}
+
 test('QA/QC duplicate comparisons: scoped historical charts, raw exclusions and read-only return', async ({ page }, testInfo) => {
   const errors = []; page.on('pageerror', error => errors.push(error.message));
   await fakeSupabase(page, { role: 'viewer' });
@@ -104,6 +134,7 @@ test('QA/QC duplicate comparisons: scoped historical charts, raw exclusions and 
   await page.screenshot({ path: testInfo.outputPath('duplicate-comparison.png'), fullPage: true });
   await checkChartDownload(page, testInfo, 'Original vs duplicate', `qaqc-scatter-${batch.id}.png`, ['1 positive pairs plotted', '1 otherwise eligible zero-value pairs', '2 assessed / 4 selected; 2 unassessed', 'not HARD thresholds', batch.id]);
   await checkChartDownload(page, testInfo, 'Ranked HARD', `qaqc-hard-${batch.id}.png`, ['Cumulative denominator: 2 eligible pairs', 'HARD = 100', 'HARD ≤10%: 1/2', 'Rolled back:']);
+  await checkComparisonPdf(page, testInfo, `qaqc-duplicates-${batch.id}.pdf`, ['D0', 'D3', parents[0].id, 'ND', '0.005', 'synthetic-duplicates.csv', batch.id]);
   await page.getByRole('button', { name: 'Back to QA/QC' }).click();
   await expect(page.getByRole('button', { name: 'Compare duplicates' })).toBeFocused();
   await expect(page.getByRole('button', { name: 'Roll back QA/QC import' })).toHaveCount(0);
@@ -122,7 +153,7 @@ test('QA/QC standard comparisons: pinned supplied references, zero and censored 
   const batch = { id: id(30), property_id: PROP, kind: 'samples', row_count: 9, rows_written: 4, request_hash: 'synthetic-standards-request',
     provenance: { filename: 'synthetic-standards.csv', sha256: 'b'.repeat(64) }, summary: { new: 4, changed: 0 }, created_at: '2026-10-23T12:00:00Z', rolled_back_at: '2026-10-23T13:00:00Z', depends_on: [] };
   const crm = { id: id(29), property_id: PROP, batch_id: id(28), source_row: 2, superseded_by_batch: id(99),
-    record: { crm_id: 'CRM-TEST', revision: 'rev-01', element: 'Au', unit: 'g/t', expected: 10, sd: 2, source: 'Synthetic supplied certificate only' } };
+    record: { crm_id: 'CRM-TEST', revision: 'rev-01', element: 'Au', unit: 'g/t', expected: 10, sd: 2, source: ('Synthetic supplied certificate only — μ <source> Ω 🧪 ' + 'x'.repeat(1000)).slice(0, 1000) } };
   const standards = [15, 0, null, 17].map((value, i) => ({ id: id(300 + i), property_id: PROP, batch_id: batch.id, source_row: 2 * i + 1, crm_version_ids: [crm.id],
     record: { sample_id: `STD-00${i}`, sample_type: 'standard', lab_id: 'Lab-A', lab_batch_id: 'Job-1', crm_id: 'CRM-TEST', crm_revision: 'rev-01',
       values: { Au: value }, units: { Au: 'g/t' }, raw_values: { Au: value === null ? 'ND' : value.toFixed(3) }, bdl: value === null ? { Au: 0.005 } : {} } }));
@@ -160,11 +191,41 @@ test('QA/QC standard comparisons: pinned supplied references, zero and censored 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('standards-comparison.png'), fullPage: true });
   await checkChartDownload(page, testInfo, 'CRM reference comparison', `qaqc-standards-${batch.id}.png`, ['Supplied expected value: 10; supplied SD: 2 g/t.', 'CRM CRM-TEST | revision rev-01', '3 assessed / 4 selected; 1 unassessed', 'Outside ±3 supplied SD: 2/3.', 'no analytical order or trend implied', 'synthetic-standards-request', batch.id]);
+  await checkComparisonPdf(page, testInfo, `qaqc-standards-${batch.id}.pdf`, ['STD-000', 'STD-003', crm.id, 'ND', '0.005', '0.000', 'Synthetic supplied certificate only', batch.id]);
   await page.getByRole('button', { name: 'Back to QA/QC' }).click(); await expect(page.getByRole('button', { name: 'Compare standards' })).toBeFocused();
   await expect(page.getByRole('button', { name: 'Roll back QA/QC import' })).toHaveCount(0);
   failReferences = true; await page.getByRole('button', { name: 'Compare standards' }).click(); await page.getByLabel('Comparison group').selectOption('0');
   await expect(page.getByRole('alert')).toContainText('No comparison is shown'); await expect(table).toHaveCount(0);
   expect(errors).toEqual([]);
+});
+
+test('QA/QC PDF retains all 51 selected records beyond table pagination and supports evidence-only reports', async ({ page }, testInfo) => {
+  test.setTimeout(90000);
+  await fakeSupabase(page, { role: 'viewer' });
+  const id = n => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+  const batch = { id: id(700), property_id: PROP, kind: 'samples', row_count: 70, rows_written: 51, request_hash: 'synthetic-long-report', provenance: { filename: 'synthetic-long-duplicates.csv', sha256: 'c'.repeat(64), sheet: 'Field controls', header_row: 2 }, summary: { new: 51 }, created_at: '2026-10-23T12:00:00Z', rolled_back_at: null, depends_on: [] };
+  const parent = { id: id(701), property_id: PROP, batch_id: id(699), source_row: 1, record: { sample_id: 'P-BASE', sample_type: 'routine', lab_id: 'Lab-L', lab_batch_id: 'Job-L', values: { Au: 90 }, units: { Au: 'g/t' }, raw_values: { Au: '90.000000' }, bdl: {} } };
+  const rows = Array.from({ length: 51 }, (_, i) => ({ id: id(800 + i), property_id: PROP, batch_id: batch.id, source_row: i + 1, parent_version_id: parent.id, record: { sample_id: `D-${String(i).padStart(3, '0')}`, sample_type: 'field_dup', parent_sample_id: 'P-BASE', lab_id: 'Lab-L', lab_batch_id: 'Job-L', values: { Au: i === 50 ? null : 110 }, units: { Au: 'g/t' }, raw_values: { Au: i === 50 ? 'ND' : '110.000000' }, bdl: i === 50 ? { Au: 0.005 } : {} } }));
+  await page.route('**/rest/v1/drill_qaqc_batches*', route => route.fulfill({ json: [batch] }));
+  await page.route('**/rest/v1/drill_qaqc_samples*', route => {
+    const q = new URL(route.request().url()).searchParams;
+    expect(q.get('property_id')).toBe(`eq.${PROP}`);
+    if (q.has('superseded_by_batch')) return route.fulfill({ json: [] });
+    if (q.has('batch_id')) return route.fulfill({ json: q.has('or') ? [] : rows });
+    return route.fulfill({ json: q.getAll('id').some(value => value.startsWith('gt.')) ? [] : [parent] });
+  });
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold'); await page.getByRole('tab', { name: 'Drill data' }).click();
+  await page.getByRole('button', { name: 'Open QA/QC register' }).click(); await page.getByRole('button', { name: 'Compare duplicates' }).click(); await page.getByLabel('Comparison group').selectOption('0');
+  await expect(page.getByText('Page 1 of 2', { exact: true })).toBeVisible();
+  await expect(page.getByRole('table', { name: 'Duplicate comparison data' })).not.toContainText('D-050');
+  const full = await checkComparisonPdf(page, testInfo, `qaqc-duplicates-${batch.id}.pdf`, ['D-000', 'D-025', 'D-050', rows[50].id, parent.id, 'ND', '0.005', 'Field controls'], 'all51-');
+  expect(full.pages).toBeGreaterThan(10); expect(full.text).toContain('Selected controls: 51');
+  await page.getByRole('button', { name: 'Back to QA/QC' }).click();
+  for (const row of rows) { row.record.values.Au = null; row.record.raw_values.Au = 'ND'; row.record.bdl.Au = 0.005; }
+  await page.getByRole('button', { name: 'Compare duplicates' }).click(); await page.getByLabel('Comparison group').selectOption('0');
+  await expect(page.getByText('0 eligible / 51 selected pairs')).toBeVisible(); await expect(page.getByRole('img')).toHaveCount(0);
+  const evidence = await checkComparisonPdf(page, testInfo, `qaqc-duplicates-${batch.id}.pdf`, ['D-000', 'D-050', 'Assessed controls: 0', 'Unassessed controls: 51', 'ND', '0.005'], 'unassessed51-');
+  expect(evidence.text).toContain('percentage unavailable'); await expect(page.getByRole('table', { name: 'Duplicate comparison data' })).toBeVisible();
 });
 
 test('QA/QC register: CRM then routine and dependent samples, stable retry and protected rollback', async ({ page }) => {
