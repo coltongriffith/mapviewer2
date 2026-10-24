@@ -3,6 +3,7 @@ import { discoverCrmGroups, loadCrmSnapshot } from '../../utils/drillQaqcSnapsho
 import { analyzeCrmSnapshot } from '../../../shared/qaqcCrms';
 
 import QaqcChartDownload from './QaqcChartDownload';
+import QaqcReportDownload from './QaqcReportDownload';
 import { chartProvenance } from '../../utils/qaqcChartPng';
 
 const number = value => value == null ? '—' : value !== 0 && (Math.abs(value) < 0.001 || Math.abs(value) >= 1e6) ? value.toExponential(3) : Number(value).toLocaleString(undefined, { maximumSignificantDigits: 5 });
@@ -46,6 +47,7 @@ function Results({ snapshot, propertyName, captureCurrent }) {
   const provenance = chartProvenance(analysis, manifest, propertyName);
   const chart = useRef(null);
   return <div className="ws-stack">
+    <QaqcReportDownload kind="standards" snapshot={snapshot} analysis={analysis} propertyName={propertyName} chartRefs={{ crm: chart }} captureCurrent={captureCurrent} />
     <p><strong>{analysis.eligibleCount} assessed / {analysis.selectedCount} selected standards</strong> · {analysis.excludedCount} unassessed.</p>
     <p>{manifest.submittedCount} rows submitted; {manifest.loadedWrittenCount} records written by this import. {manifest.rolledBackAt ? 'This import has been rolled back; these are its historical records.' : 'Historical import snapshot; newer versions may exist.'}</p>
     <p className="dash-muted">Reference comparisons use supplied SD and exact pinned definitions. They do not verify the certificate or laboratory method, or assess consecutive results.</p>

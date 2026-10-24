@@ -256,7 +256,9 @@ const BUDGETS = {
   // No added dependency; all startup-route budgets remain unchanged.
   // Native QA/QC chart PNG capture, scoped provenance and cancellation (~2.7 KiB
   // lazy); measured 1120.5 configured. No dependencies or initial-route changes.
-  totalAuthJsGzipKb: 1120.9,
+  // Selected-comparison PDF adapter, measured layout, capture and guarded lazy
+  // renderer (~6 KiB). Reuses jsPDF; startup-route limits remain unchanged.
+  totalAuthJsGzipKb: 1127.2,
   // 1009.4 → 1026.3 (measured 1026.0): lazy XLSX reader (~13.8 KiB), sheet/header preview
   // (~1.1 KiB), import wiring and numeric-format handling. Shared fflate adds ~1.2 KiB
   // for async ZIP workers; it remains one copy with the existing draft compression.
@@ -317,7 +319,8 @@ const BUDGETS = {
   // Same lazy duplicate comparison; measured 1043.4 KiB plain.
   // Same lazy CRM comparison; measured1050.5 KiB plain.
   // Same lazy QA/QC PNG feature; measured 1053.3 plain.
-  totalJsGzipKb: 1053.7,
+  // Same selected-comparison PDF feature; measured ~1059.3 before final polish.
+  totalJsGzipKb: 1059.9,
   // 940.9 → 957.8 (measured 957.5): Excel import, as totalAuthJsGzipKb above.
   // 940.9 → 944.8 (P2-8, measured 944.6): the same lazy property recipe path
   // in the unconfigured build. Its initial route budgets also stay unchanged.
