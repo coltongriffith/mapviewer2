@@ -264,7 +264,8 @@ const BUDGETS = {
   // Alteration interval mapping/text intensity and stale-preview/template guards
   // add ~0.8 KiB in the existing lazy drill tab; measured 1103.3 configured.
   // Phase 2 release (CRS, certificates, QA/QC, alteration combined): measured 1131.8.
-  totalAuthJsGzipKb: 1132.1,
+  // P2-2 vendor import presets and assay quirks, lazy drill tab only: measured 1133.1.
+  totalAuthJsGzipKb: 1133.4,
   // 1009.4 → 1026.3 (measured 1026.0): lazy XLSX reader (~13.8 KiB), sheet/header preview
   // (~1.1 KiB), import wiring and numeric-format handling. Shared fflate adds ~1.2 KiB
   // for async ZIP workers; it remains one copy with the existing draft compression.
@@ -330,7 +331,8 @@ const BUDGETS = {
   // Same selected-comparison PDF feature; measured ~1059.3 before final polish.
   // Same lazy alteration import/lifetime correction; measured 1035.9 plain.
   // Phase 2 release combined: measured 1064.6 plain.
-  totalJsGzipKb: 1064.9,
+  // P2-2 vendor import presets, as totalAuthJsGzipKb above: measured 1065.8.
+  totalJsGzipKb: 1066.1,
   // 940.9 → 957.8 (measured 957.5): Excel import, as totalAuthJsGzipKb above.
   // 940.9 → 944.8 (P2-8, measured 944.6): the same lazy property recipe path
   // in the unconfigured build. Its initial route budgets also stay unchanged.
