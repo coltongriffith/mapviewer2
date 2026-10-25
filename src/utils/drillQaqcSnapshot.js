@@ -16,15 +16,17 @@ const selected = (row, scope) => row.record.sample_type === scope.sampleType
 const selectedStandard = (row, scope) => row.record.sample_type === 'standard'
   && row.record.lab_id === scope.labId && row.record.lab_batch_id === scope.labBatchId
   && row.record.crm_id === scope.crmId && row.record.crm_revision === scope.crmRevision;
+const selectedBlank = (row, scope) => row.record.sample_type === 'blank'
+  && row.record.lab_id === scope.labId && row.record.lab_batch_id === scope.labBatchId;
 const matchingCrm = (row, scope) => row.record.crm_id === scope.crmId && row.record.revision === scope.crmRevision
   && row.record.element === scope.element && row.record.unit === scope.unit;
 function fail(code, message) { throw Object.assign(new Error(message), { snapshotCode: code }); }
-function validateScope(scope, discovery = false, crm = false) {
+function validateScope(scope, discovery = false, crm = false, blank = false) {
   if (!object(scope) || !UUID.test(scope.propertyId) || !UUID.test(scope.batchId)
-    || (!discovery && ((!crm && !TYPES.includes(scope.sampleType))
+    || (!discovery && ((!crm && !(blank ? scope.sampleType === 'blank' : TYPES.includes(scope.sampleType)))
     || !['labId', 'labBatchId', 'element', 'unit', ...(crm ? ['crmId', 'crmRevision'] : [])].every((key) => typeof scope[key] === 'string' && scope[key].trim() && scope[key].length <= 120)))) {
     throw new Error(crm ? 'Choose one property, sample import, laboratory/job, CRM/revision, element and exact unit.'
-      : 'Choose one property, sample import, duplicate type, laboratory, lab job, element and unit.');
+      : blank ? 'Choose one property, sample import, laboratory/job, element and exact unit for blanks.' : 'Choose one property, sample import, duplicate type, laboratory, lab job, element and unit.');
   }
   if (discovery) return { propertyId: scope.propertyId.toLowerCase(), batchId: scope.batchId.toLowerCase() };
   return { propertyId: scope.propertyId.toLowerCase(), batchId: scope.batchId.toLowerCase(),
@@ -81,6 +83,36 @@ export async function loadCrmSnapshot(client, selection, options = {}) {
   return loadSnapshot(client, selection, options, false, true);
 }
 
+/** One written blank population. Blanks pin no references; nothing else is read. */
+export async function loadBlankSnapshot(client, selection, options = {}) {
+  return loadSnapshot(client, selection, options, false, false, true);
+}
+
+/** Discover populated blank lab-job/element/unit groups from the bounded batch read. */
+export async function discoverBlankGroups(client, selection, options = {}) {
+  const snapshot = await loadSnapshot(client, selection, options, true, false, true);
+  const groups = new Map();
+  if (snapshot.complete) for (const row of snapshot.records) {
+    const record = row.record;
+    if (record.sample_type !== 'blank') continue;
+    if (!['lab_id', 'lab_batch_id'].every(key => typeof record[key] === 'string' && record[key].trim() && record[key].length <= 120)
+      || !object(record.values) || !object(record.units)) {
+      return { ...snapshot, complete: false, groups: [], issues: [{ code: 'invalid_group', message: 'An imported blank has incomplete group metadata.' }] };
+    }
+    for (const element of Object.keys(record.values)) {
+      const unit = record.units[element];
+      if (!element.trim() || element.length > 120 || typeof unit !== 'string' || !unit.trim() || unit.length > 120) {
+        return { ...snapshot, complete: false, groups: [], issues: [{ code: 'invalid_group', message: 'An imported blank has incomplete element or unit metadata.' }] };
+      }
+      const group = { ...snapshot.scope, sampleType: 'blank', labId: record.lab_id, labBatchId: record.lab_batch_id, element, unit };
+      const key = JSON.stringify([group.labId, group.labBatchId, element, unit]);
+      if (!groups.has(key)) groups.set(key, group);
+      if (groups.size > 4096) return { ...snapshot, complete: false, groups: [], issues: [{ code: 'group_limit', message: 'This import contains too many blank groups. Use a smaller import to compare blanks.' }] };
+    }
+  }
+  return { ...snapshot, groups: [...groups.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, group]) => group) };
+}
+
 /** Discover populated standard tuples, without fetching or interpreting definitions. */
 export async function discoverCrmGroups(client, selection, options = {}) {
   const snapshot = await loadSnapshot(client, selection, options, true, true);
@@ -109,11 +141,11 @@ export async function discoverCrmGroups(client, selection, options = {}) {
 
 async function loadSnapshot(client, selection, {
   signal, isCurrent = () => true, onProgress = () => {}, maxBytes = QAQC_SNAPSHOT_MAX_BYTES,
-} = {}, discovery = false, crm = false) {
-  const scope = validateScope(selection, discovery, crm);
+} = {}, discovery = false, crm = false, blank = false) {
+  const scope = validateScope(selection, discovery, crm, blank);
   if (!Number.isInteger(maxBytes) || maxBytes < 1 || maxBytes > QAQC_SNAPSHOT_MAX_BYTES) throw new Error('Invalid snapshot byte limit.');
   const records = [], parents = [], issues = [];
-  const inPopulation = crm ? selectedStandard : selected;
+  const inPopulation = crm ? selectedStandard : blank ? selectedBlank : selected;
   let initial = null, refreshed = null, bytes = 0, requested = [], referenceReadsComplete = false;
   const guard = () => {
     if (signal?.aborted || !isCurrent()) throw Object.assign(new Error('Snapshot load cancelled.'), { name: 'AbortError' });
@@ -165,7 +197,7 @@ async function loadSnapshot(client, selection, {
       onProgress({ phase: 'records', loaded: records.length, expected: initial.rows_written }); guard();
     }
     if (records.length !== initial.rows_written) fail('count_mismatch', 'The snapshot does not match the import written-row count.');
-    if (!discovery) {
+    if (!discovery && !blank) {
       const pins = new Set();
       for (const row of records.filter(row => inPopulation(row, scope))) {
         const candidates = crm ? (Array.isArray(row.crm_version_ids) ? row.crm_version_ids : []) : [row.parent_version_id];
@@ -209,7 +241,7 @@ async function loadSnapshot(client, selection, {
   // A failed reference request cannot establish which individual UUIDs are absent.
   const missingParentIds = referenceReadsComplete ? requested.filter((id) => !found.has(id)) : [];
   return {
-    scope, records, ...(crm ? { crms: parents } : { parents, missingParentIds }), complete: issues.length === 0, issues,
+    scope, records, ...(crm ? { crms: parents } : blank ? {} : { parents, missingParentIds }), complete: issues.length === 0, issues,
     manifest: {
       version: 1, scope: { ...scope }, population: 'written_import_rows', currentStateClaimed: false,
       retrievedAt: new Date().toISOString(), statusRefreshed: Boolean(refreshed), referenceReadsComplete,
@@ -222,7 +254,7 @@ async function loadSnapshot(client, selection, {
         // A candidate not returned by this exact tuple filter is not necessarily missing:
         // multi-element standards pin other tuples. Per-standard resolution is statistical.
         unresolvedCandidateIds: [...missingParentIds] }
-        : { requestedParentIds: requested, parentIds: parents.map((row) => row.id), missingParentIds: [...missingParentIds] }),
+        : blank ? {} : { requestedParentIds: requested, parentIds: parents.map((row) => row.id), missingParentIds: [...missingParentIds] }),
       bytesRead: bytes,
     },
   };

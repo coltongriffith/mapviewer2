@@ -1,5 +1,6 @@
 import { analyzeDuplicateSnapshot } from './qaqcDuplicates.js';
-import { analyzeCrmSnapshot } from './qaqcCrms.js';
+import { analyzeCrmSnapshot, CRM_RULES } from './qaqcCrms.js';
+import { analyzeBlankSnapshot } from './qaqcBlanks.js';
 
 export const QAQC_REPORT_LIMIT_MESSAGE = 'This comparison exceeds the PDF limit; no report was downloaded. Review the complete evidence in the app.';
 export const QAQC_REPORT_PAGE = Object.freeze({ width: 792, height: 612, margin: 36, fontSize: 10, lineHeight: 14, maxPages: 100 });
@@ -9,6 +10,7 @@ const invalid = detail => { throw new Error(`Cannot create this comparison PDF: 
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const count = value => Number.isInteger(value) && value >= 0;
 const CRM_CATEGORIES = Object.freeze({ within2: 'Within/on ±2 supplied SD', outside2Within3: 'Outside ±2, within/on ±3 supplied SD', outside3: 'Outside ±3 supplied SD' });
+const CRM_CONTROL = Object.freeze({ fail: 'Fail', warning: 'Warning (outside ±2 supplied SD)', none: 'No rule triggered' });
 const order = (a, b) => a.sourceRow - b.sourceRow || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 function equal(a, b) {
   if (Object.is(a, b)) return true;
@@ -22,9 +24,10 @@ function equal(a, b) {
  * Existing analyzers verify supplied screen analysis; no PDF-specific statistics.
  */
 export function buildQaqcReport({ kind, propertyName, snapshot, analysis, generatedAt, chartAvailability = {} } = {}) {
-  if (!['duplicates', 'standards'].includes(kind)) invalid('choose duplicates or standards.');
+  if (!['duplicates', 'standards', 'blanks'].includes(kind)) invalid('choose duplicates, standards or blanks.');
   if (!snapshot?.complete || !analysis?.complete || !object(snapshot.manifest)) invalid('a complete historical snapshot is required.');
-  const canonical = kind === 'duplicates' ? analyzeDuplicateSnapshot(snapshot) : analyzeCrmSnapshot(snapshot);
+  const canonical = kind === 'duplicates' ? analyzeDuplicateSnapshot(snapshot) : kind === 'standards' ? analyzeCrmSnapshot(snapshot)
+    : analyzeBlankSnapshot({ ...snapshot, multiplier: analysis.multiplier });
   if (!equal(canonical, analysis)) invalid('the analysis does not match the captured snapshot.');
   const m = snapshot.manifest, s = canonical.scope;
   if (!equal(m.scope, s) || m.population !== 'written_import_rows' || m.currentStateClaimed !== false
@@ -49,18 +52,21 @@ export function buildQaqcReport({ kind, propertyName, snapshot, analysis, genera
   const title = `QA/QC comparison snapshot — ${kind}`;
   const metadata = [line('Property', propertyName || undefined), line('Property ID', s.propertyId), line('Writing import', s.batchId),
     line('Laboratory', s.labId), line('Laboratory job', s.labBatchId), line('Element', s.element), line('Exact unit', s.unit),
-    ...(kind === 'duplicates' ? [line('Duplicate type', s.sampleType)] : [line('CRM ID', s.crmId), line('CRM revision', s.crmRevision)]),
+    ...(kind === 'duplicates' ? [line('Duplicate type', s.sampleType)] : kind === 'blanks' ? [line('Sample type', s.sampleType), line('Blank threshold', `${text(canonical.multiplier)} × detection limit`)]
+      : [line('CRM ID', s.crmId), line('CRM revision', s.crmRevision)]),
     line('Source filename', p.filename), line('File SHA-256 identifier', p.sha256), line('Request fingerprint', m.requestHash),
     line('Snapshot retrieved at', m.retrievedAt), line('PDF generated at', generatedAt),
     m.rolledBackAt ? line('Historical import rolled back at', m.rolledBackAt) : 'Historical import status at retrieval: not rolled back.',
     ...(p.sheet !== undefined ? [line('Import-source worksheet', p.sheet)] : []),
     ...(p.header_row !== undefined ? [line('Import-source header row', p.header_row)] : [])];
   const limitations = [
-    'Descriptive historical written-version subset; not laboratory approval, a full submitted file, whole laboratory job, analytical run or current-property inventory.',
+    `${kind === 'duplicates' ? 'Descriptive historical' : 'Historical'} written-version subset; not laboratory approval, a full submitted file, whole laboratory job, analytical run or current-property inventory.`,
     'Unchanged records from a reimport remain attached to earlier writing imports. Only the selected comparison is included.',
     'Analytical date range not recorded. Retrieval time and source row do not establish analytical sequence.',
     'Hashes identify supplied sources; they do not independently verify a certificate, original file or laboratory method.',
-    'No analytical sequence or consecutive-result assessment. Blanks and blank thresholds are outside this selected comparison.',
+    kind === 'duplicates' ? 'No analytical sequence or consecutive-result assessment. Blanks and CRM rules are outside this selected comparison.'
+      : kind === 'standards' ? 'Shewhart rules use submitted-row (import) order, not analytical order: outside ±3 supplied SD fails; two consecutive assessed standards outside ±2 supplied SD on the same side both fail; one outside ±2 is a warning. Unassessed standards are skipped.'
+      : `A blank fails when its reported value exceeds ${text(canonical.multiplier)} × the recorded detection limit. Below-detection blanks pass and remain censored. Without a recorded limit a blank is unassessed. Submitted-row order; no analytical order implied.`,
     'Raw laboratory text and numeric censoring bounds are retained separately. No detection bound, zero or DL/2 is substituted as a measurement.',
     'Numbers in evidence use round-trip strings; chart axis labels may be rounded.'
   ];
@@ -68,7 +74,7 @@ export function buildQaqcReport({ kind, propertyName, snapshot, analysis, genera
     line('Selected controls', canonical.selectedCount), line('Assessed controls', canonical.eligibleCount), line('Unassessed controls', canonical.excludedCount),
     ...Object.entries(canonical.excludedByReason).filter(([, n]) => n).map(([reason, n]) => line(`Unassessed — ${reason}`, n))];
   const fraction = (label, stat) => `${label}: ${stat.count}/${stat.total}; percentage ${stat.percent === null ? 'unavailable (no assessed controls)' : `${text(stat.percent)}%`}.`;
-  const charts = [];
+  const charts = [], references = new Map(), pins = new Set();
   const chart = (key, heading, caption, expected, reason) => {
     const availability = chartAvailability[key];
     if (expected && (!availability?.available || !Number.isFinite(availability.width) || !Number.isFinite(availability.height)
@@ -87,19 +93,36 @@ export function buildQaqcReport({ kind, propertyName, snapshot, analysis, genera
     chart('hard', 'Ranked HARD', ['HARD = 100 × abs(original − duplicate) / (original + duplicate). No substituted censored values.',
       `Cumulative denominator: ${canonical.eligibleCount} assessed pairs. Ties use stable immutable record ID ordering.`],
     canonical.eligibleCount > 0, 'No assessed pairs; ranked HARD is unavailable.');
-  } else {
+  } else if (kind === 'standards') {
     summary.push(fraction('Within/on ±2 supplied SD', canonical.summaries.within2),
       fraction('Outside ±2 but within/on ±3 supplied SD', canonical.summaries.outside2Within3),
-      fraction('Outside ±3 supplied SD', canonical.summaries.outside3), 'The three supplied-SD categories are disjoint; they are descriptive, not pass/fail.');
+      fraction('Outside ±3 supplied SD', canonical.summaries.outside3), 'The three supplied-SD categories are disjoint and descriptive.',
+      fraction('Shewhart rule failures', canonical.rules.fail), fraction('Shewhart warnings only', canonical.rules.warning), fraction('No Shewhart rule triggered', canonical.rules.none),
+      ...canonical.points.filter(p => p.control.status === 'fail').map(p => `Failure: source row ${text(p.sourceRow)}, sample ${text(p.sampleId)} — ${p.control.rules.map(r => CRM_RULES[r]).join('; ')}.`));
     const consistent = new Set(canonical.points.map(row => JSON.stringify(row.bands))).size === 1;
     chart('crm', 'CRM reference comparison', [
-      'Linear scale, including zero observations and negative mathematical lower bands. Solid: supplied expected value; short dashes: ±2 supplied SD; long dashes: ±3 supplied SD.',
-      'Submitted-row gaps are retained. No analytical order, trend or consecutive-result rule is implied.',
+      'Linear scale, including zero observations and negative mathematical lower bands. Solid: supplied expected value; short dashes: ±2 supplied SD warning lines; long dashes: ±3 supplied SD. Squares: Shewhart rule failures.',
+      'Submitted-row gaps are retained. Consecutive means adjacent in import order; no analytical order or trend is implied.',
       ...(consistent ? [line('Supplied expected value', canonical.points[0].reference.expected), line('Supplied SD', canonical.points[0].reference.sd)] : [])
     ], canonical.eligibleCount > 0 && consistent, canonical.eligibleCount ? 'The pinned definitions disagree within this group; no combined reference plot is shown.' : 'No assessed standards; the reference chart is unavailable.');
   }
+  if (kind === 'blanks') {
+    const dl = canonical.detectionLimits;
+    summary.push(fraction(`Above ${text(canonical.multiplier)} × detection limit (fail)`, canonical.summaries.fail), fraction('At or below threshold (pass)', canonical.summaries.pass),
+      fraction('Passing below-detection (censored) blanks', canonical.summaries.censored),
+      line('Distinct recorded detection limits for this laboratory job, element and unit', dl.values.length ? dl.values.join(', ') : 'none'),
+      ...canonical.failures.map(p => `Failure: source row ${text(p.sourceRow)}, sample ${text(p.sampleId)} — reported ${text(p.observed.raw)} ${text(p.unit)}; threshold ${text(p.threshold)}.`));
+    for (const source of dl.sources) references.set(source.recordId, { id: text(source.recordId), heading: `Detection-limit source version: ${text(source.recordId)}`,
+      lines: [line('Sample ID', source.sampleId), line('Sample type', source.sampleType), line('Writing import', source.batchId), line('Submitted source row', source.sourceRow),
+        line('Raw laboratory text', source.raw), line('Recorded detection limit', source.limit)] });
+    const limits = new Set(canonical.points.map(p => p.detectionLimit));
+    chart('blank', 'Blank threshold comparison', [
+      `Linear scale from zero. Solid: recorded detection limit; dashed: ${text(canonical.multiplier)} × detection limit threshold. Open circles: below detection, plotted at the recorded limit; squares: above threshold.`,
+      'Submitted-row gaps are retained; no analytical order or trend is implied.',
+      ...(limits.size === 1 ? [line('Recorded detection limit', [...limits][0]), line('Threshold', canonical.points[0].threshold)] : [])
+    ], canonical.eligibleCount > 0 && limits.size === 1, canonical.eligibleCount ? 'Assessed blanks use different recorded detection limits; no combined chart is shown.' : 'No assessed blanks; the threshold chart is unavailable.');
+  }
   const byId = new Map(snapshot.records.map(row => [row.id, row]));
-  const references = new Map(), pins = new Set();
   function reference(ref, type) {
     if (!ref) return null;
     if (!references.has(ref.recordId)) {
@@ -117,7 +140,11 @@ export function buildQaqcReport({ kind, propertyName, snapshot, analysis, genera
   }
   const records = [...canonical.points, ...canonical.excluded].sort(order).map(row => {
     const source = byId.get(row.id), lines = sourceLines(kind === 'duplicates' ? row.duplicate : row.observed);
-    if (kind === 'duplicates') {
+    if (kind === 'blanks') {
+      lines.push(line('Detection limit used', row.detectionLimit), line('Detection limit source', row.detectionLimitSource === 'result' ? 'this result' : row.detectionLimitSource === 'job' ? 'recorded laboratory-job limit (appendix)' : undefined));
+      if (row.status !== 'unassessed') lines.push(line('Threshold', row.threshold), line('Multiple of detection limit', row.censored ? 'below detection' : row.ratio),
+        `Blank outcome: ${row.outcome === 'fail' ? 'FAIL — above threshold' : row.censored ? 'pass (below detection; censored)' : 'pass'}.`);
+    } else if (kind === 'duplicates') {
       if (source.parent_version_id) pins.add(source.parent_version_id);
       lines.push(line('Requested parent sample ID', source.record.parent_sample_id), line('Requested parent version', source.parent_version_id),
         line('Validated original (reference appendix)', reference(row.original, 'original')));
@@ -131,9 +158,10 @@ export function buildQaqcReport({ kind, propertyName, snapshot, analysis, genera
         ...(candidates?.length ? candidates.map(id => line('Candidate version', id)) : ['Unavailable']),
         line('Validated selected-tuple definition (reference appendix)', reference(row.reference, 'crm')));
       if (row.status !== 'unassessed') lines.push(line('Exact z score', row.z), line('Descriptive category', CRM_CATEGORIES[row.category]),
+        `Shewhart result: ${CRM_CONTROL[row.control.status]}${row.control.rules.length ? ` — ${row.control.rules.map(r => CRM_RULES[r]).join('; ')}` : ''}.`,
         ...Object.entries(row.bands).map(([key, value]) => line(`Reference line — ${key}`, value)));
     }
-    lines.push(row.status === 'unassessed' ? `Unassessed — ${text(row.reason)}: ${text(row.message)}` : 'Assessed descriptive comparison.');
+    lines.push(row.status === 'unassessed' ? `Unassessed — ${text(row.reason)}: ${text(row.message)}` : kind === 'duplicates' ? 'Assessed descriptive comparison.' : 'Assessed comparison.');
     return { id: text(row.id), heading: `Sample version: ${text(row.id)}`, lines };
   });
   if (references.size > QAQC_REPORT_LIMITS.references || pins.size > QAQC_REPORT_LIMITS.references) fail('More than 5,000 requested or validated reference versions.');
@@ -223,9 +251,9 @@ export function layoutQaqcReport(report, { measureText } = {}) {
     }
     caption.forEach(text => command(text));
   }
-  const blocks = (heading, rows) => {
+  const blocks = (heading, rows, empty) => {
     section(heading);
-    if (!rows.length) { paragraph('No validated reference details are available. Requested pins remain with each selected sample.'); return; }
+    if (!rows.length) { paragraph(empty); return; }
     for (const row of rows) {
       const first = wrap(row.heading, 10, true), continued = wrap(`${row.heading} (continued)`, 10, true);
       if (Math.max(first.length, continued.length) * lineHeight > bottom - top - 2 * lineHeight) fail('A record identity cannot fit on a readable page.');
@@ -238,7 +266,8 @@ export function layoutQaqcReport(report, { measureText } = {}) {
     }
   };
   blocks('Selected evidence — all assessed and unassessed controls', report.records);
-  blocks('Validated pinned-reference appendix', report.references);
+  blocks(report.kind === 'blanks' ? 'Recorded detection-limit sources' : 'Validated pinned-reference appendix', report.references,
+    report.kind === 'blanks' ? 'No numeric detection limit is recorded for this laboratory job, element and unit in this import.' : 'No validated reference details are available. Requested pins remain with each selected sample.');
   for (let i = 0; i < pages.length; i++) pages[i].commands.push({ kind: 'text', x: margin, y: height - margin, text: `Page ${i + 1} of ${pages.length}`, fontSize: 10, bold: false });
   return { width, height, pages };
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createClient } from '@supabase/supabase-js';
-import { discoverDuplicateGroups, loadDuplicateSnapshot, QAQC_SNAPSHOT_MAX_BYTES } from '../src/utils/drillQaqcSnapshot.js';
+import { discoverBlankGroups, discoverDuplicateGroups, loadBlankSnapshot, loadDuplicateSnapshot, QAQC_SNAPSHOT_MAX_BYTES } from '../src/utils/drillQaqcSnapshot.js';
 
 const id = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const scope = { propertyId: id(1), batchId: id(2), sampleType: 'field_dup', labId: 'L', labBatchId: 'J', element: 'Au', unit: 'g/t' };
@@ -252,5 +252,27 @@ describe('bounded historical duplicate snapshot through the real Supabase client
     const chosen = { ...scope };
     const result = await loadDuplicateSnapshot(f.client, chosen, { onProgress: () => { chosen.labId = 'other'; } });
     expect(result.scope).toEqual(scope); expect(result.manifest.selectedCount).toBe(3);
+  });
+});
+
+describe('bounded historical blank snapshot', () => {
+  const blankScope = { ...scope, sampleType: 'blank' };
+  const asBlanks = f => { for (const row of f.samples) { row.record.sample_type = 'blank'; delete row.record.parent_sample_id; row.parent_version_id = null; } return f; };
+  it('discovers blank groups and loads every written row with no reference reads', async () => {
+    const f = asBlanks(fixture({ count: 4 })); f.samples[1].record.units.Au = 'ppm'; f.samples[3].record.sample_type = 'routine';
+    const groups = await discoverBlankGroups(f.client, { propertyId: scope.propertyId, batchId: scope.batchId });
+    expect(groups.complete).toBe(true); expect(groups.groups).toEqual([{ ...blankScope, unit: 'g/t' }, { ...blankScope, unit: 'ppm' }]);
+    const out = await loadBlankSnapshot(f.client, blankScope);
+    expect(out.complete).toBe(true); expect(out.records).toEqual(f.samples); expect(out).not.toHaveProperty('parents');
+    expect(out.manifest).toMatchObject({ scope: blankScope, population: 'written_import_rows', currentStateClaimed: false, referenceReadsComplete: true,
+      statusRefreshed: true, selectedCount: 3, loadedWrittenCount: 4, expectedWrittenCount: 4 });
+    expect(f.calls.every(call => call.table === 'drill_qaqc_batches' || call.q.has('batch_id'))).toBe(true);
+  });
+  it('requires an explicit blank scope and reports incomplete reads without statistics', async () => {
+    const f = asBlanks(fixture());
+    await expect(loadBlankSnapshot(f.client, { ...blankScope, sampleType: 'field_dup' })).rejects.toThrow('for blanks');
+    await expect(loadBlankSnapshot(f.client, { ...blankScope, unit: '' })).rejects.toThrow('for blanks');
+    const g = asBlanks(fixture({ mutate: ({ q }) => q.has('or') ? {} : null }));
+    expect(await loadBlankSnapshot(g.client, blankScope)).toMatchObject({ complete: false, issues: [{ code: 'read_failed' }] });
   });
 });

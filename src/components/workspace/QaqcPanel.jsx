@@ -5,6 +5,7 @@ import { formatWhen } from '../../utils/workspace';
 import QaqcImporter from './QaqcImporter';
 const QaqcDuplicateView = lazy(() => import('./QaqcDuplicateView'));
 const QaqcCrmView = lazy(() => import('./QaqcCrmView'));
+const QaqcBlankView = lazy(() => import('./QaqcBlankView'));
 
 function Pager({ next, pages, setPages, disabled, label }) {
   return <div className="ws-row" aria-label={label}>
@@ -77,11 +78,11 @@ function Register({ property, perms, client }) {
     finally { if (version === epoch.current) setBusy(null); }
   };
   if (comparison) {
-    const View = comparison.kind === 'standards' ? QaqcCrmView : QaqcDuplicateView;
+    const View = comparison.kind === 'standards' ? QaqcCrmView : comparison.kind === 'blanks' ? QaqcBlankView : QaqcDuplicateView;
     return <Suspense fallback={<p role="status">Loading comparisons…</p>}><View client={client} propertyId={property.id} propertyName={property.name} batchId={comparison.batchId} onClose={() => setComparison(null)} /></Suspense>;
   }
   return <div className="ws-stack">
-    <p className="dash-muted">Import CRM definitions before standards, and routine samples before their duplicates. Values stay as reported; this register does not judge pass/fail.</p>
+    <p className="dash-muted">Import CRM definitions before standards, and routine samples before their duplicates. Values stay as reported; the register itself does not judge pass/fail.</p>
     {error && <p className="ws-error" role="alert">{error}</p>}
     {notice && <p className="ws-ok" role="status">{notice}</p>}
     <div className="ws-row"><label className="ws-field">Show records<select value={kind} disabled={!!busy} onChange={e => { setKind(e.target.value); setPages([null]); }}><option value="samples">Samples</option><option value="crms">CRM definitions</option></select></label>
@@ -95,7 +96,7 @@ function Register({ property, perms, client }) {
         <thead><tr><th>When / source</th><th>Data</th><th>Change</th><th>Status</th></tr></thead>
         <tbody>{history.rows.map(batch => <tr key={batch.id}><td>{formatWhen(batch.created_at)}<br />{batch.provenance.filename || 'Unnamed source'}
           <details><summary>Provenance</summary><p style={{ overflowWrap: 'anywhere' }}>Import {batch.id}<br />SHA-256: {batch.provenance.sha256 || 'Not recorded'}<br />{batch.provenance.sheet ? `Sheet ${batch.provenance.sheet}, header row ${batch.provenance.header_row}` : ''}</p><p className="dash-muted">The hash identifies the imported bytes. The original file is not attached here; retain it in the property library.</p></details>
-        </td><td>{batch.kind === 'samples' ? <><span>Samples</span>{['duplicates', 'standards'].map(kind => <React.Fragment key={kind}><br /><button type="button" className="dash-link" disabled={!!busy} ref={node => { if (`${batch.id}:${kind}` === comparisonId.current) comparisonTrigger.current = node; }} onClick={() => { comparisonId.current = `${batch.id}:${kind}`; setComparison({ batchId: batch.id, kind }); }}>Compare {kind}</button></React.Fragment>)}</> : 'CRM definitions'}</td><td>{batch.summary.new} new, {batch.summary.changed} changed</td><td>{batch.rolled_back_at ? `Rolled back ${formatWhen(batch.rolled_back_at)}` : perms.edit ? <>
+        </td><td>{batch.kind === 'samples' ? <><span>Samples</span>{['duplicates', 'standards', 'blanks'].map(kind => <React.Fragment key={kind}><br /><button type="button" className="dash-link" disabled={!!busy} ref={node => { if (`${batch.id}:${kind}` === comparisonId.current) comparisonTrigger.current = node; }} onClick={() => { comparisonId.current = `${batch.id}:${kind}`; setComparison({ batchId: batch.id, kind }); }}>Compare {kind}</button></React.Fragment>)}</> : 'CRM definitions'}</td><td>{batch.summary.new} new, {batch.summary.changed} changed</td><td>{batch.rolled_back_at ? `Rolled back ${formatWhen(batch.rolled_back_at)}` : perms.edit ? <>
           <button type="button" className="dash-link" disabled={!!busy || blocked.has(batch.id)} onClick={() => back(batch)}>Roll back QA/QC import</button>
           {blocked.has(batch.id) && <small className="dash-muted">A later import depends on this one.</small>}
         </> : 'Current'}</td></tr>)}</tbody>
