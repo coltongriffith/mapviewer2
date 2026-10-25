@@ -1,10 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { discoverCrmGroups, loadCrmSnapshot } from '../../utils/drillQaqcSnapshot';
-<<<<<<< HEAD
 import { analyzeCrmSnapshot, CRM_RULES } from '../../../shared/qaqcCrms';
-=======
-import { analyzeCrmSnapshot } from '../../../shared/qaqcCrms';
->>>>>>> origin/main
 
 import QaqcChartDownload from './QaqcChartDownload';
 import QaqcReportDownload from './QaqcReportDownload';
@@ -12,11 +8,8 @@ import { chartProvenance } from '../../utils/qaqcChartPng';
 
 const number = value => value == null ? '—' : value !== 0 && (Math.abs(value) < 0.001 || Math.abs(value) >= 1e6) ? value.toExponential(3) : Number(value).toLocaleString(undefined, { maximumSignificantDigits: 5 });
 const short = group => `${group.crmId} (${group.crmRevision}) · ${group.labId} / ${group.labBatchId} · ${group.element} (${group.unit})`;
-<<<<<<< HEAD
 const control = { fail: 'Fail', warning: 'Warning (outside ±2 supplied SD)', none: 'No rule triggered' };
 const ruleText = p => `${control[p.control.status]}${p.control.rules.length ? `: ${p.control.rules.map(r => CRM_RULES[r]).join('; ')}` : ''}`;
-=======
->>>>>>> origin/main
 const categories = { within2: 'Within/on ±2 supplied SD', outside2Within3: 'Outside ±2, within/on ±3 supplied SD', outside3: 'Outside ±3 supplied SD' };
 
 function ReferencePlot({ points, unit, rows }) {
@@ -42,13 +35,9 @@ function ReferencePlot({ points, unit, rows }) {
     {ticks.map((tick, i) => <text key={i} x="69" y={y(tick * magnitude) + 4} textAnchor="end" fontSize="11" fill="currentColor">{number(tick * magnitude)}</text>)}
     {[...new Set([first, Math.round((first + last) / 2), last])].map(tick => <text key={tick} x={x(tick)} y="314" textAnchor="middle" fontSize="11" fill="currentColor">{tick}</text>)}
     {Object.entries(bands).map(([key, value]) => <g key={key}><line x1="75" x2="405" y1={y(value)} y2={y(value)} stroke={key === 'expected' ? 'currentColor' : '#64748b'} strokeDasharray={key === 'expected' ? undefined : key.endsWith('2') ? '3 3' : '8 4'} /><title>{key}: {value} {unit}</title></g>)}
-<<<<<<< HEAD
     {points.map(p => { const title = <title>{p.sampleId}: {p.observed.raw} {unit}; z {number(p.z)}; {categories[p.category]}; {ruleText(p)}</title>;
       return p.control.status === 'fail' ? <rect key={p.id} x={x(p.sourceRow) - 4.5} y={y(p.observed.value) - 4.5} width="9" height="9" fill="#2563eb" stroke="currentColor" data-rule="fail">{title}</rect>
         : <circle key={p.id} cx={x(p.sourceRow)} cy={y(p.observed.value)} r="3.5" fill="#2563eb" fillOpacity="0.7">{title}</circle>; })}
-=======
-    {points.map(p => <circle key={p.id} cx={x(p.sourceRow)} cy={y(p.observed.value)} r="3.5" fill="#2563eb" fillOpacity="0.7"><title>{p.sampleId}: {p.observed.raw} {unit}; z {number(p.z)}; {categories[p.category]}</title></circle>)}
->>>>>>> origin/main
     <text x="240" y="345" textAnchor="middle" fill="currentColor" fontSize="12">Submitted row (not analysis order)</text>
     <text transform="translate(15 160) rotate(-90)" textAnchor="middle" fill="currentColor" fontSize="12" data-export-label={unit.length > 20 ? "Reported value (unit below)" : undefined}>Reported value ({unit})</text>
   </svg>;
@@ -65,7 +54,6 @@ function Results({ snapshot, propertyName, captureCurrent }) {
     <QaqcReportDownload kind="standards" snapshot={snapshot} analysis={analysis} propertyName={propertyName} chartRefs={{ crm: chart }} captureCurrent={captureCurrent} />
     <p><strong>{analysis.eligibleCount} assessed / {analysis.selectedCount} selected standards</strong> · {analysis.excludedCount} unassessed.</p>
     <p>{manifest.submittedCount} rows submitted; {manifest.loadedWrittenCount} records written by this import. {manifest.rolledBackAt ? 'This import has been rolled back; these are its historical records.' : 'Historical import snapshot; newer versions may exist.'}</p>
-<<<<<<< HEAD
     <p className="dash-muted">Reference comparisons use supplied SD and exact pinned definitions. They do not verify the certificate or laboratory method.</p>
     <p>Shewhart rules: a standard outside ±3 supplied SD fails; two consecutive assessed standards outside ±2 supplied SD on the same side both fail; a single standard outside ±2 SD is a warning. Consecutive means adjacent in the displayed submitted-row order, which is import order, not analytical order; unassessed standards are skipped.</p>
     <figure ref={chart} style={{ margin: 0 }}><h4>CRM reference comparison</h4><ReferencePlot points={analysis.points} rows={rows} unit={analysis.scope.unit} /><figcaption>Solid line: supplied expected value. Short dashes: ±2 supplied SD warning lines. Long dashes: ±3 supplied SD. Squares: Shewhart rule failures. Points retain submitted-row gaps; no analytical order or trend is implied. Zero observations and negative mathematical reference lines use a linear scale.</figcaption><QaqcChartDownload chart={chart} available={analysis.points.length > 0 && new Set(analysis.points.map(p => JSON.stringify(p.bands))).size === 1} title="CRM reference comparison" filename={`qaqc-standards-${analysis.scope.batchId}.png`} captureCurrent={captureCurrent} lines={[`Supplied expected value: ${analysis.points[0]?.reference.expected}; supplied SD: ${analysis.points[0]?.reference.sd} ${analysis.scope.unit}.`, 'Linear scale. Solid: supplied expected value; short dashes: ±2 supplied SD warning lines; long dashes: ±3 supplied SD; squares: Shewhart rule failures. Submitted-row gaps retained; no analytical order or trend implied.', 'Supplied SD and exact pinned definitions; certificate and laboratory method not independently verified. Shewhart rules: outside ±3 SD fails; two consecutive outside ±2 SD on the same side fail, in import order.', ...Object.entries(analysis.summaries).map(([key, summary]) => `${categories[key]}: ${summary.count}/${summary.total}.`), `Shewhart failures: ${analysis.rules.fail.count}/${analysis.rules.fail.total}; warnings only: ${analysis.rules.warning.count}/${analysis.rules.warning.total}.`, ...provenance]} /></figure>
@@ -73,12 +61,6 @@ function Results({ snapshot, propertyName, captureCurrent }) {
     <p className="dash-muted">These three categories do not overlap. Being within a band is not approval of a laboratory job.</p>
     <ul aria-label="Shewhart rule summary">{Object.entries(analysis.rules).map(([key, summary]) => <li key={key}>{key === 'fail' ? 'Shewhart rule failures' : key === 'warning' ? 'Warnings only (outside ±2 supplied SD)' : 'No rule triggered'}: {summary.count}/{summary.total}{summary.percent == null ? ' (percentage unavailable)' : ` (${number(summary.percent)}%)`}</li>)}</ul>
     {analysis.rules.fail.count > 0 && <section aria-label="Standards failing Shewhart rules"><h4 style={{ margin: 0 }}>Failures</h4><ul>{analysis.points.filter(p => p.control.status === 'fail').map(p => <li key={p.id}>Row {p.sourceRow} · {p.sampleId}: {p.observed.raw} {p.unit} (z = {number(p.z)}) — {p.control.rules.map(r => CRM_RULES[r]).join('; ')}</li>)}</ul></section>}
-=======
-    <p className="dash-muted">Reference comparisons use supplied SD and exact pinned definitions. They do not verify the certificate or laboratory method, or assess consecutive results.</p>
-    <figure ref={chart} style={{ margin: 0 }}><h4>CRM reference comparison</h4><ReferencePlot points={analysis.points} rows={rows} unit={analysis.scope.unit} /><figcaption>Solid line: supplied expected value. Short dashes: ±2 supplied SD. Long dashes: ±3 supplied SD. Points retain submitted-row gaps; no analytical trend is implied. Zero observations and negative mathematical reference lines use a linear scale.</figcaption><QaqcChartDownload chart={chart} available={analysis.points.length > 0 && new Set(analysis.points.map(p => JSON.stringify(p.bands))).size === 1} title="CRM reference comparison" filename={`qaqc-standards-${analysis.scope.batchId}.png`} captureCurrent={captureCurrent} lines={[`Supplied expected value: ${analysis.points[0]?.reference.expected}; supplied SD: ${analysis.points[0]?.reference.sd} ${analysis.scope.unit}.`, 'Linear scale. Solid: supplied expected value; short dashes: ±2 supplied SD; long dashes: ±3 supplied SD. Submitted-row gaps retained; no analytical order or trend implied.', 'Supplied SD and exact pinned definitions; certificate and laboratory method not independently verified. Descriptive comparisons, not pass/fail or consecutive-result assessment.', ...Object.entries(analysis.summaries).map(([key, summary]) => `${categories[key]}: ${summary.count}/${summary.total}.`), ...provenance]} /></figure>
-    <ul>{Object.entries(analysis.summaries).map(([key, summary]) => <li key={key}>{categories[key]}: {summary.count}/{summary.total}{summary.percent == null ? ' (percentage unavailable)' : ` (${number(summary.percent)}%)`}</li>)}</ul>
-    <p className="dash-muted">These three categories do not overlap. Being within a band is not approval of a laboratory job.</p>
->>>>>>> origin/main
     {analysis.excludedCount > 0 && <details><summary>Why {analysis.excludedCount} standards are unassessed</summary><ul>{Object.entries(analysis.excludedByReason).filter(([, count]) => count).map(([reason, count]) => <li key={reason}>{analysis.excluded.find(row => row.reason === reason).message} ({count})</li>)}</ul></details>}
     <div className="ws-table-wrap" tabIndex="0" role="region" aria-label="Scrollable standards comparison table"><table className="ws-table" aria-label="Standards comparison data">
       <caption>Raw reported values and exact pinned references in submitted-row order. Below-detection values receive no substituted score.</caption>
@@ -87,11 +69,7 @@ function Results({ snapshot, propertyName, captureCurrent }) {
         <td>{row.sourceRow} · {row.sampleId}<details><summary>Record provenance</summary><p style={{ overflowWrap: 'anywhere' }}>Sample record: {row.id}<br />Import: {row.batchId}<br />Pinned CRM: {row.reference?.recordId || 'Unavailable'}<br />CRM import: {row.reference?.batchId || 'Unavailable'}<br />CRM submitted row: {row.reference?.sourceRow ?? 'Unavailable'}</p></details></td>
         <td>{row.observed.raw ?? 'Unavailable'} {row.observed.unit ?? ''}{row.observed.censored && <> (below detection{row.observed.detectionLimit != null && <>; recorded limit {row.observed.detectionLimit} {row.observed.unit}</>})</>}</td>
         <td>{row.reference ? <>Expected {row.reference.expected}; SD {row.reference.sd} {row.reference.unit}<br /><span style={{ overflowWrap: 'anywhere' }}>{row.reference.source}</span><br /><small>{row.reference.crmId} · {row.reference.revision}</small></> : 'Unavailable'}</td>
-<<<<<<< HEAD
         <td>{row.status === 'unassessed' ? `Unassessed: ${row.message}` : <>z = {number(row.z)}<br />{categories[row.category]}<br /><strong>{ruleText(row)}</strong><details><summary>Exact score and reference lines</summary><p>z: {row.z}<br />Expected: {row.bands.expected}<br />±2 SD: {row.bands.lower2} to {row.bands.upper2}<br />±3 SD: {row.bands.lower3} to {row.bands.upper3} {row.unit}</p></details></>}</td>
-=======
-        <td>{row.status === 'unassessed' ? `Unassessed: ${row.message}` : <>z = {number(row.z)}<br />{categories[row.category]}<details><summary>Exact score and reference lines</summary><p>z: {row.z}<br />Expected: {row.bands.expected}<br />±2 SD: {row.bands.lower2} to {row.bands.upper2}<br />±3 SD: {row.bands.lower3} to {row.bands.upper3} {row.unit}</p></details></>}</td>
->>>>>>> origin/main
       </tr>)}</tbody>
     </table></div>
     {rows.length > 50 && <div className="ws-row"><button type="button" className="btn" disabled={page === 0} onClick={() => setPage(p => p - 1)}>Previous standards</button><span>Page {page + 1} of {Math.ceil(rows.length / 50)}</span><button type="button" className="btn" disabled={(page + 1) * 50 >= rows.length} onClick={() => setPage(p => p + 1)}>Next standards</button></div>}

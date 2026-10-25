@@ -1,11 +1,6 @@
-<<<<<<< HEAD
 // Comparisons with exact pinned, supplied CRM definitions and Shewhart rules in
 // submitted-row order. No certification validation, unit conversion or
 // analytical-sequence claim: import order is not the laboratory run order.
-=======
-// Descriptive comparisons with exact pinned, supplied CRM definitions. No
-// certification validation, process acceptance, unit conversion or run rules.
->>>>>>> origin/main
 export const MAX_CRM_SNAPSHOT_ROWS = 5000;
 export const CRM_EXCLUSION_REASONS = Object.freeze({
   missing_element: 'The selected element is missing from this standard.',
@@ -49,7 +44,6 @@ export function crmReferenceComparison(observed, expected, sd) {
   return { z, bands, category };
 }
 
-<<<<<<< HEAD
 export const CRM_RULES = Object.freeze({
   outside3: 'Outside ±3 supplied SD',
   consecutive2: 'Two consecutive assessed standards outside ±2 supplied SD on the same side',
@@ -70,8 +64,6 @@ export function crmControlRules(points) {
   });
 }
 
-=======
->>>>>>> origin/main
 function observedSource(row, element) {
   const r = row.record;
   return { recordId: row.id, sampleId: r.sample_id, batchId: row.batch_id, sourceRow: row.source_row,
@@ -94,11 +86,7 @@ export function analyzeCrmSnapshot({ scope, records, crms, complete } = {}) {
   }
   if (typeof complete !== 'boolean') throw new Error('Snapshot completeness must be explicit.');
   const result = { scope: { ...scope }, complete, interpretation: 'descriptive', batchRecordCount: null,
-<<<<<<< HEAD
     selectedCount: null, eligibleCount: null, excludedCount: null, excludedByReason: null, points: [], excluded: [], summaries: null, rules: null };
-=======
-    selectedCount: null, eligibleCount: null, excludedCount: null, excludedByReason: null, points: [], excluded: [], summaries: null };
->>>>>>> origin/main
   if (!complete) return result;
   if (!Array.isArray(records) || !Array.isArray(crms) || records.length > MAX_CRM_SNAPSHOT_ROWS || crms.length > MAX_CRM_SNAPSHOT_ROWS) {
     throw new Error('A CRM snapshot is limited to 5,000 written samples and pinned definitions.');
@@ -157,7 +145,6 @@ export function analyzeCrmSnapshot({ scope, records, crms, complete } = {}) {
       result.excluded.push({ ...point, status: 'unassessed', reason, message: CRM_EXCLUSION_REASONS[reason] });
     } else result.points.push({ ...point, status: 'descriptive', ...calculated });
   }
-<<<<<<< HEAD
   const control = crmControlRules(result.points);
   result.points = result.points.map((point, i) => ({ ...point, control: control[i] }));
   const total = result.points.length;
@@ -171,15 +158,5 @@ export function analyzeCrmSnapshot({ scope, records, crms, complete } = {}) {
     excludedCount: result.excluded.length, excludedByReason,
     summaries: { within2: category('within2'), outside2Within3: category('outside2Within3'), outside3: category('outside3') },
     rules: { fail: rule('fail'), warning: rule('warning'), none: rule('none') } });
-=======
-  const total = result.points.length;
-  const category = name => {
-    const count = result.points.filter(point => point.category === name).length;
-    return { count, total, percent: total ? 100 * count / total : null };
-  };
-  Object.assign(result, { batchRecordCount: records.length, selectedCount: selected.length, eligibleCount: total,
-    excludedCount: result.excluded.length, excludedByReason,
-    summaries: { within2: category('within2'), outside2Within3: category('outside2Within3'), outside3: category('outside3') } });
->>>>>>> origin/main
   return result;
 }

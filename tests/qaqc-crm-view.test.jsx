@@ -33,12 +33,8 @@ it('requires a populated group choice and presents supplied-reference evidence w
   await choose(); await screen.findByText('3 assessed / 4 selected standards');
   expect(screen.getByText(/9 rows submitted; 4 records written/)).toHaveTextContent('rolled back');
   const plot = screen.getByRole('img', { name: /CRM reference plot, 3 assessed/ });
-<<<<<<< HEAD
   expect(plot.querySelector('polyline')).toBeNull(); expect(plot.querySelectorAll('circle')).toHaveLength(2);
   expect(plot.querySelectorAll('rect[data-rule="fail"]')).toHaveLength(1);
-=======
-  expect(plot.querySelector('polyline')).toBeNull(); expect(plot.querySelectorAll('circle')).toHaveLength(3);
->>>>>>> origin/main
   expect(plot.querySelectorAll('line')).toHaveLength(5); expect(plot).toHaveTextContent('Submitted row (not analysis order)');
   const table = screen.getByRole('table', { name: 'Standards comparison data' });
   expect(within(table).getByText('ND g/t (below detection; recorded limit 0.005 g/t)')).toBeTruthy();
@@ -46,7 +42,6 @@ it('requires a populated group choice and presents supplied-reference evidence w
   expect(within(table).getAllByText('Expected 10; SD 2 g/t')).toHaveLength(4);
   expect(screen.getByText('Outside ±2, within/on ±3 supplied SD: 2/3 (66.667%)')).toBeTruthy();
   expect(screen.getByText('Outside ±3 supplied SD: 1/3 (33.333%)')).toBeTruthy();
-<<<<<<< HEAD
   // Rows 1 and 7 are +2.5 SD but row 3 (-5 SD) lies between them in import order.
   expect(screen.getByText('Shewhart rule failures: 1/3 (33.333%)')).toBeTruthy();
   expect(screen.getByText('Warnings only (outside ±2 supplied SD): 2/3 (66.667%)')).toBeTruthy();
@@ -68,11 +63,6 @@ it('fails two consecutive same-side ±2 SD standards in displayed order and show
   expect(screen.getByRole('img').querySelectorAll('rect[data-rule="fail"]')).toHaveLength(2);
 });
 
-=======
-  expect(load.mock.calls[0][1]).toEqual(scope);
-});
-
->>>>>>> origin/main
 it('cancels stale selections and clears the report when deselected', async () => {
   let release; load.mockReturnValueOnce(new Promise(resolve => { release = resolve; }));
   render(view()); await choose(); await choose('1'); await screen.findByRole('table');
@@ -113,11 +103,7 @@ it('pages raw evidence in original submitted order and restores page on a new ch
 it('keeps zero-denominator percentages unavailable and explains numerical precision exclusions', async () => {
   const data = snapshot(1); data.records[0].record.values.Au = 1e-320; data.crms[0].record.expected = 0; data.crms[0].record.sd = 1e10;
   load.mockResolvedValue(data); render(view()); await choose(); await screen.findByText('0 assessed / 1 selected standards');
-<<<<<<< HEAD
   expect(screen.getAllByText(/0\/0 \(percentage unavailable\)/)).toHaveLength(6);
-=======
-  expect(screen.getAllByText(/0\/0 \(percentage unavailable\)/)).toHaveLength(3);
->>>>>>> origin/main
   expect(screen.getByRole('button', { name: 'Download CRM reference comparison PNG' })).toBeDisabled();
   expect(screen.queryByRole('img')).toBeNull(); expect(within(screen.getByRole('table')).getByText(/Unassessed: The score or reference bands cannot be represented/)).toBeTruthy();
 });
