@@ -109,7 +109,7 @@ function readAssays(t, problems) {
   const c = matchCols(t.header), n = t.header.map(norm), used = new Set([c.hole, c.from, c.to]);
   if (c.hole === undefined || c.from === undefined || c.to === undefined) { problems.push(`${t.name}: no hole ID, From and To columns, so it is not read as assays.`); return { elements: [], rows: new Map() }; }
   const cols = t.header.map((h, i) => ({ h, i })).filter(({ i }) => !used.has(i) && !NOT_ELEMENT.test(n[i]) && !/(^|_)id$/.test(n[i]) && !/units?$/.test(n[i]))
-    .filter(({ i }) => { let k = 0, tot = 0; for (const r of t.rows) { const v = cell(r[i]); if (!v) continue; tot++; if (parseAssay(v).value !== null || parseAssay(v).dl) k++; } return tot && k / tot >= 0.8; });
+    .filter(({ i }) => { let k = 0, tot = 0; for (const r of t.rows) { const v = cell(r[i]); if (!v) continue; const a = parseAssay(v); if (a.missing) continue; tot++; if (a.value !== null || a.dl) k++; } return tot && k / tot >= 0.8; });
   const elements = cols.map(({ h }) => parseElementHeader(h)), rows = new Map();
   for (const r of t.rows) {
     const id = key(r[c.hole]), f = num(r[c.from]), to = num(r[c.to]);

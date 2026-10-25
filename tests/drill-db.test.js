@@ -130,7 +130,8 @@ describe('below-detection and other assay values', () => {
     expect(parseAssay('BDL')).toEqual({ value: null, dl: true });
     expect(parseAssay('>10')).toEqual({ value: 10, over: true });
     expect(parseAssay(' 0.42 ')).toEqual({ value: 0.42 });
-    for (const v of ['', '-', 'NS', 'IS', 'n/a']) expect(parseAssay(v)).toEqual({ value: null, missing: true });
+    expect(parseAssay('')).toEqual({ value: null, missing: true });
+    for (const v of ['-', 'NS', 'IS', 'n/a']) expect(parseAssay(v)).toEqual({ value: null, missing: true, raw: v });
     expect(parseAssay('0.4%')).toMatchObject({ value: null, error: '"0.4%" is not a number' });
   });
 });
@@ -172,7 +173,7 @@ describe('checking an import', () => {
     expect(r.warnings.map((w) => w.message)).toEqual([
       'Overlapping intervals in 1 hole: R-1',
       'Unsampled gaps between intervals in 1 hole: R-2',
-      '1 value over the upper detection limit (">") kept at the limit',
+      '1 value over the upper detection limit (">") in Cu kept at the limit, not a measured grade; re-assay by an over-limit method',
     ]);
   });
 

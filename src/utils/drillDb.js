@@ -263,16 +263,22 @@ const BDL_WORDS = /^(bdl|bld|nd|<dl|<lod|<ld|lod|trace|tr)$/i;
 // guess whether a comma means a decimal point or a thousands separator.
 const decimalValue = (value, comma) => comma ? cell(value).replace(/^([<>]?\s*[-+]?\d+),(\d+(?:e[-+]?\d+)?)$/i, '$1.$2') : value;
 
+// Database "no value" codes, never read as a negative detection limit. A
+// preset (shared/drillPresets.json) or mapping can replace them with `missing`.
+export const MISSING_SENTINELS = ['-99', '-999', '-9999'];
+
 /**
- * One assay cell → { value, dl?, over?, missing?, error? }. "<0.005" is below
+ * One assay cell → { value, dl?, over?, missing?, raw?, error? }. "<0.005" is below
  * detection (dl 0.005) and stored by `mode`; a negative number is the same
- * (labs write -0.005 for <0.005); "BDL" has no known limit and keeps no value;
- * ">10" is over the upper limit and kept as 10.
+ * (labs write -0.005 for <0.005) unless it is a sentinel (-999: missing);
+ * "BDL" has no known limit and keeps no value; IS, NSS, NS, LNR are missing
+ * with their text in `raw`; ">10" is over the upper limit, kept as 10 and flagged.
  */
-export function parseAssay(raw, mode = 'half') {
+export function parseAssay(raw, mode = 'half', sentinels = MISSING_SENTINELS) {
   const v = cell(raw);
-  if (MISSING.test(v)) return { value: null, missing: true };
+  if (MISSING.test(v)) return v ? { value: null, missing: true, raw: v } : { value: null, missing: true };
   if (BDL_WORDS.test(v)) return { value: null, dl: true };
+  if (sentinels.some((s) => Number(s) === Number(v))) return { value: null, missing: true, raw: v };
   const m = v.match(/^([<>])\s*(.+)$/);
   const num = Number(m ? m[2] : v);
   if (!Number.isFinite(num) || Math.abs(num) >= 1e12) return { value: null, error: `"${v}" is not a number` };
@@ -346,7 +352,8 @@ export function buildImport(kind, { header, rows, lines: fileLines = null }, map
   if (noUnit.length) warnings.push({ kind: 'no-unit', holes: [], message: `No unit for ${noUnit.join(', ')}. Set one so grades are never read in the wrong unit` });
 
   const mode = mapping.bdl || 'half';
-  const stats = { bdl: 0, over: 0, skipped: 0, dipsFlipped: false };
+  const sentinels = Array.isArray(mapping.missing) ? mapping.missing.map(String) : MISSING_SENTINELS;
+  const stats = { bdl: 0, over: 0, missing: {}, skipped: 0, dipsFlipped: false }, overElements = new Set();
   const dips = [];
   const seen = new Map();
   rows.forEach((r, i) => {
@@ -392,11 +399,12 @@ export function buildImport(kind, { header, rows, lines: fileLines = null }, map
     if (kind === 'assays') {
       const values = {}, bdl = {};
       for (const e of elements) {
-        const p = parseAssay(decimalValue(r[header.indexOf(e.column)], mapping.decimalComma), mode);
+        const p = parseAssay(decimalValue(r[header.indexOf(e.column)], mapping.decimalComma), mode, sentinels);
         const name = cell(e.name);
         if (p.error) { fail(`${e.column}: ${p.error}`); continue; }
         if (p.dl !== undefined) { bdl[name] = p.dl; stats.bdl++; }
-        if (p.over) stats.over++;
+        if (p.over) { stats.over++; overElements.add(name); }
+        if (p.raw) { const k = p.raw.toUpperCase(); stats.missing[k] = (stats.missing[k] || 0) + 1; }
         if (p.value !== null) values[name] = p.value;
       }
       o.values = values;
@@ -439,7 +447,9 @@ export function buildImport(kind, { header, rows, lines: fileLines = null }, map
     warn('overlapping-intervals', overlap, (n) => `Overlapping intervals in ${plural(n, 'hole')}`);
     warn('gaps', gap, (n) => `${kind === 'alteration' ? 'Gaps between logged intervals' : 'Unsampled gaps between intervals'} in ${plural(n, 'hole')}`);
   }
-  if (stats.over) warnings.push({ kind: 'over-limit', holes: [], message: `${plural(stats.over, 'value')} over the upper detection limit (">") kept at the limit` });
+  if (stats.over) warnings.push({ kind: 'over-limit', holes: [], message: `${plural(stats.over, 'value')} over the upper detection limit (">") in ${[...overElements].join(', ')} kept at the limit, not a measured grade; re-assay by an over-limit method` });
+  const codes = Object.entries(stats.missing);
+  if (codes.length) warnings.push({ kind: 'no-value-codes', holes: [], message: `${plural(codes.reduce((t, [, c]) => t + c, 0), 'value')} stored as no value: ${codes.map(([k, c]) => `${k} ×${c.toLocaleString('en-US')}`).join(', ')}` });
   if (stats.bdl) warnings.push({ kind: 'bdl', holes: [], message: `${plural(stats.bdl, 'value')} below detection, stored as ${BDL_MODES.find((m) => m.value === mode)?.label.toLowerCase()} and flagged` });
   if (!out.length && !errorCount) err(null, 'The file has no data rows.');
   return { rows: out, lines, errors, errorCount, warnings, stats };

@@ -1,0 +1,27 @@
+{
+  "readme": [
+    "Built-in, read-only drill import presets, keyed by header signature (src/utils/drillPresets.js).",
+    "Each preset: id, vendor, kind (collars | surveys | assays | lithology | alteration), label (read as 'Looks like <label>: use its mapping?'),",
+    "sources (URLs of the published documentation or sample export the headers come from), required (headers that must all be in the file),",
+    "columns ({ field: header }, the fields in src/utils/drillDb.js FIELDS), and optionally elements ([{ column, name, unit }]) and",
+    "missing (strings read as no value, replacing the default -99, -999, -9999).",
+    "Headers compare without case, spaces or punctuation. Add only headers taken from a cited source or a real export sample.",
+    "Skipped for want of a public header list (2026-10): acQuire (export pages are user-defined; the GIM Suite help is behind a sign-in),",
+    "Geotic (no published export format). MX Deposit exports use the labels each account configures, so only its fixed header fields are here."
+  ],
+  "presets": [
+    {
+      "id": "mx-deposit-collars",
+      "vendor": "MX Deposit",
+      "kind": "collars",
+      "label": "an MX Deposit collar (header) export",
+      "sources": [
+        "https://support.mxdeposit.net/hc/en-us/articles/360059187353-Export-Data",
+        "https://help.seequent.com/MXDeposit/en-GB/Content/admin/logging/headers.htm"
+      ],
+      "notes": "Export Data: CSV headers match the labels in MX Deposit; the header file holds the top coordinates row as columns prefixed 'coordinates.' (coordinates.grid, coordinates.northing, coordinates.easting) and the export-grid copy as 'converted.coordinates.'. Headers and Fields: 'Hole number' is a required header field. The native coordinates are mapped; coordinates.grid names their grid.",
+      "required": ["coordinates.easting", "coordinates.northing"],
+      "columns": { "hole_id": "Hole number", "x": "coordinates.easting", "y": "coordinates.northing" }
+    }
+  ]
+}

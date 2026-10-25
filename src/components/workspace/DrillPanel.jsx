@@ -9,6 +9,7 @@ import { ErrorNote } from './shared';
 import { lazyGuarded } from '../../utils/preloadGuard';
 import DrillCoordinateSource from './DrillCoordinateSource';
 import { keepFileSource, sourceCoordinateMapping } from '../../utils/drillCoordinates';
+import { detectPreset, presetMapping } from '../../utils/drillPresets';
 
 const ResultsPanel = lazyGuarded(() => import('./ResultsPanel'));
 const ExcelSheetPicker = lazyGuarded(() => import('./ExcelSheetPicker'));
@@ -71,6 +72,7 @@ export function Importer({ db, property, orgId, onDone }) {
   const [error, setError] = useState(null);
   const [note, setNote] = useState(null);
   const [conversion, setConversion] = useState(null);
+  const [preset, setPreset] = useState(null); // a vendor preset the header matches, offered until used or dismissed
   const batchId = useRef(null);
   const input = useRef(null);
   const readVersion = useRef(0);
@@ -85,13 +87,13 @@ export function Importer({ db, property, orgId, onDone }) {
 
   const built = useMemo(() => (file && mapping ? buildImport(kind, file, mapping) : null), [file, kind, mapping]);
   const change = (m) => { operationVersion.current++; setBusy(null); setMapping(m); setDiff(null); setNote(null); batchId.current = null; };
-  const reset = () => { readVersion.current++; operationVersion.current++; setWorkbook(null); setFile(null); setMapping(null); setDiff(null); setTplName(''); setBusy(null); batchId.current = null; };
+  const reset = () => { readVersion.current++; operationVersion.current++; setWorkbook(null); setFile(null); setMapping(null); setDiff(null); setTplName(''); setBusy(null); setPreset(null); batchId.current = null; };
   const choose = (t, name, excel = null) => {
     if (excel) setWorkbook(w => ({ ...w, selection: excel }));
     const k = detectKind(t.header, t.rows, excel?.sheet || name) || 'assays';
     setFile({ name, ...t, excel }); setKind(k);
     setMapping({ ...autoMapping(k, t.header, t.rows, { name, crs: property.crs, decimalComma: excel?.decimalComma }), ...(excel ? { excel } : {}) });
-    setDiff(null); batchId.current = null;
+    setPreset(detectPreset(t.header)); setDiff(null); batchId.current = null;
   };
 
   const open = async (f) => {
@@ -175,12 +177,26 @@ export function Importer({ db, property, orgId, onDone }) {
     setNote(kind === 'collars' && mapped.crs && mapped.crs !== mapping.crs
       ? `Columns applied; the source CRS stays ${mapping.crs || 'unspecified'}. This template used ${mapped.crs}—confirm the source coordinate system below against your file.` : null);
   };
+  const usePreset = () => {
+    const base = autoMapping(preset.kind, file.header, file.rows, { name: file.name, crs: property.crs, decimalComma: mapping.decimalComma });
+    const mapped = presetMapping(preset, file.header, base);
+    setKind(preset.kind);
+    change({ ...(preset.kind === 'collars' && kind === 'collars' ? keepFileSource(mapped, mapping) : mapped), ...(file.excel ? { excel: file.excel } : {}) });
+    setNote(`Columns set from the ${preset.vendor} preset. Check them below before importing.`); setPreset(null);
+  };
   const problems = built ? { ...built, errors: diff?.ok === false ? serverErrors(diff, built.lines) : built.errors, errorCount: diff?.ok === false ? diff.error_count : built.errorCount } : null;
   return (
     <form className="ws-form" aria-label="Import drill data" onSubmit={(e) => { e.preventDefault(); if (diff?.ok) commit(); else check(); }}>
       <fieldset disabled={busy === 'commit'} className="ws-stack" style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
       <ErrorNote error={error} onDismiss={() => setError(null)} />
       {note && <p className="ws-notice" role="status">{note}</p>}
+      {preset && (
+        <div className="ws-notice ws-row" role="group" aria-label="Import preset">
+          <span>Looks like {preset.label}: use its mapping?</span>
+          <button type="button" className="btn" onClick={usePreset}>Use its mapping</button>
+          <button type="button" className="btn" onClick={() => setPreset(null)}>Dismiss</button>
+        </div>
+      )}
       <div className="ws-row">
         <span className="ws-list-main"><b>{file.name}</b><small>{n(file.rows.length)} rows · {file.header.length} columns</small></span>
         {file.excel && <button type="button" className="btn" disabled={!!busy} onClick={() => { operationVersion.current++; setFile(null); setMapping(null); setDiff(null); batchId.current = null; }}>Choose sheet or header</button>}
