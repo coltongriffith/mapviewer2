@@ -199,7 +199,7 @@ export function AuthProvider({ children }) {
   // Kept for existing call sites and pricing copy. isPro now means "entitled
   // to Pro", not "not yet proven free" — it no longer fails open.
   const isPro = tier === TIERS.PRO || tier === TIERS.COMPANY;
-  const planDenied = tier !== TIERS.PRO;
+  const planDenied = tier !== TIERS.PRO && tier !== TIERS.COMPANY;
 
   return (
     <AuthContext.Provider value={{
