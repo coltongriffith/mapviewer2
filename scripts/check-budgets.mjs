@@ -249,7 +249,8 @@ const BUDGETS = {
   // Combined Excel + page exports + GA4 budget; all changes retained when integrating main.
   // Source CRS selection and same-datum preview add ~2.2 KiB to the lazy
   // drill import UI. Proj4 is reused lazily; editor/startup limits unchanged.
-  totalAuthJsGzipKb: 1095.3,
+    // Lab certificate links/retractions in the lazy Drill tab (+2.4 KiB); initial routes unchanged.
+  totalAuthJsGzipKb: 1095.5,
   // 1009.4 → 1026.3 (measured 1026.0): lazy XLSX reader (~13.8 KiB), sheet/header preview
   // (~1.1 KiB), import wiring and numeric-format handling. Shared fflate adds ~1.2 KiB
   // for async ZIP workers; it remains one copy with the existing draft compression.
@@ -306,7 +307,9 @@ const BUDGETS = {
   // Same paginated table export (~2.9 KiB lazy); editor/homepage/3D startup budgets unchanged.
   // GA4 (measured 1006.6): as totalAuthJsGzipKb above.
   // Combined Excel + page exports + GA4, as configured above.
-  totalJsGzipKb: 1028.1, // Source coordinate review: matching lazy-only increase.
+  // Source coordinate review: matching lazy-only increase.
+  // Same lazy certificate controls; measured 1027.9 KiB.
+  totalJsGzipKb: 1028.2,
   // 940.9 → 957.8 (measured 957.5): Excel import, as totalAuthJsGzipKb above.
   // 940.9 → 944.8 (P2-8, measured 944.6): the same lazy property recipe path
   // in the unconfigured build. Its initial route budgets also stay unchanged.

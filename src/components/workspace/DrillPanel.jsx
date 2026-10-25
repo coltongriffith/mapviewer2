@@ -12,6 +12,7 @@ import { keepFileSource } from '../../utils/drillCoordinates';
 
 const ResultsPanel = lazyGuarded(() => import('./ResultsPanel'));
 const ExcelSheetPicker = lazyGuarded(() => import('./ExcelSheetPicker'));
+const BatchCertificates = lazyGuarded(() => import('./BatchCertificates'));
 
 // The property's drill database: what is stored, importing CSV or XLSX (columns,
 // checks, the diff, commit) and the import history with Roll back. Loaded
@@ -284,7 +285,7 @@ export default function DrillPanel({ property, perms }) {
                   <tr key={b.id}>
                     <td>{formatWhen(b.created_at)}</td>
                     <td>{kindLabel(b.kind)}</td>
-                    <td>{b.filename || '—'}</td>
+                    <td>{b.filename || '—'}{b.kind === 'assays' && <Suspense fallback={null}><BatchCertificates client={supabase} property={property} batch={b} canEdit={perms.edit} /></Suspense>}</td>
                     <td>{diffSentence(b.kind, b.summary)}</td>
                     <td>{b.created_by_email || '—'}</td>
                     <td>

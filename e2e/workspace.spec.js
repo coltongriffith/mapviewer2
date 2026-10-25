@@ -32,6 +32,62 @@ const BATCH0 = '00000000-0000-4000-8000-0000000000e0';
 const collarBatch = { id: BATCH0, kind: 'collars', filename: 'Rails collars.csv', rows: 12, rows_written: 12, summary: { new: 12, changed: 0, unchanged: 0, new_holes: 12 }, created_at: '2026-10-18T00:00:00Z', created_by_email: 'cfo@star.test', rolled_back_at: null, blocked_by: null };
 const drillSummary = () => ({ collars: 12, planned: 2, metres: 3420.5, surveys: 40, assays: 0, lithology: 0, holes: 12, elements: [], limit: 20000, batches: [{ ...collarBatch }] });
 
+test('lab certificates: pin a PDF version, download it and retract a mistaken link', async ({ page }) => {
+  const fake = await fakeSupabase(page);
+  fake.drill.batches = [{ ...collarBatch, kind: 'assays', filename: 'assays.csv' }];
+  fake.files = [{ ...assays, name: 'Lab certificate.pdf', kind: 'document', role: null, version: 1, path: `${ORG}/${PROP}/${FILE}/v1/lab.pdf` }];
+  const links = [];
+  await page.route('**/rest/v1/rpc/drill_batch_certificates', route => route.fulfill({ json: links }));
+  await page.route('**/rest/v1/drill_batch_files*', route => {
+    const request = route.request();
+    if (request.method() === 'POST') {
+      expect(request.postDataJSON()).toEqual({ batch_id: BATCH0, file_id: FILE, version: 1 });
+      if (links.length) return route.fulfill({ status: 409, json: { code: '23505', message: 'duplicate' } });
+      links.push({ file_id: FILE, version: 1, name: 'Lab certificate.pdf', storage_path: fake.files[0].path });
+    } else {
+      expect(request.postDataJSON()).toEqual({ retraction_reason: 'Wrong laboratory job' });
+      links[0].retracted_at = '2026-10-23T00:00:00Z'; links[0].retraction_reason = 'Wrong laboratory job';
+    }
+    return route.fulfill({ json: links });
+  });
+  await page.route('**/storage/v1/object/sign/property-files/**?token=t*', route => route.fulfill({ contentType: 'application/pdf', headers: { 'content-disposition': 'attachment; filename="lab.pdf"' }, body: '%PDF-1.4\n% synthetic certificate fixture' }));
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold');
+  await page.getByRole('tab', { name: 'Drill data' }).click();
+  await page.getByRole('button', { name: 'Lab certificates' }).click();
+  await page.getByLabel('Certificate PDF').selectOption(FILE);
+  await page.getByRole('button', { name: 'Link certificate' }).click();
+  await expect(page.getByText('Certificate linked to this assay import.')).toBeVisible();
+  fake.files[0] = { ...fake.files[0], version: 2, path: `${ORG}/${PROP}/${FILE}/v2/lab.pdf` };
+  const downloaded = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Lab certificate.pdf · v1' }).click();
+  await downloaded;
+  expect(fake.signed).toEqual([`${ORG}/${PROP}/${FILE}/v1/lab.pdf`]);
+  await page.getByRole('button', { name: 'Retract link' }).click();
+  await page.getByLabel('Why retract Lab certificate.pdf?').fill('Wrong laboratory job');
+  await page.getByRole('button', { name: 'Confirm retraction' }).click();
+  await expect(page.getByText('· Retracted: Wrong laboratory job')).toBeVisible();
+  await page.getByRole('button', { name: 'Link certificate' }).click();
+  await expect(page.getByRole('alert')).toContainText('was retracted from this import');
+  await expect(page.getByText('Certificate linked to this assay import.')).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
+});
+
+test('lab certificates: a saved PDF with a failed link stays available for retry', async ({ page }) => {
+  const fake = await fakeSupabase(page);
+  fake.drill.batches = [{ ...collarBatch, kind: 'assays', filename: 'assays.csv' }];
+  await page.route('**/rest/v1/rpc/drill_batch_certificates', route => route.fulfill({ json: [] }));
+  await page.route('**/rest/v1/drill_batch_files*', route => route.fulfill({ status: 403, json: { code: '42501', message: 'permission denied' } }));
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold');
+  await page.getByRole('tab', { name: 'Drill data' }).click();
+  await page.getByRole('button', { name: 'Lab certificates' }).click();
+  await page.getByLabel('Upload lab certificate').setInputFiles({ name: 'New lab.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n% synthetic fixture') });
+  await expect(page.getByRole('alert')).toContainText('was saved in the property library, but was not linked');
+  await expect(page.getByText('Certificate linked to this assay import.')).toHaveCount(0);
+  expect(fake.files.find(f => f.name === 'New lab.pdf')).toBeTruthy();
+  await expect(page.getByLabel('Certificate PDF')).toHaveValue(fake.files.find(f => f.name === 'New lab.pdf').id);
+  await expect(page.getByRole('button', { name: '+ Import CSV or Excel' })).toBeEnabled();
+});
+
 async function fakeSupabase(page, { role = 'owner', orgs = [org(role)], properties = null } = {}) {
   const fake = { rpc: [], orgs, properties: properties || (orgs.length ? [property] : []), invites: [], files: [{ ...assays }], uploads: [], signed: [], patches: [], drill: drillSummary(), templates: [], recipes: [], assayRows: [] };
   await page.route('**/api/track', (route) => route.fulfill({ status: 204 }));
