@@ -42,7 +42,12 @@ describe('/api/claims Quebec search: co-owners', () => {
       urls.push(decodeURIComponent(u.search));
       const offset = Number(u.searchParams.get('offset')), limit = Number(u.searchParams.get('limit'));
       // Unordered, PostgREST may return rows in any order; reverse to show it.
-      const ordered = u.searchParams.get('order') ? [...rows].sort(byColumns) : [...rows].reverse();
+      // Only the tag_number filters matter here (in., gte., lt.).
+      const keep = (r) => u.searchParams.getAll('tag_number').every((f) => {
+        const [op, v] = [f.slice(0, f.indexOf('.')), f.slice(f.indexOf('.') + 1)];
+        return op === 'in' ? v.slice(1, -1).split(',').includes(r.tag_number) : op === 'gte' ? r.tag_number >= v : op === 'lt' ? r.tag_number < v : true;
+      });
+      const ordered = (u.searchParams.get('order') ? [...rows].sort(byColumns) : [...rows].reverse()).filter(keep);
       const page = ordered.slice(offset, offset + limit);
       return { ok: true, status: 200, headers: new Map(), json: async () => page, text: async () => JSON.stringify(page) };
     }));
@@ -87,6 +92,15 @@ describe('/api/claims Quebec search: co-owners', () => {
     const split = res.body.features.find((f) => f.properties.TAG_NUMBER === '2400999');
     expect(split.properties.OWNERS).toEqual(['Azimut co-owner inc.', 'Exploration Azimut inc.']);
     expect(res.body.meta).toMatchObject({ returned: 1499, totalKnown: 1499, truncated: false });
+  });
+
+  it('keeps a prefix search truncated when merging co-owners leaves fewer claims than rows', async () => {
+    for (let i = 0; i < 100; i++) for (const o of ['Owner A inc.', 'Owner B inc.']) rows.push(row(String(2_400_000 + i), o));
+    const res = await run({ q: '24000', type: 'number' });
+    expect(res.statusCode).toBe(200);
+    expect(res.body.features).toHaveLength(25);
+    expect(res.body.features[0].properties.OWNERS).toEqual(['Owner A inc.', 'Owner B inc.']);
+    expect(res.body.meta.truncated).toBe(true);
   });
 
   it('leaves a single-owner claim as it was', async () => {

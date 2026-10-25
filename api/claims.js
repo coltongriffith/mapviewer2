@@ -2842,7 +2842,9 @@ async function searchQc(term, type, res, { numberList = null } = {}) {
         NEAR_MISS_LIMIT,
       );
       const kept = r.features.filter((f) => String(f.properties?.TAG_NUMBER || '').toUpperCase().startsWith(s.term));
-      return { features: kept, meta: { ...r.meta, truncated: r.meta?.truncated === true && kept.length >= NEAR_MISS_LIMIT } };
+      // Rows are fetched up to the ceiling and then merged per claim, so test
+      // "every fetched claim is a prefix match" rather than the claim count.
+      return { features: kept, meta: { ...r.meta, truncated: r.meta?.truncated === true && kept.length === r.features.length } };
     });
     const widened = step && step.match !== 'exact';
     const shown = widened ? features.slice(0, NEAR_MISS_LIMIT) : features;
