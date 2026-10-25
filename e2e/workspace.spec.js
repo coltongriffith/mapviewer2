@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { xlsxFixture } from '../tests/fixtures/xlsx.js';
 import readExcelFile from 'read-excel-file/node';
 import { unzipSync } from 'fflate';
+import { readFile } from 'node:fs/promises';
 
 // Company workspaces against an in-memory Supabase (auth, REST and RPC are
 // mocked; no request leaves the browser). Needs the configured client build
@@ -31,6 +32,341 @@ const assays = { id: FILE, name: 'assays.csv', kind: 'drill', role: 'assays', ve
 const BATCH0 = '00000000-0000-4000-8000-0000000000e0';
 const collarBatch = { id: BATCH0, kind: 'collars', filename: 'Rails collars.csv', rows: 12, rows_written: 12, summary: { new: 12, changed: 0, unchanged: 0, new_holes: 12 }, created_at: '2026-10-18T00:00:00Z', created_by_email: 'cfo@star.test', rolled_back_at: null, blocked_by: null };
 const drillSummary = () => ({ collars: 12, planned: 2, metres: 3420.5, surveys: 40, assays: 0, lithology: 0, holes: 12, elements: [], limit: 20000, batches: [{ ...collarBatch }] });
+
+test('lab certificates: pin a PDF version, download it and retract a mistaken link', async ({ page }) => {
+  const fake = await fakeSupabase(page);
+  fake.drill.batches = [{ ...collarBatch, kind: 'assays', filename: 'assays.csv' }];
+  fake.files = [{ ...assays, name: 'Lab certificate.pdf', kind: 'document', role: null, version: 1, path: `${ORG}/${PROP}/${FILE}/v1/lab.pdf` }];
+  const links = [];
+  await page.route('**/rest/v1/rpc/drill_batch_certificates', route => route.fulfill({ json: links }));
+  await page.route('**/rest/v1/drill_batch_files*', route => {
+    const request = route.request();
+    if (request.method() === 'POST') {
+      expect(request.postDataJSON()).toEqual({ batch_id: BATCH0, file_id: FILE, version: 1 });
+      if (links.length) return route.fulfill({ status: 409, json: { code: '23505', message: 'duplicate' } });
+      links.push({ file_id: FILE, version: 1, name: 'Lab certificate.pdf', storage_path: fake.files[0].path });
+    } else {
+      expect(request.postDataJSON()).toEqual({ retraction_reason: 'Wrong laboratory job' });
+      links[0].retracted_at = '2026-10-23T00:00:00Z'; links[0].retraction_reason = 'Wrong laboratory job';
+    }
+    return route.fulfill({ json: links });
+  });
+  await page.route('**/storage/v1/object/sign/property-files/**?token=t*', route => route.fulfill({ contentType: 'application/pdf', headers: { 'content-disposition': 'attachment; filename="lab.pdf"' }, body: '%PDF-1.4\n% synthetic certificate fixture' }));
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold');
+  await page.getByRole('tab', { name: 'Drill data' }).click();
+  await page.getByRole('button', { name: 'Lab certificates' }).click();
+  await page.getByLabel('Certificate PDF').selectOption(FILE);
+  await page.getByRole('button', { name: 'Link certificate' }).click();
+  await expect(page.getByText('Certificate linked to this assay import.')).toBeVisible();
+  fake.files[0] = { ...fake.files[0], version: 2, path: `${ORG}/${PROP}/${FILE}/v2/lab.pdf` };
+  const downloaded = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Lab certificate.pdf · v1' }).click();
+  await downloaded;
+  expect(fake.signed).toEqual([`${ORG}/${PROP}/${FILE}/v1/lab.pdf`]);
+  await page.getByRole('button', { name: 'Retract link' }).click();
+  await page.getByLabel('Why retract Lab certificate.pdf?').fill('Wrong laboratory job');
+  await page.getByRole('button', { name: 'Confirm retraction' }).click();
+  await expect(page.getByText('· Retracted: Wrong laboratory job')).toBeVisible();
+  await page.getByRole('button', { name: 'Link certificate' }).click();
+  await expect(page.getByRole('alert')).toContainText('was retracted from this import');
+  await expect(page.getByText('Certificate linked to this assay import.')).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
+});
+
+test('lab certificates: a saved PDF with a failed link stays available for retry', async ({ page }) => {
+  const fake = await fakeSupabase(page);
+  fake.drill.batches = [{ ...collarBatch, kind: 'assays', filename: 'assays.csv' }];
+  await page.route('**/rest/v1/rpc/drill_batch_certificates', route => route.fulfill({ json: [] }));
+  await page.route('**/rest/v1/drill_batch_files*', route => route.fulfill({ status: 403, json: { code: '42501', message: 'permission denied' } }));
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold');
+  await page.getByRole('tab', { name: 'Drill data' }).click();
+  await page.getByRole('button', { name: 'Lab certificates' }).click();
+  await page.getByLabel('Upload lab certificate').setInputFiles({ name: 'New lab.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n% synthetic fixture') });
+  await expect(page.getByRole('alert')).toContainText('was saved in the property library, but was not linked');
+  await expect(page.getByText('Certificate linked to this assay import.')).toHaveCount(0);
+  expect(fake.files.find(f => f.name === 'New lab.pdf')).toBeTruthy();
+  await expect(page.getByLabel('Certificate PDF')).toHaveValue(fake.files.find(f => f.name === 'New lab.pdf').id);
+  await expect(page.getByRole('button', { name: '+ Import CSV or Excel' })).toBeEnabled();
+});
+
+// Observe the browser's locally generated SVG; download and decode the actual PNG.
+async function checkChartDownload(page, testInfo, title, filename, expected) {
+  await page.evaluate(() => {
+    window.__chartSvg = [];
+    const original = URL.createObjectURL;
+    URL.createObjectURL = function (blob) {
+      if (blob.type.startsWith('image/svg+xml')) window.__chartSvg.push(blob.text());
+      return original.call(this, blob);
+    };
+  });
+  const pending = page.waitForEvent('download');
+  await page.getByRole('button', { name: `Download ${title} PNG` }).click();
+  const download = await pending; expect(download.suggestedFilename()).toBe(filename);
+  const path = testInfo.outputPath(filename); await download.saveAs(path);
+  const bytes = await readFile(path);
+  expect(bytes.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
+  expect(bytes.readUInt32BE(16)).toBe(1920); expect(bytes.readUInt32BE(20)).toBeLessThanOrEqual(4096);
+  const labels = await page.evaluate(async () => {
+    const text = await Promise.all(window.__chartSvg);
+    return text.map(svg => new DOMParser().parseFromString(svg, 'image/svg+xml').documentElement.textContent).join('');
+  });
+  for (const text of expected) expect(labels).toContain(text);
+  expect(labels).toContain('Rails Copper-Gold'); expect(labels).toContain('Historical written-import subset only');
+  expect(labels).toContain('not a full-file, whole-job or current-property report');
+  const pixels = await page.evaluate(async data => {
+    const image = new Image(); image.src = `data:image/png;base64,${data}`; await image.decode();
+    const canvas = document.createElement('canvas'); canvas.width = image.width; canvas.height = image.height;
+    const ctx = canvas.getContext('2d'); ctx.drawImage(image, 0, 0);
+    const values = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    let blue = 0, dark = 0;
+    for (let i = 0; i < values.length; i += 4) { if (values[i+2] > 100 && values[i+2] > values[i] * 2) blue++; if (values[i] < 100 && values[i+1] < 100 && values[i+2] < 100) dark++; }
+    return { blue, dark, corner: [...values.slice(0, 4)] };
+  }, bytes.toString('base64'));
+  expect(pixels.blue).toBeGreaterThan(30); expect(pixels.dark).toBeGreaterThan(2000); expect(pixels.corner).toEqual([255, 255, 255, 255]);
+}
+
+// The PDF is intentionally raster-based. Inspect all page text at its draw
+// boundary as well as the actual file/page structure; local release validation
+// also renders representative downloaded pages with PyMuPDF.
+async function checkComparisonPdf(page, testInfo, filename, expected, artifactPrefix = '') {
+  await page.evaluate(() => {
+    window.__pdfText = [];
+    if (!window.__pdfTextHook) {
+      window.__pdfTextHook = true;
+      const original = CanvasRenderingContext2D.prototype.fillText;
+      CanvasRenderingContext2D.prototype.fillText = function (text, ...rest) {
+        if (this.canvas.width === 1584 && this.canvas.height === 1224) window.__pdfText.push(text);
+        return original.call(this, text, ...rest);
+      };
+    }
+  });
+  const pending = page.waitForEvent('download'); await page.getByRole('button', { name: 'Download comparison PDF', exact: true }).click();
+  const download = await pending; expect(download.suggestedFilename()).toBe(filename);
+  const path = testInfo.outputPath(artifactPrefix + filename); await download.saveAs(path); const bytes = await readFile(path);
+  expect(bytes.subarray(0, 5).toString()).toBe('%PDF-'); expect(bytes.length).toBeLessThanOrEqual(32 * 1024 * 1024);
+  const pdf = bytes.toString('latin1'), pages = [...pdf.matchAll(/\/Type\s*\/Page\b/g)].length;
+  expect(pages).toBeGreaterThan(1); expect(pages).toBeLessThanOrEqual(100);
+  const boxes = [...pdf.matchAll(/\/MediaBox\s*\[([^\]]+)\]/g)].map(match => match[1].trim().split(/\s+/).map(Number));
+  expect(boxes.length).toBe(pages); expect(boxes.every(box => JSON.stringify(box) === '[0,0,792,612]')).toBe(true);
+  const text = await page.evaluate(() => window.__pdfText.join('\n'));
+  for (const value of expected) expect(text).toContain(value);
+  expect(text).toContain('Rails Copper-Gold'); expect(text).toContain('Page');
+  await expect(page.getByRole('button', { name: 'Download comparison PDF', exact: true })).toBeEnabled();
+  return { pages, bytes: bytes.length, text };
+}
+
+test('QA/QC duplicate comparisons: scoped historical charts, raw exclusions and read-only return', async ({ page }, testInfo) => {
+  const errors = []; page.on('pageerror', error => errors.push(error.message));
+  await fakeSupabase(page, { role: 'viewer' });
+  const id = n => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+  const batch = { id: id(10), property_id: PROP, kind: 'samples', row_count: 9, rows_written: 4, request_hash: 'synthetic-request',
+    provenance: { filename: 'synthetic-duplicates.csv', sha256: 'a'.repeat(64) }, summary: { new: 4, changed: 0 }, created_at: '2026-10-23T12:00:00Z', rolled_back_at: '2026-10-23T13:00:00Z', depends_on: [] };
+  const record = (sample_id, sample_type, value) => ({ sample_id, sample_type, lab_id: 'Lab-A', lab_batch_id: 'Job-1', values: { Au: value }, units: { Au: 'g/t' }, raw_values: { Au: value.toFixed(2) }, bdl: {} });
+  const parents = Array.from({ length: 4 }, (_, i) => ({ id: id(100 + i), property_id: PROP, batch_id: id(9), source_row: i + 1, superseded_by_batch: id(99), record: record(`P${i}`, 'routine', i === 2 ? 0 : 90) }));
+  const duplicates = parents.map((parent, i) => ({ id: id(200 + i), property_id: PROP, batch_id: batch.id, source_row: i + 2, parent_version_id: parent.id, record: { ...record(`D${i}`, 'field_dup', i === 1 || i === 2 ? 0 : 110), parent_sample_id: parent.record.sample_id } }));
+  parents[3].record.bdl.Au = 0.005; parents[3].record.raw_values.Au = 'ND';
+  let failReferences = false;
+  await page.route('**/rest/v1/drill_qaqc_batches*', route => route.fulfill({ json: [batch] }));
+  await page.route('**/rest/v1/drill_qaqc_samples*', route => {
+    const q = new URL(route.request().url()).searchParams;
+    expect(q.get('property_id')).toBe(`eq.${PROP}`);
+    if (q.has('superseded_by_batch')) return route.fulfill({ json: [] });
+    if (q.has('batch_id')) { expect(q.get('batch_id')).toBe(`eq.${batch.id}`); return route.fulfill({ json: q.has('or') ? [] : duplicates }); }
+    if (failReferences) return route.fulfill({ status: 403, json: { message: 'Denied synthetic reference read' } });
+    return route.fulfill({ json: q.getAll('id').some(value => value.startsWith('gt.')) ? [] : parents });
+  });
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold');
+  await page.getByRole('tab', { name: 'Drill data' }).click();
+  await page.getByRole('button', { name: 'Open QA/QC register' }).click();
+  await page.getByRole('button', { name: 'Compare duplicates' }).click();
+  await page.getByLabel('Comparison group').selectOption('0');
+  await expect(page.getByText('2 eligible / 4 selected pairs')).toBeVisible();
+  await expect(page.getByText(/9 rows submitted; 4 records written/)).toHaveText(/rolled back/);
+  await expect(page.getByRole('img', { name: /log scatter, 1 positive pairs/ })).toBeVisible();
+  await expect(page.getByRole('img', { name: /Ranked HARD cumulative plot, 2 eligible pairs/ })).toBeVisible();
+  await expect(page.getByRole('table', { name: 'Duplicate comparison data' })).toContainText('ND g/t (below detection; recorded limit 0.005 g/t)');
+  await expect(page.getByText(/HARD ≤10%: 1\/2 \(50%\)/)).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('duplicate-comparison.png'), fullPage: true });
+  await checkChartDownload(page, testInfo, 'Original vs duplicate', `qaqc-scatter-${batch.id}.png`, ['1 positive pairs plotted', '1 otherwise eligible zero-value pairs', '2 assessed / 4 selected; 2 unassessed', 'not HARD thresholds', batch.id]);
+  await checkChartDownload(page, testInfo, 'Ranked HARD', `qaqc-hard-${batch.id}.png`, ['Cumulative denominator: 2 eligible pairs', 'HARD = 100', 'HARD ≤10%: 1/2', 'Rolled back:']);
+  await checkComparisonPdf(page, testInfo, `qaqc-duplicates-${batch.id}.pdf`, ['D0', 'D3', parents[0].id, 'ND', '0.005', 'synthetic-duplicates.csv', batch.id]);
+  await page.getByRole('button', { name: 'Back to QA/QC' }).click();
+  await expect(page.getByRole('button', { name: 'Compare duplicates' })).toBeFocused();
+  await expect(page.getByRole('button', { name: 'Roll back QA/QC import' })).toHaveCount(0);
+  failReferences = true;
+  await page.getByRole('button', { name: 'Compare duplicates' }).click();
+  await page.getByLabel('Comparison group').selectOption('0');
+  await expect(page.getByRole('alert')).toContainText('No comparison is shown');
+  await expect(page.getByRole('table', { name: 'Duplicate comparison data' })).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test('QA/QC standard comparisons: pinned supplied references, zero and censored evidence, denied retry', async ({ page }, testInfo) => {
+  const errors = []; page.on('pageerror', error => errors.push(error.message));
+  await fakeSupabase(page, { role: 'viewer' });
+  const id = n => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+  const batch = { id: id(30), property_id: PROP, kind: 'samples', row_count: 9, rows_written: 4, request_hash: 'synthetic-standards-request',
+    provenance: { filename: 'synthetic-standards.csv', sha256: 'b'.repeat(64) }, summary: { new: 4, changed: 0 }, created_at: '2026-10-23T12:00:00Z', rolled_back_at: '2026-10-23T13:00:00Z', depends_on: [] };
+  const crm = { id: id(29), property_id: PROP, batch_id: id(28), source_row: 2, superseded_by_batch: id(99),
+    record: { crm_id: 'CRM-TEST', revision: 'rev-01', element: 'Au', unit: 'g/t', expected: 10, sd: 2, source: ('Synthetic supplied certificate only — μ <source> Ω 🧪 ' + 'x'.repeat(1000)).slice(0, 1000) } };
+  const standards = [15, 0, null, 17].map((value, i) => ({ id: id(300 + i), property_id: PROP, batch_id: batch.id, source_row: 2 * i + 1, crm_version_ids: [crm.id],
+    record: { sample_id: `STD-00${i}`, sample_type: 'standard', lab_id: 'Lab-A', lab_batch_id: 'Job-1', crm_id: 'CRM-TEST', crm_revision: 'rev-01',
+      values: { Au: value }, units: { Au: 'g/t' }, raw_values: { Au: value === null ? 'ND' : value.toFixed(3) }, bdl: value === null ? { Au: 0.005 } : {} } }));
+  let failReferences = false;
+  await page.route('**/rest/v1/drill_qaqc_batches*', route => route.fulfill({ json: [batch] }));
+  await page.route('**/rest/v1/drill_qaqc_samples*', route => {
+    const q = new URL(route.request().url()).searchParams;
+    expect(q.get('property_id')).toBe(`eq.${PROP}`);
+    if (q.has('superseded_by_batch')) return route.fulfill({ json: [] });
+    expect(q.get('batch_id')).toBe(`eq.${batch.id}`);
+    return route.fulfill({ json: q.has('or') ? [] : standards });
+  });
+  await page.route('**/rest/v1/drill_crm_values*', route => {
+    const q = new URL(route.request().url()).searchParams;
+    expect(q.get('property_id')).toBe(`eq.${PROP}`); expect(q.get('record->>crm_id')).toBe('eq.CRM-TEST');
+    expect(q.get('record->>revision')).toBe('eq.rev-01'); expect(q.get('record->>element')).toBe('eq.Au'); expect(q.get('record->>unit')).toBe('eq.g/t');
+    expect(q.has('superseded_by_batch')).toBe(false); expect(q.getAll('id').some(value => value.startsWith('in.'))).toBe(true);
+    if (failReferences) return route.fulfill({ status: 403, json: { message: 'Denied synthetic reference read' } });
+    return route.fulfill({ json: q.getAll('id').some(value => value.startsWith('gt.')) ? [] : [crm] });
+  });
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold');
+  await page.getByRole('tab', { name: 'Drill data' }).click(); await page.getByRole('button', { name: 'Open QA/QC register' }).click();
+  await page.getByRole('button', { name: 'Compare standards' }).click();
+  await expect(page.getByRole('table', { name: 'Standards comparison data' })).toHaveCount(0);
+  await page.getByLabel('Comparison group').selectOption('0');
+  await expect(page.getByText('3 assessed / 4 selected standards')).toBeVisible();
+  await expect(page.getByText(/9 rows submitted; 4 records written/)).toHaveText(/rolled back/);
+  const plot = page.getByRole('img', { name: /CRM reference plot, 3 assessed/ }); await expect(plot).toBeVisible();
+  expect(await plot.locator('polyline').count()).toBe(0); expect(await plot.locator('circle').count()).toBe(3);
+  const table = page.getByRole('table', { name: 'Standards comparison data' });
+  await expect(table).toContainText('ND g/t (below detection; recorded limit 0.005 g/t)'); await expect(table).toContainText('0.000 g/t');
+  await expect(page.getByText('Outside ±3 supplied SD: 2/3 (66.667%)')).toBeVisible();
+  await table.locator('summary').filter({ hasText: 'Record provenance' }).first().click();
+  await expect(table).toContainText(`Pinned CRM: ${crm.id}`); await expect(table).toContainText('Synthetic supplied certificate only');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('standards-comparison.png'), fullPage: true });
+  await checkChartDownload(page, testInfo, 'CRM reference comparison', `qaqc-standards-${batch.id}.png`, ['Supplied expected value: 10; supplied SD: 2 g/t.', 'CRM CRM-TEST | revision rev-01', '3 assessed / 4 selected; 1 unassessed', 'Outside ±3 supplied SD: 2/3.', 'no analytical order or trend implied', 'synthetic-standards-request', batch.id]);
+  await checkComparisonPdf(page, testInfo, `qaqc-standards-${batch.id}.pdf`, ['STD-000', 'STD-003', crm.id, 'ND', '0.005', '0.000', 'Synthetic supplied certificate only', batch.id]);
+  await page.getByRole('button', { name: 'Back to QA/QC' }).click(); await expect(page.getByRole('button', { name: 'Compare standards' })).toBeFocused();
+  await expect(page.getByRole('button', { name: 'Roll back QA/QC import' })).toHaveCount(0);
+  failReferences = true; await page.getByRole('button', { name: 'Compare standards' }).click(); await page.getByLabel('Comparison group').selectOption('0');
+  await expect(page.getByRole('alert')).toContainText('No comparison is shown'); await expect(table).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test('QA/QC PDF retains all 51 selected records beyond table pagination and supports evidence-only reports', async ({ page }, testInfo) => {
+  test.setTimeout(90000);
+  await fakeSupabase(page, { role: 'viewer' });
+  const id = n => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+  const batch = { id: id(700), property_id: PROP, kind: 'samples', row_count: 70, rows_written: 51, request_hash: 'synthetic-long-report', provenance: { filename: 'synthetic-long-duplicates.csv', sha256: 'c'.repeat(64), sheet: 'Field controls', header_row: 2 }, summary: { new: 51 }, created_at: '2026-10-23T12:00:00Z', rolled_back_at: null, depends_on: [] };
+  const parent = { id: id(701), property_id: PROP, batch_id: id(699), source_row: 1, record: { sample_id: 'P-BASE', sample_type: 'routine', lab_id: 'Lab-L', lab_batch_id: 'Job-L', values: { Au: 90 }, units: { Au: 'g/t' }, raw_values: { Au: '90.000000' }, bdl: {} } };
+  const rows = Array.from({ length: 51 }, (_, i) => ({ id: id(800 + i), property_id: PROP, batch_id: batch.id, source_row: i + 1, parent_version_id: parent.id, record: { sample_id: `D-${String(i).padStart(3, '0')}`, sample_type: 'field_dup', parent_sample_id: 'P-BASE', lab_id: 'Lab-L', lab_batch_id: 'Job-L', values: { Au: i === 50 ? null : 110 }, units: { Au: 'g/t' }, raw_values: { Au: i === 50 ? 'ND' : '110.000000' }, bdl: i === 50 ? { Au: 0.005 } : {} } }));
+  await page.route('**/rest/v1/drill_qaqc_batches*', route => route.fulfill({ json: [batch] }));
+  await page.route('**/rest/v1/drill_qaqc_samples*', route => {
+    const q = new URL(route.request().url()).searchParams;
+    expect(q.get('property_id')).toBe(`eq.${PROP}`);
+    if (q.has('superseded_by_batch')) return route.fulfill({ json: [] });
+    if (q.has('batch_id')) return route.fulfill({ json: q.has('or') ? [] : rows });
+    return route.fulfill({ json: q.getAll('id').some(value => value.startsWith('gt.')) ? [] : [parent] });
+  });
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold'); await page.getByRole('tab', { name: 'Drill data' }).click();
+  await page.getByRole('button', { name: 'Open QA/QC register' }).click(); await page.getByRole('button', { name: 'Compare duplicates' }).click(); await page.getByLabel('Comparison group').selectOption('0');
+  await expect(page.getByText('Page 1 of 2', { exact: true })).toBeVisible();
+  await expect(page.getByRole('table', { name: 'Duplicate comparison data' })).not.toContainText('D-050');
+  const full = await checkComparisonPdf(page, testInfo, `qaqc-duplicates-${batch.id}.pdf`, ['D-000', 'D-025', 'D-050', rows[50].id, parent.id, 'ND', '0.005', 'Field controls'], 'all51-');
+  expect(full.pages).toBeGreaterThan(10); expect(full.text).toContain('Selected controls: 51');
+  await page.getByRole('button', { name: 'Back to QA/QC' }).click();
+  for (const row of rows) { row.record.values.Au = null; row.record.raw_values.Au = 'ND'; row.record.bdl.Au = 0.005; }
+  await page.getByRole('button', { name: 'Compare duplicates' }).click(); await page.getByLabel('Comparison group').selectOption('0');
+  await expect(page.getByText('0 eligible / 51 selected pairs')).toBeVisible(); await expect(page.getByRole('img')).toHaveCount(0);
+  const evidence = await checkComparisonPdf(page, testInfo, `qaqc-duplicates-${batch.id}.pdf`, ['D-000', 'D-050', 'Assessed controls: 0', 'Unassessed controls: 51', 'ND', '0.005'], 'unassessed51-');
+  expect(evidence.text).toContain('percentage unavailable'); await expect(page.getByRole('table', { name: 'Duplicate comparison data' })).toBeVisible();
+});
+
+test('QA/QC register: CRM then routine and dependent samples, stable retry and protected rollback', async ({ page }) => {
+  const pageErrors = []; page.on('pageerror', error => pageErrors.push(error.message));
+  await fakeSupabase(page);
+  const store = { samples: [], crms: [], batches: [] }, commits = [], results = new Map();
+  let uncertain = true;
+  for (const [table, key] of [['drill_qaqc_samples', 'samples'], ['drill_crm_values', 'crms'], ['drill_qaqc_batches', 'batches']]) {
+    await page.route(`**/rest/v1/${table}*`, route => route.fulfill({ json: store[key] }));
+  }
+  await page.route('**/rest/v1/rpc/drill_qaqc_import', route => {
+    const args = route.request().postDataJSON(), diff = { ok: true, new: args.p_rows.length, changed: 0, unchanged: 0 };
+    if (args.p_dry_run) return route.fulfill({ json: diff });
+    commits.push(args);
+    if (results.has(args.p_batch)) return route.fulfill({ json: { ...results.get(args.p_batch), replayed: true } });
+    const result = { ...diff, committed: true, batch_id: args.p_batch };
+    results.set(args.p_batch, result);
+    const dependent = args.p_kind === 'samples' && args.p_rows.some(row => row.sample_type !== 'routine');
+    store[args.p_kind].push(...args.p_rows.map((record, i) => ({ id: crypto.randomUUID(), record, batch_id: args.p_batch, source_row: i + 1 })));
+    store.batches.unshift({ id: args.p_batch, kind: args.p_kind, provenance: args.p_provenance, summary: diff, created_at: '2026-10-23T12:00:00Z', depends_on: dependent ? store.batches.map(b => b.id) : [], rolled_back_at: null });
+    if (args.p_kind === 'samples' && uncertain) { uncertain = false; return route.fulfill({ status: 500, json: { message: 'Response lost; retry this import' } }); }
+    return route.fulfill({ json: result });
+  });
+  await page.route('**/rest/v1/rpc/drill_qaqc_rollback', route => route.fulfill({ status: 400, json: { message: 'BATCH_DEPENDENCY' } }));
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold');
+  await page.getByRole('tab', { name: 'Drill data' }).click();
+  await page.getByRole('button', { name: 'Open QA/QC register' }).click();
+  const region = page.getByRole('region', { name: 'QA/QC', exact: true });
+  await region.getByRole('combobox', { name: 'Import data', exact: true }).selectOption('crms');
+  const crm = 'crm_id,revision,element,unit,expected,sd,source\nCRM-TEST,rev1,Au,g/t,1,0.05,Synthetic certificate fixture';
+  await region.getByLabel('QA/QC data file').setInputFiles({ name: 'synthetic-crm.csv', mimeType: 'text/csv', buffer: Buffer.from(crm) });
+  await region.getByRole('button', { name: 'Check QA/QC import' }).click();
+  await region.getByRole('button', { name: 'Commit QA/QC import' }).click();
+  await expect(region.getByText('Imported: 1 new, 0 changed, 0 unchanged.')).toBeVisible();
+  await region.getByLabel('Show records').selectOption('crms');
+  await expect(region.getByRole('table', { name: 'QA/QC register' }).getByRole('cell', { name: 'CRM-TEST', exact: true })).toBeVisible();
+  await region.getByLabel('Show records').selectOption('samples');
+  await expect(region.getByText('No current samples on this page.')).toBeVisible();
+  await region.getByRole('combobox', { name: 'Import data', exact: true }).selectOption('samples');
+  const sampleRows = [['lab_id', 'lab_batch_id', 'sample_id', 'sample_type', 'Au'], ['Lab-TEST', 'Job-TEST', '00001', 'routine', '<0.005']];
+  await region.getByLabel('QA/QC data file').setInputFiles({ name: 'synthetic-routine.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: Buffer.from(xlsxFixture([{ name: 'Samples', rows: sampleRows }])) });
+  await region.getByRole('button', { name: 'Use these columns' }).click();
+  await region.getByRole('checkbox', { name: 'Au', exact: true }).check();
+  await region.getByLabel('Unit for Au').fill('g/t');
+  await region.getByRole('button', { name: 'Check QA/QC import' }).click();
+  await region.getByRole('button', { name: 'Commit QA/QC import' }).click();
+  await expect(region.getByRole('alert')).toContainText('Response lost');
+  await region.getByRole('button', { name: 'Commit QA/QC import' }).click();
+  await expect(region.getByText('Previous import confirmed: 1 new, 0 changed, 0 unchanged.')).toBeVisible();
+  expect(commits[1].p_batch).toBe(commits[2].p_batch);
+  expect(commits[1].p_rows[0]).toMatchObject({ sample_id: '00001', values: { Au: null }, bdl: { Au: 0.005 }, raw_values: { Au: '<0.005' } });
+  expect(commits[1].p_provenance).toMatchObject({ filename: 'synthetic-routine.xlsx', sheet: 'Samples', header_row: 1 });
+  expect(commits[1].p_provenance.sha256).toMatch(/^[0-9a-f]{64}$/);
+  const dependent = 'lab_id,lab_batch_id,sample_id,sample_type,parent_sample_id,crm_id,crm_revision,Au\nLab-TEST,Job-TEST,STD-TEST,standard,,CRM-TEST,rev1,1.020\nLab-TEST,Job-TEST,DUP-TEST,field_dup,00001,,,0.006';
+  await region.getByLabel('QA/QC data file').setInputFiles({ name: 'synthetic-dependent.csv', mimeType: 'text/csv', buffer: Buffer.from(dependent) });
+  await region.getByRole('checkbox', { name: 'Au', exact: true }).check(); await region.getByLabel('Unit for Au').fill('g/t');
+  await region.getByRole('button', { name: 'Check QA/QC import' }).click(); await region.getByRole('button', { name: 'Commit QA/QC import' }).click();
+  await expect(region.getByText('Imported: 2 new, 0 changed, 0 unchanged.')).toBeVisible();
+  const table = region.getByRole('table', { name: 'QA/QC register' });
+  await expect(table.getByRole('cell', { name: '00001', exact: true })).toBeVisible();
+  await expect(table.getByText('Au: <0.005 g/t (below detection)', { exact: true })).toBeVisible();
+  await region.getByLabel('Show records').selectOption('crms');
+  await expect(table.getByRole('cell', { name: 'CRM-TEST', exact: true })).toBeVisible();
+  await expect(table.getByRole('cell', { name: '00001', exact: true })).toHaveCount(0);
+  await region.getByLabel('Show records').selectOption('samples');
+  await expect(table.getByRole('cell', { name: '00001', exact: true })).toBeVisible();
+  await expect(table.getByRole('cell', { name: 'CRM-TEST', exact: true })).toHaveCount(0);
+  expect(pageErrors).toEqual([]);
+  const history = region.getByRole('table', { name: 'QA/QC imports' });
+  await expect(history.getByRole('row').filter({ hasText: 'synthetic-routine.xlsx' }).getByRole('button', { name: 'Roll back QA/QC import' })).toBeDisabled();
+  page.once('dialog', dialog => dialog.accept());
+  await history.getByRole('row').filter({ hasText: 'synthetic-dependent.csv' }).getByRole('button', { name: 'Roll back QA/QC import' }).click();
+  await expect(region.getByRole('alert')).toContainText('Roll back the dependent import first');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
+});
+
+test('QA/QC register: unavailable schema leaves ordinary imports available', async ({ page }) => {
+  await fakeSupabase(page);
+  await page.route('**/rest/v1/drill_qaqc_samples*', route => route.fulfill({ status: 404, json: { code: 'PGRST205', message: 'missing table' } }));
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold');
+  await page.getByRole('tab', { name: 'Drill data' }).click(); await page.getByRole('button', { name: 'Open QA/QC register' }).click();
+  await expect(page.getByRole('alert')).toContainText('Existing drill imports still work');
+  await expect(page.getByRole('button', { name: '+ Import CSV or Excel' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Import QA/QC CSV or Excel' })).toHaveCount(0);
+});
 
 async function fakeSupabase(page, { role = 'owner', orgs = [org(role)], properties = null } = {}) {
   const fake = { rpc: [], orgs, properties: properties || (orgs.length ? [property] : []), invites: [], files: [{ ...assays }], uploads: [], signed: [], patches: [], drill: drillSummary(), templates: [], recipes: [], assayRows: [] };
@@ -231,6 +567,98 @@ test('the data library lists, adds, versions, downloads and deletes files', asyn
   await region.getByRole('button', { name: 'Delete assays.csv' }).click();
   await expect(table.getByText('assays.csv')).toHaveCount(0);
   expect(fake.patches).toEqual([{ id: FILE, body: { deleted_at: expect.any(String) } }]);
+});
+
+test('drill data: source coordinate preview preserves the imported survey values', async ({ page }) => {
+  const fake = await fakeSupabase(page, { role: 'editor', properties: [{ ...property, crs: 'EPSG:26910' }] });
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold');
+  await page.getByRole('tab', { name: 'Drill data' }).click();
+  await page.getByLabel('Drill data file').setInputFiles({ name: 'synthetic-collars.csv', mimeType: 'text/csv', buffer: Buffer.from('HoleID,Easting,Northing\nSYNTHETIC-01,512345.678,5432109.876\n') });
+  const source = page.getByRole('region', { name: 'Source coordinates', exact: true });
+  await expect(source.getByLabel('Source coordinate system')).toHaveValue('EPSG:26910');
+  await source.getByLabel('Source coordinate system').fill('EPSG:26710');
+  await expect(source.getByText(/The property uses EPSG:26910/)).toBeVisible();
+  await source.getByRole('button', { name: 'Preview source coordinates' }).click();
+  const preview = source.getByRole('table', { name: 'Source coordinate preview' });
+  await expect(preview.getByRole('columnheader', { name: 'Longitude (NAD27)' })).toBeVisible();
+  await expect(preview.getByRole('cell', { name: '512345.678', exact: true })).toBeVisible();
+  await expect(source.getByText(/it is not a WGS84 map position/)).toBeVisible();
+  await page.getByRole('button', { name: 'Check against stored data' }).click();
+  await page.getByRole('button', { name: 'Commit import' }).click();
+  await expect(page.getByText(/Imported synthetic-collars.csv/)).toBeVisible();
+  const requests = fake.rpc.filter(c => c.fn === 'drill_import_batch');
+  expect(requests).toHaveLength(2);
+  for (const { args } of requests) {
+    expect(args.p_rows).toEqual([{ hole_id: 'SYNTHETIC-01', x: 512345.678, y: 5432109.876, crs: 'EPSG:26710' }]);
+    expect(args.p_mapping.coordinateSource).toEqual({ version: 1, crs: 'EPSG:26710', operation: 'preserve-source', axisOrder: 'xy' });
+  }
+});
+
+test('alteration import: CSV and Excel preserve source text with retry, templates and rollback', async ({ page }, testInfo) => {
+  const fake = await fakeSupabase(page, { role: 'editor' });
+  fake.drill.alteration = 0;
+  const imports = [], committed = new Set(); let uncertain = true;
+  await page.route('**/rest/v1/rpc/drill_import_batch', route => {
+    const args = route.request().postDataJSON(); imports.push(args);
+    expect(args.p_kind).toBe('alteration');
+    const diff = { ok: true, new: args.p_rows.length, changed: 0, unchanged: 0, new_holes: 0, missing_collars: 1, missing_collar_holes: ['SOURCE-01'], overlaps_existing: 0, changed_sample: [] };
+    if (args.p_dry_run) return route.fulfill({ json: diff });
+    if (!committed.has(args.p_batch)) {
+      committed.add(args.p_batch); fake.drill.alteration = args.p_rows.length;
+      fake.drill.batches.unshift({ id: args.p_batch, kind: 'alteration', filename: args.p_filename, summary: diff, created_at: '2026-10-23T12:00:00Z', rolled_back_at: null });
+    }
+    if (uncertain) { uncertain = false; return route.fulfill({ status: 500, json: { message: 'Synthetic response lost; retry unchanged import' } }); }
+    return route.fulfill({ json: { ...diff, committed: true } });
+  });
+  await page.route('**/rest/v1/rpc/drill_rollback_batch', route => {
+    const args = route.request().postDataJSON(); fake.drill.alteration = 0;
+    fake.drill.batches = fake.drill.batches.map(b => b.id === args.p_batch ? { ...b, rolled_back_at: '2026-10-23T13:00:00Z' } : b);
+    return route.fulfill({ json: { rolled_back: true, withdrawn: 2, restored: 0 } });
+  });
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold'); await page.getByRole('tab', { name: 'Drill data' }).click();
+  const region = page.getByRole('region', { name: 'Drill data', exact: true }), form = region.getByRole('form', { name: 'Import drill data' });
+  const rows = [['HoleID', 'From', 'To', 'Alteration code', 'Description', 'Intensity'], ['SOURCE-01', '0', '2', '03', '', '03'], ['SOURCE-01', '1', '3', '', 'Sericite', 'weak']];
+  await region.getByLabel('Drill data file').setInputFiles({ name: 'alteration.csv', mimeType: 'text/csv', buffer: Buffer.from(rows.map(r => r.join(',')).join('\n')) });
+  await expect(form.getByLabel('Data')).toHaveValue('alteration'); await expect(form.getByLabel('Intensity (text)')).toHaveValue('Intensity');
+  await expect(form.getByText(/Overlapping intervals in 1 hole/)).toBeVisible();
+  await form.getByRole('button', { name: 'Check against stored data' }).click();
+  await expect(form.getByRole('status', { name: 'Changes' })).toContainText('2 new alteration intervals');
+  await expect(form.getByText('1 hole has no collar yet: SOURCE-01')).toBeVisible();
+  await form.getByLabel('Template name').fill('Alteration source'); await form.getByRole('button', { name: 'Save columns as template' }).click();
+  await expect(form.getByLabel('Saved columns').locator('option', { hasText: 'Alteration source' })).toHaveCount(1);
+  await form.getByRole('button', { name: 'Commit import' }).click(); await expect(form.getByRole('alert')).toContainText('Synthetic response lost');
+  await form.getByRole('button', { name: 'Commit import' }).click(); await expect(region.getByText('Imported alteration.csv: 2 new alteration intervals.')).toBeVisible();
+  const attempts = imports.filter(a => !a.p_dry_run); expect(attempts[0].p_batch).toBe(attempts[1].p_batch);
+  expect(attempts[0].p_rows).toEqual([{ hole_id: 'SOURCE-01', from_m: 0, to_m: 2, code: '03', intensity: '03' }, { hole_id: 'SOURCE-01', from_m: 1, to_m: 3, description: 'Sericite', intensity: 'weak' }]);
+  await expect(region.getByText('Alteration intervals', { exact: true }).locator('..')).toHaveText('Alteration intervals2');
+  expect(fake.drill.collars).toBe(12); expect(fake.drill.assays).toBe(0);
+  page.once('dialog', d => d.accept()); await region.getByRole('button', { name: 'Roll back alteration.csv' }).click();
+  await expect(region.getByRole('table', { name: 'Import history' }).getByRole('row', { name: /alteration.csv.*Rolled back/ })).toBeVisible();
+  await expect(region.getByText('Alteration intervals', { exact: true }).locator('..')).toHaveText('Alteration intervals0');
+  await region.getByLabel('Drill data file').setInputFiles({ name: 'alteration.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: Buffer.from(xlsxFixture([{ name: 'Alteration', rows }])) });
+  await region.getByRole('button', { name: 'Use these columns' }).click();
+  await expect(form.getByLabel('Data')).toHaveValue('alteration'); await form.getByLabel('Saved columns').selectOption({ label: 'Alteration source' });
+  await form.getByRole('button', { name: 'Check against stored data' }).click(); await expect(form.getByRole('button', { name: 'Commit import' })).toBeEnabled();
+  expect(imports.at(-1).p_rows).toEqual(attempts[0].p_rows);
+  await form.getByRole('button', { name: 'Commit import' }).click(); await expect(region.getByText('Imported alteration.xlsx: 2 new alteration intervals.')).toBeVisible();
+  expect(fake.rpc.find(c => c.fn === 'drill_save_template').args.p_kind).toBe('alteration');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
+  await page.screenshot({ path: testInfo.outputPath('alteration-import.png'), fullPage: true });
+});
+
+test('alteration import: unavailable database support leaves legacy import usable', async ({ page }) => {
+  await fakeSupabase(page, { role: 'editor' });
+  await page.route('**/rest/v1/rpc/drill_import_batch', route => {
+    const args = route.request().postDataJSON();
+    return args.p_kind === 'alteration' ? route.fulfill({ status: 400, json: { code: '22023', message: 'INVALID_KIND: alteration' } }) : route.fulfill({ json: { ok: true, new: 1, changed: 0, unchanged: 0 } });
+  });
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold'); await page.getByRole('tab', { name: 'Drill data' }).click();
+  await page.getByLabel('Drill data file').setInputFiles({ name: 'alteration.csv', mimeType: 'text/csv', buffer: Buffer.from('HoleID,From,To,Alteration code,Intensity\nH1,0,1,03,weak') });
+  const form = page.getByRole('form', { name: 'Import drill data' });
+  await form.getByRole('button', { name: 'Check against stored data' }).click(); await expect(form.getByRole('alert')).toContainText('Alteration imports are not available on this site yet');
+  await form.getByLabel('Data').selectOption('lithology'); await form.getByRole('combobox', { name: 'Code', exact: true }).selectOption('Alteration code');
+  await form.getByRole('button', { name: 'Check against stored data' }).click(); await expect(form.getByRole('button', { name: 'Commit import' })).toBeEnabled();
+  await expect(page.getByText('Alteration intervals', { exact: true })).toHaveCount(0);
 });
 
 test('drill data: import a CSV, map its columns, see the diff, commit and roll back', async ({ page }, testInfo) => {

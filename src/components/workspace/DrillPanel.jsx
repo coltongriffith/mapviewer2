@@ -7,9 +7,13 @@ import {
 import { formatWhen } from '../../utils/workspace';
 import { ErrorNote } from './shared';
 import { lazyGuarded } from '../../utils/preloadGuard';
+import DrillCoordinateSource from './DrillCoordinateSource';
+import { keepFileSource } from '../../utils/drillCoordinates';
 
 const ResultsPanel = lazyGuarded(() => import('./ResultsPanel'));
 const ExcelSheetPicker = lazyGuarded(() => import('./ExcelSheetPicker'));
+const BatchCertificates = lazyGuarded(() => import('./BatchCertificates'));
+const QaqcPanel = lazyGuarded(() => import('./QaqcPanel'));
 
 // The property's drill database: what is stored, importing CSV or XLSX (columns,
 // checks, the diff, commit) and the import history with Roll back. Loaded
@@ -21,6 +25,7 @@ function Summary({ s }) {
   if (!s) return <p className="dash-muted">Loading the drill database…</p>;
   const items = [['Holes', n(s.holes)], ['Collars', `${n(s.collars)}${s.planned ? ` (${n(s.planned)} planned)` : ''}`], ['Metres drilled', n(s.metres)],
     ['Survey stations', n(s.surveys)], ['Assays', n(s.assays)], ['Lithology intervals', n(s.lithology)]];
+  if (typeof s.alteration === 'number') items.push(['Alteration intervals', n(s.alteration)]);
   return (
     <dl className="ws-stats" aria-label="Drill data summary">
       {items.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}
@@ -56,7 +61,9 @@ export function Importer({ db, property, orgId, onDone }) {
   const [workbook, setWorkbook] = useState(null);
   const [kind, setKind] = useState('assays');
   const [mapping, setMapping] = useState(null);
-  const [templates, setTemplates] = useState([]);
+  const [templatePage, setTemplatePage] = useState(null);
+  const templates = templatePage?.kind === kind ? templatePage.rows : [];
+  const [templateRevision, setTemplateRevision] = useState(0);
   const [tplName, setTplName] = useState('');
   const [diff, setDiff] = useState(null);
   const [busy, setBusy] = useState(null);
@@ -65,14 +72,18 @@ export function Importer({ db, property, orgId, onDone }) {
   const batchId = useRef(null);
   const input = useRef(null);
   const readVersion = useRef(0);
-  useEffect(() => () => { readVersion.current++; }, []);
+  const operationVersion = useRef(0);
+  useEffect(() => () => { readVersion.current++; operationVersion.current++; }, []);
 
-  const loadTemplates = useCallback((k) => db.templates(orgId, k).then(setTemplates).catch(() => setTemplates([])), [db, orgId]);
-  useEffect(() => { if (file) loadTemplates(kind); }, [file, kind, loadTemplates]);
+  useEffect(() => {
+    let active = true; setTemplatePage(null);
+    if (file) db.templates(orgId, kind).then(rows => { if (active) setTemplatePage({ kind, rows }); }).catch(() => { if (active) setTemplatePage(null); });
+    return () => { active = false; };
+  }, [db, orgId, file, kind, templateRevision]);
 
   const built = useMemo(() => (file && mapping ? buildImport(kind, file, mapping) : null), [file, kind, mapping]);
-  const change = (m) => { setMapping(m); setDiff(null); batchId.current = null; };
-  const reset = () => { readVersion.current++; setWorkbook(null); setFile(null); setMapping(null); setDiff(null); setTplName(''); setBusy(null); batchId.current = null; };
+  const change = (m) => { operationVersion.current++; setBusy(null); setMapping(m); setDiff(null); setNote(null); batchId.current = null; };
+  const reset = () => { readVersion.current++; operationVersion.current++; setWorkbook(null); setFile(null); setMapping(null); setDiff(null); setTplName(''); setBusy(null); batchId.current = null; };
   const choose = (t, name, excel = null) => {
     if (excel) setWorkbook(w => ({ ...w, selection: excel }));
     const k = detectKind(t.header, t.rows, excel?.sheet || name) || 'assays';
@@ -103,14 +114,17 @@ export function Importer({ db, property, orgId, onDone }) {
     finally { if (version === readVersion.current) setBusy(null); }
   };
   const run = async (key, fn) => {
+    const version = ++operationVersion.current;
+    const current = () => version === operationVersion.current;
     setBusy(key); setError(null);
-    try { await fn(); } catch (e) { setError(e.message); } finally { setBusy(null); }
+    try { await fn(current); } catch (e) { if (current()) setError(e.message); } finally { if (current()) setBusy(null); }
   };
   const args = () => ({ propertyId: property.id, kind, rows: built.rows, mapping, filename: file.name });
-  const check = () => run('check', async () => setDiff(await db.dryRun(args())));
-  const commit = () => run('commit', async () => {
+  const check = () => run('check', async current => { const result = await db.dryRun(args()); if (current()) setDiff(result); });
+  const commit = () => run('commit', async current => {
     batchId.current = batchId.current || crypto.randomUUID();
     const r = await db.commit({ ...args(), batchId: batchId.current });
+    if (!current()) return;
     setNote(r.nothing_to_do ? `Nothing to import: everything in ${file.name} is already stored.` : `Imported ${file.name}: ${diffSentence(kind, r)}.`);
     reset();
     onDone();
@@ -125,7 +139,7 @@ export function Importer({ db, property, orgId, onDone }) {
         <ErrorNote error={error} onDismiss={() => setError(null)} />
         <div className="ws-row">
           <button type="button" className="btn primary" onClick={() => input.current?.click()}>+ Import CSV or Excel</button>
-          <span className="dash-muted">Collars, downhole surveys, assays or lithology. CSV or .xlsx; up to 20,000 rows per import.</span>
+          <span className="dash-muted">Collars, downhole surveys, assays, lithology or alteration. CSV or .xlsx; up to 20,000 rows per import.</span>
         </div>
         {busy === 'read' && <p role="status">Reading file… <button type="button" className="btn" onClick={reset}>Cancel</button></p>}
         <input ref={input} type="file" accept=".csv,.txt,.tsv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden aria-label="Drill data file"
@@ -137,13 +151,23 @@ export function Importer({ db, property, orgId, onDone }) {
   const cols = mapping.columns || {};
   const setCol = (k, v) => change({ ...mapping, columns: { ...cols, [k]: v || undefined } });
   const setEl = (i, patch) => change({ ...mapping, elements: mapping.elements.map((e, j) => (j === i ? { ...e, ...patch } : e)) });
+  const selectTemplate = (id) => {
+    const template = templates.find(x => x.id === id);
+    if (!template) return;
+    const mapped = applyTemplate(template, file.header, kind === 'assays' ? autoMapping(kind, file.header, file.rows, { decimalComma: mapping.decimalComma }).elements : null);
+    change({ ...(kind === 'collars' ? keepFileSource(mapped, mapping) : mapped), decimalComma: mapping.decimalComma === true, excel: file.excel || undefined });
+    setNote(kind === 'collars' && mapped.crs && mapped.crs !== mapping.crs
+      ? `Columns applied; the source CRS stays ${mapping.crs || 'unspecified'}. This template used ${mapped.crs}—confirm the source coordinate system below against your file.` : null);
+  };
   const problems = built ? { ...built, errors: diff?.ok === false ? serverErrors(diff, built.lines) : built.errors, errorCount: diff?.ok === false ? diff.error_count : built.errorCount } : null;
   return (
     <form className="ws-form" aria-label="Import drill data" onSubmit={(e) => { e.preventDefault(); if (diff?.ok) commit(); else check(); }}>
+      <fieldset disabled={busy === 'commit'} className="ws-stack" style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
       <ErrorNote error={error} onDismiss={() => setError(null)} />
+      {note && <p className="ws-notice" role="status">{note}</p>}
       <div className="ws-row">
         <span className="ws-list-main"><b>{file.name}</b><small>{n(file.rows.length)} rows · {file.header.length} columns</small></span>
-        {file.excel && <button type="button" className="btn" disabled={!!busy} onClick={() => { setFile(null); setMapping(null); setDiff(null); batchId.current = null; }}>Choose sheet or header</button>}
+        {file.excel && <button type="button" className="btn" disabled={!!busy} onClick={() => { operationVersion.current++; setFile(null); setMapping(null); setDiff(null); batchId.current = null; }}>Choose sheet or header</button>}
         <button type="button" className="btn" onClick={reset}>Cancel</button>
       </div>
       {file.excel && <p className="dash-muted">Sheet: {file.excel.sheet} · header row {file.excel.headerRow} · decimal separator: {mapping.decimalComma ? 'comma' : 'point'}. Reported line numbers refer to worksheet rows.</p>}
@@ -154,16 +178,11 @@ export function Importer({ db, property, orgId, onDone }) {
           </select>
         </label>
         <label className="ws-field">Saved columns
-          <select value="" onChange={(e) => { const t = templates.find((x) => x.id === e.target.value); if (t) change({ ...applyTemplate(t, file.header, kind === 'assays' ? autoMapping(kind, file.header, file.rows, { decimalComma: mapping.decimalComma }).elements : null), decimalComma: mapping.decimalComma === true, excel: file.excel || undefined }); }}>
+          <select value="" onChange={(e) => selectTemplate(e.target.value)}>
             <option value="">{templates.length ? 'Apply a template…' : 'No templates yet'}</option>
             {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
         </label>
-        {kind === 'collars' && (
-          <label className="ws-field">Coordinate system
-            <input value={mapping.crs || ''} placeholder="EPSG:26910" onChange={(e) => change({ ...mapping, crs: e.target.value.trim() || undefined })} />
-          </label>
-        )}
         {kind === 'assays' && (
           <label className="ws-field">Below detection (&lt;) stored as
             <select value={mapping.bdl || 'half'} onChange={(e) => change({ ...mapping, bdl: e.target.value })}>
@@ -172,6 +191,7 @@ export function Importer({ db, property, orgId, onDone }) {
           </label>
         )}
       </div>
+      {kind === 'collars' && <DrillCoordinateSource mapping={mapping} propertyCrs={property.crs} rows={built.rows} onChange={change} />}
       <fieldset className="ws-form-grid" style={{ border: 0, padding: 0, margin: 0 }}>
         <legend className="dash-muted" style={{ fontSize: 13, marginBottom: 4 }}>Columns</legend>
         {FIELDS[kind].map((f) => (
@@ -183,6 +203,7 @@ export function Importer({ db, property, orgId, onDone }) {
           </label>
         ))}
       </fieldset>
+      {kind === 'alteration' && <p className="dash-muted">One alteration record per hole and interval. Code or description is required. Intensity stays as source text (for example weak or 03); blank means unknown. No collars or 3D geology are created.</p>}
       {kind === 'assays' && (
         <div className="ws-table-wrap">
           <table className="ws-table" aria-label="Elements">
@@ -225,8 +246,9 @@ export function Importer({ db, property, orgId, onDone }) {
         )}
         <span className="ws-field"><input aria-label="Template name" placeholder="Template name" value={tplName} onChange={(e) => setTplName(e.target.value)} style={{ width: 170 }} /></span>
         <button type="button" className="btn" disabled={!tplName.trim() || !!busy}
-          onClick={() => run('tpl', async () => { await db.saveTemplate(orgId, kind, tplName.trim(), mapping); setTplName(''); await loadTemplates(kind); })}>Save columns as template</button>
+          onClick={() => run('tpl', async current => { await db.saveTemplate(orgId, kind, tplName.trim(), mapping); if (current()) { setTplName(''); setTemplateRevision(v => v + 1); } })}>Save columns as template</button>
       </div>
+      </fieldset>
     </form>
   );
 }
@@ -237,6 +259,7 @@ export default function DrillPanel({ property, perms }) {
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(null);
   const [results, setResults] = useState(false);
+  const [qaqc, setQaqc] = useState(false);
   const [revision, setRevision] = useState(0); // bumped by each import and roll-back, so Results reloads its assays
   const load = useCallback(async () => {
     try {
@@ -254,7 +277,11 @@ export default function DrillPanel({ property, perms }) {
     <section aria-label="Drill data" className="ws-stack">
       <ErrorNote error={error} onDismiss={() => setError(null)} />
       <div className="dash-panel"><Summary s={s} /></div>
-      {perms.edit && db && <div className="dash-panel"><Importer db={db} property={property} orgId={property.org_id} onDone={() => { setRevision((v) => v + 1); load(); }} /></div>}
+      {perms.edit && db && <div className="dash-panel"><Importer key={property.id} db={db} property={property} orgId={property.org_id} onDone={() => { setRevision((v) => v + 1); load(); }} /></div>}
+      <section className="dash-panel" aria-label="QA/QC">
+        <h3 style={{ margin: '0 0 8px', fontSize: 15 }}>QA/QC</h3>
+        {qaqc ? <Suspense fallback={<p role="status">Loading QA/QC…</p>}><QaqcPanel property={property} perms={perms} /></Suspense> : <div className="ws-row"><button type="button" className="btn" onClick={() => setQaqc(true)}>Open QA/QC register</button><span className="dash-muted">Routine samples, standards, blanks and duplicates, with their lab provenance.</span></div>}
+      </section>
       {s?.assays > 0 && (
         <section className="dash-panel" aria-label="Results">
           <h3 style={{ margin: '0 0 8px', fontSize: 15 }}>Results</h3>
@@ -277,7 +304,7 @@ export default function DrillPanel({ property, perms }) {
                   <tr key={b.id}>
                     <td>{formatWhen(b.created_at)}</td>
                     <td>{kindLabel(b.kind)}</td>
-                    <td>{b.filename || '—'}</td>
+                    <td>{b.filename || '—'}{b.kind === 'assays' && <Suspense fallback={null}><BatchCertificates client={supabase} property={property} batch={b} canEdit={perms.edit} /></Suspense>}</td>
                     <td>{diffSentence(b.kind, b.summary)}</td>
                     <td>{b.created_by_email || '—'}</td>
                     <td>

@@ -1,0 +1,101 @@
+import React from 'react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, it, expect, vi } from 'vitest';
+import QaqcImporter from '../src/components/workspace/QaqcImporter';
+import QaqcPanel from '../src/components/workspace/QaqcPanel';
+const { api } = vi.hoisted(() => ({api:{importQaqc:vi.fn(),listQaqcRecords:vi.fn(),listQaqcBatches:vi.fn(),rollbackQaqc:vi.fn()}}));
+vi.mock('../src/utils/drillQaqcDb',async original=>({...(await original()),...api}));
+vi.mock('../src/utils/propertyFiles',()=>({sha256Hex:async()=> 'a'.repeat(64)}));
+vi.mock('../src/lib/supabase',()=>({supabase:null}));
+const counts={ok:true,new:1,changed:0,unchanged:0};
+const sampleRecord={id:'sample-row',batch_id:'sample-batch',source_row:1,record:{sample_id:'SAMPLE-TEST',sample_type:'routine',lab_id:'Lab',lab_batch_id:'Job',values:{Au:1},units:{Au:'g/t'},raw_values:{Au:'1.00'},bdl:{}}};
+const crmRecord={id:'crm-row',batch_id:'crm-batch',source_row:1,record:{crm_id:'CRM-TEST',revision:'rev1',element:'Au',unit:'g/t',expected:1,sd:0.05,source:'Synthetic certificate'}};
+beforeEach(()=>{vi.resetAllMocks(); api.importQaqc.mockResolvedValue(counts); api.listQaqcRecords.mockResolvedValue({rows:[],next:null}); api.listQaqcBatches.mockResolvedValue({rows:[],next:null});});
+async function file() {
+  fireEvent.change(screen.getByLabelText('QA/QC data file'),{target:{files:[{name:'synthetic.csv',size:70,arrayBuffer:async()=>new ArrayBuffer(0),text:async()=> 'lab_id,lab_batch_id,sample_id,sample_type,Au\nLab,Job,00001,routine,0.005'}]}});
+  await screen.findByRole('form',{name:'Map QA/QC columns'});
+  fireEvent.click(screen.getByRole('checkbox',{name:'Au',exact:true}));
+  fireEvent.change(screen.getByLabelText('Unit for Au'),{target:{value:'g/t'}});
+}
+it('invalidates reviewed preview when units change and reuses one UUID after uncertain commit',async()=>{
+  const saved=vi.fn(); render(<QaqcImporter client={{}} propertyId="prop" onSaved={saved} />); await file();
+  fireEvent.click(screen.getByRole('button',{name:'Check QA/QC import'})); await screen.findByRole('button',{name:'Commit QA/QC import'});
+  fireEvent.change(screen.getByLabelText('Unit for Au'),{target:{value:'ppm'}});
+  expect(screen.queryByRole('button',{name:'Commit QA/QC import'})).toBeNull();
+  fireEvent.click(screen.getByRole('button',{name:'Check QA/QC import'})); await screen.findByRole('button',{name:'Commit QA/QC import'});
+  api.importQaqc.mockRejectedValueOnce(new Error('Network outcome unknown')).mockResolvedValueOnce({...counts,committed:true,replayed:true});
+  fireEvent.click(screen.getByRole('button',{name:'Commit QA/QC import'})); await screen.findByText('Network outcome unknown');
+  const first=api.importQaqc.mock.calls.at(-1)[4];
+  fireEvent.click(screen.getByRole('button',{name:'Commit QA/QC import'})); await screen.findByText('Previous import confirmed: 1 new, 0 changed, 0 unchanged.');
+  expect(api.importQaqc.mock.calls.at(-1)[4].batchId).toBe(first.batchId); expect(first.batchId).toBeTruthy();
+  expect(api.importQaqc.mock.calls.at(-1)[3][0]).toMatchObject({sample_id:'00001',units:{Au:'ppm'},raw_values:{Au:'0.005'}});
+  expect(saved).toHaveBeenCalledOnce();
+});
+it('does not report an already rolled-back retry as a successful import',async()=>{
+  const saved=vi.fn(); render(<QaqcImporter client={{}} propertyId="prop" onSaved={saved} />); await file();
+  fireEvent.click(screen.getByRole('button',{name:'Check QA/QC import'})); await screen.findByRole('button',{name:'Commit QA/QC import'});
+  api.importQaqc.mockResolvedValue({...counts,committed:true,replayed:true,rolled_back:true});
+  fireEvent.click(screen.getByRole('button',{name:'Commit QA/QC import'}));
+  await screen.findByText(/No records were restored/); expect(saved).not.toHaveBeenCalled();
+  expect(screen.getByRole('button',{name:'Check QA/QC import'})).toBeTruthy();
+});
+it('leaves old property responses behind and never carries a reviewed import into the next property',async()=>{
+  const client={}; const ui=render(<QaqcPanel client={client} property={{id:'old'}} perms={{edit:true}} />);
+  await screen.findByRole('button',{name:'Import QA/QC CSV or Excel'}); await file();
+  let resolve; api.importQaqc.mockReturnValue(new Promise(r=>{resolve=r;}));
+  fireEvent.click(screen.getByRole('button',{name:'Check QA/QC import'}));
+  ui.rerender(<QaqcPanel client={client} property={{id:'new'}} perms={{edit:true}} />);
+  await act(async()=>resolve(counts));
+  await screen.findByRole('button',{name:'Import QA/QC CSV or Excel'});
+  expect(screen.queryByRole('button',{name:'Commit QA/QC import'})).toBeNull();
+  expect(api.importQaqc.mock.calls[0][1]).toBe('old');
+});
+it('is read only for viewers and displays unavailable migration without import controls',async()=>{
+  const ui=render(<QaqcPanel client={{}} property={{id:'viewer'}} perms={{edit:false}} />);
+  await screen.findByText('No QA/QC imports yet.');
+  expect(screen.queryByRole('button',{name:'Import QA/QC CSV or Excel'})).toBeNull();
+  api.listQaqcRecords.mockRejectedValue({code:'PGRST205',message:'missing'});
+  ui.rerender(<QaqcPanel client={{}} property={{id:'missing'}} perms={{edit:true}} />);
+  expect(await screen.findByRole('alert')).toHaveTextContent('Existing drill imports still work');
+  expect(screen.queryByRole('button',{name:'Import QA/QC CSV or Excel'})).toBeNull();
+});
+it('keeps a confirmed import message when the subsequent register refresh fails',async()=>{
+  render(<QaqcPanel client={{}} property={{id:'prop'}} perms={{edit:true}} />);
+  await screen.findByRole('button',{name:'Import QA/QC CSV or Excel'}); await file();
+  fireEvent.click(screen.getByRole('button',{name:'Check QA/QC import'})); await screen.findByRole('button',{name:'Commit QA/QC import'});
+  api.importQaqc.mockResolvedValue({...counts,committed:true}); api.listQaqcRecords.mockRejectedValue(new Error('Refresh offline'));
+  fireEvent.click(screen.getByRole('button',{name:'Commit QA/QC import'}));
+  await screen.findByText('Imported: 1 new, 0 changed, 0 unchanged.');
+  expect(await screen.findByRole('alert')).toHaveTextContent('Refresh offline');
+  await waitFor(()=>expect(screen.getByRole('button',{name:'Import QA/QC CSV or Excel'})).toBeEnabled());
+});
+it('switches populated sample and CRM registers without interpreting the previous kind as the next',async()=>{
+  api.listQaqcRecords.mockImplementation(async(_client,_property,kind)=>({rows:[kind==='samples'?sampleRecord:crmRecord],next:null}));
+  render(<QaqcPanel client={{}} property={{id:'prop'}} perms={{edit:false}} />);
+  await screen.findByText('SAMPLE-TEST');
+  fireEvent.change(screen.getByLabelText('Show records'),{target:{value:'crms'}});
+  expect(screen.queryByText('SAMPLE-TEST')).toBeNull();
+  await screen.findByText('CRM-TEST'); expect(screen.getByText(/Expected 1; SD 0.05/)).toBeTruthy();
+  fireEvent.change(screen.getByLabelText('Show records'),{target:{value:'samples'}});
+  expect(screen.queryByText('CRM-TEST')).toBeNull();
+  await screen.findByText('SAMPLE-TEST'); expect(screen.getAllByText('Au: 1.00 g/t')).toHaveLength(2);
+});
+it('ignores delayed responses across rapid kind changes in both directions',async()=>{
+  const pending=[];
+  api.listQaqcRecords.mockImplementation((_client,_property,kind)=>new Promise(resolve=>pending.push({kind,resolve})));
+  render(<QaqcPanel client={{}} property={{id:'prop'}} perms={{edit:false}} />);
+  await waitFor(()=>expect(pending).toHaveLength(1));
+  await act(async()=>pending[0].resolve({rows:[sampleRecord],next:null}));
+  fireEvent.change(screen.getByLabelText('Show records'),{target:{value:'crms'}});
+  fireEvent.change(screen.getByLabelText('Show records'),{target:{value:'samples'}});
+  await act(async()=>pending[2].resolve({rows:[sampleRecord],next:null}));
+  await act(async()=>pending[1].resolve({rows:[crmRecord],next:null}));
+  expect(screen.getByText('SAMPLE-TEST')).toBeTruthy(); expect(screen.queryByText('CRM-TEST')).toBeNull();
+  fireEvent.change(screen.getByLabelText('Show records'),{target:{value:'crms'}});
+  await act(async()=>pending[3].resolve({rows:[crmRecord],next:null}));
+  fireEvent.change(screen.getByLabelText('Show records'),{target:{value:'samples'}});
+  fireEvent.change(screen.getByLabelText('Show records'),{target:{value:'crms'}});
+  await act(async()=>pending[5].resolve({rows:[crmRecord],next:null}));
+  await act(async()=>pending[4].resolve({rows:[sampleRecord],next:null}));
+  expect(screen.getByText('CRM-TEST')).toBeTruthy(); expect(screen.queryByText('SAMPLE-TEST')).toBeNull();
+});

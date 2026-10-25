@@ -8,7 +8,7 @@ const compare = (keys) => (a, b) => {
 };
 function fixture({ cap = 2, onRequest = () => {}, ignoreCursor = false, ids = ['A,(x)."q"\\z: *', 'H10', 'H2', 'Éclair'] } = {}) {
   const calls = [], base = { property_id: 'p1', superseded_by_batch: null };
-  const db = { drill_import_batches: [{ property_id: 'p1', id: 'b1', created_at: '2026-10-01T00:00:00Z' }],
+  const db = { drill_import_batches: [{ property_id: 'p1', id: 'b1', kind: 'collars', created_at: '2026-10-01T00:00:00Z' }],
     drill_collars: ids.map((hole_id) => ({ ...base, hole_id, x: 1, y: 2, z: 3, crs: null })),
     drill_surveys: ids.flatMap((hole_id) => [0, 0.1, 0.2, 2, 10].map((depth_m) => ({ ...base, hole_id, depth_m, azimuth: 0, dip: -60 }))),
     drill_assays: ids.flatMap((hole_id) => [[0, 1], [0, 2], [0, 3], [0.1, 0.2], [0.1, 0.3]].map(([from_m, to_m]) => ({ ...base, hole_id, from_m, to_m, values: { Au: 1 }, units: { Au: 'g/t' } }))),
@@ -67,7 +67,7 @@ describe('property cursors through the real Supabase client', () => {
       if (!changed && table === 'drill_assays' && q.has('or')) {
         changed = true;
         db.drill_assays[0].values.Au = 9;
-        db.drill_import_batches.unshift({ property_id: 'p1', id: 'b2', created_at: '2026-10-02T00:00:00Z' });
+        db.drill_import_batches.unshift({ property_id: 'p1', id: 'b2', kind: 'assays', created_at: '2026-10-02T00:00:00Z' });
       }
     } });
     const loaded = await pull(f.sb, { id: 'p1' });
@@ -104,7 +104,7 @@ describe('property cursors through the real Supabase client', () => {
   it('refuses an unstable import history after the existing bounded retry', async () => {
     let version = 0;
     const f = fixture({ onRequest: ({ table, db }) => {
-      if (table === 'drill_import_batches') db.drill_import_batches = [{ property_id: 'p1', id: `b${++version}`, created_at: `2026-10-0${version}T00:00:00Z` }];
+      if (table === 'drill_import_batches') db.drill_import_batches = [{ property_id: 'p1', id: `b${++version}`, kind: 'assays', created_at: `2026-10-0${version}T00:00:00Z` }];
     } });
     await expect(pull(f.sb, { id: 'p1' })).rejects.toThrow('changed while it was loading');
     expect(version).toBe(4);
