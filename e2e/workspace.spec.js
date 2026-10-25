@@ -740,6 +740,124 @@ test('alteration import: unavailable database support leaves legacy import usabl
   await expect(page.getByText('Alteration intervals', { exact: true })).toHaveCount(0);
 });
 
+test('drill data: NAD27 collars convert to the property NAD83 CRS with the NRCan grid, keeping the originals', async ({ page }) => {
+  const fake = await fakeSupabase(page, { role: 'editor', properties: [{ ...property, crs: 'EPSG:26910' }] });
+  const grids = [];
+  page.on('request', r => { if (r.url().includes('/grids/')) grids.push(new URL(r.url()).pathname); });
+  // This database stores source coordinates (the dry run counts them).
+  await page.route('**/rest/v1/rpc/drill_import_batch', async route => {
+    const args = route.request().postDataJSON();
+    fake.rpc.push({ fn: 'drill_import_batch', args });
+    const diff = { ok: true, kind: 'collars', rows: 1, new: 1, changed: 0, unchanged: 0, holes: 1, new_holes: 1, missing_collars: 0, missing_collar_holes: [], overlaps_existing: 0, overlap_holes: [], changed_sample: [], errors: [], error_count: 0, limit: 20000, source_coordinates: 1 };
+    await route.fulfill({ json: args.p_dry_run ? { ...diff, dry_run: true } : { ...diff, dry_run: false, committed: true, batch_id: args.p_batch, rows_written: 1 } });
+  });
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold');
+  await page.getByRole('tab', { name: 'Drill data' }).click();
+  await page.getByLabel('Drill data file').setInputFiles({ name: 'synthetic-collars.csv', mimeType: 'text/csv', buffer: Buffer.from('HoleID,Easting,Northing,Elevation\nSYNTHETIC-01,512345.678,5432109.876,120\n') });
+  const source = page.getByRole('region', { name: 'Source coordinates', exact: true });
+  await source.getByLabel('Source coordinate system').fill('EPSG:26710');
+  expect(grids).toEqual([]);
+  await source.getByLabel(/Convert X\/Y to the property’s EPSG:26910/).check();
+  const conversion = source.getByRole('region', { name: 'Coordinate conversion' });
+  await expect(conversion.getByText(/1 with the ca_nrc_ntv2_0_west\.gsb grid shift/)).toBeVisible();
+  await expect(conversion.getByRole('cell', { name: '512250.138', exact: true })).toBeVisible();
+  await expect(conversion.getByRole('alert')).toHaveCount(0);
+  expect(grids).toEqual(['/grids/ca_nrc_ntv2_0_west.gsb']);
+  await page.getByRole('button', { name: 'Check against stored data' }).click();
+  await page.getByRole('button', { name: 'Commit import' }).click();
+  await expect(page.getByText(/Imported synthetic-collars.csv/)).toBeVisible();
+  const requests = fake.rpc.filter(c => c.fn === 'drill_import_batch');
+  expect(requests).toHaveLength(2);
+  for (const { args } of requests) {
+    expect(args.p_rows).toEqual([{ hole_id: 'SYNTHETIC-01', x: 512250.138, y: 5432310.033, z: 120, crs: 'EPSG:26910', x_src: 512345.678, y_src: 5432109.876, crs_src: 'EPSG:26710',
+      transform: { method: 'grid', grid: 'ca_nrc_ntv2_0_west.gsb', source: expect.stringContaining('NRCan'), sha256: expect.stringMatching(/^[0-9a-f]{64}$/), from: 'EPSG:26710', to: 'EPSG:26910', library: expect.stringMatching(/^proj4js /) } }]);
+    expect(args.p_mapping.coordinateSource).toMatchObject({ version: 1, crs: 'EPSG:26710', operation: 'convert', target: 'EPSG:26910', methods: { grid: 1 }, grids: ['ca_nrc_ntv2_0_west'] });
+  }
+});
+
+test('drill data: a database without source-coordinate columns keeps the file values, with a notice', async ({ page }) => {
+  const fake = await fakeSupabase(page, { role: 'editor', properties: [{ ...property, crs: 'EPSG:26910', jurisdiction: 'other' }] });
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold');
+  await page.getByRole('tab', { name: 'Drill data' }).click();
+  await page.getByLabel('Drill data file').setInputFiles({ name: 'synthetic-collars.csv', mimeType: 'text/csv', buffer: Buffer.from('HoleID,Easting,Northing\nSYNTHETIC-01,512345.678,5432109.876\n') });
+  const source = page.getByRole('region', { name: 'Source coordinates', exact: true });
+  await source.getByLabel('Source coordinate system').fill('EPSG:26710');
+  await source.getByLabel(/Convert X\/Y/).check();
+  await expect(source.getByRole('alert')).toContainText('NAD27→NAD83 without a grid shift can be off by up to ~50 m');
+  const check = page.getByRole('button', { name: 'Check against stored data' });
+  await expect(check).toBeDisabled();
+  await source.getByLabel(/I accept converted positions/).check();
+  await check.click();
+  await expect(page.getByText(/cannot store converted coordinates with their originals yet/)).toBeVisible();
+  await expect(source.getByLabel(/Convert X\/Y/)).not.toBeChecked();
+  await check.click();
+  await page.getByRole('button', { name: 'Commit import' }).click();
+  await expect(page.getByText(/Imported synthetic-collars.csv/)).toBeVisible();
+  const [, ...kept] = fake.rpc.filter(c => c.fn === 'drill_import_batch');
+  expect(kept).toHaveLength(2);
+  for (const { args } of kept) expect(args.p_rows).toEqual([{ hole_id: 'SYNTHETIC-01', x: 512345.678, y: 5432109.876, crs: 'EPSG:26710' }]);
+});
+
+test('structure import: point measurements map, preview, retry, save templates and roll back', async ({ page }, testInfo) => {
+  const fake = await fakeSupabase(page, { role: 'editor' });
+  fake.drill.structure = 0;
+  const imports = [], committed = new Set(); let uncertain = true;
+  await page.route('**/rest/v1/rpc/drill_import_batch', route => {
+    const args = route.request().postDataJSON(); imports.push(args);
+    expect(args.p_kind).toBe('structure');
+    const diff = { ok: true, new: args.p_rows.length, changed: 0, unchanged: 0, new_holes: 0, missing_collars: 1, missing_collar_holes: ['SOURCE-01'], overlaps_existing: 0, changed_sample: [] };
+    if (args.p_dry_run) return route.fulfill({ json: diff });
+    if (!committed.has(args.p_batch)) {
+      committed.add(args.p_batch); fake.drill.structure = args.p_rows.length;
+      fake.drill.batches.unshift({ id: args.p_batch, kind: 'structure', filename: args.p_filename, summary: diff, created_at: '2026-10-25T12:00:00Z', rolled_back_at: null });
+    }
+    if (uncertain) { uncertain = false; return route.fulfill({ status: 500, json: { message: 'Synthetic response lost; retry unchanged import' } }); }
+    return route.fulfill({ json: { ...diff, committed: true } });
+  });
+  await page.route('**/rest/v1/rpc/drill_rollback_batch', route => {
+    const args = route.request().postDataJSON(); fake.drill.structure = 0;
+    fake.drill.batches = fake.drill.batches.map(b => b.id === args.p_batch ? { ...b, rolled_back_at: '2026-10-25T13:00:00Z' } : b);
+    return route.fulfill({ json: { rolled_back: true, withdrawn: 2, restored: 0 } });
+  });
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold'); await page.getByRole('tab', { name: 'Drill data' }).click();
+  const region = page.getByRole('region', { name: 'Drill data', exact: true }), form = region.getByRole('form', { name: 'Import drill data' });
+  const rows = [['HoleID', 'Depth', 'Structure', 'Alpha', 'Beta', 'Dip', 'Dip Direction', 'Comments'], ['SOURCE-01', '12.5', 'Vein', '45', '210', '', '', ''], ['SOURCE-01', '30', 'fault', '', '', '70', '135', 'Gouge']];
+  await region.getByLabel('Drill data file').setInputFiles({ name: 'core.csv', mimeType: 'text/csv', buffer: Buffer.from(rows.map(r => r.join(',')).join('\n')) });
+  await expect(form.getByLabel('Data')).toHaveValue('structure');
+  for (const [name, value] of [['Alpha', 'Alpha'], ['Dip direction', 'Dip Direction'], ['Description', 'Comments']]) await expect(form.getByRole('combobox', { name, exact: true })).toHaveValue(value);
+  await form.getByRole('button', { name: 'Check against stored data' }).click();
+  await expect(form.getByRole('status', { name: 'Changes' })).toContainText('2 new structure measurements');
+  await form.getByLabel('Template name').fill('Core structure'); await form.getByRole('button', { name: 'Save columns as template' }).click();
+  await expect(form.getByLabel('Saved columns').locator('option', { hasText: 'Core structure' })).toHaveCount(1);
+  await form.getByRole('button', { name: 'Commit import' }).click(); await expect(form.getByRole('alert')).toContainText('Synthetic response lost');
+  await form.getByRole('button', { name: 'Commit import' }).click(); await expect(region.getByText('Imported core.csv: 2 new structure measurements.')).toBeVisible();
+  const attempts = imports.filter(a => !a.p_dry_run); expect(attempts[0].p_batch).toBe(attempts[1].p_batch);
+  expect(attempts[0].p_rows).toEqual([{ hole_id: 'SOURCE-01', depth_m: 12.5, type: 'Vein', alpha: 45, beta: 210 }, { hole_id: 'SOURCE-01', depth_m: 30, type: 'fault', dip: 70, dip_direction: 135, description: 'Gouge' }]);
+  await expect(region.getByText('Structure measurements', { exact: true }).locator('..')).toHaveText('Structure measurements2');
+  expect(fake.rpc.find(c => c.fn === 'drill_save_template').args.p_kind).toBe('structure');
+  page.once('dialog', d => d.accept()); await region.getByRole('button', { name: 'Roll back core.csv' }).click();
+  await expect(region.getByRole('table', { name: 'Import history' }).getByRole('row', { name: /core.csv.*Rolled back/ })).toBeVisible();
+  await expect(region.getByText('Structure measurements', { exact: true }).locator('..')).toHaveText('Structure measurements0');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
+  await page.screenshot({ path: testInfo.outputPath('structure-import.png'), fullPage: true });
+});
+
+test('structure import: unavailable database support leaves legacy import usable', async ({ page }) => {
+  await fakeSupabase(page, { role: 'editor' });
+  await page.route('**/rest/v1/rpc/drill_import_batch', route => {
+    const args = route.request().postDataJSON();
+    return args.p_kind === 'structure' ? route.fulfill({ status: 400, json: { code: '22023', message: 'INVALID_KIND: structure' } }) : route.fulfill({ json: { ok: true, new: 1, changed: 0, unchanged: 0 } });
+  });
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold'); await page.getByRole('tab', { name: 'Drill data' }).click();
+  await page.getByLabel('Drill data file').setInputFiles({ name: 'structure.csv', mimeType: 'text/csv', buffer: Buffer.from('HoleID,Depth,Dip,Azimuth\nH1,10,60,90') });
+  const form = page.getByRole('form', { name: 'Import drill data' });
+  await expect(form.getByLabel('Data')).toHaveValue('structure');
+  await form.getByRole('button', { name: 'Check against stored data' }).click(); await expect(form.getByRole('alert')).toContainText('Structure imports are not available on this site yet');
+  await form.getByLabel('Data').selectOption('surveys');
+  await form.getByRole('button', { name: 'Check against stored data' }).click(); await expect(form.getByRole('button', { name: 'Commit import' })).toBeEnabled();
+  await expect(page.getByText('Structure measurements', { exact: true })).toHaveCount(0);
+});
+
 test('drill data: import a CSV, map its columns, see the diff, commit and roll back', async ({ page }, testInfo) => {
   const fake = await fakeSupabase(page, { role: 'editor' });
   await page.goto('/workspace/star-copper-corp/p/rails-copper-gold');

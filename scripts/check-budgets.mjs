@@ -264,9 +264,13 @@ const BUDGETS = {
   // Alteration interval mapping/text intensity and stale-preview/template guards
   // add ~0.8 KiB in the existing lazy drill tab; measured 1103.3 configured.
   // Phase 2 release (CRS, certificates, QA/QC, alteration combined): measured 1131.8.
+  // P2-6 datum conversion (lazy converter + drill tab UI; grids are public/ files): measured 1135.7.
+  // Datum conversion + structure import kind combined: measured 1136.4.
   // Lazy QA/QC blank comparison and CRM Shewhart rules (~7.5 KiB); measured 1139.4 configured.
   // P2-2 vendor import presets and assay quirks, lazy drill tab only: measured 1133.1.
-  totalAuthJsGzipKb: 1140.9, // with blanks (#365): measured 1140.6
+  // With blanks (#365) and vendor presets (#366): measured 1140.6.
+  // Datum conversion and structure import with all of the above: measured 1145.0.
+  totalAuthJsGzipKb: 1145.3,
   // 1009.4 → 1026.3 (measured 1026.0): lazy XLSX reader (~13.8 KiB), sheet/header preview
   // (~1.1 KiB), import wiring and numeric-format handling. Shared fflate adds ~1.2 KiB
   // for async ZIP workers; it remains one copy with the existing draft compression.
@@ -332,9 +336,12 @@ const BUDGETS = {
   // Same selected-comparison PDF feature; measured ~1059.3 before final polish.
   // Same lazy alteration import/lifetime correction; measured 1035.9 plain.
   // Phase 2 release combined: measured 1064.6 plain.
+  // P2-6 datum conversion, as totalAuthJsGzipKb above: measured 1068.5 plain.
+  // Datum conversion + structure import kind combined: measured 1069.1 plain.
   // Same lazy blank comparison and CRM rules; measured 1072.1 plain.
   // P2-2 vendor import presets, as totalAuthJsGzipKb above: measured 1065.8.
-  totalJsGzipKb: 1073.5, // with blanks (#365): measured 1073.2
+  // With blanks, presets, datum and structure: measured 1077.7.
+  totalJsGzipKb: 1078.0,
   // 940.9 → 957.8 (measured 957.5): Excel import, as totalAuthJsGzipKb above.
   // 940.9 → 944.8 (P2-8, measured 944.6): the same lazy property recipe path
   // in the unconfigured build. Its initial route budgets also stay unchanged.
