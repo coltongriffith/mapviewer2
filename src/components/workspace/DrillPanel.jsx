@@ -13,6 +13,7 @@ import { keepFileSource } from '../../utils/drillCoordinates';
 const ResultsPanel = lazyGuarded(() => import('./ResultsPanel'));
 const ExcelSheetPicker = lazyGuarded(() => import('./ExcelSheetPicker'));
 const BatchCertificates = lazyGuarded(() => import('./BatchCertificates'));
+const QaqcPanel = lazyGuarded(() => import('./QaqcPanel'));
 
 // The property's drill database: what is stored, importing CSV or XLSX (columns,
 // checks, the diff, commit) and the import history with Roll back. Loaded
@@ -245,6 +246,7 @@ export default function DrillPanel({ property, perms }) {
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(null);
   const [results, setResults] = useState(false);
+  const [qaqc, setQaqc] = useState(false);
   const [revision, setRevision] = useState(0); // bumped by each import and roll-back, so Results reloads its assays
   const load = useCallback(async () => {
     try {
@@ -263,6 +265,10 @@ export default function DrillPanel({ property, perms }) {
       <ErrorNote error={error} onDismiss={() => setError(null)} />
       <div className="dash-panel"><Summary s={s} /></div>
       {perms.edit && db && <div className="dash-panel"><Importer db={db} property={property} orgId={property.org_id} onDone={() => { setRevision((v) => v + 1); load(); }} /></div>}
+      <section className="dash-panel" aria-label="QA/QC">
+        <h3 style={{ margin: '0 0 8px', fontSize: 15 }}>QA/QC</h3>
+        {qaqc ? <Suspense fallback={<p role="status">Loading QA/QC…</p>}><QaqcPanel property={property} perms={perms} /></Suspense> : <div className="ws-row"><button type="button" className="btn" onClick={() => setQaqc(true)}>Open QA/QC register</button><span className="dash-muted">Routine samples, standards, blanks and duplicates, with their lab provenance.</span></div>}
+      </section>
       {s?.assays > 0 && (
         <section className="dash-panel" aria-label="Results">
           <h3 style={{ margin: '0 0 8px', fontSize: 15 }}>Results</h3>

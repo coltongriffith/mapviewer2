@@ -249,8 +249,19 @@ const BUDGETS = {
   // Combined Excel + page exports + GA4 budget; all changes retained when integrating main.
   // Source CRS selection and same-datum preview add ~2.2 KiB to the lazy
   // drill import UI. Proj4 is reused lazily; editor/startup limits unchanged.
-    // Lab certificate links/retractions in the lazy Drill tab (+2.4 KiB); initial routes unchanged.
-  totalAuthJsGzipKb: 1095.5,
+  // Lab certificate links/retractions in the lazy Drill tab (+2.4 KiB); initial routes unchanged.
+  // Lazy QA/QC mapper, import/register/history UI (+~9.5 KiB); initial routes unchanged.
+  // Explicitly opened duplicate comparison: bounded historical loader, shared
+  // statistics, SVG charts and accessible table (~8.4 KiB lazy); measured 1110.8.
+  // No new dependency and no startup-route budget changes.
+  // Explicitly opened CRM comparison: scoped historical definitions, supplied-SD
+  // statistics, native SVG and raw evidence table (~7.0 KiB lazy); measured1117.8.
+  // No added dependency; all startup-route budgets remain unchanged.
+  // Native QA/QC chart PNG capture, scoped provenance and cancellation (~2.7 KiB
+  // lazy); measured 1120.5 configured. No dependencies or initial-route changes.
+  // Selected-comparison PDF adapter, measured layout, capture and guarded lazy
+  // renderer (~6 KiB). Reuses jsPDF; startup-route limits remain unchanged.
+  totalAuthJsGzipKb: 1127.2,
   // 1009.4 → 1026.3 (measured 1026.0): lazy XLSX reader (~13.8 KiB), sheet/header preview
   // (~1.1 KiB), import wiring and numeric-format handling. Shared fflate adds ~1.2 KiB
   // for async ZIP workers; it remains one copy with the existing draft compression.
@@ -309,7 +320,12 @@ const BUDGETS = {
   // Combined Excel + page exports + GA4, as configured above.
   // Source coordinate review: matching lazy-only increase.
   // Same lazy certificate controls; measured 1027.9 KiB.
-  totalJsGzipKb: 1028.2,
+  // Same lazy QA/QC controls; measured 1035.0 KiB plain.
+  // Same lazy duplicate comparison; measured 1043.4 KiB plain.
+  // Same lazy CRM comparison; measured1050.5 KiB plain.
+  // Same lazy QA/QC PNG feature; measured 1053.3 plain.
+  // Same selected-comparison PDF feature; measured ~1059.3 before final polish.
+  totalJsGzipKb: 1059.9,
   // 940.9 → 957.8 (measured 957.5): Excel import, as totalAuthJsGzipKb above.
   // 940.9 → 944.8 (P2-8, measured 944.6): the same lazy property recipe path
   // in the unconfigured build. Its initial route budgets also stay unchanged.

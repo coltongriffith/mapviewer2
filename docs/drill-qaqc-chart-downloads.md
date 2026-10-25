@@ -1,0 +1,13 @@
+# QA/QC chart PNG downloads
+
+Each displayed duplicate scatter, ranked HARD or CRM comparison has its own PNG download. The PNG captures the current native SVG and the selected historical snapshot synchronously before decoding or encoding. It does not requery the database or recompute a different chart. There are no additional dependencies, PDF output, server calls or analytical rules.
+
+The image includes property name/ID, import UUID, exact group and units, assessed/selected/unassessed counts, submitted/written counts, file/hash/request provenance, retrieval timestamp and rollback status. It explicitly describes a written-import subset, not a full-file, whole-job or current-property report. Raw values, detection bounds and individual historical version pins remain available in the app evidence table; the PNG does not claim to contain that full report.
+
+Scatter captions distinguish positive log pairs from otherwise eligible zero pairs and describe the original-relative ±10/20/30% bands. Ranked HARD retains its existing formula, tie order and eligible denominator. CRM captions identify supplied expected value and SD lines, submitted-row gaps, disjoint category denominators and the absence of method/certificate verification. These are descriptive charts, not pass/fail results or analytical sequences.
+
+The PNG is 1920 pixels wide, at most 4096 pixels high, with a white background, explicit text color and Arial. All provenance text wraps, including long unbroken IDs. If metadata cannot fit, export fails visibly instead of truncating it. Long unit labels on axes use a short label referring to the full exact unit in the wrapped provenance; point coordinates and bands are unchanged. Duplicate PNGs add a small left margin and move only the vertical title into it so long tick labels do not touch the title. A chart with no plotted points has its download disabled. One-zero pairs can still appear in ranked HARD even when the scatter is unavailable.
+
+Auth, group or close events invalidate pending exports immediately, before React's next commit. Unmount also invalidates them. Checks run before image decoding, after decoding and after PNG encoding, immediately before download. Local object URLs and canvas memory are released on success, failure or cancellation. No remote assets/fonts are loaded by the exporter.
+
+Focused tests cover exact geometry/label capture, XML escaping, metadata bounds, counts/history, decode/encode failures, stale auth/selection/property/close cancellation and zero-count availability. Configured desktop/phone browser tests download and decode all three actual PNGs, inspect labels and counts in the captured SVG, and confirm bounded dimensions plus visible plot/text pixels.
