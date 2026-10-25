@@ -13,6 +13,10 @@
 // to the section, download the PNG. Later edits to the figure never reach it.
 // "Start a new figure from this version" copies it into an unsaved figure;
 // "Back to the current figure" reopens the latest save.
+//
+// A QP may sign off a version (20261103100000_figure_version_signoff.sql): name, credentials, date and a note,
+// written once and only ever retracted with a reason. Without that migration the sign-off controls are hidden
+// and the dialog says so; the PNG of a signed-off version can carry the sign-off in its metadata.
 import { track } from './track.js';
 
 const $ = (id) => document.getElementById(id);
@@ -106,7 +110,13 @@ export async function publish({ label, releaseDate = today() } = {}) {
 export async function list(id = figureId()) {
   if (!id) return [];
   const rows = await rpc('list_figure_versions', { p_kind: 'figure', p_figure_id: id }, 'load the published versions');
-  return (rows || []).map(toVersion);
+  return (await signoffs()).withSignoffs((rows || []).map(toVersion));
+}
+// QP sign-offs (src/utils/figureSignoffs.js), loaded with the first list or opened version.
+let SO = null;
+async function signoffs() {
+  SO ||= await import('../utils/figureSignoffs.js');
+  return SO.figureSignoffs(await host.client());
 }
 
 let shown = null; // { version, project, figureId } while a version is on screen
@@ -144,6 +154,7 @@ export async function open(n, { force = false, figure = null } = {}) {
     throw plain(`That version could not be opened (${err.message}).`, err);
   }
   const v = toVersion(row), live = await liveFigure(sb, row.figure_id);
+  try { await (await signoffs()).withSignoffs([v]); } catch { /* the bar works without it */ }
   shown = { version: v, project, figureId: row.figure_id, live };
   host.setFrozen({ ...v, figureId: row.figure_id });
   bar(v, live);
@@ -206,15 +217,16 @@ function bar(v, live) {
   const note = document.createElement('span');
   note.className = 'share-note'; note.id = 'ver-banner'; note.setAttribute('role', 'status'); note.textContent = banner(v);
   note.title = `Published ${new Date(v.createdAt).toLocaleString()}${v.publishedBy ? ` by ${v.publishedBy}` : ''} · SHA-256 ${v.contentHash}`;
-  box.append(note,
-    btn('Download PNG', () => em().exportPNG({ view: em().getState().view, download: true }), true),
+  box.append(note, ...(v.signoff ? SO.barExtras(note, v) : []),
+    // Ticked, the sign-off goes in the PNG's metadata (an iTXt Comment).
+    btn('Download PNG', () => ($('ver-inc-signoff')?.checked ? SO.downloadSigned(em(), v) : em().exportPNG({ view: em().getState().view, download: true })), true),
     btn('Start a new figure from this version', startCopy),
     ...(live ? [btn('Back to the current figure', close)] : [])); // no live figure to go back to
   document.querySelector('.toolbar').appendChild(box);
 }
 
 // ── Versions dialog ─────────────────────────────────────────────────────────
-let dlg = null, items = [], msg = { text: '', bad: false };
+let dlg = null, items = [], msg = { text: '', bad: false }, signing = null; // the version whose sign-off form is open
 function dialog() {
   if (dlg) return dlg;
   dlg = document.createElement('dialog');
@@ -239,7 +251,8 @@ function render(loading = false) {
     <div id="ver-list">${loading ? '<p class="muted">Loading…</p>' : items.error ? `<p class="bad">${esc(items.error)}</p>` : !items.length ? '<p class="muted">No published versions yet.</p>'
     : `<ul class="share-list" aria-label="Versions of ${esc(cur?.name || 'this figure')}">${items.map((v) => `<li><b title="${esc(v.label)}">v${v.version} · ${esc(v.label)}</b>
         <span class="acct-acts"><button class="btn" type="button" data-ver="${v.version}" aria-label="Open version ${v.version}">Open</button><button class="btn" type="button" data-link="${v.version}" aria-label="Copy link to version ${v.version}">Copy link</button></span>
-        <small>${v.releaseDate ? `Release ${esc(v.releaseDate)} · ` : ''}published ${esc(new Date(v.createdAt).toLocaleDateString())}${v.publishedBy ? ` by ${esc(v.publishedBy)}` : ''} · <span title="SHA-256 ${esc(v.contentHash)}">${esc(String(v.contentHash).slice(0, 10))}</span></small></li>`).join('')}</ul>`}</div>
+        <small>${v.releaseDate ? `Release ${esc(v.releaseDate)} · ` : ''}published ${esc(new Date(v.createdAt).toLocaleDateString())}${v.publishedBy ? ` by ${esc(v.publishedBy)}` : ''} · <span title="SHA-256 ${esc(v.contentHash)}">${esc(String(v.contentHash).slice(0, 10))}</span></small>
+        ${items.signoffs ? SO.signoffHtml(v, { canSign: mayPublish, open: signing === v, date: today() }) : ''}</li>`).join('')}</ul>${items.signoffs ? '' : SO.UNAVAILABLE}`}</div>
     <div class="actions"><button class="btn" type="button" data-close="1">Close</button></div>
   </div>`;
 }
@@ -263,6 +276,13 @@ async function doPublish() {
 async function onClick(e) {
   const b = e.target.closest('button'); if (!b || b.disabled) return;
   if (b.dataset.close) { dlg.close(); return; }
+  if (b.dataset.sign) { signing = items.find((v) => v.version === +b.dataset.sign); msg = { text: '', bad: false }; render(); return; }
+  if (b.dataset.so) { // sign, retract or cancel: null when refused (said in place, so the form keeps what was typed)
+    b.disabled = true;
+    const text = await (await signoffs()).submit(dlg, signing, b.dataset.so);
+    if (text !== null) { msg = { text, bad: false }; signing = null; await refresh(); }
+    return;
+  }
   if (b.dataset.link) {
     const url = versionLink(host.current().id, b.dataset.link);
     try { await navigator.clipboard.writeText(url); msg = { text: 'Link copied. It opens this version for people with access to the figure.', bad: false }; } catch { msg = { text: url, bad: false }; }
@@ -275,7 +295,7 @@ async function onClick(e) {
   }
 }
 export async function openDialog() {
-  msg = { text: '', bad: false };
+  msg = { text: '', bad: false }; signing = null;
   render(true);
   if (!dialog().open) dialog().showModal();
   await refresh();

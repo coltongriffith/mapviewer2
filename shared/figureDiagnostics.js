@@ -11,6 +11,7 @@
 //   bounds    { left, top, width, height } in 1x composition px, or null
 //   message   one short plain-language sentence
 //   action    what to do about it, or ''
+//   fix       optional: { label, layout?, note? }, a one-click fix the editor applies (shared/disclosure.js)
 
 export const SEVERITIES = ['error', 'warning', 'info'];
 const RANK = { error: 0, warning: 1, info: 2 };
@@ -23,7 +24,7 @@ function cleanBounds(b) {
   return Object.values(out).every(Number.isFinite) ? out : null;
 }
 
-export function diagnostic({ code, severity = 'warning', elementId = null, bounds = null, message = '', action = '' }) {
+export function diagnostic({ code, severity = 'warning', elementId = null, bounds = null, message = '', action = '', fix = null }) {
   return {
     code: String(code || 'unknown'),
     severity: RANK[severity] === undefined ? 'warning' : severity,
@@ -31,6 +32,7 @@ export function diagnostic({ code, severity = 'warning', elementId = null, bound
     bounds: cleanBounds(bounds),
     message: cap(String(message || code || '')),
     action: cap(String(action || '')),
+    ...(fix?.label ? { fix } : {}),
   };
 }
 

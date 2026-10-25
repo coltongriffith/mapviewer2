@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { runPreflight, textScale, isBlankImage } from '../src/export/preflight.js';
+import { runPreflight, textScale, isBlankImage, disclosureFacts } from '../src/export/preflight.js';
 import { renderSceneToSvg, createExportContext, getExportWarnings, ensureExportFonts } from '../src/export/renderScene.js';
 import { getTemplate } from '../src/templates';
 
@@ -229,5 +229,20 @@ describe('export context', () => {
     expect(res).toEqual({ timedOut: true, missing: ['Lato'] });
     expect(ctx.diagnostics[0]).toMatchObject({ code: 'font-timeout' });
     expect(ctx.warnings).toEqual([]);
+  });
+
+  it('checks disclosure defaults only for a figure with a standard, from what it draws', async () => {
+    expect(codes(await runPreflight(scene({ layout: { basemap: 'blank' } }), { loadImage })).filter((c) => c.startsWith('disclosure-'))).toEqual([]);
+    const pending = { id: 'h', name: 'Holes', visible: true, geojson: { type: 'FeatureCollection', features: [
+      { type: 'Feature', id: 1, properties: { hole: 'DDH-4', assay_status: 'Pending' }, geometry: { type: 'Point', coordinates: [100, 100] } }] } };
+    const s = scene({ layout: { basemap: 'blank', disclosureStandard: 'ni43101' }, layers: [pending], callouts: [{ id: 'r', resultId: 'R1', text: 'DDH-4 12 m @ 3 g/t', anchor: { lat: 100, lng: 100 } }] });
+    const list = (await runPreflight(s, { loadImage })).filter((d) => d.code.startsWith('disclosure-'));
+    expect(codes(list).sort()).toEqual(['disclosure-crs', 'disclosure-north-arrow', 'disclosure-pending', 'disclosure-scale-bar', 'disclosure-sources', 'disclosure-true-width']);
+    expect(list.find((d) => d.code === 'disclosure-scale-bar').fix).toEqual({ label: 'Add scale bar', layout: { showScaleBar: true } });
+    // A claim's "Pending" status is not a pending assay; the projection label under a scale bar states the CRS.
+    const claims = { ...pending, geojson: { type: 'FeatureCollection', features: [{ ...pending.geojson.features[0], properties: { status: 'PENDING' } }] } };
+    const f = disclosureFacts(scene({ layout: { showScaleBar: true, showProjectionLabel: true, projectionName: 'NAD83 / UTM 10N', footerText: 'Source: MTO' }, layers: [claims] }));
+    expect(f).toMatchObject({ scaleBar: true, crs: 'NAD83 / UTM 10N', pending: false, intercepts: false, historical: false });
+    expect(f.texts).toContain('Source: MTO');
   });
 });
