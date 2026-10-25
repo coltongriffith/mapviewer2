@@ -8,7 +8,7 @@ import { formatWhen } from '../../utils/workspace';
 import { ErrorNote } from './shared';
 import { lazyGuarded } from '../../utils/preloadGuard';
 import DrillCoordinateSource from './DrillCoordinateSource';
-import { keepFileSource } from '../../utils/drillCoordinates';
+import { keepFileSource, sourceCoordinateMapping } from '../../utils/drillCoordinates';
 
 const ResultsPanel = lazyGuarded(() => import('./ResultsPanel'));
 const ExcelSheetPicker = lazyGuarded(() => import('./ExcelSheetPicker'));
@@ -69,6 +69,7 @@ export function Importer({ db, property, orgId, onDone }) {
   const [busy, setBusy] = useState(null);
   const [error, setError] = useState(null);
   const [note, setNote] = useState(null);
+  const [conversion, setConversion] = useState(null);
   const batchId = useRef(null);
   const input = useRef(null);
   const readVersion = useRef(0);
@@ -119,8 +120,22 @@ export function Importer({ db, property, orgId, onDone }) {
     setBusy(key); setError(null);
     try { await fn(current); } catch (e) { if (current()) setError(e.message); } finally { if (current()) setBusy(null); }
   };
-  const args = () => ({ propertyId: property.id, kind, rows: built.rows, mapping, filename: file.name });
-  const check = () => run('check', async current => { const result = await db.dryRun(args()); if (current()) setDiff(result); });
+  const cs = mapping?.coordinateSource;
+  const converting = kind === 'collars' && cs?.operation === 'convert';
+  const converted = converting && conversion?.input === built?.rows && conversion.rows ? conversion : null;
+  const args = () => ({ propertyId: property.id, kind, rows: converted ? converted.rows : built.rows, filename: file.name,
+    mapping: converted ? { ...mapping, coordinateSource: { ...cs, methods: converted.counts, grids: converted.grids, expectedErrorM: converted.expectedErrorM } } : mapping });
+  const check = () => run('check', async current => {
+    const result = await db.dryRun(args());
+    if (!current()) return;
+    // A database without the source-coordinate columns would drop the originals: keep the file's values instead.
+    if (converted && result?.ok && typeof result.source_coordinates !== 'number') {
+      change(sourceCoordinateMapping(mapping, mapping.crs));
+      setNote(`This site’s drill database cannot store converted coordinates with their originals yet, so nothing was converted. ${file.name} will be imported with its own X/Y and ${mapping.crs}; check again to continue.`);
+      return;
+    }
+    setDiff(result);
+  });
   const commit = () => run('commit', async current => {
     batchId.current = batchId.current || crypto.randomUUID();
     const r = await db.commit({ ...args(), batchId: batchId.current });
@@ -191,7 +206,7 @@ export function Importer({ db, property, orgId, onDone }) {
           </label>
         )}
       </div>
-      {kind === 'collars' && <DrillCoordinateSource mapping={mapping} propertyCrs={property.crs} rows={built.rows} onChange={change} />}
+      {kind === 'collars' && <DrillCoordinateSource mapping={mapping} propertyCrs={property.crs} jurisdiction={property.jurisdiction} rows={built.rows} onChange={change} onConverted={setConversion} />}
       <fieldset className="ws-form-grid" style={{ border: 0, padding: 0, margin: 0 }}>
         <legend className="dash-muted" style={{ fontSize: 13, marginBottom: 4 }}>Columns</legend>
         {FIELDS[kind].map((f) => (
@@ -242,7 +257,7 @@ export function Importer({ db, property, orgId, onDone }) {
         {diff?.ok ? (
           <button type="submit" className="btn primary" disabled={!!busy || !(diff.new + diff.changed)}>{busy === 'commit' ? 'Importing…' : 'Commit import'}</button>
         ) : (
-          <button type="submit" className="btn primary" disabled={!!busy || !built || built.errorCount > 0}>{busy === 'check' ? 'Checking…' : 'Check against stored data'}</button>
+          <button type="submit" className="btn primary" disabled={!!busy || !built || built.errorCount > 0 || (converting && (!converted || (converted.needsAck && !cs.acknowledged)))}>{busy === 'check' ? 'Checking…' : 'Check against stored data'}</button>
         )}
         <span className="ws-field"><input aria-label="Template name" placeholder="Template name" value={tplName} onChange={(e) => setTplName(e.target.value)} style={{ width: 170 }} /></span>
         <button type="button" className="btn" disabled={!tplName.trim() || !!busy}
