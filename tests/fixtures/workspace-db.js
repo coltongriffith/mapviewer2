@@ -9,11 +9,14 @@ import { pgcrypto } from '@electric-sql/pglite/contrib/pgcrypto';
 // then `migrations` in order (repeat one to check it is idempotent).
 export const readMigration = (f) => readFileSync(`supabase/migrations/${f}`, 'utf8');
 
-export async function createWorkspaceDb({ emails, unconfirmed = [], pro = [], migrations = [] }) {
-  const db = await PGlite.create({ extensions: { pgcrypto } });
+// The roles PostgREST switches to (cluster-wide on a real Postgres server).
+export const ROLES_SQL = 'create role anon; create role authenticated; create role service_role;';
+
+// Auth/storage/vault/net stubs and the production baseline tables, as SQL, so
+// scripts/drill-scale-test.mjs can build the same database on a local server.
+export function baselineSql({ emails, unconfirmed = [], pro = [] }) {
   const users = Object.entries(emails).map(([u, e]) => `('${u}', '${e}', ${unconfirmed.includes(u) ? 'null' : 'now()'})`).join(',');
-  await db.exec(`
-    create role anon; create role authenticated; create role service_role;
+  return `
     create schema extensions; create extension pgcrypto schema extensions;
     create schema auth;
     create table auth.users (id uuid primary key, email text, email_confirmed_at timestamptz);
@@ -79,9 +82,15 @@ export async function createWorkspaceDb({ emails, unconfirmed = [], pro = [], mi
     create policy portfolios_select_own on public.monitored_portfolios for select to authenticated using (user_id = auth.uid());
     create policy portfolios_update_own on public.monitored_portfolios for update to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
     grant select, update, delete on public.monitored_portfolios to authenticated;
-  `);
-  await db.exec(readMigration('20260728000006_project_revisions_and_trash.sql'));
-  await db.exec(readMigration('20261022100000_three_d_projects.sql'));
+  `;
+}
+// Earlier migrations the workspace migrations redefine, applied for real.
+export const BASELINE_MIGRATIONS = ['20260728000006_project_revisions_and_trash.sql', '20261022100000_three_d_projects.sql'];
+
+export async function createWorkspaceDb({ emails, unconfirmed = [], pro = [], migrations = [] }) {
+  const db = await PGlite.create({ extensions: { pgcrypto } });
+  await db.exec(ROLES_SQL + baselineSql({ emails, unconfirmed, pro }));
+  for (const m of BASELINE_MIGRATIONS) await db.exec(readMigration(m));
   for (const m of migrations) await db.exec(m);
 
   // Run one statement as a signed-in user (or anon), as PostgREST would.
