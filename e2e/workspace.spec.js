@@ -475,7 +475,7 @@ async function fakeSupabase(page, { role = 'owner', orgs = [org(role)], properti
       return rows([]);
     }
     if (path === '/rest/v1/drill_column_templates') return json(fake.templates);
-    if (path === '/rest/v1/drill_assays') { fake.assayReads = (fake.assayReads || 0) + 1; return json(Number(url.searchParams.get('offset') || 0) ? [] : fake.assayRows); }
+    if (path === '/rest/v1/drill_assays') { fake.assayReads = (fake.assayReads || 0) + 1; return url.searchParams.has('offset') ? json({ message: 'assays are keyset-paged, not offset' }, 400) : json(url.searchParams.has('or') ? [] : fake.assayRows); }
     if (path === '/rest/v1/user_plans') return single ? json({ plan: 'free', source: 'signup', status: 'active' }) : json([]);
     return single ? json({ code: 'PGRST116', message: 'no rows' }, 406) : json([]);
   });
