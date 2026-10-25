@@ -21,6 +21,7 @@ export const KINDS = [
   { value: 'assays', label: 'Assays' },
   { value: 'lithology', label: 'Lithology' },
   { value: 'alteration', label: 'Alteration' },
+  { value: 'structure', label: 'Structure' },
 ];
 export const kindLabel = (k) => KINDS.find((x) => x.value === k)?.label || k;
 
@@ -64,9 +65,19 @@ export const FIELDS = {
     { key: 'description', label: 'Description', re: /^(alteration_description|alteration_desc|alt_description|alt_desc|description|desc)$/ },
     { key: 'intensity', label: 'Intensity (text)', re: /^(alteration_intensity|alt_intensity|intensity)$/ },
   ],
+  structure: [
+    { key: 'hole_id', label: 'Hole ID', required: true, from: 'hole' },
+    { key: 'depth_m', label: 'Depth', required: true, from: 'depth' },
+    { key: 'type', label: 'Type (text)', re: /^(structure|structure_type|struct|struct_type|type|feature|feature_type)$/ },
+    { key: 'alpha', label: 'Alpha', re: /^(alpha|alpha_angle|alpha_deg|alpha_core_axis)$/ },
+    { key: 'beta', label: 'Beta', re: /^(beta|beta_angle|beta_deg)$/ },
+    { key: 'dip', label: 'Dip', re: /^(dip|true_dip|dip_deg|structure_dip|struct_dip)$/ },
+    { key: 'dip_direction', label: 'Dip direction', re: /^(dip_direction|dipdirection|dip_dir|dipdir|dip_azimuth|dip_az|dd|azimuth|azi|az)$/ },
+    { key: 'description', label: 'Description', re: /^(description|desc|comments?|notes?|remarks?)$/ },
+  ],
 };
-const NUMERIC = new Set(['x', 'y', 'z', 'azimuth', 'dip', 'depth', 'depth_m', 'from_m', 'to_m']);
-const TEXT_MAX = { hole_id: 60, status: 40, sample_id: 60, code: 60, description: 500, intensity: 60 };
+const NUMERIC = new Set(['x', 'y', 'z', 'azimuth', 'dip', 'depth', 'depth_m', 'from_m', 'to_m', 'alpha', 'beta', 'dip_direction']);
+const TEXT_MAX = { hole_id: 60, status: 40, sample_id: 60, code: 60, description: 500, intensity: 60, type: 60 };
 
 export const BDL_MODES = [
   { value: 'half', label: 'Half the detection limit' },
@@ -139,6 +150,9 @@ export function detectKind(header, rows, name = '') {
   if (entry.cols.hole !== undefined && entry.cols.from !== undefined && entry.cols.to !== undefined
     && (header.some(h => /^(alteration(?:_code|_type|_description|_desc|_intensity)?|alt_(?:code|description|desc|intensity))$/.test(norm(h)))
       || /(?:^|[^a-z])alteration(?:[^a-z]|$)/i.test(name))) return 'alteration';
+  // Point structures: hole and depth with core angles, a dip direction or a structure column.
+  if (entry.cols.hole !== undefined && entry.cols.depth !== undefined && entry.cols.from === undefined
+    && (header.some(h => /^(alpha|beta|dip_?dir(ection)?|structure(_type)?|struct(_type)?)$/.test(norm(h))) || /struct/i.test(name))) return 'structure';
   const kind = ROLE_KIND[refineRole(entry, roleOf(entry.cols, name), name)];
   if (kind) return kind;
   const n = String(name).toLowerCase();
@@ -193,6 +207,10 @@ export function autoMapping(kind, header, rows, { name = '', crs = null, decimal
       const explicit = n.findIndex(h => /^(alteration|alt_)/.test(h) && field.re.test(h));
       if (explicit >= 0) cols[key] = header[explicit];
     }
+  }
+  if (kind === 'structure') {
+    const dd = n.findIndex(h => /^(dip_?dir|dipdirection|dip_az|dd$)/.test(h));
+    if (dd >= 0) cols.dip_direction = header[dd];
   }
   const mapping = { columns: cols, bdl: 'half', ...(decimalComma ? { decimalComma: true } : {}) };
   // Collars in latitude / longitude: x is longitude, y latitude, in WGS 84.
@@ -359,7 +377,12 @@ export function buildImport(kind, { header, rows, lines: fileLines = null }, map
     for (const k of ['depth', 'depth_m', 'from_m', 'to_m']) if (o[k] < 0) fail(`Negative depth (${k.replace('_m', '')} ${o[k]})`);
     if (o.from_m !== undefined && o.to_m !== undefined && !(o.to_m > o.from_m)) fail(`To (${o.to_m}) must be greater than From (${o.from_m})`);
     if (o.azimuth !== undefined && !(o.azimuth >= 0 && o.azimuth <= 360)) fail(`Azimuth ${o.azimuth} is outside 0 to 360`);
-    if (o.dip !== undefined && !(o.dip >= -90 && o.dip <= 90)) fail(`Dip ${o.dip} is outside -90 to 90`);
+    if (kind === 'structure') {
+      for (const [k, max] of [['alpha', 90], ['beta', 360], ['dip', 90], ['dip_direction', 360]]) if (o[k] !== undefined && !(o[k] >= 0 && o[k] <= max)) fail(`${FIELDS.structure.find(f => f.key === k).label} ${o[k]} is outside 0 to ${max}`);
+      if (o.beta !== undefined && o.alpha === undefined) fail('Beta needs an alpha');
+      if (o.dip_direction !== undefined && o.dip === undefined) fail('Dip direction needs a dip');
+      if (o.alpha === undefined && o.dip === undefined && !o.description && !bad) fail('No alpha, dip or description');
+    } else if (o.dip !== undefined && !(o.dip >= -90 && o.dip <= 90)) fail(`Dip ${o.dip} is outside -90 to 90`);
     if (kind === 'surveys' && o.azimuth === undefined && o.dip === undefined && !bad) fail('A survey station needs an azimuth or a dip');
     if (['lithology', 'alteration'].includes(kind) && !o.code && !o.description && !bad) fail('No code or description');
     if (kind === 'collars') {
@@ -382,7 +405,7 @@ export function buildImport(kind, { header, rows, lines: fileLines = null }, map
     }
     if (bad) return;
     const key = [o.hole_id, o.depth_m ?? o.from_m ?? '', o.to_m ?? ''].join('|');
-    if (seen.has(key)) { err(line, `${kind === 'collars' ? `Hole ${o.hole_id}` : `This ${kind === 'surveys' ? 'depth' : 'interval'} of ${o.hole_id}`} is also on line ${seen.get(key)}`); return; }
+    if (seen.has(key)) { err(line, `${kind === 'collars' ? `Hole ${o.hole_id}` : `This ${['surveys', 'structure'].includes(kind) ? 'depth' : 'interval'} of ${o.hole_id}`} is also on line ${seen.get(key)}`); return; }
     seen.set(key, line);
     if (o.dip !== undefined) dips.push(o.dip);
     out.push(o);
@@ -423,7 +446,7 @@ export function buildImport(kind, { header, rows, lines: fileLines = null }, map
 }
 
 // ── The diff in words ──────────────────────────────────────────────────────
-const NOUN = { collars: ['collar', 'collars'], surveys: ['survey station', 'survey stations'], assays: ['assay', 'assays'], lithology: ['lithology interval', 'lithology intervals'], alteration: ['alteration interval', 'alteration intervals'] };
+const NOUN = { collars: ['collar', 'collars'], surveys: ['survey station', 'survey stations'], assays: ['assay', 'assays'], lithology: ['lithology interval', 'lithology intervals'], alteration: ['alteration interval', 'alteration intervals'], structure: ['structure measurement', 'structure measurements'] };
 
 /** "12 new holes, 1,340 new assays, 3 changed assays" (or "No changes: 120 assays already stored"). */
 export function diffSentence(kind, d) {
@@ -449,6 +472,7 @@ export const serverErrors = (diff, lines) => (diff?.errors || []).map((e) => ({ 
 // ── Client ─────────────────────────────────────────────────────────────────
 const MESSAGES = [
   [/INVALID_KIND:\s*alteration\b/, 'Alteration imports are not available on this site yet. Ask the site administrator to enable the alteration database update; existing drill imports still work.'],
+  [/INVALID_KIND:\s*structure\b/, 'Structure imports are not available on this site yet. Ask the site administrator to enable the structure database update; existing drill imports still work.'],
   [/ORG_READ_ONLY/, 'You have view-only access here. Ask an admin of the workspace for editor access.'],
   [/BATCH_TOO_LARGE/, 'One import takes at most 20,000 rows (13 MB). Split files over 20,000 rows and import each part.'],
   [/BATCH_SUPERSEDED: (.*)/, (m) => `${m[1].charAt(0).toUpperCase()}${m[1].slice(1)}.`],

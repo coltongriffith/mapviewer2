@@ -26,6 +26,7 @@ function Summary({ s }) {
   const items = [['Holes', n(s.holes)], ['Collars', `${n(s.collars)}${s.planned ? ` (${n(s.planned)} planned)` : ''}`], ['Metres drilled', n(s.metres)],
     ['Survey stations', n(s.surveys)], ['Assays', n(s.assays)], ['Lithology intervals', n(s.lithology)]];
   if (typeof s.alteration === 'number') items.push(['Alteration intervals', n(s.alteration)]);
+  if (typeof s.structure === 'number') items.push(['Structure measurements', n(s.structure)]);
   return (
     <dl className="ws-stats" aria-label="Drill data summary">
       {items.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}
@@ -139,7 +140,7 @@ export function Importer({ db, property, orgId, onDone }) {
         <ErrorNote error={error} onDismiss={() => setError(null)} />
         <div className="ws-row">
           <button type="button" className="btn primary" onClick={() => input.current?.click()}>+ Import CSV or Excel</button>
-          <span className="dash-muted">Collars, downhole surveys, assays, lithology or alteration. CSV or .xlsx; up to 20,000 rows per import.</span>
+          <span className="dash-muted">Collars, downhole surveys, assays, lithology, alteration or structure. CSV or .xlsx; up to 20,000 rows per import.</span>
         </div>
         {busy === 'read' && <p role="status">Reading file… <button type="button" className="btn" onClick={reset}>Cancel</button></p>}
         <input ref={input} type="file" accept=".csv,.txt,.tsv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden aria-label="Drill data file"
@@ -204,6 +205,7 @@ export function Importer({ db, property, orgId, onDone }) {
         ))}
       </fieldset>
       {kind === 'alteration' && <p className="dash-muted">One alteration record per hole and interval. Code or description is required. Intensity stays as source text (for example weak or 03); blank means unknown. No collars or 3D geology are created.</p>}
+      {kind === 'structure' && <p className="dash-muted">One structure measurement per hole and depth. Alpha (0 to 90) with optional beta (0 to 360), dip (0 to 90) with optional dip direction (0 to 360), or a description is required. Type stays as source text. Not drawn in 3D.</p>}
       {kind === 'assays' && (
         <div className="ws-table-wrap">
           <table className="ws-table" aria-label="Elements">

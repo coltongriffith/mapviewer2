@@ -661,6 +661,66 @@ test('alteration import: unavailable database support leaves legacy import usabl
   await expect(page.getByText('Alteration intervals', { exact: true })).toHaveCount(0);
 });
 
+test('structure import: point measurements map, preview, retry, save templates and roll back', async ({ page }, testInfo) => {
+  const fake = await fakeSupabase(page, { role: 'editor' });
+  fake.drill.structure = 0;
+  const imports = [], committed = new Set(); let uncertain = true;
+  await page.route('**/rest/v1/rpc/drill_import_batch', route => {
+    const args = route.request().postDataJSON(); imports.push(args);
+    expect(args.p_kind).toBe('structure');
+    const diff = { ok: true, new: args.p_rows.length, changed: 0, unchanged: 0, new_holes: 0, missing_collars: 1, missing_collar_holes: ['SOURCE-01'], overlaps_existing: 0, changed_sample: [] };
+    if (args.p_dry_run) return route.fulfill({ json: diff });
+    if (!committed.has(args.p_batch)) {
+      committed.add(args.p_batch); fake.drill.structure = args.p_rows.length;
+      fake.drill.batches.unshift({ id: args.p_batch, kind: 'structure', filename: args.p_filename, summary: diff, created_at: '2026-10-25T12:00:00Z', rolled_back_at: null });
+    }
+    if (uncertain) { uncertain = false; return route.fulfill({ status: 500, json: { message: 'Synthetic response lost; retry unchanged import' } }); }
+    return route.fulfill({ json: { ...diff, committed: true } });
+  });
+  await page.route('**/rest/v1/rpc/drill_rollback_batch', route => {
+    const args = route.request().postDataJSON(); fake.drill.structure = 0;
+    fake.drill.batches = fake.drill.batches.map(b => b.id === args.p_batch ? { ...b, rolled_back_at: '2026-10-25T13:00:00Z' } : b);
+    return route.fulfill({ json: { rolled_back: true, withdrawn: 2, restored: 0 } });
+  });
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold'); await page.getByRole('tab', { name: 'Drill data' }).click();
+  const region = page.getByRole('region', { name: 'Drill data', exact: true }), form = region.getByRole('form', { name: 'Import drill data' });
+  const rows = [['HoleID', 'Depth', 'Structure', 'Alpha', 'Beta', 'Dip', 'Dip Direction', 'Comments'], ['SOURCE-01', '12.5', 'Vein', '45', '210', '', '', ''], ['SOURCE-01', '30', 'fault', '', '', '70', '135', 'Gouge']];
+  await region.getByLabel('Drill data file').setInputFiles({ name: 'core.csv', mimeType: 'text/csv', buffer: Buffer.from(rows.map(r => r.join(',')).join('\n')) });
+  await expect(form.getByLabel('Data')).toHaveValue('structure');
+  for (const [name, value] of [['Alpha', 'Alpha'], ['Dip direction', 'Dip Direction'], ['Description', 'Comments']]) await expect(form.getByRole('combobox', { name, exact: true })).toHaveValue(value);
+  await form.getByRole('button', { name: 'Check against stored data' }).click();
+  await expect(form.getByRole('status', { name: 'Changes' })).toContainText('2 new structure measurements');
+  await form.getByLabel('Template name').fill('Core structure'); await form.getByRole('button', { name: 'Save columns as template' }).click();
+  await expect(form.getByLabel('Saved columns').locator('option', { hasText: 'Core structure' })).toHaveCount(1);
+  await form.getByRole('button', { name: 'Commit import' }).click(); await expect(form.getByRole('alert')).toContainText('Synthetic response lost');
+  await form.getByRole('button', { name: 'Commit import' }).click(); await expect(region.getByText('Imported core.csv: 2 new structure measurements.')).toBeVisible();
+  const attempts = imports.filter(a => !a.p_dry_run); expect(attempts[0].p_batch).toBe(attempts[1].p_batch);
+  expect(attempts[0].p_rows).toEqual([{ hole_id: 'SOURCE-01', depth_m: 12.5, type: 'Vein', alpha: 45, beta: 210 }, { hole_id: 'SOURCE-01', depth_m: 30, type: 'fault', dip: 70, dip_direction: 135, description: 'Gouge' }]);
+  await expect(region.getByText('Structure measurements', { exact: true }).locator('..')).toHaveText('Structure measurements2');
+  expect(fake.rpc.find(c => c.fn === 'drill_save_template').args.p_kind).toBe('structure');
+  page.once('dialog', d => d.accept()); await region.getByRole('button', { name: 'Roll back core.csv' }).click();
+  await expect(region.getByRole('table', { name: 'Import history' }).getByRole('row', { name: /core.csv.*Rolled back/ })).toBeVisible();
+  await expect(region.getByText('Structure measurements', { exact: true }).locator('..')).toHaveText('Structure measurements0');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
+  await page.screenshot({ path: testInfo.outputPath('structure-import.png'), fullPage: true });
+});
+
+test('structure import: unavailable database support leaves legacy import usable', async ({ page }) => {
+  await fakeSupabase(page, { role: 'editor' });
+  await page.route('**/rest/v1/rpc/drill_import_batch', route => {
+    const args = route.request().postDataJSON();
+    return args.p_kind === 'structure' ? route.fulfill({ status: 400, json: { code: '22023', message: 'INVALID_KIND: structure' } }) : route.fulfill({ json: { ok: true, new: 1, changed: 0, unchanged: 0 } });
+  });
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold'); await page.getByRole('tab', { name: 'Drill data' }).click();
+  await page.getByLabel('Drill data file').setInputFiles({ name: 'structure.csv', mimeType: 'text/csv', buffer: Buffer.from('HoleID,Depth,Dip,Azimuth\nH1,10,60,90') });
+  const form = page.getByRole('form', { name: 'Import drill data' });
+  await expect(form.getByLabel('Data')).toHaveValue('structure');
+  await form.getByRole('button', { name: 'Check against stored data' }).click(); await expect(form.getByRole('alert')).toContainText('Structure imports are not available on this site yet');
+  await form.getByLabel('Data').selectOption('surveys');
+  await form.getByRole('button', { name: 'Check against stored data' }).click(); await expect(form.getByRole('button', { name: 'Commit import' })).toBeEnabled();
+  await expect(page.getByText('Structure measurements', { exact: true })).toHaveCount(0);
+});
+
 test('drill data: import a CSV, map its columns, see the diff, commit and roll back', async ({ page }, testInfo) => {
   const fake = await fakeSupabase(page, { role: 'editor' });
   await page.goto('/workspace/star-copper-corp/p/rails-copper-gold');

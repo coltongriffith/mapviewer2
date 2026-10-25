@@ -13,6 +13,7 @@ const WORKSPACES = readMigration('20261023100000_workspaces_properties.sql');
 const FILES = readMigration('20261025100000_property_files.sql');
 const MIGRATION = readMigration('20261027100000_drill_database.sql');
 const ALTERATION = readMigration('20261101120000_drill_alteration.sql');
+const STRUCTURE = readMigration('20261102110000_drill_structure.sql');
 
 const id = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const O = id(1); // owner
@@ -41,7 +42,7 @@ const au = (from, to, cu, aueq = null) => ({ hole_id: 'R-1', from_m: from, to_m:
 
 beforeAll(async () => {
   // Run every legacy-kind regression against the extended functions too.
-  ({ db, as, one, val, su } = await createWorkspaceDb({ emails: EMAIL, migrations: [WORKSPACES, FILES, MIGRATION, MIGRATION, ALTERATION, ALTERATION] }));
+  ({ db, as, one, val, su } = await createWorkspaceDb({ emails: EMAIL, migrations: [WORKSPACES, FILES, MIGRATION, MIGRATION, ALTERATION, ALTERATION, STRUCTURE, STRUCTURE] }));
   S.org = (await val(O, `select public.create_organization('Star Copper Corp.')`)).id;
   S.orgB = (await val(X, `select public.create_organization('Rival Metals')`)).id;
   await su(`insert into public.organization_members (org_id, user_id, role) values ($1, $2, 'admin'), ($1, $3, 'editor'), ($1, $4, 'viewer')`, [S.org, A, E, V]);
@@ -74,7 +75,7 @@ describe('migration', () => {
     expect(pols.map((p) => [p.tablename, p.cmd])).toEqual([
       ['drill_alteration', 'SELECT'],
       ['drill_assays', 'SELECT'], ['drill_collars', 'SELECT'], ['drill_column_templates', 'DELETE'], ['drill_column_templates', 'SELECT'],
-      ['drill_import_batches', 'SELECT'], ['drill_lithology', 'SELECT'], ['drill_surveys', 'SELECT'],
+      ['drill_import_batches', 'SELECT'], ['drill_lithology', 'SELECT'], ['drill_structure', 'SELECT'], ['drill_surveys', 'SELECT'],
     ]);
     for (const p of pols) expect(p.qual, p.policyname).toMatch(/\(\s*SELECT auth\.uid\(\) AS uid\s*\)/);
     const defs = (await su(`select pg_get_constraintdef(oid) as d from pg_constraint where conname in ('org_activity_action_check', 'org_activity_entity_type_check') order by conname`)).map((r) => r.d);
