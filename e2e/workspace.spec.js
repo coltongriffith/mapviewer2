@@ -1265,7 +1265,17 @@ test('release pack: approve, a new assay import makes a draft with the diff, app
   fake.recipes = [{ id: 'r1', name: 'Default', version: 1, recipe: { elements: [{ name: 'Cu', unit: '%' }], primary: 'Cu', cutoff: 0.1, minLength: 1, maxDilution: 0 }, created_at: '2026-10-19T00:00:00Z', versions: [] }];
   const pack = { id: 'pk1', items: [{ kind: 'results_table', ref: 'Default' }, { kind: 'drill_plan', ref: MAP }, { kind: 'figure_3d', ref: FIG }], updated_at: '2026-10-19T00:00:00Z' };
   const approvals = [], posted = [];
-  await page.route('**/rest/v1/release_packs*', (route) => route.fulfill({ json: [pack] }));
+  await page.route('**/rest/v1/release_packs*', (route) => {
+    if (route.request().method() === 'PATCH') pack.items = route.request().postDataJSON().items;
+    return route.fulfill({ json: [pack] });
+  });
+  // Each approved batch's status, read by id (not only the summary's latest 50).
+  const statusReads = [];
+  await page.route('**/rest/v1/drill_import_batches*', (route) => {
+    const ids = (new URL(route.request().url()).searchParams.get('id') || '').replace(/^in\.\(|\)$/g, '').split(',').map((x) => x.replace(/"/g, ''));
+    statusReads.push(ids);
+    return route.fulfill({ json: fake.drill.batches.filter((b) => ids.includes(b.id)) });
+  });
   await page.route('**/rest/v1/figure_versions*', (route) => route.fulfill({ json: [] }));
   await page.route('**/rest/v1/drill_assays*', (route) => (new URL(route.request().url()).searchParams.get('batch_id')
     ? route.fulfill({ json: [{ hole_id: 'R-1' }, { hole_id: 'R-1' }, { hole_id: 'R-9' }] }) : route.fallback()));
@@ -1293,7 +1303,7 @@ test('release pack: approve, a new assay import makes a draft with the diff, app
   page.once('dialog', (d) => d.accept());
   await region.getByRole('button', { name: 'Approve' }).click();
   await expect(status).toContainText('Up to date: approved 2026-10-21 by geo@star.test');
-  expect(posted[0]).toEqual({ pack_id: 'pk1', batch_ids: [BATCH0], recipe: { id: 'r1' }, note: null,
+  expect(posted[0]).toEqual({ pack_id: 'pk1', items: pack.items, batch_ids: [BATCH0], recipe: { id: 'r1' }, note: null,
     figures: [{ kind: 'map', id: MAP, version_id: null, revision: 3 }, { kind: 'figure', id: FIG, version_id: null, revision: null }] });
   await expect(region.getByRole('button', { name: 'Approve' })).toBeDisabled();
 
@@ -1313,6 +1323,7 @@ test('release pack: approve, a new assay import makes a draft with the diff, app
   await region.getByRole('button', { name: 'Approve' }).click();
   await expect(status).toContainText('Up to date: approved 2026-10-22');
   expect(posted[1].batch_ids).toEqual([fake.drill.batches[0].id, BATCH0]);
+  expect(statusReads.at(-1)).toEqual([fake.drill.batches[0].id, BATCH0]);
   await expect(region.getByRole('list', { name: 'Approval history' }).getByRole('listitem')).toHaveCount(2);
   expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
 
@@ -1322,8 +1333,23 @@ test('release pack: approve, a new assay import makes a draft with the diff, app
   const dialog = page.getByRole('dialog', { name: 'Export a package' });
   await expect(dialog.getByRole('checkbox', { name: /Fig 1.*Rails claims/ })).toBeChecked();
   await expect(dialog.getByLabel('Project')).toHaveValue('Rails Copper-Gold');
+  await expect(dialog.getByRole('checkbox', { name: /Draft watermark/ })).not.toBeChecked();
   await dialog.getByRole('button', { name: 'Close' }).click();
   await expect(dialog).toHaveCount(0);
+
+  // A saved change to the pack drops the earlier draft outputs; the next download is regenerated, with the draft mark.
+  await region.getByRole('button', { name: 'Remove Rails claims' }).click();
+  await region.getByRole('button', { name: 'Save pack' }).click();
+  await expect(status).toContainText('Draft: data changed since approved');
+  await expect(region.getByRole('list', { name: 'Draft outputs' })).toHaveCount(0);
+  await region.getByRole('button', { name: 'Download pack' }).click();
+  await expect(region.getByRole('list', { name: 'Draft outputs' })).not.toContainText('Rails claims');
+  await expect(dialog.getByRole('checkbox', { name: /Draft watermark/ })).toBeChecked();
+  await expect(dialog.getByRole('checkbox', { name: /Fig 1.*Rails claims/ })).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'Close' }).click();
+  // One results table per pack.
+  await expect(region.getByLabel('Add').locator('option', { hasText: 'Results table' })).toHaveText('Results table (one per pack)');
+  await expect(region.getByLabel('Add').locator('option[value=results_table]')).toHaveAttribute('disabled', '');
 });
 
 test('release pack: a site without the migration shows a notice', async ({ page }) => {

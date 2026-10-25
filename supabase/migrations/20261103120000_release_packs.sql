@@ -13,8 +13,8 @@
 --   touches an approval.
 --
 -- APPROVAL (release_pack_approvals, immutable)
---   The browser inserts { pack_id, batch_ids, figures, recipe, note }: what the
---   reviewer had on screen. The guard checks it against the database (under
+--   The browser inserts { pack_id, items, batch_ids, figures, recipe, note }:
+--   what the reviewer had on screen (items in order; one results table at most). The guard checks it against the database (under
 --   the drill import lock) and refuses APPROVAL_STALE when an import, a roll
 --   back, a new figure version, a map save or a recipe save happened since;
 --   it then stores the server's own copy: the pack's items, every live import
@@ -79,7 +79,7 @@ revoke all on table public.release_packs, public.release_pack_approvals from pub
 grant select on table public.release_packs, public.release_pack_approvals to authenticated;
 grant insert (property_id, items) on table public.release_packs to authenticated;
 grant update (items) on table public.release_packs to authenticated;
-grant insert (pack_id, batch_ids, figures, recipe, note) on table public.release_pack_approvals to authenticated;
+grant insert (pack_id, items, batch_ids, figures, recipe, note) on table public.release_pack_approvals to authenticated;
 
 do $$
 declare t text;
@@ -111,6 +111,8 @@ returns text language sql stable set search_path = '' as $$
       then 'each item needs a kind (results_table, drill_plan, location_map or figure_3d) and a ref'
     when (select count(distinct (e->>'kind', e->>'ref')) from jsonb_array_elements(p) e) <> jsonb_array_length(p)
       then 'an item is listed twice'
+    when (select count(*) from jsonb_array_elements(p) e where e->>'kind' = 'results_table') > 1
+      then 'a pack holds one results table'
     when exists (select 1 from jsonb_array_elements(p) e where e->>'kind' in ('drill_plan', 'location_map')
                  and not exists (select 1 from public.projects m where m.id = public.ws_uuid(e->>'ref')
                                  and m.property_id = p_property and m.deleted_at is null))
@@ -181,6 +183,12 @@ begin
     raise exception 'RELEASE_PACK_NOT_FOUND' using errcode = '42501';
   end if;
   if jsonb_array_length(p.items) = 0 then raise exception 'APPROVAL_INCOMPLETE: the pack has no items' using errcode = '22023'; end if;
+  -- The items the reviewer saw, in order: a pack changed (or reordered) since is not what was reviewed.
+  if (select coalesce(jsonb_agg(jsonb_build_array(e->>'kind', e->>'ref') order by o), '[]') from jsonb_array_elements(p.items) with ordinality x(e, o))
+     is distinct from (select coalesce(jsonb_agg(jsonb_build_array(e->>'kind', e->>'ref') order by o), '[]')
+                       from jsonb_array_elements(case when jsonb_typeof(new.items) = 'array' then new.items else '[]' end) with ordinality x(e, o)) then
+    raise exception 'APPROVAL_STALE: the pack''s items changed since the pack was checked' using errcode = 'P0001';
+  end if;
   -- The drill import lock: no import or roll back lands while this is checked.
   perform pg_advisory_xact_lock(hashtextextended('drill:' || p.property_id::text, 0));
   v_live := array(select b.id from public.drill_import_batches b where b.property_id = p.property_id and b.rolled_back_at is null order by b.created_at, b.id);

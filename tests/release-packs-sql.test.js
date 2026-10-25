@@ -18,9 +18,10 @@ const imp = async (rows) => (await val(E, `select public.drill_import_batch($1, 
 const assay = (hole, from) => ({ hole_id: hole, from_m: from, to_m: from + 1, values: { Au: 1.2 }, units: { Au: 'g/t' }, bdl: {} });
 const live = () => su(`select id from public.drill_import_batches where property_id = $1 and rolled_back_at is null order by created_at, id`, [S.prop]).then((r) => r.map((x) => x.id));
 const figures = async () => (await su(`select public.release_pack_figures($1, (select items from public.release_packs where id = $2)) as f`, [S.prop, S.pack]))[0].f;
-const approve = (uid, { batches, figs, recipe, note = null } = {}) => one(uid, `insert into public.release_pack_approvals (pack_id, batch_ids, figures, recipe, note)
-  values ($1, $2, $3, $4, $5) returning *`, [S.pack, batches, JSON.stringify(figs), recipe && JSON.stringify(recipe), note]);
+const approve = (uid, { items, batches, figs, recipe, note = null } = {}) => one(uid, `insert into public.release_pack_approvals (pack_id, items, batch_ids, figures, recipe, note)
+  values ($1, $2, $3, $4, $5, $6) returning *`, [S.pack, JSON.stringify(items ?? []), batches, JSON.stringify(figs), recipe && JSON.stringify(recipe), note]);
 const current = async () => ({
+  items: (await su(`select items from public.release_packs where id = $1`, [S.pack]))[0].items,
   batches: await live(),
   figs: (await figures()).map((f) => ({ kind: f.kind, id: f.id, version_id: f.version_id, revision: f.revision })),
   recipe: await one(E, `select id from public.drill_result_recipes where property_id = $1 and superseded_at is null`, [S.prop]),
@@ -71,6 +72,7 @@ describe('the pack', () => {
     await expect(as(X, `insert into public.release_packs (property_id, items) values ($1, '[]')`, [S.prop])).rejects.toThrow(/PROPERTY_NOT_FOUND/);
     await expect(as(E, `insert into public.release_packs (property_id, items) values ($1, $2)`, [S.prop, JSON.stringify([{ kind: 'drill_plan', ref: S.otherMap }])])).rejects.toThrow(/not in this property/);
     await expect(as(E, `insert into public.release_packs (property_id, items) values ($1, $2)`, [S.prop, JSON.stringify([{ kind: 'drill_plan', ref: S.map }, { kind: 'drill_plan', ref: S.map }])])).rejects.toThrow(/listed twice/);
+    await expect(as(E, `insert into public.release_packs (property_id, items) values ($1, $2)`, [S.prop, JSON.stringify([{ kind: 'results_table', ref: 'Default' }, { kind: 'results_table', ref: 'Other' }])])).rejects.toThrow(/one results table/);
     await expect(as(E, `insert into public.release_packs (property_id, items) values ($1, '[{"kind":"video","ref":"x"}]')`, [S.prop])).rejects.toThrow(/INVALID_RELEASE_PACK/);
     await expect(as(E, `insert into public.release_packs (org_id, property_id, items) values ($1, $2, '[]')`, [S.orgB, S.prop])).rejects.toThrow(/permission denied/);
     const p = await one(E, `insert into public.release_packs (property_id, items) values ($1, $2) returning *`, [S.prop, JSON.stringify(items)]);
@@ -93,6 +95,10 @@ describe('approvals', () => {
     await expect(approve(E, { ...c, batches: [] })).rejects.toThrow(/APPROVAL_STALE: the drill data/);
     await expect(approve(E, { ...c, figs: c.figs.slice(1) })).rejects.toThrow(/APPROVAL_STALE: a map/);
     await expect(approve(E, { ...c, recipe: { id: id(9) } })).rejects.toThrow(/APPROVAL_STALE: the results recipe/);
+    // The items the reviewer saw: missing, one fewer, or reordered is stale.
+    await expect(approve(E, { ...c, items: undefined })).rejects.toThrow(/APPROVAL_STALE: the pack's items/);
+    await expect(approve(E, { ...c, items: c.items.slice(1) })).rejects.toThrow(/APPROVAL_STALE: the pack's items/);
+    await expect(approve(E, { ...c, items: [c.items[1], c.items[0], ...c.items.slice(2)] })).rejects.toThrow(/APPROVAL_STALE: the pack's items/);
     await expect(as(E, `insert into public.release_pack_approvals (pack_id, approved_by, batch_ids) values ($1, $2, '{}')`, [S.pack, O])).rejects.toThrow(/permission denied/);
   });
 
@@ -120,6 +126,15 @@ describe('approvals', () => {
     await val(E, `select public.drill_rollback_batch($1)`, [S.b2]);
     await expect(approve(E, { ...(await current()), batches: [S.b1, S.b2] })).rejects.toThrow(/APPROVAL_STALE/);
     expect((await approve(E, await current())).batch_ids).toEqual([S.b1]);
+  });
+
+  it('a pack reordered by another editor after the check is stale until reviewed again', async () => {
+    const seen = await current();
+    await as(O, `update public.release_packs set items = $1`, [JSON.stringify([seen.items[2], ...seen.items.filter((_, i) => i !== 2)])]);
+    await expect(approve(E, seen)).rejects.toThrow(/APPROVAL_STALE: the pack's items/);
+    const a = await approve(E, await current());
+    expect(a.items.map((it) => it.kind)).toEqual(['figure_3d', 'results_table', 'drill_plan', 'location_map']);
+    await as(O, `update public.release_packs set items = $1`, [JSON.stringify(seen.items)]);
   });
 
   it('never change or disappear, for any role, until their pack is deleted with its property', async () => {

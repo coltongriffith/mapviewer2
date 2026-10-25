@@ -38,6 +38,14 @@ export function releasePackDb(sb) {
       const rows = await q(sb.from('release_pack_approvals').insert(request).select('*'));
       return rows[0];
     },
+    /** The status of every batch an approval used, read directly (the property summary lists only the latest 50). */
+    async batchStatus(ids) {
+      const out = [];
+      for (let i = 0; i < ids.length; i += 100) {
+        out.push(...(await q(sb.from('drill_import_batches').select('id, kind, filename, created_at, rolled_back_at').in('id', ids.slice(i, i + 100)))) || []);
+      }
+      return out;
+    },
     /** The hole ids an import wrote (first 2,000 rows), for the diff in words. */
     async holes(batch) {
       const t = TABLES[batch.kind];

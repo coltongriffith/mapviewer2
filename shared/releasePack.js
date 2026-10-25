@@ -9,6 +9,8 @@ export const ITEM_KINDS = [
   { value: 'location_map', label: 'Location map' },
 ];
 export const itemKindLabel = (k) => ITEM_KINDS.find((x) => x.value === k)?.label || k;
+/** A pack holds one results table (the database refuses a second). */
+export const canAddKind = (items, kind) => kind !== 'results_table' || !(items || []).some((it) => it.kind === 'results_table');
 // The items that are drawn from the drill data.
 const USES_DRILL = new Set(['results_table', 'drill_plan', 'figure_3d']);
 
@@ -30,12 +32,14 @@ export function batchSentence(b, holes = null) {
 /**
  * The pack against its last approval.
  *   pack: { items: [{ kind, ref }] }, approval: the latest release_pack_approvals row (or null)
- *   batches: drill_property_summary().batches; holes: { [batchId]: [hole ids] }
+ *   batches: drill_property_summary().batches (the latest 50); holes: { [batchId]: [hole ids] }
+ *   approvedBatches: drill_import_batches rows for every id the approval used, read directly so a roll back of an
+ *     approval's batch older than the summary's window is still seen ({ id, kind, filename, rolled_back_at }); null: not read
  *   figures: { [id]: { name, revision, savedAt, versionId, version } } for the pack's maps and 3D figures, as they are now
  *   recipes: { [name]: { id, version } }, the current saved results recipes
  * Returns { state: 'empty' | 'draft' | 'up_to_date', label, changes: [text], diff: text, items: [{ state, notes }] }.
  */
-export function packStatus({ pack, approval = null, batches = [], holes = {}, figures = {}, recipes = {} }) {
+export function packStatus({ pack, approval = null, batches = [], approvedBatches = null, holes = {}, figures = {}, recipes = {} }) {
   const items = (pack?.items || []).map(() => ({ state: 'ok', notes: [] }));
   if (!items.length) return { state: 'empty', label: 'No items yet', changes: [], diff: '', items };
   const changes = [];
@@ -52,12 +56,23 @@ export function packStatus({ pack, approval = null, batches = [], holes = {}, fi
   if (key(pack.items) !== key(approval.items)) changes.push('The pack’s items changed');
   const used = new Set(approval.batch_ids || []);
   const added = batches.filter((b) => !b.rolled_back_at && !used.has(b.id)).sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
-  const undone = batches.filter((b) => b.rolled_back_at && used.has(b.id));
+  // Each approved batch's status: read directly when given (every one), else what the summary's window shows.
+  const status = new Map(batches.map((b) => [b.id, b]));
+  for (const b of approvedBatches || []) status.set(b.id, { ...status.get(b.id), ...b });
+  const undone = [...used].map((id) => status.get(id)).filter((b) => b?.rolled_back_at);
+  const gone = approvedBatches ? [...used].filter((id) => !status.has(id)).length : 0;
   const data = [...added.map((b) => batchSentence(b, holes[b.id])), ...undone.map((b) => `${b.filename || b.kind} rolled back`)];
+  if (gone) data.push(`${gone} approved import${gone === 1 ? ' is' : 's are'} no longer stored`);
   changes.push(...data);
   if (data.length) pack.items.forEach((it, i) => { if (USES_DRILL.has(it.kind) && items[i].state !== 'missing') note(i, 'Drill data changed'); });
 
   const then = new Map((approval.figures || []).map((f) => [f.id, f]));
+  // A missing item (a map or figure deleted or moved out, an unsaved recipe) is never up to date.
+  pack.items.forEach((it, i) => {
+    if (items[i].state !== 'missing') return;
+    const name = it.kind === 'results_table' ? `Results table (recipe "${it.ref}")` : then.get(it.ref)?.name || itemKindLabel(it.kind);
+    changes.push(`${name}: ${items[i].notes.join('; ').replace(/^./, (c) => c.toLowerCase())}`);
+  });
   pack.items.forEach((it, i) => {
     if (it.kind === 'results_table') {
       const r = recipes[it.ref];
@@ -87,6 +102,7 @@ export function approvalRequest({ pack, batches = [], figures = {}, recipes = {}
   const recipeItem = items.find((it) => it.kind === 'results_table');
   return {
     pack_id: pack.id,
+    items: items.map((it) => ({ kind: it.kind, ref: it.ref })),
     batch_ids: batches.filter((b) => !b.rolled_back_at).map((b) => b.id),
     figures: items.filter((it) => it.kind !== 'results_table').map((it) => {
       const f = figures[it.ref] || {};

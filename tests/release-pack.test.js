@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { packStatus, batchSentence, approvalRequest } from '../shared/releasePack.js';
+import { packStatus, batchSentence, approvalRequest, canAddKind } from '../shared/releasePack.js';
 
 const MAP = 'm1', FIG = 'f1', LOC = 'm2';
 const pack = { id: 'p1', items: [{ kind: 'results_table', ref: 'Default' }, { kind: 'drill_plan', ref: MAP }, { kind: 'figure_3d', ref: FIG }, { kind: 'location_map', ref: LOC }] };
@@ -9,7 +9,7 @@ const figures = { [MAP]: { name: 'Drill plan', revision: 3 }, [LOC]: { name: 'Lo
 const recipes = { Default: { id: 'r1', version: 1 } };
 const approval = {
   items: pack.items.map((it) => ({ ref: it.ref, kind: it.kind })), batch_ids: ['b1'], recipe: { name: 'Default', id: 'r1', version: 1 },
-  figures: [{ kind: 'map', id: MAP, revision: 3 }, { kind: 'figure', id: FIG, version_id: 'v2', version: 2, saved_at: '2026-10-20T00:00:00+00:00' }, { kind: 'map', id: LOC, revision: 1 }],
+  figures: [{ kind: 'map', id: MAP, name: 'Drill plan', revision: 3 }, { kind: 'figure', id: FIG, version_id: 'v2', version: 2, saved_at: '2026-10-20T00:00:00+00:00' }, { kind: 'map', id: LOC, revision: 1 }],
   approved_at: '2026-10-21T09:00:00Z', approved_by_email: 'geo@star.test',
 };
 const base = { pack, approval, batches: [b1], figures, recipes };
@@ -49,6 +49,22 @@ describe('packStatus', () => {
     const s = packStatus({ ...base, figures: { [FIG]: figures[FIG], [LOC]: figures[LOC] }, recipes: {} });
     expect(s.items.map((i) => i.state)).toEqual(['missing', 'missing', 'ok', 'ok']);
     expect(s.items[0].notes).toEqual(['Save the results recipe "Default" first']);
+    expect(s.state).toBe('draft');
+  });
+
+  it('a map or 3D figure deleted or moved out after the approval makes the pack a draft, naming it', () => {
+    const s = packStatus({ ...base, figures: { [FIG]: figures[FIG], [LOC]: figures[LOC] } });
+    expect(s).toMatchObject({ state: 'draft', diff: 'Drill plan: no longer in this property' });
+    expect(s.items[1].state).toBe('missing');
+  });
+
+  it('an approved batch rolled back outside the summary window is seen from its own status row', () => {
+    const recent = Array.from({ length: 50 }, (_, i) => ({ id: `n${i}`, kind: 'assays', summary: {}, created_at: '2026-10-01T00:00:00Z', rolled_back_at: null }));
+    const approval50 = { ...approval, batch_ids: ['b0', ...recent.map((b) => b.id)] };
+    expect(packStatus({ ...base, approval: approval50, batches: recent }).state).toBe('up_to_date');
+    const s = packStatus({ ...base, approval: approval50, batches: recent, approvedBatches: [{ id: 'b0', kind: 'collars', filename: 'old collars.csv', rolled_back_at: '2026-10-24T00:00:00Z' }, ...recent] });
+    expect(s).toMatchObject({ state: 'draft', diff: 'old collars.csv rolled back' });
+    expect(packStatus({ ...base, approval: approval50, batches: recent, approvedBatches: recent }).diff).toBe('1 approved import is no longer stored');
   });
 });
 
@@ -63,9 +79,17 @@ describe('batchSentence', () => {
 describe('approvalRequest', () => {
   it('sends the live batches, each map revision and 3D figure version in item order, and the recipe', () => {
     expect(approvalRequest({ pack, batches: [b2, { ...b1, rolled_back_at: 'x' }], figures, recipes }, '  NR 26-14 ')).toEqual({
-      pack_id: 'p1', batch_ids: ['b2'], recipe: { id: 'r1' }, note: 'NR 26-14',
+      pack_id: 'p1', items: pack.items, batch_ids: ['b2'], recipe: { id: 'r1' }, note: 'NR 26-14',
       figures: [{ kind: 'map', id: MAP, version_id: null, revision: 3 }, { kind: 'figure', id: FIG, version_id: 'v2', revision: null }, { kind: 'map', id: LOC, version_id: null, revision: 1 }],
     });
     expect(approvalRequest({ pack: { id: 'p', items: [{ kind: 'figure_3d', ref: 'x' }] } }).figures).toEqual([{ kind: 'figure', id: 'x', version_id: null, revision: null }]);
+  });
+});
+
+describe('canAddKind', () => {
+  it('allows one results table per pack', () => {
+    expect(canAddKind([{ kind: 'drill_plan', ref: 'm' }], 'results_table')).toBe(true);
+    expect(canAddKind([{ kind: 'results_table', ref: 'Default' }], 'results_table')).toBe(false);
+    expect(canAddKind([{ kind: 'results_table', ref: 'Default' }], 'figure_3d')).toBe(true);
   });
 });

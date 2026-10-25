@@ -5,7 +5,7 @@ import { drillDb } from '../../utils/drillDb';
 import { drillResultsDb, MAX_ASSAYS } from '../../utils/drillResultsDb';
 import { listPropertyMaps, listPropertyFigures, formatWhen } from '../../utils/workspace';
 import { lazyGuarded } from '../../utils/preloadGuard';
-import { packStatus, approvalRequest, ITEM_KINDS, itemKindLabel } from '../../../shared/releasePack.js';
+import { packStatus, approvalRequest, canAddKind, ITEM_KINDS, itemKindLabel } from '../../../shared/releasePack.js';
 import { computeResults } from '../../../shared/drillResults.js';
 import { ErrorNote } from './shared';
 
@@ -45,8 +45,14 @@ export default function ReleasePackPanel({ property, perms, onOpenMap }) {
       const recipes = Object.fromEntries((recipeList || []).map((r) => [r.name, { id: r.id, version: r.version, recipe: r.recipe }]));
       const used = new Set(approvals[0]?.batch_ids || []);
       const added = (summary.batches || []).filter((b) => !b.rolled_back_at && !used.has(b.id)).slice(0, 10);
-      const holes = Object.fromEntries(await Promise.all(added.map(async (b) => [b.id, await db.holes(b).catch(() => [])])));
-      setData({ pack, approvals, maps, figs, figures, recipes, batches: summary.batches || [], holes });
+      const [holes, approvedBatches] = await Promise.all([
+        Promise.all(added.map(async (b) => [b.id, await db.holes(b).catch(() => [])])).then(Object.fromEntries),
+        // Every batch the approval used, by id: the summary lists only the latest 50.
+        approvals[0] ? db.batchStatus(approvals[0].batch_ids || []).catch(() => null) : null,
+      ]);
+      setData({ pack, approvals, maps, figs, figures, recipes, batches: summary.batches || [], approvedBatches, holes });
+      // New data, pack or approval: earlier draft outputs no longer describe it.
+      setOutputs(null);
       setUnavailable(false);
     } catch (e) {
       if (e.code === 'UNAVAILABLE') setUnavailable(true); else setError(e.message);
@@ -61,7 +67,7 @@ export default function ReleasePackPanel({ property, perms, onOpenMap }) {
   const list = items || saved;
   const dirty = !!items && JSON.stringify(items) !== JSON.stringify(saved);
   const approval = data.approvals[0] || null;
-  const status = packStatus({ pack: data.pack ? { ...data.pack, items: saved } : null, approval, batches: data.batches, holes: data.holes, figures: data.figures, recipes: data.recipes });
+  const status = packStatus({ pack: data.pack ? { ...data.pack, items: saved } : null, approval, batches: data.batches, approvedBatches: data.approvedBatches, holes: data.holes, figures: data.figures, recipes: data.recipes });
   const blocked = status.items.some((i) => i.state === 'missing');
   const nameOf = (it) => (it.kind === 'results_table' ? `Results table · recipe "${it.ref}"` : data.figures[it.ref]?.name || 'Missing item');
   const choices = add.kind === 'results_table' ? Object.keys(data.recipes).map((n) => ({ id: n, name: n }))
@@ -89,12 +95,15 @@ export default function ReleasePackPanel({ property, perms, onOpenMap }) {
       summary.push(`Results table: ${out.results.length} intercept${out.results.length === 1 ? '' : 's'} in ${new Set(out.results.map((x) => x.holeId)).size} holes (recipe "${it.ref}" v${r.version})`);
     }
     const maps = saved.filter((x) => x.kind === 'drill_plan' || x.kind === 'location_map').filter((x) => data.figures[x.ref]);
+    // Missing items are named, never silently left out.
+    const missing = saved.map((x, i) => ({ ...x, name: nameOf(x), why: status.items[i]?.notes.join('; ') })).filter((_, i) => status.items[i]?.state === 'missing');
+    missing.forEach((x) => summary.push(`Missing, not in the download: ${x.name} (${x.why})`));
     if (maps.length) summary.push(`${maps.map((x) => data.figures[x.ref].name).join(', ')}: drawn from the saved map${maps.length === 1 ? '' : 's'} when you download the pack`);
     const record = { property: property.name, generated_at: new Date().toISOString(), status: status.label, changes: status.changes,
-      items: saved.map((x) => ({ ...x, name: nameOf(x) })), approval: approval && { id: approval.id, approved_at: approval.approved_at, approved_by: approval.approved_by_email,
+      items: saved.map((x, i) => ({ ...x, name: nameOf(x), state: status.items[i]?.state || 'ok' })), missing: missing.map(({ kind, ref, why }) => ({ kind, ref, why })), approval: approval && { id: approval.id, approved_at: approval.approved_at, approved_by: approval.approved_by_email,
         batch_ids: approval.batch_ids, recipe: approval.recipe, figures: approval.figures } };
     files['release-pack.json'] = new TextEncoder().encode(JSON.stringify(record, null, 2));
-    const o = { files, summary, maps };
+    const o = { files, summary, maps, draft: status.state !== 'up_to_date' };
     setOutputs(o);
     return o;
   };
@@ -147,7 +156,7 @@ export default function ReleasePackPanel({ property, perms, onOpenMap }) {
         {perms.edit && (
           <div className="ws-row" style={{ marginTop: 10 }}>
             <label className="ws-field">Add
-              <select value={add.kind} onChange={(e) => setAdd({ kind: e.target.value, ref: '' })}>{ITEM_KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}</select>
+              <select value={add.kind} onChange={(e) => setAdd({ kind: e.target.value, ref: '' })}>{ITEM_KINDS.map((k) => <option key={k.value} value={k.value} disabled={!canAddKind(list, k.value)}>{k.label}{canAddKind(list, k.value) ? '' : ' (one per pack)'}</option>)}</select>
             </label>
             <label className="ws-field">{add.kind === 'results_table' ? 'Recipe' : add.kind === 'figure_3d' ? '3D figure' : 'Map'}
               <select value={add.ref} onChange={(e) => setAdd({ ...add, ref: e.target.value })}>
@@ -155,7 +164,7 @@ export default function ReleasePackPanel({ property, perms, onOpenMap }) {
                 {choices.filter((c) => !list.some((x) => x.kind === add.kind && x.ref === c.id)).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </label>
-            <button type="button" className="btn" disabled={!add.ref || list.length >= 12} onClick={() => { setItems([...list, { kind: add.kind, ref: add.ref }]); setAdd({ ...add, ref: '' }); }}>Add item</button>
+            <button type="button" className="btn" disabled={!add.ref || list.length >= 12 || !canAddKind(list, add.kind)} onClick={() => { setItems([...list, { kind: add.kind, ref: add.ref }]); setAdd({ ...add, ref: '' }); }}>Add item</button>
             <button type="button" className="btn primary" disabled={!dirty || !!busy} onClick={() => run('save', async () => {
               const p = await db.save(property.id, data.pack, items);
               setItems(null); setNote('Saved the pack.'); setData((d) => ({ ...d, pack: p })); await load();
@@ -170,7 +179,7 @@ export default function ReleasePackPanel({ property, perms, onOpenMap }) {
         <div className="dash-panel ws-stack">
           <div className="ws-row">
             <button type="button" className="btn" disabled={!!busy} onClick={() => run('regen', async () => { await regenerate(); setNote('Regenerated the draft from the current data.'); })}>{busy === 'regen' ? 'Regenerating…' : 'Regenerate draft'}</button>
-            <button type="button" className="btn" disabled={!!busy} onClick={() => run('pkg', async () => { const o = outputs || await regenerate(); setPkg(o); })}>{busy === 'pkg' ? 'Preparing…' : 'Download pack'}</button>
+            <button type="button" className="btn" disabled={!!busy} onClick={() => run('pkg', async () => { setPkg(await regenerate()); })}>{busy === 'pkg' ? 'Preparing…' : 'Download pack'}</button>
             {perms.edit && (
               <button type="button" className="btn primary" disabled={!!busy || dirty || blocked || status.state === 'up_to_date'}
                 title={blocked ? 'Fix the items marked above first' : dirty ? 'Save the pack first' : undefined}
@@ -200,7 +209,7 @@ export default function ReleasePackPanel({ property, perms, onOpenMap }) {
       {pkg && (
         <Suspense fallback={null}>
           <PackageExport projects={pkg.maps.map((x) => ({ id: x.ref, name: data.figures[x.ref].name }))} onClose={() => setPkg(null)}
-            preset={{ picked: pkg.maps.map((x) => x.ref), extra: pkg.files, meta: { project: property.name }, draft: status.state !== 'up_to_date' }} />
+            preset={{ picked: pkg.maps.map((x) => x.ref), extra: pkg.files, meta: { project: property.name }, draft: pkg.draft }} />
         </Suspense>
       )}
     </section>
