@@ -33,7 +33,8 @@ it('requires a populated group choice and presents supplied-reference evidence w
   await choose(); await screen.findByText('3 assessed / 4 selected standards');
   expect(screen.getByText(/9 rows submitted; 4 records written/)).toHaveTextContent('rolled back');
   const plot = screen.getByRole('img', { name: /CRM reference plot, 3 assessed/ });
-  expect(plot.querySelector('polyline')).toBeNull(); expect(plot.querySelectorAll('circle')).toHaveLength(3);
+  expect(plot.querySelector('polyline')).toBeNull(); expect(plot.querySelectorAll('circle')).toHaveLength(2);
+  expect(plot.querySelectorAll('rect[data-rule="fail"]')).toHaveLength(1);
   expect(plot.querySelectorAll('line')).toHaveLength(5); expect(plot).toHaveTextContent('Submitted row (not analysis order)');
   const table = screen.getByRole('table', { name: 'Standards comparison data' });
   expect(within(table).getByText('ND g/t (below detection; recorded limit 0.005 g/t)')).toBeTruthy();
@@ -41,7 +42,25 @@ it('requires a populated group choice and presents supplied-reference evidence w
   expect(within(table).getAllByText('Expected 10; SD 2 g/t')).toHaveLength(4);
   expect(screen.getByText('Outside ±2, within/on ±3 supplied SD: 2/3 (66.667%)')).toBeTruthy();
   expect(screen.getByText('Outside ±3 supplied SD: 1/3 (33.333%)')).toBeTruthy();
+  // Rows 1 and 7 are +2.5 SD but row 3 (-5 SD) lies between them in import order.
+  expect(screen.getByText('Shewhart rule failures: 1/3 (33.333%)')).toBeTruthy();
+  expect(screen.getByText('Warnings only (outside ±2 supplied SD): 2/3 (66.667%)')).toBeTruthy();
+  expect(within(screen.getByRole('region', { name: 'Standards failing Shewhart rules' })).getByText(/Row 3 · 0001: 0.000 g\/t \(z = -5\) — Outside ±3 supplied SD/)).toBeTruthy();
+  expect(screen.getByText(/import order, not analytical order/)).toBeTruthy();
+  expect(within(table).getAllByText('Warning (outside ±2 supplied SD)')).toHaveLength(2);
   expect(load.mock.calls[0][1]).toEqual(scope);
+});
+
+it('fails two consecutive same-side ±2 SD standards in displayed order and shows them as failures', async () => {
+  const data = snapshot(4); data.records[1].record.values.Au = 15; data.records[1].record.raw_values.Au = '15.000';
+  data.records[2].record.values.Au = 5; data.records[2].record.raw_values.Au = '5.000'; data.records[2].record.bdl = {};
+  load.mockResolvedValue(data); render(view()); await choose(); await screen.findByText('4 assessed / 4 selected standards');
+  expect(screen.getByText('Shewhart rule failures: 2/4 (50%)')).toBeTruthy();
+  const failures = screen.getByRole('region', { name: 'Standards failing Shewhart rules' });
+  expect(within(failures).getAllByRole('listitem').map(li => li.textContent)).toEqual([
+    'Row 1 · 0000: 15.000 g/t (z = 2.5) — Two consecutive assessed standards outside ±2 supplied SD on the same side',
+    'Row 3 · 0001: 15.000 g/t (z = 2.5) — Two consecutive assessed standards outside ±2 supplied SD on the same side']);
+  expect(screen.getByRole('img').querySelectorAll('rect[data-rule="fail"]')).toHaveLength(2);
 });
 
 it('cancels stale selections and clears the report when deselected', async () => {
@@ -84,7 +103,7 @@ it('pages raw evidence in original submitted order and restores page on a new ch
 it('keeps zero-denominator percentages unavailable and explains numerical precision exclusions', async () => {
   const data = snapshot(1); data.records[0].record.values.Au = 1e-320; data.crms[0].record.expected = 0; data.crms[0].record.sd = 1e10;
   load.mockResolvedValue(data); render(view()); await choose(); await screen.findByText('0 assessed / 1 selected standards');
-  expect(screen.getAllByText(/0\/0 \(percentage unavailable\)/)).toHaveLength(3);
+  expect(screen.getAllByText(/0\/0 \(percentage unavailable\)/)).toHaveLength(6);
   expect(screen.getByRole('button', { name: 'Download CRM reference comparison PNG' })).toBeDisabled();
   expect(screen.queryByRole('img')).toBeNull(); expect(within(screen.getByRole('table')).getByText(/Unassessed: The score or reference bands cannot be represented/)).toBeTruthy();
 });

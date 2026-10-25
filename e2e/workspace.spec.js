@@ -238,20 +238,74 @@ test('QA/QC standard comparisons: pinned supplied references, zero and censored 
   await expect(page.getByText('3 assessed / 4 selected standards')).toBeVisible();
   await expect(page.getByText(/9 rows submitted; 4 records written/)).toHaveText(/rolled back/);
   const plot = page.getByRole('img', { name: /CRM reference plot, 3 assessed/ }); await expect(plot).toBeVisible();
-  expect(await plot.locator('polyline').count()).toBe(0); expect(await plot.locator('circle').count()).toBe(3);
+  expect(await plot.locator('polyline').count()).toBe(0); expect(await plot.locator('circle').count()).toBe(1); expect(await plot.locator('rect[data-rule="fail"]').count()).toBe(2);
   const table = page.getByRole('table', { name: 'Standards comparison data' });
   await expect(table).toContainText('ND g/t (below detection; recorded limit 0.005 g/t)'); await expect(table).toContainText('0.000 g/t');
   await expect(page.getByText('Outside ±3 supplied SD: 2/3 (66.667%)')).toBeVisible();
+  await expect(page.getByText('Shewhart rule failures: 2/3 (66.667%)')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Standards failing Shewhart rules' })).toContainText('Row 3 · STD-001: 0.000 g/t (z = -5) — Outside ±3 supplied SD');
   await table.locator('summary').filter({ hasText: 'Record provenance' }).first().click();
   await expect(table).toContainText(`Pinned CRM: ${crm.id}`); await expect(table).toContainText('Synthetic supplied certificate only');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('standards-comparison.png'), fullPage: true });
-  await checkChartDownload(page, testInfo, 'CRM reference comparison', `qaqc-standards-${batch.id}.png`, ['Supplied expected value: 10; supplied SD: 2 g/t.', 'CRM CRM-TEST | revision rev-01', '3 assessed / 4 selected; 1 unassessed', 'Outside ±3 supplied SD: 2/3.', 'no analytical order or trend implied', 'synthetic-standards-request', batch.id]);
-  await checkComparisonPdf(page, testInfo, `qaqc-standards-${batch.id}.pdf`, ['STD-000', 'STD-003', crm.id, 'ND', '0.005', '0.000', 'Synthetic supplied certificate only', batch.id]);
+  await checkChartDownload(page, testInfo, 'CRM reference comparison', `qaqc-standards-${batch.id}.png`, ['Supplied expected value: 10; supplied SD: 2 g/t.', 'CRM CRM-TEST | revision rev-01', '3 assessed / 4 selected; 1 unassessed', 'Outside ±3 supplied SD: 2/3.', 'Shewhart failures: 2/3', 'no analytical order or trend implied', 'synthetic-standards-request', batch.id]);
+  await checkComparisonPdf(page, testInfo, `qaqc-standards-${batch.id}.pdf`, ['STD-000', 'STD-003', crm.id, 'ND', '0.005', '0.000', 'Synthetic supplied certificate only', 'Shewhart rule failures: 2/3', 'Failure: source row 7, sample STD-003', batch.id]);
   await page.getByRole('button', { name: 'Back to QA/QC' }).click(); await expect(page.getByRole('button', { name: 'Compare standards' })).toBeFocused();
   await expect(page.getByRole('button', { name: 'Roll back QA/QC import' })).toHaveCount(0);
   failReferences = true; await page.getByRole('button', { name: 'Compare standards' }).click(); await page.getByLabel('Comparison group').selectOption('0');
   await expect(page.getByRole('alert')).toContainText('No comparison is shown'); await expect(table).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test('QA/QC blank comparisons: N × detection-limit threshold, censored passes, unassessed blanks, PNG and PDF', async ({ page }, testInfo) => {
+  const errors = []; page.on('pageerror', error => errors.push(error.message));
+  await fakeSupabase(page, { role: 'viewer' });
+  const id = n => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+  const batch = { id: id(40), property_id: PROP, kind: 'samples', row_count: 9, rows_written: 5, request_hash: 'synthetic-blanks-request',
+    provenance: { filename: 'synthetic-blanks.csv', sha256: 'd'.repeat(64) }, summary: { new: 5, changed: 0 }, created_at: '2026-10-23T12:00:00Z', rolled_back_at: null, depends_on: [] };
+  const row = (n, sample_id, sample_type, value, raw, bdl = {}) => ({ id: id(400 + n), property_id: PROP, batch_id: batch.id, source_row: n, parent_version_id: null,
+    record: { sample_id, sample_type, lab_id: 'Lab-A', lab_batch_id: 'Job-1', values: { Au: value }, units: { Au: 'g/t' }, raw_values: { Au: raw }, bdl } });
+  const rows = [row(1, 'BLK-001', 'blank', 0.004, '0.004'), row(2, 'R-001', 'routine', null, '<0.005', { Au: 0.005 }), row(3, 'BLK-002', 'blank', 0.02, '0.020'),
+    row(5, 'BLK-003', 'blank', null, '<0.005', { Au: 0.005 }), row(7, 'BLK-004', 'blank', 0.04, '0.040')];
+  await page.route('**/rest/v1/drill_qaqc_batches*', route => route.fulfill({ json: [batch] }));
+  await page.route('**/rest/v1/drill_qaqc_samples*', route => {
+    const q = new URL(route.request().url()).searchParams;
+    expect(q.get('property_id')).toBe(`eq.${PROP}`);
+    if (q.has('superseded_by_batch')) return route.fulfill({ json: [] });
+    expect(q.get('batch_id')).toBe(`eq.${batch.id}`);
+    return route.fulfill({ json: q.has('or') ? [] : rows });
+  });
+  await page.route('**/rest/v1/drill_crm_values*', route => { throw new Error(`Blank comparisons read no CRM definitions: ${route.request().url()}`); });
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold');
+  await page.getByRole('tab', { name: 'Drill data' }).click(); await page.getByRole('button', { name: 'Open QA/QC register' }).click();
+  await page.getByRole('button', { name: 'Compare blanks' }).click();
+  await expect(page.getByRole('heading', { name: 'Compare blanks' })).toBeFocused();
+  await expect(page.getByRole('table', { name: 'Blanks comparison data' })).toHaveCount(0);
+  await page.getByLabel('Comparison group').selectOption('0');
+  await expect(page.getByText('4 assessed / 4 selected blanks')).toBeVisible();
+  await expect(page.getByText(/9 rows submitted; 5 records written/)).toHaveText(/newer versions may exist/);
+  await expect(page.getByRole('combobox', { name: /^Blank threshold/ })).toHaveValue('5');
+  const plot = page.getByRole('img', { name: /Blank threshold plot, 4 assessed blanks/ }); await expect(plot).toBeVisible();
+  expect(await plot.locator('[data-outcome="censored"]').count()).toBe(1); expect(await plot.locator('rect[data-outcome="fail"]').count()).toBe(1);
+  await expect(page.getByRole('region', { name: 'Blanks above threshold' })).toContainText('Row 7 · BLK-004: 0.040 g/t is 8 × the detection limit 0.005 g/t');
+  const table = page.getByRole('table', { name: 'Blanks comparison data' });
+  await expect(table).toContainText('<0.005 g/t (below detection; recorded limit 0.005 g/t)'); await expect(table).toContainText('Pass (below detection; censored)');
+  await expect(table).not.toContainText('R-001');
+  await page.getByRole('combobox', { name: /^Blank threshold/ }).selectOption('3');
+  await expect(page.getByRole('region', { name: 'Blanks above threshold' }).getByRole('listitem')).toHaveCount(2);
+  await expect(page.getByText('Above threshold (fail): 2/4 (50%)')).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('blanks-comparison.png'), fullPage: true });
+  await checkChartDownload(page, testInfo, 'Blank threshold comparison', `qaqc-blanks-${batch.id}.png`, ['Recorded detection limit: 0.005 g/t; threshold 3 × detection limit = 0.015 g/t.', 'Above threshold: 2/4', 'no analytical order implied', 'Group: blank | lab Lab-A | job Job-1', '4 assessed / 4 selected; 0 unassessed', 'synthetic-blanks-request', batch.id]);
+  await checkComparisonPdf(page, testInfo, `qaqc-blanks-${batch.id}.pdf`, ['BLK-001', 'BLK-004', rows[1].id, 'Blank threshold: 3 × detection limit', 'Above 3 × detection limit (fail): 2/4', 'Failure: source row 3, sample BLK-002', 'pass (below detection; censored)', 'Recorded detection-limit sources', '<0.005', 'synthetic-blanks.csv', batch.id]);
+  await page.getByRole('button', { name: 'Back to QA/QC' }).click(); await expect(page.getByRole('button', { name: 'Compare blanks' })).toBeFocused();
+  rows.splice(1, 1); rows.splice(2, 1); batch.rows_written = 3;
+  await page.getByRole('button', { name: 'Compare blanks' }).click(); await page.getByLabel('Comparison group').selectOption('0');
+  await expect(page.getByText('0 assessed / 3 selected blanks')).toBeVisible(); await expect(page.getByRole('img')).toHaveCount(0);
+  await expect(page.getByRole('table', { name: 'Blanks comparison data' }).getByText(/Unassessed: No detection limit is recorded/)).toHaveCount(3);
+  await expect(page.getByRole('button', { name: 'Download Blank threshold comparison PNG' })).toBeDisabled();
+  const evidence = await checkComparisonPdf(page, testInfo, `qaqc-blanks-${batch.id}.pdf`, ['BLK-001', 'BLK-004', 'Assessed controls: 0', 'missing_detection_limit', 'No numeric detection limit is recorded'], 'unassessed-');
+  expect(evidence.text).toContain('percentage unavailable');
   expect(errors).toEqual([]);
 });
 

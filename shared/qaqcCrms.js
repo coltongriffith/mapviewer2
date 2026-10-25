@@ -1,5 +1,6 @@
-// Descriptive comparisons with exact pinned, supplied CRM definitions. No
-// certification validation, process acceptance, unit conversion or run rules.
+// Comparisons with exact pinned, supplied CRM definitions and Shewhart rules in
+// submitted-row order. No certification validation, unit conversion or
+// analytical-sequence claim: import order is not the laboratory run order.
 export const MAX_CRM_SNAPSHOT_ROWS = 5000;
 export const CRM_EXCLUSION_REASONS = Object.freeze({
   missing_element: 'The selected element is missing from this standard.',
@@ -43,6 +44,26 @@ export function crmReferenceComparison(observed, expected, sd) {
   return { z, bands, category };
 }
 
+export const CRM_RULES = Object.freeze({
+  outside3: 'Outside ±3 supplied SD',
+  consecutive2: 'Two consecutive assessed standards outside ±2 supplied SD on the same side',
+});
+/**
+ * Shewhart rules over assessed points in the displayed submitted-row order.
+ * Unassessed standards are skipped, not treated as passing or failing. A single
+ * excursion beyond ±2 SD (within ±3) is a warning; both members of a same-side
+ * consecutive pair fail. Order is import order, not analytical order.
+ */
+export function crmControlRules(points) {
+  const side = p => p.category === 'within2' ? 0 : Math.sign(p.z);
+  return points.map((p, i) => {
+    const s = side(p), rules = [];
+    if (p.category === 'outside3') rules.push('outside3');
+    if (s && [points[i - 1], points[i + 1]].some(q => q && side(q) === s)) rules.push('consecutive2');
+    return { status: rules.length ? 'fail' : s ? 'warning' : 'none', rules };
+  });
+}
+
 function observedSource(row, element) {
   const r = row.record;
   return { recordId: row.id, sampleId: r.sample_id, batchId: row.batch_id, sourceRow: row.source_row,
@@ -65,7 +86,7 @@ export function analyzeCrmSnapshot({ scope, records, crms, complete } = {}) {
   }
   if (typeof complete !== 'boolean') throw new Error('Snapshot completeness must be explicit.');
   const result = { scope: { ...scope }, complete, interpretation: 'descriptive', batchRecordCount: null,
-    selectedCount: null, eligibleCount: null, excludedCount: null, excludedByReason: null, points: [], excluded: [], summaries: null };
+    selectedCount: null, eligibleCount: null, excludedCount: null, excludedByReason: null, points: [], excluded: [], summaries: null, rules: null };
   if (!complete) return result;
   if (!Array.isArray(records) || !Array.isArray(crms) || records.length > MAX_CRM_SNAPSHOT_ROWS || crms.length > MAX_CRM_SNAPSHOT_ROWS) {
     throw new Error('A CRM snapshot is limited to 5,000 written samples and pinned definitions.');
@@ -124,13 +145,18 @@ export function analyzeCrmSnapshot({ scope, records, crms, complete } = {}) {
       result.excluded.push({ ...point, status: 'unassessed', reason, message: CRM_EXCLUSION_REASONS[reason] });
     } else result.points.push({ ...point, status: 'descriptive', ...calculated });
   }
+  const control = crmControlRules(result.points);
+  result.points = result.points.map((point, i) => ({ ...point, control: control[i] }));
   const total = result.points.length;
-  const category = name => {
-    const count = result.points.filter(point => point.category === name).length;
+  const tally = test => {
+    const count = result.points.filter(test).length;
     return { count, total, percent: total ? 100 * count / total : null };
   };
+  const category = name => tally(point => point.category === name);
+  const rule = status => tally(point => point.control.status === status);
   Object.assign(result, { batchRecordCount: records.length, selectedCount: selected.length, eligibleCount: total,
     excludedCount: result.excluded.length, excludedByReason,
-    summaries: { within2: category('within2'), outside2Within3: category('outside2Within3'), outside3: category('outside3') } });
+    summaries: { within2: category('within2'), outside2Within3: category('outside2Within3'), outside3: category('outside3') },
+    rules: { fail: rule('fail'), warning: rule('warning'), none: rule('none') } });
   return result;
 }

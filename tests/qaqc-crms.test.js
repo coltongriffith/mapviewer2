@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { analyzeCrmSnapshot, crmReferenceComparison, CRM_EXCLUSION_REASONS } from '../shared/qaqcCrms.js';
+import { analyzeCrmSnapshot, crmControlRules, crmReferenceComparison, CRM_EXCLUSION_REASONS, CRM_RULES } from '../shared/qaqcCrms.js';
 
 // Synthetic controls only; these do not describe real assays or certified CRMs.
 const scope = { propertyId: 'property', batchId: 'sample-import', labId: 'Lab', labBatchId: 'Job', crmId: 'CRM', crmRevision: 'rev-01', element: 'Au', unit: 'g/t' };
@@ -149,5 +149,37 @@ describe('historical CRM snapshot analysis', () => {
     expect(() => analyze([sample(), sample()])).toThrow('Repeated');
     expect(() => analyze(records, [crm(), crm()])).toThrow('unique');
     expect(() => analyze(Array(5001).fill(sample()))).toThrow('5,000');
+  });
+});
+
+describe('Shewhart failure rules in displayed submitted-row order', () => {
+  const points = zs => zs.map(z => ({ z, category: Math.abs(z) > 3 ? 'outside3' : Math.abs(z) > 2 ? 'outside2Within3' : 'within2' }));
+  const statuses = zs => crmControlRules(points(zs)).map(r => r.status);
+  it('fails outside ±3 SD, warns on a single ±2 SD excursion and leaves ±2 SD boundaries unflagged', () => {
+    expect(crmControlRules(points([3.5, -2.5, 0, 2]))).toEqual([{ status: 'fail', rules: ['outside3'] }, { status: 'warning', rules: [] },
+      { status: 'none', rules: [] }, { status: 'none', rules: [] }]);
+  });
+  it('fails both members of two consecutive same-side ±2 SD excursions, never opposite sides or non-adjacent pairs', () => {
+    expect(statuses([2.5, 2.1, 0])).toEqual(['fail', 'fail', 'none']);
+    expect(statuses([-2.5, -2.9])).toEqual(['fail', 'fail']);
+    expect(statuses([2.5, -2.5, 2.5])).toEqual(['warning', 'warning', 'warning']);
+    expect(statuses([2.5, 0, 2.5])).toEqual(['warning', 'none', 'warning']);
+    expect(crmControlRules(points([3.5, 2.5]))).toEqual([{ status: 'fail', rules: ['outside3', 'consecutive2'] }, { status: 'fail', rules: ['consecutive2'] }]);
+    expect(crmControlRules([])).toEqual([]);
+    expect(Object.keys(CRM_RULES)).toEqual(['outside3', 'consecutive2']);
+  });
+  it('applies rules in source-row order, skipping unassessed standards, with explicit rule summaries', () => {
+    const result = analyze([sample('c', 15, {}, { source_row: 5 }), sample('a', 15, {}, { source_row: 1 }),
+      sample('censored', null, { bdl: { Au: 0.005 }, raw_values: { Au: 'ND' } }, { source_row: 3 }), sample('d', 10, {}, { source_row: 7 }), sample('e', 17, {}, { source_row: 9 })]);
+    expect(result.points.map(p => [p.id, p.control.status])).toEqual([['a', 'fail'], ['c', 'fail'], ['d', 'none'], ['e', 'fail']]);
+    expect(result.points[0].control.rules).toEqual(['consecutive2']); expect(result.points[3].control.rules).toEqual(['outside3']);
+    expect(result.excluded[0]).not.toHaveProperty('control');
+    expect(result.rules).toEqual({ fail: { count: 3, total: 4, percent: 75 }, warning: { count: 0, total: 4, percent: 0 }, none: { count: 1, total: 4, percent: 25 } });
+    expect(analyze([]).rules.fail).toEqual({ count: 0, total: 0, percent: null });
+    expect(analyze([sample()], [crm()], { complete: false }).rules).toBeNull();
+  });
+  it('uses the boundary-tolerant category, so a 2 SD boundary pair does not fail', () => {
+    const result = analyze([sample('a', 14), sample('b', 14, {}, { source_row: 2 }), sample('c', 14 + 1e-10, {}, { source_row: 3 })]);
+    expect(result.points.map(p => p.control.status)).toEqual(['none', 'none', 'warning']);
   });
 });
