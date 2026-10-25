@@ -341,7 +341,8 @@ const BUDGETS = {
   // Same lazy blank comparison and CRM rules; measured 1072.1 plain.
   // P2-2 vendor import presets, as totalAuthJsGzipKb above: measured 1065.8.
   // With blanks, presets, datum and structure: measured 1077.7.
-  totalJsGzipKb: 1078.0,
+  // Explicit Company-tier entitlement adds a small amount of auth code; measured 1078.0.
+  totalJsGzipKb: 1079.0,
   // 940.9 → 957.8 (measured 957.5): Excel import, as totalAuthJsGzipKb above.
   // 940.9 → 944.8 (P2-8, measured 944.6): the same lazy property recipe path
   // in the unconfigured build. Its initial route budgets also stay unchanged.
