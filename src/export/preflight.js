@@ -279,7 +279,10 @@ export function disclosureFacts(scene) {
   const ni = (scene.template?.id || layout.templateId) === NI_TEMPLATE_ID && layout.showTitle !== false; // the title strip states the projection
   const shown = (p.layers || []).filter((l) => l.visible !== false && !String(l.id).startsWith('__ac_'));
   const footer = layout.footerEnabled !== false ? layout.footerText : '';
-  const texts = [layout.title, layout.subtitle, footer, ...(layout.legendItems || []).map((i) => i.label),
+  // Only text the export draws: renderScene skips a hidden title or legend.
+  const title = layout.showTitle !== false ? [layout.title, layout.subtitle] : [];
+  const legend = layout.showLegend !== false ? (layout.legendItems || []).map((i) => i.label) : [];
+  const texts = [...title, footer, ...legend,
     ...(p.callouts || []).flatMap((c) => [c.text, c.subtext, c.label]), ...(p.markers || []).map((m) => m.label)];
   return {
     scaleBar, northArrow: layout.showNorthArrow !== false, texts,

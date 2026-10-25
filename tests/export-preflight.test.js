@@ -244,5 +244,10 @@ describe('export context', () => {
     const f = disclosureFacts(scene({ layout: { showScaleBar: true, showProjectionLabel: true, projectionName: 'NAD83 / UTM 10N', footerText: 'Source: MTO' }, layers: [claims] }));
     expect(f).toMatchObject({ scaleBar: true, crs: 'NAD83 / UTM 10N', pending: false, intercepts: false, historical: false });
     expect(f.texts).toContain('Source: MTO');
+    // Hidden title and legend text is not in the export, so it satisfies nothing.
+    const hidden = disclosureFacts(scene({ layout: { title: 'Assays pending', showTitle: false, showLegend: false, legendItems: [{ label: 'Historical holes' }] } }));
+    expect(hidden.texts).not.toContain('Assays pending');
+    expect(hidden.texts).not.toContain('Historical holes');
+    expect(disclosureFacts(scene({ layout: { title: 'Assays pending', showTitle: true, legendItems: [{ label: 'Historical holes' }] } })).texts).toEqual(expect.arrayContaining(['Assays pending', 'Historical holes']));
   });
 });
