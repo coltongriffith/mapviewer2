@@ -15,7 +15,8 @@
 -- (QC_BBOX_MAX), so raising it here alone would report a capped box as
 -- complete.
 --
--- Same signature, return type, security and grants; create or replace keeps
+-- Same signature, return type, security (search_path public, pg_temp, as on
+-- production) and grants; create or replace keeps
 -- the existing EXECUTE grants. Idempotent.
 --
 -- Rollback: rerun the definition in supabase-qc-claims-setup.sql.
@@ -39,7 +40,7 @@ returns table (
 language sql
 stable
 security definer
-set search_path = public
+set search_path = public, pg_temp
 as $$
   select tag_number, owner_name, status, good_to_date, area_hectares, title_type, geometry
   from public.qc_claims
