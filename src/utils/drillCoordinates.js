@@ -14,6 +14,11 @@ export function sourceCoordinateMapping(mapping, code) {
   const crs = String(code || '').trim().toUpperCase();
   return { ...mapping, crs: crs || undefined, coordinateSource: { version: 1, crs: crs || null, operation: 'preserve-source', axisOrder: 'xy' } };
 }
+// Converting to the property CRS: the import stores converted X/Y plus the originals.
+export function conversionMapping(mapping, target, convert) {
+  const base = sourceCoordinateMapping(mapping, mapping.crs);
+  return convert ? { ...base, coordinateSource: { ...base.coordinateSource, operation: 'convert', target: String(target).toUpperCase() } } : base;
+}
 // A column template is not evidence of the new file's datum. Keep its current
 // source choice (including an explicit blank), not the previous file's CRS.
 export function keepFileSource(templateMapping, fileMapping) {
