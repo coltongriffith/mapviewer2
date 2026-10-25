@@ -460,7 +460,7 @@ describe('the Quebec store, whose exact numbers we measured', () => {
     await runQc({ q: '26543', type: 'number', province: 'qc' });
     expect(queryUrls[0]).toMatch(/tag_number=in\.\(26543\)(&|$)/);
     // "starts with 26543" as an index range: [26543, 26544), closest first.
-    expect(queryUrls[1]).toMatch(/tag_number=gte\.26543&tag_number=lt\.26544&order=tag_number\.asc/);
+    expect(queryUrls[1]).toMatch(/tag_number=gte\.26543&tag_number=lt\.26544&order=tag_number,/);
   });
 
   // Regression, Oct 2026: every QC number NOT in the store came back as an
