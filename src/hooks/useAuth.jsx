@@ -37,6 +37,23 @@ export function AuthProvider({ children }) {
     // Grandfather backstop: any account created before the billing launch is
     // Pro forever, even if its user_plans row is missing for some reason.
     if (isGrandfathered(target)) {
+      // Existing grandfathered accounts stay Pro even if the plan service
+      // fails, but an explicit Company assignment must not be hidden by
+      // that fallback. Only the authenticated user's own plan is read.
+      try {
+        const { data } = await supabase
+          .from('user_plans')
+          .select('plan, source')
+          .eq('user_id', target.id)
+          .maybeSingle();
+        if (!current()) return;
+        if (data?.plan === 'company') {
+          rememberProGrace(target.id);
+          setPlanState({ plan: 'company', source: data.source, ready: true });
+          return;
+        }
+      } catch { /* preserve the grandfathered Pro fallback */ }
+      if (!current()) return;
       rememberProGrace(target.id);
       setPlanState({ plan: 'pro', source: 'grandfathered', ready: true });
       return;
@@ -61,7 +78,7 @@ export function AuthProvider({ children }) {
         return;
       }
       // Definitive answer — refresh or revoke the offline grace record.
-      if (data.plan === 'pro') rememberProGrace(target.id);
+      if (data.plan === 'pro' || data.plan === 'company') rememberProGrace(target.id);
       else clearProGrace();
       setPlanState({ plan: data.plan, source: data.source, ready: true });
     } catch {
@@ -181,7 +198,7 @@ export function AuthProvider({ children }) {
 
   // Kept for existing call sites and pricing copy. isPro now means "entitled
   // to Pro", not "not yet proven free" — it no longer fails open.
-  const isPro = tier === TIERS.PRO;
+  const isPro = tier === TIERS.PRO || tier === TIERS.COMPANY;
   const planDenied = tier !== TIERS.PRO;
 
   return (
