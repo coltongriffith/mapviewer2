@@ -1,6 +1,9 @@
 -- P2-3: downhole structural point measurements (kind 'structure'); no 3D orientation rendering.
--- Additive, after 20261101120000_drill_alteration.sql: the functions below are its latest
--- definitions with a 'structure' branch added and nothing else changed. Not applied to production.
+-- Additive, after 20261102100000_drill_collar_source_coords.sql: drill_incoming, drill_current,
+-- drill_row_errors and drill_import_batch below are that file's definitions (collar source
+-- coordinates) with a 'structure' branch added; drill_table, drill_kind_noun and
+-- drill_property_summary are 20261101120000_drill_alteration.sql's with the same. Nothing else
+-- changed. Not applied to production.
 -- Key is property + hole + depth_m, as for surveys.
 
 create table if not exists public.drill_structure (
@@ -72,7 +75,10 @@ language sql immutable set search_path = '' as $$
         'crs', nullif(btrim(e.r->>'crs'), ''), 'azimuth', public.drill_num(e.r->'azimuth'),
         'dip', public.drill_num(e.r->'dip'), 'depth', public.drill_num(e.r->'depth'),
         'status', nullif(btrim(e.r->>'status'), ''),
-        'planned', coalesce(jsonb_typeof(e.r->'planned') = 'boolean' and (e.r->>'planned')::boolean, false)))
+        'planned', coalesce(jsonb_typeof(e.r->'planned') = 'boolean' and (e.r->>'planned')::boolean, false),
+        'x_src', public.drill_num(e.r->'x_src'), 'y_src', public.drill_num(e.r->'y_src'),
+        'crs_src', nullif(btrim(e.r->>'crs_src'), ''),
+        'transform', case when jsonb_typeof(e.r->'transform') = 'object' then e.r->'transform' end))
       when 'surveys' then jsonb_strip_nulls(jsonb_build_object(
         'azimuth', public.drill_num(e.r->'azimuth'), 'dip', public.drill_num(e.r->'dip')))
       when 'assays' then jsonb_build_object(
@@ -98,7 +104,7 @@ returns table (id uuid, hole_id text, k1 double precision, k2 double precision, 
 language sql stable set search_path = '' as $$
   select c.id, c.hole_id, null::double precision, null::double precision, jsonb_strip_nulls(jsonb_build_object(
       'x', c.x, 'y', c.y, 'z', c.z, 'crs', c.crs, 'azimuth', c.azimuth, 'dip', c.dip, 'depth', c.depth,
-      'status', c.status, 'planned', c.planned))
+      'status', c.status, 'planned', c.planned, 'x_src', c.x_src, 'y_src', c.y_src, 'crs_src', c.crs_src, 'transform', c.transform))
     from public.drill_collars c
     where p_kind = 'collars' and c.property_id = p_property and c.superseded_by_batch is null
   union all
@@ -142,7 +148,9 @@ language sql immutable set search_path = '' as $$
       case when p_kind = 'structure' then public.drill_num(e.r->'dip_direction') end as sdd,
       case when p_kind in ('surveys', 'structure') then public.drill_num(e.r->'depth_m')
            when p_kind in ('assays', 'lithology', 'alteration') then public.drill_num(e.r->'from_m') end as k1,
-      case when p_kind in ('assays', 'lithology', 'alteration') then public.drill_num(e.r->'to_m') end as k2
+      case when p_kind in ('assays', 'lithology', 'alteration') then public.drill_num(e.r->'to_m') end as k2,
+      case when p_kind = 'collars' then num_nonnulls(nullif(e.r->'x_src', 'null'), nullif(e.r->'y_src', 'null'),
+        nullif(e.r->'crs_src', 'null'), nullif(e.r->'transform', 'null')) end as src
     from jsonb_array_elements(p_rows) with ordinality as e(r, ord)
   ),
   -- A present value that is not a JSON number (or null) in range.
@@ -175,6 +183,17 @@ language sql immutable set search_path = '' as $$
              and coalesce(n.r->>'crs', '') !~ '^EPSG:[0-9]{4,6}$' then 'coordinate system must be EPSG:<code>' end,
       case when p_kind = 'collars' and char_length(n.r->>'status') > 40 then 'status longer than 40 characters' end,
       case when p_kind = 'collars' and jsonb_typeof(n.r->'planned') not in ('boolean', 'null') then 'planned must be true or false' end,
+      -- Source coordinates of a converted collar: all four or none.
+      case when p_kind = 'collars' and n.src between 1 and 3 then 'source coordinates need x_src, y_src, crs_src and transform together' end,
+      case when p_kind = 'collars' and ((jsonb_typeof(n.r->'x_src') <> 'null' and public.drill_num(n.r->'x_src') is null)
+             or (jsonb_typeof(n.r->'y_src') <> 'null' and public.drill_num(n.r->'y_src') is null)) then 'x_src and y_src must be numbers' end,
+      case when p_kind = 'collars' and jsonb_typeof(n.r->'crs_src') <> 'null'
+             and coalesce(n.r->>'crs_src', '') !~ '^EPSG:[0-9]{4,6}$' then 'source coordinate system must be EPSG:<code>' end,
+      case when p_kind = 'collars' and n.src = 4 and coalesce(n.r->>'crs', '') in ('', n.r->>'crs_src')
+           then 'a converted collar needs a coordinate system other than its source' end,
+      case when p_kind = 'collars' and jsonb_typeof(n.r->'transform') <> 'null' and (jsonb_typeof(n.r->'transform') <> 'object'
+             or pg_column_size(n.r->'transform') > 2048 or coalesce(jsonb_typeof(n.r->'transform'->'method'), '') <> 'string')
+           then 'transform must be an object naming its method' end,
       case when p_kind = 'assays' and char_length(n.r->>'sample_id') > 60 then 'sample ID longer than 60 characters' end,
       case when p_kind = 'lithology' and coalesce(btrim(n.r->>'code'), '') = '' and coalesce(btrim(n.r->>'description'), '') = ''
            then 'a lithology interval needs a code or a description' end,
@@ -315,7 +334,7 @@ begin
   c as materialized (select * from public.drill_current(p_kind, p_property)),
   d as (
     select i.hole_id, i.k1, i.k2, i.rec, c.id as cur_id, c.rec as cur_rec,
-           case when c.id is null then 'new' when c.rec = i.rec then 'unchanged' else 'changed' end as status
+           case when c.id is null then 'new' when c.rec - 'transform' = i.rec - 'transform' then 'unchanged' else 'changed' end as status
     from i left join c on c.hole_id = i.hole_id and coalesce(c.k1, -1) = coalesce(i.k1, -1) and coalesce(c.k2, -1) = coalesce(i.k2, -1)
   ),
   holes as (select distinct hole_id from i),
@@ -333,6 +352,8 @@ begin
       'new', (select count(*) from d where status = 'new'),
       'changed', (select count(*) from d where status = 'changed'),
       'unchanged', (select count(*) from d where status = 'unchanged'),
+      -- Also tells the importer this database stores source coordinates.
+      'source_coordinates', (select count(*) from i where i.rec ? 'x_src'),
       'holes', (select count(*) from holes),
       'new_holes', (select count(*) from holes h where not exists (select 1 from had x where x.hole_id = h.hole_id)),
       'missing_collars', (select count(*) from no_collar),
@@ -372,10 +393,11 @@ begin
     using v_batch, v_changed;
 
   if p_kind = 'collars' then
-    insert into public.drill_collars (org_id, property_id, batch_id, hole_id, x, y, z, crs, azimuth, dip, depth, status, planned)
+    insert into public.drill_collars (org_id, property_id, batch_id, hole_id, x, y, z, crs, azimuth, dip, depth, status, planned, x_src, y_src, crs_src, transform)
     select v_org, p_property, v_batch, i.hole_id, (i.rec->>'x')::double precision, (i.rec->>'y')::double precision,
            (i.rec->>'z')::double precision, i.rec->>'crs', (i.rec->>'azimuth')::double precision, (i.rec->>'dip')::double precision,
-           (i.rec->>'depth')::double precision, i.rec->>'status', (i.rec->>'planned')::boolean
+           (i.rec->>'depth')::double precision, i.rec->>'status', (i.rec->>'planned')::boolean,
+           (i.rec->>'x_src')::double precision, (i.rec->>'y_src')::double precision, i.rec->>'crs_src', i.rec->'transform'
     from public.drill_incoming(p_kind, p_rows) i
     where not exists (select 1 from public.drill_collars t where t.property_id = p_property and t.superseded_by_batch is null and t.hole_id = i.hole_id);
   elsif p_kind = 'surveys' then

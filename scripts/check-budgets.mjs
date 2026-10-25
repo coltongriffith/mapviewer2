@@ -265,7 +265,8 @@ const BUDGETS = {
   // add ~0.8 KiB in the existing lazy drill tab; measured 1103.3 configured.
   // Phase 2 release (CRS, certificates, QA/QC, alteration combined): measured 1131.8.
   // P2-6 datum conversion (lazy converter + drill tab UI; grids are public/ files): measured 1135.7.
-  totalAuthJsGzipKb: 1136.0,
+  // Datum conversion + structure import kind combined: measured 1136.4.
+  totalAuthJsGzipKb: 1136.7,
   // 1009.4 → 1026.3 (measured 1026.0): lazy XLSX reader (~13.8 KiB), sheet/header preview
   // (~1.1 KiB), import wiring and numeric-format handling. Shared fflate adds ~1.2 KiB
   // for async ZIP workers; it remains one copy with the existing draft compression.
@@ -332,7 +333,8 @@ const BUDGETS = {
   // Same lazy alteration import/lifetime correction; measured 1035.9 plain.
   // Phase 2 release combined: measured 1064.6 plain.
   // P2-6 datum conversion, as totalAuthJsGzipKb above: measured 1068.5 plain.
-  totalJsGzipKb: 1068.8,
+  // Datum conversion + structure import kind combined: measured 1069.1 plain.
+  totalJsGzipKb: 1069.4,
   // 940.9 → 957.8 (measured 957.5): Excel import, as totalAuthJsGzipKb above.
   // 940.9 → 944.8 (P2-8, measured 944.6): the same lazy property recipe path
   // in the unconfigured build. Its initial route budgets also stay unchanged.

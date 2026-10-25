@@ -13,7 +13,9 @@ const WORKSPACES = readMigration('20261023100000_workspaces_properties.sql');
 const FILES = readMigration('20261025100000_property_files.sql');
 const MIGRATION = readMigration('20261027100000_drill_database.sql');
 const ALTERATION = readMigration('20261101120000_drill_alteration.sql');
+const DATUM = readMigration('20261102100000_drill_collar_source_coords.sql');
 const STRUCTURE = readMigration('20261102110000_drill_structure.sql');
+const SCOPED = readMigration('20261102120000_drill_import_scoped_diff.sql');
 
 const id = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const O = id(1); // owner
@@ -42,7 +44,7 @@ const au = (from, to, cu, aueq = null) => ({ hole_id: 'R-1', from_m: from, to_m:
 
 beforeAll(async () => {
   // Run every legacy-kind regression against the extended functions too.
-  ({ db, as, one, val, su } = await createWorkspaceDb({ emails: EMAIL, migrations: [WORKSPACES, FILES, MIGRATION, MIGRATION, ALTERATION, ALTERATION, STRUCTURE, STRUCTURE] }));
+  ({ db, as, one, val, su } = await createWorkspaceDb({ emails: EMAIL, migrations: [WORKSPACES, FILES, MIGRATION, MIGRATION, ALTERATION, ALTERATION, DATUM, DATUM, STRUCTURE, STRUCTURE, SCOPED, SCOPED] }));
   S.org = (await val(O, `select public.create_organization('Star Copper Corp.')`)).id;
   S.orgB = (await val(X, `select public.create_organization('Rival Metals')`)).id;
   await su(`insert into public.organization_members (org_id, user_id, role) values ($1, $2, 'admin'), ($1, $3, 'editor'), ($1, $4, 'viewer')`, [S.org, A, E, V]);
@@ -56,7 +58,7 @@ describe('migration', () => {
     const fns = await su(`select proname, proconfig, prosecdef, has_function_privilege('anon', oid, 'execute') as anon,
       has_function_privilege('authenticated', oid, 'execute') as auth from pg_proc where proname like 'drill\\_%'`);
     const by = Object.fromEntries(fns.map((f) => [f.proname, f]));
-    expect(Object.keys(by).sort()).toEqual(['drill_current', 'drill_import_batch', 'drill_incoming', 'drill_kind_noun', 'drill_num',
+    expect(Object.keys(by).sort()).toEqual(['drill_current', 'drill_current_for_holes', 'drill_import_batch', 'drill_incoming', 'drill_kind_noun', 'drill_num',
       'drill_property_summary', 'drill_rollback_batch', 'drill_row_errors', 'drill_save_template', 'drill_table']);
     for (const f of fns) {
       expect(f.proconfig?.[0], f.proname).toBe('search_path=""');
@@ -66,7 +68,7 @@ describe('migration', () => {
       expect(by[f].auth, f).toBe(true);
       expect(by[f].prosecdef, f).toBe(true);
     }
-    for (const f of ['drill_current', 'drill_incoming', 'drill_row_errors', 'drill_num', 'drill_table', 'drill_kind_noun']) expect(by[f].auth, f).toBe(false);
+    for (const f of ['drill_current', 'drill_current_for_holes', 'drill_incoming', 'drill_row_errors', 'drill_num', 'drill_table', 'drill_kind_noun']) expect(by[f].auth, f).toBe(false);
   });
 
   it('applies twice without duplicating policies, and every policy reads auth.uid() once per statement', async () => {

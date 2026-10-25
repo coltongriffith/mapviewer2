@@ -21,7 +21,7 @@ beforeAll(async () => {
   ({ db, as, val, su } = await createWorkspaceDb({ emails: { [O]: 'owner@test.example', [E]: 'editor@test.example', [V]: 'viewer@test.example', [X]: 'other@test.example' }, migrations: [
     readMigration('20261023100000_workspaces_properties.sql'), readMigration('20261025100000_property_files.sql'),
     readMigration('20261027100000_drill_database.sql'), readMigration('20261101110000_drill_qaqc_foundation.sql'),
-    readMigration('20261101120000_drill_alteration.sql'),
+    readMigration('20261101120000_drill_alteration.sql'), readMigration('20261102100000_drill_collar_source_coords.sql'),
   ] }));
   guardBefore = await su("select prosrc,proacl::text from pg_proc where oid='public.ws_property_has_content(uuid)'::regprocedure");
   await db.exec(migration); await db.exec(migration);
