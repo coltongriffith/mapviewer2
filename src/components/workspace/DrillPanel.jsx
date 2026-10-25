@@ -7,6 +7,8 @@ import {
 import { formatWhen } from '../../utils/workspace';
 import { ErrorNote } from './shared';
 import { lazyGuarded } from '../../utils/preloadGuard';
+import DrillCoordinateSource from './DrillCoordinateSource';
+import { keepFileSource } from '../../utils/drillCoordinates';
 
 const ResultsPanel = lazyGuarded(() => import('./ResultsPanel'));
 const ExcelSheetPicker = lazyGuarded(() => import('./ExcelSheetPicker'));
@@ -71,7 +73,7 @@ export function Importer({ db, property, orgId, onDone }) {
   useEffect(() => { if (file) loadTemplates(kind); }, [file, kind, loadTemplates]);
 
   const built = useMemo(() => (file && mapping ? buildImport(kind, file, mapping) : null), [file, kind, mapping]);
-  const change = (m) => { setMapping(m); setDiff(null); batchId.current = null; };
+  const change = (m) => { setMapping(m); setDiff(null); setNote(null); batchId.current = null; };
   const reset = () => { readVersion.current++; setWorkbook(null); setFile(null); setMapping(null); setDiff(null); setTplName(''); setBusy(null); batchId.current = null; };
   const choose = (t, name, excel = null) => {
     if (excel) setWorkbook(w => ({ ...w, selection: excel }));
@@ -137,10 +139,19 @@ export function Importer({ db, property, orgId, onDone }) {
   const cols = mapping.columns || {};
   const setCol = (k, v) => change({ ...mapping, columns: { ...cols, [k]: v || undefined } });
   const setEl = (i, patch) => change({ ...mapping, elements: mapping.elements.map((e, j) => (j === i ? { ...e, ...patch } : e)) });
+  const selectTemplate = (id) => {
+    const template = templates.find(x => x.id === id);
+    if (!template) return;
+    const mapped = applyTemplate(template, file.header, kind === 'assays' ? autoMapping(kind, file.header, file.rows, { decimalComma: mapping.decimalComma }).elements : null);
+    change({ ...(kind === 'collars' ? keepFileSource(mapped, mapping) : mapped), decimalComma: mapping.decimalComma === true, excel: file.excel || undefined });
+    setNote(kind === 'collars' && mapped.crs && mapped.crs !== mapping.crs
+      ? `Columns applied; the source CRS stays ${mapping.crs || 'unspecified'}. This template used ${mapped.crs}—confirm the source coordinate system below against your file.` : null);
+  };
   const problems = built ? { ...built, errors: diff?.ok === false ? serverErrors(diff, built.lines) : built.errors, errorCount: diff?.ok === false ? diff.error_count : built.errorCount } : null;
   return (
     <form className="ws-form" aria-label="Import drill data" onSubmit={(e) => { e.preventDefault(); if (diff?.ok) commit(); else check(); }}>
       <ErrorNote error={error} onDismiss={() => setError(null)} />
+      {note && <p className="ws-notice" role="status">{note}</p>}
       <div className="ws-row">
         <span className="ws-list-main"><b>{file.name}</b><small>{n(file.rows.length)} rows · {file.header.length} columns</small></span>
         {file.excel && <button type="button" className="btn" disabled={!!busy} onClick={() => { setFile(null); setMapping(null); setDiff(null); batchId.current = null; }}>Choose sheet or header</button>}
@@ -154,16 +165,11 @@ export function Importer({ db, property, orgId, onDone }) {
           </select>
         </label>
         <label className="ws-field">Saved columns
-          <select value="" onChange={(e) => { const t = templates.find((x) => x.id === e.target.value); if (t) change({ ...applyTemplate(t, file.header, kind === 'assays' ? autoMapping(kind, file.header, file.rows, { decimalComma: mapping.decimalComma }).elements : null), decimalComma: mapping.decimalComma === true, excel: file.excel || undefined }); }}>
+          <select value="" onChange={(e) => selectTemplate(e.target.value)}>
             <option value="">{templates.length ? 'Apply a template…' : 'No templates yet'}</option>
             {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
         </label>
-        {kind === 'collars' && (
-          <label className="ws-field">Coordinate system
-            <input value={mapping.crs || ''} placeholder="EPSG:26910" onChange={(e) => change({ ...mapping, crs: e.target.value.trim() || undefined })} />
-          </label>
-        )}
         {kind === 'assays' && (
           <label className="ws-field">Below detection (&lt;) stored as
             <select value={mapping.bdl || 'half'} onChange={(e) => change({ ...mapping, bdl: e.target.value })}>
@@ -172,6 +178,7 @@ export function Importer({ db, property, orgId, onDone }) {
           </label>
         )}
       </div>
+      {kind === 'collars' && <DrillCoordinateSource mapping={mapping} propertyCrs={property.crs} rows={built.rows} onChange={change} />}
       <fieldset className="ws-form-grid" style={{ border: 0, padding: 0, margin: 0 }}>
         <legend className="dash-muted" style={{ fontSize: 13, marginBottom: 4 }}>Columns</legend>
         {FIELDS[kind].map((f) => (

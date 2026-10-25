@@ -233,6 +233,31 @@ test('the data library lists, adds, versions, downloads and deletes files', asyn
   expect(fake.patches).toEqual([{ id: FILE, body: { deleted_at: expect.any(String) } }]);
 });
 
+test('drill data: source coordinate preview preserves the imported survey values', async ({ page }) => {
+  const fake = await fakeSupabase(page, { role: 'editor', properties: [{ ...property, crs: 'EPSG:26910' }] });
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold');
+  await page.getByRole('tab', { name: 'Drill data' }).click();
+  await page.getByLabel('Drill data file').setInputFiles({ name: 'synthetic-collars.csv', mimeType: 'text/csv', buffer: Buffer.from('HoleID,Easting,Northing\nSYNTHETIC-01,512345.678,5432109.876\n') });
+  const source = page.getByRole('region', { name: 'Source coordinates', exact: true });
+  await expect(source.getByLabel('Source coordinate system')).toHaveValue('EPSG:26910');
+  await source.getByLabel('Source coordinate system').fill('EPSG:26710');
+  await expect(source.getByText(/The property uses EPSG:26910/)).toBeVisible();
+  await source.getByRole('button', { name: 'Preview source coordinates' }).click();
+  const preview = source.getByRole('table', { name: 'Source coordinate preview' });
+  await expect(preview.getByRole('columnheader', { name: 'Longitude (NAD27)' })).toBeVisible();
+  await expect(preview.getByRole('cell', { name: '512345.678', exact: true })).toBeVisible();
+  await expect(source.getByText(/it is not a WGS84 map position/)).toBeVisible();
+  await page.getByRole('button', { name: 'Check against stored data' }).click();
+  await page.getByRole('button', { name: 'Commit import' }).click();
+  await expect(page.getByText(/Imported synthetic-collars.csv/)).toBeVisible();
+  const requests = fake.rpc.filter(c => c.fn === 'drill_import_batch');
+  expect(requests).toHaveLength(2);
+  for (const { args } of requests) {
+    expect(args.p_rows).toEqual([{ hole_id: 'SYNTHETIC-01', x: 512345.678, y: 5432109.876, crs: 'EPSG:26710' }]);
+    expect(args.p_mapping.coordinateSource).toEqual({ version: 1, crs: 'EPSG:26710', operation: 'preserve-source', axisOrder: 'xy' });
+  }
+});
+
 test('drill data: import a CSV, map its columns, see the diff, commit and roll back', async ({ page }, testInfo) => {
   const fake = await fakeSupabase(page, { role: 'editor' });
   await page.goto('/workspace/star-copper-corp/p/rails-copper-gold');
