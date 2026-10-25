@@ -2280,6 +2280,11 @@ function qcSupabaseCreds() {
   return { base, key };
 }
 
+// Every column a qc_claims read returns, which is also its page order:
+// tag_number is not unique (co-owners get a row each) and there is no id, so
+// only the whole row is a stable key. Rows tied on all of them are identical.
+const QC_COLUMNS = 'tag_number,owner_name,status,good_to_date,area_hectares,title_type,geometry';
+
 // Map a qc_claims row onto the BC-style property names the UI renders.
 function qcRowToFeature(row) {
   return {
@@ -2705,6 +2710,27 @@ export function relaxedTokenSetsPreservingSpelling(tokens) {
   return relaxedTokenSets(folded).map((set) => set.map((f) => original.get(f) ?? f));
 }
 
+/**
+ * One feature per Quebec claim. Co-owners arrive as a row each, alike but for
+ * owner_name; they become one feature listing every owner in OWNERS, with
+ * OWNER_NAME naming them all. Counts are claims, not rows.
+ */
+export function mergeQcCoOwners({ features, meta }) {
+  const byTag = new Map();
+  for (const f of features) {
+    const { QC_ROW, ...p } = f.properties;
+    const hit = byTag.get(p.TAG_NUMBER);
+    if (!hit) byTag.set(p.TAG_NUMBER, { ...f, properties: { ...p, OWNERS: p.OWNER_NAME ? [p.OWNER_NAME] : [] } });
+    else if (p.OWNER_NAME && !hit.properties.OWNERS.includes(p.OWNER_NAME)) hit.properties.OWNERS.push(p.OWNER_NAME);
+  }
+  const merged = [...byTag.values()];
+  for (const f of merged) if (f.properties.OWNERS.length > 1) f.properties.OWNER_NAME = f.properties.OWNERS.join('; ');
+  return {
+    features: merged,
+    meta: { ...meta, returned: merged.length, totalKnown: meta?.truncated ? meta.totalKnown : merged.length },
+  };
+}
+
 async function searchQc(term, type, res, { numberList = null } = {}) {
   const creds = qcSupabaseCreds();
   if (!creds) {
@@ -2739,15 +2765,13 @@ async function searchQc(term, type, res, { numberList = null } = {}) {
   // the identical `column=ilike.value` shape already proven in production, and
   // PostgREST ANDs duplicate keys. The grouped form would put the tokens inside
   // a comma-separated list, which is parsing surface for no benefit.
-  const runQuery = async (filter, maxTotal = undefined) => fetchAllPages({
+  const runQuery = async (filter, maxTotal = undefined) => mergeQcCoOwners(await fetchAllPages({
     provider: 'qc-store',
     pageSize: Math.min(1000, maxTotal || 1000),
     ...(maxTotal ? { maxTotal } : {}),
-    idField: 'TAG_NUMBER',
+    idField: 'QC_ROW',
     fetchPage: async (offset, count) => {
-      const url = `${base}/rest/v1/qc_claims?` +
-        `select=tag_number,owner_name,status,good_to_date,area_hectares,title_type,geometry` +
-        `&${filter}&limit=${count}&offset=${offset}`;
+      const url = `${base}/rest/v1/qc_claims?select=${QC_COLUMNS}&${filter}&order=${QC_COLUMNS}&limit=${count}&offset=${offset}`;
       const r = await fetch(url, {
         headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' },
         signal: AbortSignal.timeout(20000),
@@ -2758,9 +2782,13 @@ async function searchQc(term, type, res, { numberList = null } = {}) {
       }
       const rows = await r.json();
       // Keys already match what the UI renders; no normalizeProps pass needed.
-      return { features: rows.map(qcRowToFeature) };
+      return { features: rows.map((row) => {
+        const f = qcRowToFeature(row);
+        f.properties.QC_ROW = JSON.stringify({ ...row, geometry: undefined });
+        return f;
+      }) };
     },
-  });
+  }));
 
   if (type === 'number' && numberList) {
     // A pasted list: one indexed IN query for all of them, exact matches only.
@@ -2810,12 +2838,13 @@ async function searchQc(term, type, res, { numberList = null } = {}) {
       const upper = prefixUpperBound(s.term);
       const r = await runQuery(
         `tag_number=gte.${encodeURIComponent(s.term)}`
-          + (upper ? `&tag_number=lt.${encodeURIComponent(upper)}` : '')
-          + '&order=tag_number.asc',
+          + (upper ? `&tag_number=lt.${encodeURIComponent(upper)}` : ''),
         NEAR_MISS_LIMIT,
       );
       const kept = r.features.filter((f) => String(f.properties?.TAG_NUMBER || '').toUpperCase().startsWith(s.term));
-      return { features: kept, meta: { ...r.meta, truncated: r.meta?.truncated === true && kept.length >= NEAR_MISS_LIMIT } };
+      // Rows are fetched up to the ceiling and then merged per claim, so test
+      // "every fetched claim is a prefix match" rather than the claim count.
+      return { features: kept, meta: { ...r.meta, truncated: r.meta?.truncated === true && kept.length === r.features.length } };
     });
     const widened = step && step.match !== 'exact';
     const shown = widened ? features.slice(0, NEAR_MISS_LIMIT) : features;
@@ -2927,7 +2956,6 @@ async function searchQc(term, type, res, { numberList = null } = {}) {
 const QC_BBOX_MAX = 2000;          // the function's own `limit`
 const QC_BBOX_PAGE_ROWS = 1000;    // never above max-rows
 const QC_BBOX_CONCURRENCY = 4;
-const QC_BBOX_ORDER = 'tag_number,owner_name,status,good_to_date,area_hectares,title_type,geometry';
 
 function postgrestTotal(r) {
   const m = /\/(\d+)\s*$/.exec(String(r.headers?.get?.('content-range') || ''));
@@ -2942,7 +2970,7 @@ async function searchQcBbox(minLng, minLat, maxLng, maxLat, res) {
   const { base, key } = creds;
   const body = JSON.stringify({ min_lng: minLng, min_lat: minLat, max_lng: maxLng, max_lat: maxLat });
   const page = async (offset, { count = false } = {}) => {
-    const r = await fetch(`${base}/rest/v1/rpc/qc_claims_in_bbox?order=${QC_BBOX_ORDER}&offset=${offset}&limit=${QC_BBOX_PAGE_ROWS}`, {
+    const r = await fetch(`${base}/rest/v1/rpc/qc_claims_in_bbox?order=${QC_COLUMNS}&offset=${offset}&limit=${QC_BBOX_PAGE_ROWS}`, {
       method: 'POST',
       headers: {
         apikey: key,
