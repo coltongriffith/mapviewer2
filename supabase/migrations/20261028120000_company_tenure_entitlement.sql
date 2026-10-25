@@ -56,7 +56,7 @@ begin
       'max_monitored_tenures', 50,
       'max_portfolios', null,
       'max_alert_recipients', 2,
-      'alert_offsets', jsonb_build_array(90, 30, 7)
+      'alert_offsets', jsonb_build_array(90, 30, 7, 1)
     );
   end if;
 
@@ -65,7 +65,7 @@ begin
     'max_monitored_tenures', 10,
     'max_portfolios', 1,
     'max_alert_recipients', 1,
-    'alert_offsets', jsonb_build_array(90, 30)
+    'alert_offsets', jsonb_build_array(90, 30, 1)
   );
 end;
 $$;
