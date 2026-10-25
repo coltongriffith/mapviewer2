@@ -184,7 +184,7 @@ test('a figure takes its holes from the property drill database, keeps them, and
   expect(st.files[2].gradeColumns).toEqual(['Cu_pct', 'Au_gpt']);
   expect(st.project).toMatchObject({ holes: 12, intervals: 2520 });
   expect(st.grade.column).toBe('Cu_pct');
-  expect(st.drillSource).toEqual({ kind: 'property', propertyId: PROP, propertyName: 'Rails', latestBatchId: B(4), latestAt: '2026-10-18T13:00:00.000Z', holes: 12, assays: 2520, crs: null });
+  expect(st.drillSource).toEqual({ kind: 'property', propertyId: PROP, propertyName: 'Rails', latestBatchId: B(4), latestAt: '2026-10-18T13:00:00.000Z', holes: 12, assays: 2520, crs: null, geologySource: 'lithology', geologyIntervals: 24 });
   await expect.poll(() => chunks.some((u) => /\/min-curvature-[\w-]+\.js$/.test(u))).toBe(true); // surveyed holes follow minimum curvature
 
   // Saved: the data goes with the figure as files, and the reference with its settings.
@@ -212,7 +212,7 @@ test('a figure takes its holes from the property drill database, keeps them, and
   await open3d(page, `/3d?project=${saved.id}`);
   const notice = page.locator('#drill-notice');
   await expect(notice).toBeVisible({ timeout: 60_000 });
-  await expect(notice).toContainText('New drill data since this figure (1 new hole, 210 assays) —');
+  await expect(notice).toContainText('New drill data since this figure (1 new hole, 210 assays, 0 lithology intervals) —');
   st = await state(page);
   expect(st.project).toMatchObject({ holes: 12, intervals: 2520 });
   expect(st.drillSource.latestBatchId).toBe(B(4));
@@ -261,4 +261,48 @@ test('a figure made from files is untouched: no drill source, no drill reads, no
   await page.evaluate((i) => window.EM3D.account.saveProject('OLD FIGURE', i), id);
   await expect.poll(() => fake.upserts.length).toBe(1);
   expect(fake.upserts[0].settings.settings.drillSource).toBeNull();
+});
+
+test('explicit alteration source stays separate, survives saving, and updates without losing legend labels', async ({ page }) => {
+  const db = drillData();
+  db.drill_collars = db.drill_collars.slice(0, 1); db.drill_assays = []; db.drill_surveys = [];
+  db.drill_lithology = db.drill_lithology.filter((r) => r.hole_id === 'RL-01');
+  db.drill_alteration = [{ ...db.drill_lithology[0], batch_id: B(5), code: '03', description: 'Chlorite', intensity: 'weak', from_m: 0, to_m: 30 }];
+  db.batches.push({ ...db.batches[3], id: B(5), kind: 'alteration', created_at: '2026-10-19T13:00:00Z', summary: { new: 1 } });
+  const fake = await fakeSupabase(page, db);
+  await page.addInitScript(([k, s]) => localStorage.setItem(k, JSON.stringify(s)), [AUTH_KEY, session]);
+  await open3d(page);
+  await page.getByRole('button', { name: 'From property drill database' }).click();
+  await expect(page.getByLabel('Geology source')).toHaveValue('lithology');
+  await page.getByLabel('Geology source').selectOption('alteration');
+  await page.locator('#drill-load').click();
+  await expect(page.locator('#status')).toContainText('Loaded Rails');
+  let st = await state(page);
+  expect(st.drillSource.geologySource).toBe('alteration');
+  expect(st.files.filter((f) => f.role === 'litho').map((f) => f.name)).toEqual(['property-alteration.csv']);
+  expect(fake.drillPages.some((p) => p.table === 'drill_lithology')).toBe(false);
+  const text = await page.evaluate(() => window.EM3D.getProject().files.find((f) => f.name === 'property-alteration.csv').text);
+  expect(text).toContain('Intensity'); expect(text).toContain('weak'); expect(text).toContain('03');
+  await page.evaluate(async () => { await window.EM3D.setGeology({ enabled: true }); const legend = window.EM3D.getState().geology.legend.map((r) => ({ ...r, name: 'My chlorite label', nameSet: true })); await window.EM3D.setGeology({ legend }); });
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Save to your account' });
+  await dialog.getByLabel('Name').fill('Synthetic alteration'); await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect.poll(() => fake.upserts.length).toBe(1); const saved = fake.upserts[0];
+  expect(saved.settings.settings.drillSource.geologySource).toBe('alteration');
+  db.batches.push({ ...db.batches[4], id: B(6), created_at: '2026-10-20T13:00:00Z', summary: { new: 0, changed: 1 } });
+  db.drill_alteration[0].intensity = '03'; db.drill_alteration[0].batch_id = B(6);
+  await open3d(page, `/3d?project=${saved.id}`);
+  await expect(page.locator('#drill-notice')).toBeVisible({ timeout: 60_000 });
+  await expect(page.locator('#acct-note')).toHaveText(/^Saved /, { timeout: 60_000 });
+  await page.locator('#drill-update').click();
+  await expect(page.locator('#drill-notice')).toBeHidden();
+  st = await state(page); expect(st.drillSource.geologySource).toBe('alteration');
+  expect(st.geology.legend[0].name).toBe('My chlorite label'); expect(st.geology.title).toBe('Alteration');
+  expect(st.files.filter((f) => f.role === 'litho').map((f) => f.name)).toEqual(['property-alteration.csv']);
+  await page.getByRole('button', { name: 'From property drill database' }).click();
+  await expect(page.getByLabel('Geology source')).toHaveValue('alteration');
+  await page.getByLabel('Geology source').selectOption('none'); await page.locator('#drill-load').click();
+  await expect.poll(async () => (await state(page)).drillSource.geologySource).toBe('none');
+  expect((await state(page)).files.some((f) => f.role === 'litho')).toBe(false);
+  expect((await state(page)).geology.legend).toEqual([]);
 });

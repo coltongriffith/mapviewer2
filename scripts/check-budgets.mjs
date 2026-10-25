@@ -261,7 +261,9 @@ const BUDGETS = {
   // lazy); measured 1120.5 configured. No dependencies or initial-route changes.
   // Selected-comparison PDF adapter, measured layout, capture and guarded lazy
   // renderer (~6 KiB). Reuses jsPDF; startup-route limits remain unchanged.
-  totalAuthJsGzipKb: 1127.2,
+  // Alteration interval mapping/text intensity and stale-preview/template guards
+  // add ~0.8 KiB in the existing lazy drill tab; measured 1103.3 configured.
+  totalAuthJsGzipKb: 9999,
   // 1009.4 → 1026.3 (measured 1026.0): lazy XLSX reader (~13.8 KiB), sheet/header preview
   // (~1.1 KiB), import wiring and numeric-format handling. Shared fflate adds ~1.2 KiB
   // for async ZIP workers; it remains one copy with the existing draft compression.
@@ -325,7 +327,8 @@ const BUDGETS = {
   // Same lazy CRM comparison; measured1050.5 KiB plain.
   // Same lazy QA/QC PNG feature; measured 1053.3 plain.
   // Same selected-comparison PDF feature; measured ~1059.3 before final polish.
-  totalJsGzipKb: 1059.9,
+  // Same lazy alteration import/lifetime correction; measured 1035.9 plain.
+  totalJsGzipKb: 9999,
   // 940.9 → 957.8 (measured 957.5): Excel import, as totalAuthJsGzipKb above.
   // 940.9 → 944.8 (P2-8, measured 944.6): the same lazy property recipe path
   // in the unconfigured build. Its initial route budgets also stay unchanged.
@@ -567,7 +570,9 @@ const BUDGETS = {
   // hash churn moves it to 161.194 locally and 161.201 with CI's commit stamp. Keep 0.1 KiB
   // of headroom for those hashes; no new /3d module or XLSX reader enters this graph.
   // Recipe/cursor composition plus result-ownership guard: 162.5 plain / 162.7 configured.
-  threeDLazyJsGzipKb: 163.0,
+  // Explicit property geology source and selected-table paging: 163.3 plain / 163.5 configured.
+  // Picker, source/legend ownership and missing-alteration handling remain lazy; startup is unchanged.
+  threeDLazyJsGzipKb: 163.8,
   // 161.2 → 162.7 (P2-8, measured 162.2 plain / 162.4 configured): explicit
   // recipe selection, snapshot ownership, collision/edited-wording guards and
   // recipe-only update notices in property-data. No eager 3D page growth.

@@ -39,6 +39,22 @@ async function clickAction(id) {
   await vi.waitFor(() => expect(el(id).disabled).toBe(false));
 }
 
+describe('property recipe geology selection', () => {
+  it('forwards the selected log without changing calculated result IDs or values', async () => {
+    const legacy = await pullPropertyResults(fixture().sb, prop);
+    const f = fixture();
+    f.db.drill_alteration = [{ hole_id: 'TEST-01', from_m: 0, to_m: 4, code: 'SER', intensity: '03' }];
+    const selected = await pullPropertyResults(f.sb, prop, { geologySource: 'alteration' });
+    expect(selected.files.find(file => file.name === RESULTS_FILE)).toEqual(legacy.files.find(file => file.name === RESULTS_FILE));
+    expect(selected.files.some(file => file.name === 'property-alteration.csv')).toBe(true);
+    expect(f.reads.some(read => read.table === 'drill_lithology')).toBe(false);
+    expect(selected.ref).toMatchObject({ geologySource: 'alteration', geologyIntervals: 1, resultsRecipe: legacy.ref.resultsRecipe });
+    const raw = await pullPropertyResults(fixture().sb, prop, { recipeName: null, geologySource: 'none' });
+    expect(raw.ref).toMatchObject({ geologySource: 'none', geologyIntervals: 0 });
+    expect(raw.files.some(file => file.name === RESULTS_FILE)).toBe(false);
+  });
+});
+
 describe('3D property recipe controls', () => {
   it('defaults to the saved recipe, preserves other files and enables its exact callouts', async () => {
     const f = fixture(), h = figureHarness(f);

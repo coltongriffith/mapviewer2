@@ -1983,6 +1983,7 @@ function addUserFiles(arr, o = {}) {
   if (!Array.isArray(arr) || !arr.length || arr.some((f) => !f || typeof f.name !== 'string' || typeof f.text !== 'string')) throw new Error('addFiles expects [{ name: "collars.csv", text: "HoleID,Easting,..." }].');
   if (usingSample && !arr.every((a) => isOverlay(a.name, a.text))) { files = []; usingSample = false; S.meshes = {}; S.valueCol = null; S.coOverrides = {}; S.valueCol2 = null; resetDerived(); }
   if (o.drillSource !== undefined) S.drillSource = structuredClone(o.drillSource); // property-data.js
+  if (o.geologyTitle !== undefined) S.geology.title = String(o.geologyTitle).slice(0, 40) || 'Lithology'; // same synchronous property-source replacement
   arr.forEach((a) => { if (a.lib) S.libRefs[a.name] = { libFileId: String(a.lib.libFileId), version: +a.lib.version }; else delete S.libRefs[a.name]; });
   refresh.secSet = false; addFiles(arr); extAutoOn(arr); refresh(); // extAutoOn: EXT hook
   const mine = files.filter((f) => arr.some((a) => a.name === f.name)), added = mine.map((f) => `${f.name} → ${ROLE_LABEL[f.role]}`);

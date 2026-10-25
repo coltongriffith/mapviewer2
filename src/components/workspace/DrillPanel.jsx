@@ -25,6 +25,7 @@ function Summary({ s }) {
   if (!s) return <p className="dash-muted">Loading the drill database…</p>;
   const items = [['Holes', n(s.holes)], ['Collars', `${n(s.collars)}${s.planned ? ` (${n(s.planned)} planned)` : ''}`], ['Metres drilled', n(s.metres)],
     ['Survey stations', n(s.surveys)], ['Assays', n(s.assays)], ['Lithology intervals', n(s.lithology)]];
+  if (typeof s.alteration === 'number') items.push(['Alteration intervals', n(s.alteration)]);
   return (
     <dl className="ws-stats" aria-label="Drill data summary">
       {items.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}
@@ -60,7 +61,9 @@ export function Importer({ db, property, orgId, onDone }) {
   const [workbook, setWorkbook] = useState(null);
   const [kind, setKind] = useState('assays');
   const [mapping, setMapping] = useState(null);
-  const [templates, setTemplates] = useState([]);
+  const [templatePage, setTemplatePage] = useState(null);
+  const templates = templatePage?.kind === kind ? templatePage.rows : [];
+  const [templateRevision, setTemplateRevision] = useState(0);
   const [tplName, setTplName] = useState('');
   const [diff, setDiff] = useState(null);
   const [busy, setBusy] = useState(null);
@@ -69,14 +72,18 @@ export function Importer({ db, property, orgId, onDone }) {
   const batchId = useRef(null);
   const input = useRef(null);
   const readVersion = useRef(0);
-  useEffect(() => () => { readVersion.current++; }, []);
+  const operationVersion = useRef(0);
+  useEffect(() => () => { readVersion.current++; operationVersion.current++; }, []);
 
-  const loadTemplates = useCallback((k) => db.templates(orgId, k).then(setTemplates).catch(() => setTemplates([])), [db, orgId]);
-  useEffect(() => { if (file) loadTemplates(kind); }, [file, kind, loadTemplates]);
+  useEffect(() => {
+    let active = true; setTemplatePage(null);
+    if (file) db.templates(orgId, kind).then(rows => { if (active) setTemplatePage({ kind, rows }); }).catch(() => { if (active) setTemplatePage(null); });
+    return () => { active = false; };
+  }, [db, orgId, file, kind, templateRevision]);
 
   const built = useMemo(() => (file && mapping ? buildImport(kind, file, mapping) : null), [file, kind, mapping]);
-  const change = (m) => { setMapping(m); setDiff(null); setNote(null); batchId.current = null; };
-  const reset = () => { readVersion.current++; setWorkbook(null); setFile(null); setMapping(null); setDiff(null); setTplName(''); setBusy(null); batchId.current = null; };
+  const change = (m) => { operationVersion.current++; setBusy(null); setMapping(m); setDiff(null); setNote(null); batchId.current = null; };
+  const reset = () => { readVersion.current++; operationVersion.current++; setWorkbook(null); setFile(null); setMapping(null); setDiff(null); setTplName(''); setBusy(null); batchId.current = null; };
   const choose = (t, name, excel = null) => {
     if (excel) setWorkbook(w => ({ ...w, selection: excel }));
     const k = detectKind(t.header, t.rows, excel?.sheet || name) || 'assays';
@@ -107,14 +114,17 @@ export function Importer({ db, property, orgId, onDone }) {
     finally { if (version === readVersion.current) setBusy(null); }
   };
   const run = async (key, fn) => {
+    const version = ++operationVersion.current;
+    const current = () => version === operationVersion.current;
     setBusy(key); setError(null);
-    try { await fn(); } catch (e) { setError(e.message); } finally { setBusy(null); }
+    try { await fn(current); } catch (e) { if (current()) setError(e.message); } finally { if (current()) setBusy(null); }
   };
   const args = () => ({ propertyId: property.id, kind, rows: built.rows, mapping, filename: file.name });
-  const check = () => run('check', async () => setDiff(await db.dryRun(args())));
-  const commit = () => run('commit', async () => {
+  const check = () => run('check', async current => { const result = await db.dryRun(args()); if (current()) setDiff(result); });
+  const commit = () => run('commit', async current => {
     batchId.current = batchId.current || crypto.randomUUID();
     const r = await db.commit({ ...args(), batchId: batchId.current });
+    if (!current()) return;
     setNote(r.nothing_to_do ? `Nothing to import: everything in ${file.name} is already stored.` : `Imported ${file.name}: ${diffSentence(kind, r)}.`);
     reset();
     onDone();
@@ -129,7 +139,7 @@ export function Importer({ db, property, orgId, onDone }) {
         <ErrorNote error={error} onDismiss={() => setError(null)} />
         <div className="ws-row">
           <button type="button" className="btn primary" onClick={() => input.current?.click()}>+ Import CSV or Excel</button>
-          <span className="dash-muted">Collars, downhole surveys, assays or lithology. CSV or .xlsx; up to 20,000 rows per import.</span>
+          <span className="dash-muted">Collars, downhole surveys, assays, lithology or alteration. CSV or .xlsx; up to 20,000 rows per import.</span>
         </div>
         {busy === 'read' && <p role="status">Reading file… <button type="button" className="btn" onClick={reset}>Cancel</button></p>}
         <input ref={input} type="file" accept=".csv,.txt,.tsv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden aria-label="Drill data file"
@@ -152,11 +162,12 @@ export function Importer({ db, property, orgId, onDone }) {
   const problems = built ? { ...built, errors: diff?.ok === false ? serverErrors(diff, built.lines) : built.errors, errorCount: diff?.ok === false ? diff.error_count : built.errorCount } : null;
   return (
     <form className="ws-form" aria-label="Import drill data" onSubmit={(e) => { e.preventDefault(); if (diff?.ok) commit(); else check(); }}>
+      <fieldset disabled={busy === 'commit'} className="ws-stack" style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
       <ErrorNote error={error} onDismiss={() => setError(null)} />
       {note && <p className="ws-notice" role="status">{note}</p>}
       <div className="ws-row">
         <span className="ws-list-main"><b>{file.name}</b><small>{n(file.rows.length)} rows · {file.header.length} columns</small></span>
-        {file.excel && <button type="button" className="btn" disabled={!!busy} onClick={() => { setFile(null); setMapping(null); setDiff(null); batchId.current = null; }}>Choose sheet or header</button>}
+        {file.excel && <button type="button" className="btn" disabled={!!busy} onClick={() => { operationVersion.current++; setFile(null); setMapping(null); setDiff(null); batchId.current = null; }}>Choose sheet or header</button>}
         <button type="button" className="btn" onClick={reset}>Cancel</button>
       </div>
       {file.excel && <p className="dash-muted">Sheet: {file.excel.sheet} · header row {file.excel.headerRow} · decimal separator: {mapping.decimalComma ? 'comma' : 'point'}. Reported line numbers refer to worksheet rows.</p>}
@@ -192,6 +203,7 @@ export function Importer({ db, property, orgId, onDone }) {
           </label>
         ))}
       </fieldset>
+      {kind === 'alteration' && <p className="dash-muted">One alteration record per hole and interval. Code or description is required. Intensity stays as source text (for example weak or 03); blank means unknown. No collars or 3D geology are created.</p>}
       {kind === 'assays' && (
         <div className="ws-table-wrap">
           <table className="ws-table" aria-label="Elements">
@@ -234,8 +246,9 @@ export function Importer({ db, property, orgId, onDone }) {
         )}
         <span className="ws-field"><input aria-label="Template name" placeholder="Template name" value={tplName} onChange={(e) => setTplName(e.target.value)} style={{ width: 170 }} /></span>
         <button type="button" className="btn" disabled={!tplName.trim() || !!busy}
-          onClick={() => run('tpl', async () => { await db.saveTemplate(orgId, kind, tplName.trim(), mapping); setTplName(''); await loadTemplates(kind); })}>Save columns as template</button>
+          onClick={() => run('tpl', async current => { await db.saveTemplate(orgId, kind, tplName.trim(), mapping); if (current()) { setTplName(''); setTemplateRevision(v => v + 1); } })}>Save columns as template</button>
       </div>
+      </fieldset>
     </form>
   );
 }
@@ -264,7 +277,7 @@ export default function DrillPanel({ property, perms }) {
     <section aria-label="Drill data" className="ws-stack">
       <ErrorNote error={error} onDismiss={() => setError(null)} />
       <div className="dash-panel"><Summary s={s} /></div>
-      {perms.edit && db && <div className="dash-panel"><Importer db={db} property={property} orgId={property.org_id} onDone={() => { setRevision((v) => v + 1); load(); }} /></div>}
+      {perms.edit && db && <div className="dash-panel"><Importer key={property.id} db={db} property={property} orgId={property.org_id} onDone={() => { setRevision((v) => v + 1); load(); }} /></div>}
       <section className="dash-panel" aria-label="QA/QC">
         <h3 style={{ margin: '0 0 8px', fontSize: 15 }}>QA/QC</h3>
         {qaqc ? <Suspense fallback={<p role="status">Loading QA/QC…</p>}><QaqcPanel property={property} perms={perms} /></Suspense> : <div className="ws-row"><button type="button" className="btn" onClick={() => setQaqc(true)}>Open QA/QC register</button><span className="dash-muted">Routine samples, standards, blanks and duplicates, with their lab provenance.</span></div>}
