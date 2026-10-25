@@ -92,6 +92,14 @@ describe('reading drill files as the 3D maker reads them', () => {
     expect(mergeAssays({ elements: [], rows: new Map() }, { elements: [{ name: 'Au' }], rows: new Map() }).elements).toEqual([{ name: 'Au' }]);
   });
 
+  it('keeps an element whose missing-value codes (-999, IS) outnumber its grades', async () => {
+    const t = await tables();
+    const au = await parseTable('HoleID,From,To,Au_ppm\n077,0,2,2\n077,2,4,3\n077,4,6,-999\n077,6,8,-999\n077,8,10,IS');
+    const { plan } = await buildPlan([t[0], { name: 'au.csv', ...au, kind: 'assays' }], { crs: CRS });
+    expect(plan.assays.elements.map((e) => e.name)).toEqual(['Au']);
+    expect(plan.assays.rows['077'].map((r) => r[2])).toEqual([2, 3, null, null, null]);
+  });
+
   it('projects only the easting/northing collars when collar tables are mixed', async () => {
     const t = await tables(), ll = await parseTable('HoleID,Longitude,Latitude,Azimuth,Dip,Depth\nGEO-1,-120.6950,50.6010,0,-90,100');
     const { plan } = await buildPlan([t[0], { name: 'geo.csv', ...ll, kind: 'collars' }], { crs: CRS });

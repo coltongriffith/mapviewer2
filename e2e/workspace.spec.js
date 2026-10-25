@@ -648,6 +648,31 @@ test('drill data: source coordinate preview preserves the imported survey values
   }
 });
 
+test('drill data: a vendor preset is offered for its header and sets the mapping in one click', async ({ page }) => {
+  const fake = await fakeSupabase(page, { role: 'editor', properties: [{ ...property, crs: 'EPSG:26910' }] });
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold');
+  await page.getByRole('tab', { name: 'Drill data' }).click();
+  const csv = 'Hole number,coordinates.grid,coordinates.easting,coordinates.northing,converted.coordinates.easting,converted.coordinates.northing\nMX-01,UTM 10N,512345.6,5432109.8,-123.1,49.0\n';
+  await page.getByLabel('Drill data file').setInputFiles({ name: 'mx-export.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) });
+  const offer = page.getByRole('group', { name: 'Import preset' });
+  const field = (label) => page.getByRole('form', { name: 'Import drill data' }).locator('label.ws-field', { hasText: label }).locator('select').first();
+  await expect(offer).toContainText('Looks like an MX Deposit collar (header) export: use its mapping?');
+  await expect(field(/^Data/)).toHaveValue('assays');
+  await offer.getByRole('button', { name: 'Use its mapping' }).click();
+  await expect(offer).toHaveCount(0);
+  await expect(field(/^Data/)).toHaveValue('collars');
+  await expect(field('Hole ID *')).toHaveValue('Hole number');
+  await expect(field('Easting / X *')).toHaveValue('coordinates.easting');
+  await expect(field('Northing / Y *')).toHaveValue('coordinates.northing');
+  await expect(page.getByText('Columns set from the MX Deposit preset.')).toBeVisible();
+  await page.getByRole('button', { name: 'Check against stored data' }).click();
+  await page.getByRole('button', { name: 'Commit import' }).click();
+  await expect(page.getByText(/Imported mx-export.csv/)).toBeVisible();
+  const [{ args }] = fake.rpc.filter(c => c.fn === 'drill_import_batch');
+  expect(args.p_rows).toEqual([{ hole_id: 'MX-01', x: 512345.6, y: 5432109.8, crs: 'EPSG:26910' }]);
+  expect(args.p_mapping).toMatchObject({ preset: 'mx-deposit-collars', columns: { hole_id: 'Hole number', x: 'coordinates.easting', y: 'coordinates.northing' } });
+});
+
 test('alteration import: CSV and Excel preserve source text with retry, templates and rollback', async ({ page }, testInfo) => {
   const fake = await fakeSupabase(page, { role: 'editor' });
   fake.drill.alteration = 0;
