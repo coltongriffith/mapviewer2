@@ -1259,3 +1259,76 @@ test('an invite link signed out asks to sign in and keeps the token', async ({ p
   await expect(page).toHaveURL(/\/invite$/);
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('em.pendingInvite.v1')).token)).toBe(t);
 });
+
+test('release pack: approve, a new assay import makes a draft with the diff, approve again', async ({ page }) => {
+  const fake = await fakeSupabase(page, { role: 'editor' });
+  fake.recipes = [{ id: 'r1', name: 'Default', version: 1, recipe: { elements: [{ name: 'Cu', unit: '%' }], primary: 'Cu', cutoff: 0.1, minLength: 1, maxDilution: 0 }, created_at: '2026-10-19T00:00:00Z', versions: [] }];
+  const pack = { id: 'pk1', items: [{ kind: 'results_table', ref: 'Default' }, { kind: 'drill_plan', ref: MAP }, { kind: 'figure_3d', ref: FIG }], updated_at: '2026-10-19T00:00:00Z' };
+  const approvals = [], posted = [];
+  await page.route('**/rest/v1/release_packs*', (route) => route.fulfill({ json: [pack] }));
+  await page.route('**/rest/v1/figure_versions*', (route) => route.fulfill({ json: [] }));
+  await page.route('**/rest/v1/drill_assays*', (route) => (new URL(route.request().url()).searchParams.get('batch_id')
+    ? route.fulfill({ json: [{ hole_id: 'R-1' }, { hole_id: 'R-1' }, { hole_id: 'R-9' }] }) : route.fallback()));
+  await page.route('**/rest/v1/release_pack_approvals*', (route) => {
+    if (route.request().method() === 'POST') {
+      const body = route.request().postDataJSON(); posted.push(body);
+      approvals.unshift({ id: `a${approvals.length + 1}`, pack_id: pack.id, items: pack.items, batch_ids: fake.drill.batches.filter((b) => !b.rolled_back_at).map((b) => b.id),
+        figures: [{ item: 1, kind: 'map', id: MAP, name: 'Rails claims', revision: 3, saved_at: '2026-10-19T00:00:00+00:00', version_id: null, version: null },
+          { item: 2, kind: 'figure', id: FIG, name: 'Rails 3D section', revision: null, saved_at: '2026-10-18T00:00:00+00:00', version_id: null, version: null }],
+        recipe: { name: 'Default', id: 'r1', version: 1 }, note: null, approved_by_email: user.email, approved_at: `2026-10-2${approvals.length + 1}T12:00:00Z` });
+      return route.fulfill({ status: 201, json: [approvals[0]] });
+    }
+    return route.fulfill({ json: approvals });
+  });
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold');
+  await page.getByRole('tab', { name: 'Release pack' }).click();
+  const region = page.getByRole('region', { name: 'Release pack' });
+  const status = region.getByRole('status', { name: 'Release pack status' });
+  await expect(status).toContainText('Draft: not approved yet');
+  const items = region.getByRole('table', { name: 'Pack items' });
+  await expect(items.getByRole('row', { name: /1.*Results table · recipe "Default".*Not approved yet/ })).toBeVisible();
+  await expect(items.getByRole('row', { name: /2.*Rails claims.*Drill plan map/ })).toBeVisible();
+  await expect(items.getByRole('link', { name: 'Open in 3D' })).toHaveAttribute('href', `/3d?project=${FIG}`);
+
+  page.once('dialog', (d) => d.accept());
+  await region.getByRole('button', { name: 'Approve' }).click();
+  await expect(status).toContainText('Up to date: approved 2026-10-21 by geo@star.test');
+  expect(posted[0]).toEqual({ pack_id: 'pk1', batch_ids: [BATCH0], recipe: { id: 'r1' }, note: null,
+    figures: [{ kind: 'map', id: MAP, version_id: null, revision: 3 }, { kind: 'figure', id: FIG, version_id: null, revision: null }] });
+  await expect(region.getByRole('button', { name: 'Approve' })).toBeDisabled();
+
+  // A new assay import: the pack becomes a draft, naming what changed; nothing is approved or published by itself.
+  await page.getByRole('tab', { name: 'Drill data' }).click();
+  await page.getByLabel('Drill data file').setInputFiles({ name: 'assays-7.csv', mimeType: 'text/csv', buffer: Buffer.from('HoleID,From,To,Cu_pct\nR-1,0,2,0.41\nR-1,2,4,0.55\nR-9,0,1.5,0.2\n') });
+  await page.getByRole('button', { name: 'Check against stored data' }).click();
+  await page.getByRole('button', { name: 'Commit import' }).click();
+  await expect(page.getByText('Imported assays-7.csv')).toBeVisible();
+  await page.getByRole('tab', { name: 'Release pack' }).click();
+  await expect(status).toContainText('Draft: data changed since approved');
+  await expect(status.getByRole('list', { name: 'Changes since approval' })).toHaveText('3 new assays in holes R-1, R-9');
+  await expect(items.getByRole('row', { name: /Results table.*Drill data changed/ })).toBeVisible();
+  expect(posted).toHaveLength(1);
+
+  page.once('dialog', (d) => d.accept());
+  await region.getByRole('button', { name: 'Approve' }).click();
+  await expect(status).toContainText('Up to date: approved 2026-10-22');
+  expect(posted[1].batch_ids).toEqual([fake.drill.batches[0].id, BATCH0]);
+  await expect(region.getByRole('list', { name: 'Approval history' }).getByRole('listitem')).toHaveCount(2);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
+
+  // Download pack: the results table regenerated from the current assays, the pack's maps ticked in the package export.
+  await region.getByRole('button', { name: 'Download pack' }).click();
+  await expect(region.getByRole('list', { name: 'Draft outputs' })).toContainText('Results table: 0 intercepts in 0 holes (recipe "Default" v1)');
+  const dialog = page.getByRole('dialog', { name: 'Export a package' });
+  await expect(dialog.getByRole('checkbox', { name: /Fig 1.*Rails claims/ })).toBeChecked();
+  await expect(dialog.getByLabel('Project')).toHaveValue('Rails Copper-Gold');
+  await dialog.getByRole('button', { name: 'Close' }).click();
+  await expect(dialog).toHaveCount(0);
+});
+
+test('release pack: a site without the migration shows a notice', async ({ page }) => {
+  await fakeSupabase(page, { role: 'viewer' });
+  await page.route('**/rest/v1/release_pack*', (route) => route.fulfill({ status: 404, json: { code: 'PGRST205', message: "Could not find the table 'public.release_packs' in the schema cache" } }));
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold?tab=release');
+  await expect(page.getByText('Release packs are not available on this site yet.')).toBeVisible();
+});
