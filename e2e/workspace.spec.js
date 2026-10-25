@@ -238,18 +238,30 @@ test('QA/QC standard comparisons: pinned supplied references, zero and censored 
   await expect(page.getByText('3 assessed / 4 selected standards')).toBeVisible();
   await expect(page.getByText(/9 rows submitted; 4 records written/)).toHaveText(/rolled back/);
   const plot = page.getByRole('img', { name: /CRM reference plot, 3 assessed/ }); await expect(plot).toBeVisible();
+<<<<<<< HEAD
   expect(await plot.locator('polyline').count()).toBe(0); expect(await plot.locator('circle').count()).toBe(1); expect(await plot.locator('rect[data-rule="fail"]').count()).toBe(2);
   const table = page.getByRole('table', { name: 'Standards comparison data' });
   await expect(table).toContainText('ND g/t (below detection; recorded limit 0.005 g/t)'); await expect(table).toContainText('0.000 g/t');
   await expect(page.getByText('Outside ±3 supplied SD: 2/3 (66.667%)')).toBeVisible();
   await expect(page.getByText('Shewhart rule failures: 2/3 (66.667%)')).toBeVisible();
   await expect(page.getByRole('region', { name: 'Standards failing Shewhart rules' })).toContainText('Row 3 · STD-001: 0.000 g/t (z = -5) — Outside ±3 supplied SD');
+=======
+  expect(await plot.locator('polyline').count()).toBe(0); expect(await plot.locator('circle').count()).toBe(3);
+  const table = page.getByRole('table', { name: 'Standards comparison data' });
+  await expect(table).toContainText('ND g/t (below detection; recorded limit 0.005 g/t)'); await expect(table).toContainText('0.000 g/t');
+  await expect(page.getByText('Outside ±3 supplied SD: 2/3 (66.667%)')).toBeVisible();
+>>>>>>> origin/main
   await table.locator('summary').filter({ hasText: 'Record provenance' }).first().click();
   await expect(table).toContainText(`Pinned CRM: ${crm.id}`); await expect(table).toContainText('Synthetic supplied certificate only');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('standards-comparison.png'), fullPage: true });
+<<<<<<< HEAD
   await checkChartDownload(page, testInfo, 'CRM reference comparison', `qaqc-standards-${batch.id}.png`, ['Supplied expected value: 10; supplied SD: 2 g/t.', 'CRM CRM-TEST | revision rev-01', '3 assessed / 4 selected; 1 unassessed', 'Outside ±3 supplied SD: 2/3.', 'Shewhart failures: 2/3', 'no analytical order or trend implied', 'synthetic-standards-request', batch.id]);
   await checkComparisonPdf(page, testInfo, `qaqc-standards-${batch.id}.pdf`, ['STD-000', 'STD-003', crm.id, 'ND', '0.005', '0.000', 'Synthetic supplied certificate only', 'Shewhart rule failures: 2/3', 'Failure: source row 7, sample STD-003', batch.id]);
+=======
+  await checkChartDownload(page, testInfo, 'CRM reference comparison', `qaqc-standards-${batch.id}.png`, ['Supplied expected value: 10; supplied SD: 2 g/t.', 'CRM CRM-TEST | revision rev-01', '3 assessed / 4 selected; 1 unassessed', 'Outside ±3 supplied SD: 2/3.', 'no analytical order or trend implied', 'synthetic-standards-request', batch.id]);
+  await checkComparisonPdf(page, testInfo, `qaqc-standards-${batch.id}.pdf`, ['STD-000', 'STD-003', crm.id, 'ND', '0.005', '0.000', 'Synthetic supplied certificate only', batch.id]);
+>>>>>>> origin/main
   await page.getByRole('button', { name: 'Back to QA/QC' }).click(); await expect(page.getByRole('button', { name: 'Compare standards' })).toBeFocused();
   await expect(page.getByRole('button', { name: 'Roll back QA/QC import' })).toHaveCount(0);
   failReferences = true; await page.getByRole('button', { name: 'Compare standards' }).click(); await page.getByLabel('Comparison group').selectOption('0');
@@ -257,6 +269,7 @@ test('QA/QC standard comparisons: pinned supplied references, zero and censored 
   expect(errors).toEqual([]);
 });
 
+<<<<<<< HEAD
 test('QA/QC blank comparisons: N × detection-limit threshold, censored passes, unassessed blanks, PNG and PDF', async ({ page }, testInfo) => {
   const errors = []; page.on('pageerror', error => errors.push(error.message));
   await fakeSupabase(page, { role: 'viewer' });
@@ -309,6 +322,8 @@ test('QA/QC blank comparisons: N × detection-limit threshold, censored passes, 
   expect(errors).toEqual([]);
 });
 
+=======
+>>>>>>> origin/main
 test('QA/QC PDF retains all 51 selected records beyond table pagination and supports evidence-only reports', async ({ page }, testInfo) => {
   test.setTimeout(90000);
   await fakeSupabase(page, { role: 'viewer' });

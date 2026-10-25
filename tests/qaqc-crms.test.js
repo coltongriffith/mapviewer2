@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
+<<<<<<< HEAD
 import { analyzeCrmSnapshot, crmControlRules, crmReferenceComparison, CRM_EXCLUSION_REASONS, CRM_RULES } from '../shared/qaqcCrms.js';
+=======
+import { analyzeCrmSnapshot, crmReferenceComparison, CRM_EXCLUSION_REASONS } from '../shared/qaqcCrms.js';
+>>>>>>> origin/main
 
 // Synthetic controls only; these do not describe real assays or certified CRMs.
 const scope = { propertyId: 'property', batchId: 'sample-import', labId: 'Lab', labBatchId: 'Job', crmId: 'CRM', crmRevision: 'rev-01', element: 'Au', unit: 'g/t' };
@@ -151,6 +155,7 @@ describe('historical CRM snapshot analysis', () => {
     expect(() => analyze(Array(5001).fill(sample()))).toThrow('5,000');
   });
 });
+<<<<<<< HEAD
 
 describe('Shewhart failure rules in displayed submitted-row order', () => {
   const points = zs => zs.map(z => ({ z, category: Math.abs(z) > 3 ? 'outside3' : Math.abs(z) > 2 ? 'outside2Within3' : 'within2' }));
@@ -183,3 +188,5 @@ describe('Shewhart failure rules in displayed submitted-row order', () => {
     expect(result.points.map(p => p.control.status)).toEqual(['none', 'none', 'warning']);
   });
 });
+=======
+>>>>>>> origin/main

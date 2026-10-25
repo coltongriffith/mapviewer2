@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { createClient } from '@supabase/supabase-js';
+<<<<<<< HEAD
 import { discoverBlankGroups, discoverDuplicateGroups, loadBlankSnapshot, loadDuplicateSnapshot, QAQC_SNAPSHOT_MAX_BYTES } from '../src/utils/drillQaqcSnapshot.js';
+=======
+import { discoverDuplicateGroups, loadDuplicateSnapshot, QAQC_SNAPSHOT_MAX_BYTES } from '../src/utils/drillQaqcSnapshot.js';
+>>>>>>> origin/main
 
 const id = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const scope = { propertyId: id(1), batchId: id(2), sampleType: 'field_dup', labId: 'L', labBatchId: 'J', element: 'Au', unit: 'g/t' };
@@ -254,6 +258,7 @@ describe('bounded historical duplicate snapshot through the real Supabase client
     expect(result.scope).toEqual(scope); expect(result.manifest.selectedCount).toBe(3);
   });
 });
+<<<<<<< HEAD
 
 describe('bounded historical blank snapshot', () => {
   const blankScope = { ...scope, sampleType: 'blank' };
@@ -276,3 +281,5 @@ describe('bounded historical blank snapshot', () => {
     expect(await loadBlankSnapshot(g.client, blankScope)).toMatchObject({ complete: false, issues: [{ code: 'read_failed' }] });
   });
 });
+=======
+>>>>>>> origin/main

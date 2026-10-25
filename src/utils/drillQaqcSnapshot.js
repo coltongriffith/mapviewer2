@@ -16,6 +16,7 @@ const selected = (row, scope) => row.record.sample_type === scope.sampleType
 const selectedStandard = (row, scope) => row.record.sample_type === 'standard'
   && row.record.lab_id === scope.labId && row.record.lab_batch_id === scope.labBatchId
   && row.record.crm_id === scope.crmId && row.record.crm_revision === scope.crmRevision;
+<<<<<<< HEAD
 const selectedBlank = (row, scope) => row.record.sample_type === 'blank'
   && row.record.lab_id === scope.labId && row.record.lab_batch_id === scope.labBatchId;
 const matchingCrm = (row, scope) => row.record.crm_id === scope.crmId && row.record.revision === scope.crmRevision
@@ -27,6 +28,17 @@ function validateScope(scope, discovery = false, crm = false, blank = false) {
     || !['labId', 'labBatchId', 'element', 'unit', ...(crm ? ['crmId', 'crmRevision'] : [])].every((key) => typeof scope[key] === 'string' && scope[key].trim() && scope[key].length <= 120)))) {
     throw new Error(crm ? 'Choose one property, sample import, laboratory/job, CRM/revision, element and exact unit.'
       : blank ? 'Choose one property, sample import, laboratory/job, element and exact unit for blanks.' : 'Choose one property, sample import, duplicate type, laboratory, lab job, element and unit.');
+=======
+const matchingCrm = (row, scope) => row.record.crm_id === scope.crmId && row.record.revision === scope.crmRevision
+  && row.record.element === scope.element && row.record.unit === scope.unit;
+function fail(code, message) { throw Object.assign(new Error(message), { snapshotCode: code }); }
+function validateScope(scope, discovery = false, crm = false) {
+  if (!object(scope) || !UUID.test(scope.propertyId) || !UUID.test(scope.batchId)
+    || (!discovery && ((!crm && !TYPES.includes(scope.sampleType))
+    || !['labId', 'labBatchId', 'element', 'unit', ...(crm ? ['crmId', 'crmRevision'] : [])].every((key) => typeof scope[key] === 'string' && scope[key].trim() && scope[key].length <= 120)))) {
+    throw new Error(crm ? 'Choose one property, sample import, laboratory/job, CRM/revision, element and exact unit.'
+      : 'Choose one property, sample import, duplicate type, laboratory, lab job, element and unit.');
+>>>>>>> origin/main
   }
   if (discovery) return { propertyId: scope.propertyId.toLowerCase(), batchId: scope.batchId.toLowerCase() };
   return { propertyId: scope.propertyId.toLowerCase(), batchId: scope.batchId.toLowerCase(),
@@ -83,6 +95,7 @@ export async function loadCrmSnapshot(client, selection, options = {}) {
   return loadSnapshot(client, selection, options, false, true);
 }
 
+<<<<<<< HEAD
 /** One written blank population. Blanks pin no references; nothing else is read. */
 export async function loadBlankSnapshot(client, selection, options = {}) {
   return loadSnapshot(client, selection, options, false, false, true);
@@ -113,6 +126,8 @@ export async function discoverBlankGroups(client, selection, options = {}) {
   return { ...snapshot, groups: [...groups.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, group]) => group) };
 }
 
+=======
+>>>>>>> origin/main
 /** Discover populated standard tuples, without fetching or interpreting definitions. */
 export async function discoverCrmGroups(client, selection, options = {}) {
   const snapshot = await loadSnapshot(client, selection, options, true, true);
@@ -141,11 +156,19 @@ export async function discoverCrmGroups(client, selection, options = {}) {
 
 async function loadSnapshot(client, selection, {
   signal, isCurrent = () => true, onProgress = () => {}, maxBytes = QAQC_SNAPSHOT_MAX_BYTES,
+<<<<<<< HEAD
 } = {}, discovery = false, crm = false, blank = false) {
   const scope = validateScope(selection, discovery, crm, blank);
   if (!Number.isInteger(maxBytes) || maxBytes < 1 || maxBytes > QAQC_SNAPSHOT_MAX_BYTES) throw new Error('Invalid snapshot byte limit.');
   const records = [], parents = [], issues = [];
   const inPopulation = crm ? selectedStandard : blank ? selectedBlank : selected;
+=======
+} = {}, discovery = false, crm = false) {
+  const scope = validateScope(selection, discovery, crm);
+  if (!Number.isInteger(maxBytes) || maxBytes < 1 || maxBytes > QAQC_SNAPSHOT_MAX_BYTES) throw new Error('Invalid snapshot byte limit.');
+  const records = [], parents = [], issues = [];
+  const inPopulation = crm ? selectedStandard : selected;
+>>>>>>> origin/main
   let initial = null, refreshed = null, bytes = 0, requested = [], referenceReadsComplete = false;
   const guard = () => {
     if (signal?.aborted || !isCurrent()) throw Object.assign(new Error('Snapshot load cancelled.'), { name: 'AbortError' });
@@ -197,7 +220,11 @@ async function loadSnapshot(client, selection, {
       onProgress({ phase: 'records', loaded: records.length, expected: initial.rows_written }); guard();
     }
     if (records.length !== initial.rows_written) fail('count_mismatch', 'The snapshot does not match the import written-row count.');
+<<<<<<< HEAD
     if (!discovery && !blank) {
+=======
+    if (!discovery) {
+>>>>>>> origin/main
       const pins = new Set();
       for (const row of records.filter(row => inPopulation(row, scope))) {
         const candidates = crm ? (Array.isArray(row.crm_version_ids) ? row.crm_version_ids : []) : [row.parent_version_id];
@@ -241,7 +268,11 @@ async function loadSnapshot(client, selection, {
   // A failed reference request cannot establish which individual UUIDs are absent.
   const missingParentIds = referenceReadsComplete ? requested.filter((id) => !found.has(id)) : [];
   return {
+<<<<<<< HEAD
     scope, records, ...(crm ? { crms: parents } : blank ? {} : { parents, missingParentIds }), complete: issues.length === 0, issues,
+=======
+    scope, records, ...(crm ? { crms: parents } : { parents, missingParentIds }), complete: issues.length === 0, issues,
+>>>>>>> origin/main
     manifest: {
       version: 1, scope: { ...scope }, population: 'written_import_rows', currentStateClaimed: false,
       retrievedAt: new Date().toISOString(), statusRefreshed: Boolean(refreshed), referenceReadsComplete,
@@ -254,7 +285,11 @@ async function loadSnapshot(client, selection, {
         // A candidate not returned by this exact tuple filter is not necessarily missing:
         // multi-element standards pin other tuples. Per-standard resolution is statistical.
         unresolvedCandidateIds: [...missingParentIds] }
+<<<<<<< HEAD
         : blank ? {} : { requestedParentIds: requested, parentIds: parents.map((row) => row.id), missingParentIds: [...missingParentIds] }),
+=======
+        : { requestedParentIds: requested, parentIds: parents.map((row) => row.id), missingParentIds: [...missingParentIds] }),
+>>>>>>> origin/main
       bytesRead: bytes,
     },
   };
