@@ -18,6 +18,9 @@ function recipeError(err) {
   return drillError(err);
 }
 
+// PostgREST's or=() grammar needs quoted, escaped text (as property-data.js); standalone filters take literal values.
+const filterValue = (v) => `"${String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+
 export function drillResultsDb(sb) {
   if (!sb) throw new Error('Drill results need an Exploration Maps account, which is not available on this site right now.');
   const rpc = async (fn, args) => { const { data, error } = await sb.rpc(fn, args); if (error) throw recipeError(error); return data; };
@@ -26,16 +29,28 @@ export function drillResultsDb(sb) {
     recipes: (propertyId) => rpc('drill_property_recipes', { p_property: propertyId }),
     /** Saves a new version; baseVersion (0 for a new name) refuses it if someone saved meanwhile. */
     save: (propertyId, name, recipe, baseVersion = null) => rpc('drill_save_recipe', { p_property: propertyId, p_name: name, p_recipe: recipe, p_base_version: baseVersion }),
-    /** The property's current assays, a page at a time: { rows, capped }. */
+    /** The property's current assays, a page at a time after the last row's key (as /3d's property-data.js): { rows, capped }. */
     async assays(propertyId, max = MAX_ASSAYS) {
-      const rows = [];
-      for (let at = 0; at < max; at += PAGE) {
-        const { data, error } = await sb.from('drill_assays').select('hole_id,from_m,to_m,values,bdl,units')
+      const rows = [], cursors = new Set();
+      let cursor = null;
+      while (rows.length < max) {
+        let q = sb.from('drill_assays').select('hole_id,from_m,to_m,values,bdl,units')
           .eq('property_id', propertyId).is('superseded_by_batch', null)
-          .order('hole_id').order('from_m').order('to_m').range(at, at + PAGE - 1);
+          .order('hole_id').order('from_m').order('to_m');
+        // In drill_assays_current_key order; the redundant hole_id bound lets the index seek before the OR filter.
+        if (cursor) {
+          const [h, f, t] = cursor, hole = filterValue(h);
+          q = q.gte('hole_id', h).or(`hole_id.gt.${hole},and(hole_id.eq.${hole},from_m.gt.${f}),and(hole_id.eq.${hole},from_m.eq.${f},to_m.gt.${t})`);
+        }
+        const { data, error } = await q.limit(PAGE);
         if (error) throw drillError(error);
         rows.push(...(data || []));
         if (!data || data.length < PAGE) return { rows, capped: false };
+        const last = data.at(-1), key = JSON.stringify(cursor = [last.hole_id, last.from_m, last.to_m]);
+        if (typeof last.hole_id !== 'string' || !last.hole_id.length || !Number.isFinite(last.from_m) || !Number.isFinite(last.to_m) || cursors.has(key)) {
+          throw new Error("Could not read the property's assays (invalid or repeated page cursor).");
+        }
+        cursors.add(key);
       }
       return { rows, capped: true };
     },
