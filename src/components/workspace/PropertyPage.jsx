@@ -17,6 +17,7 @@ import {
 
 // The drill database tab (import, checks, history) loads with the tab.
 const DrillPanel = lazyGuarded(() => import('./DrillPanel'));
+const ReleasePackPanel = lazyGuarded(() => import('./ReleasePackPanel'));
 
 // /workspace/p/<slug>: one exploration project and everything it owns.
 // Viewers get the same page with every editing control left out; the
@@ -29,6 +30,7 @@ const TABS = [
   { id: 'claims', label: 'Claims' },
   { id: 'data', label: 'Data library' },
   { id: 'drill', label: 'Drill data' },
+  { id: 'release', label: 'Release pack' },
   { id: 'activity', label: 'Activity' },
 ];
 
@@ -442,6 +444,7 @@ export default function PropertyPage({ orgSlug = null, slug, onExit, onOpenDashb
               {tab === 'figures' && <FiguresTab property={property} perms={perms} userId={user?.id} />}
               {tab === 'data' && <DataTab property={property} perms={perms} onNewMap={onNewMap} />}
               {tab === 'drill' && <Suspense fallback={<p className="dash-muted">Loading the drill database…</p>}><DrillPanel property={property} perms={perms} /></Suspense>}
+              {tab === 'release' && <Suspense fallback={<p className="dash-muted">Loading the release pack…</p>}><ReleasePackPanel property={property} perms={perms} onOpenMap={onOpenMap} /></Suspense>}
               {tab === 'claims' && <ClaimsTab property={property} perms={perms} userId={user?.id} onOpenTenureMonitor={onOpenTenureMonitor} />}
               {tab === 'activity' && <section className="dash-panel"><ActivityFeed orgId={property.org_id} propertyId={property.id} /></section>}
             </div>
