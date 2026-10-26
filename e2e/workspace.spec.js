@@ -33,6 +33,43 @@ const BATCH0 = '00000000-0000-4000-8000-0000000000e0';
 const collarBatch = { id: BATCH0, kind: 'collars', filename: 'Rails collars.csv', rows: 12, rows_written: 12, summary: { new: 12, changed: 0, unchanged: 0, new_holes: 12 }, created_at: '2026-10-18T00:00:00Z', created_by_email: 'cfo@star.test', rolled_back_at: null, blocked_by: null };
 const drillSummary = () => ({ collars: 12, planned: 2, metres: 3420.5, surveys: 40, assays: 0, lithology: 0, holes: 12, elements: [], limit: 20000, batches: [{ ...collarBatch }] });
 
+test('property data tabs: historical imports without counts survive repeated and in-flight switches', async ({ page }) => {
+  const errors = []; page.on('pageerror', error => errors.push(error.message));
+  const fake = await fakeSupabase(page);
+  // Direct imports can record provenance without the browser importer's diff.
+  fake.drill.batches = [
+    { ...collarBatch, summary: { method: 'published collars only', source_urls: [] } },
+    { ...collarBatch, id: '00000000-0000-4000-8000-0000000000e2', filename: 'Other collars.csv', summary: { note: 'Published collar and orientation' } },
+    { ...collarBatch, id: '00000000-0000-4000-8000-0000000000e3', filename: 'Normal collars.csv' },
+  ];
+  const reports = [];
+  page.on('request', request => { if (request.url().endsWith('/api/client-error')) reports.push(request.postDataJSON()); });
+  let releaseSummary;
+  const pendingSummary = new Promise(resolve => { releaseSummary = resolve; });
+  let requested;
+  const summaryRequested = new Promise(resolve => { requested = resolve; });
+  await page.route('**/rest/v1/rpc/drill_property_summary', async route => {
+    requested(); await pendingSummary; await route.fulfill({ json: fake.drill });
+  });
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold');
+  await page.getByRole('tab', { name: 'Drill data', exact: true }).click();
+  await summaryRequested;
+  await page.getByRole('tab', { name: 'Data library', exact: true }).click();
+  await expect(page.getByRole('table', { name: 'Data files' })).toBeVisible();
+  releaseSummary();
+  for (let i = 0; i < 4; i++) {
+    await page.getByRole('tab', { name: 'Drill data', exact: true }).click();
+    await expect(page.getByRole('table', { name: 'Import history' })).toBeVisible();
+    await expect(page.getByText('Change counts unavailable.', { exact: true })).toHaveCount(2);
+    await expect(page.getByText('12 new holes', { exact: true })).toBeVisible();
+    await page.getByRole('tab', { name: 'Data library', exact: true }).click();
+    await expect(page.getByRole('table', { name: 'Data files' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Download assays.csv', exact: true })).toBeEnabled();
+  }
+  expect(errors).toEqual([]);
+  expect(reports.filter(report => report.kind === 'react')).toEqual([]);
+});
+
 test('lab certificates: pin a PDF version, download it and retract a mistaken link', async ({ page }) => {
   const fake = await fakeSupabase(page);
   fake.drill.batches = [{ ...collarBatch, kind: 'assays', filename: 'assays.csv' }];
