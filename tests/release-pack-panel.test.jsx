@@ -76,3 +76,22 @@ it('does not show approved status when the initial complete history cannot be re
   await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('History unavailable'));
   expect(screen.queryByText(/Up to date:/)).toBeNull(); expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
 });
+
+for (const approved of [true, false]) {
+  for (const action of ['Download pack', 'Regenerate draft']) {
+    it(`refuses capped results for ${approved ? 'approved' : 'draft'} packs via ${action}, then allows a complete retry`, async () => {
+      if (!approved) state.approvals = [];
+      render(<ReleasePackPanel property={property} perms={{ edit: true }} />);
+      await screen.findByText(approved ? /Up to date: approved/ : 'Draft: not approved yet');
+      mock.assays.mockResolvedValueOnce({ rows: [], capped: true });
+      fireEvent.click(screen.getByRole('button', { name: action, exact: true }));
+      await screen.findByRole('alert');
+      expect(screen.getByRole('alert')).toHaveTextContent('200,000-assay loading limit');
+      expect(mock.xlsx).not.toHaveBeenCalled(); expect(mock.pdf).not.toHaveBeenCalled();
+      expect(mock.pkg).not.toHaveBeenCalled();
+      prepare(); await screen.findByRole('dialog');
+      expect(mock.xlsx).toHaveBeenCalledOnce(); expect(mock.pdf).toHaveBeenCalledOnce();
+      expect(mock.pkg.mock.lastCall[0].preset.draft).toBe(!approved);
+    });
+  }
+}

@@ -1385,6 +1385,44 @@ test('release pack: an import made with the tab open makes the downloaded snapsh
   expect(Object.keys(zip)).toEqual(expect.arrayContaining(['rails-copper-gold-results.xlsx', 'rails-copper-gold-results.pdf']));
 });
 
+test('release pack: capped results cannot produce an approved download and a complete retry works', async ({ page }, testInfo) => {
+  test.setTimeout(120_000);
+  const fake = await fakeSupabase(page);
+  const pack = { id: 'p1', items: [{ kind: 'results_table', ref: 'Default' }] };
+  const approval = { id: 'a1', items: pack.items, batch_ids: [BATCH0], recipe: { id: 'r1', name: 'Default', version: 1 }, figures: [], approved_at: '2026-10-25T00:00:00Z' };
+  fake.recipes = [{ id: 'r1', name: 'Default', version: 1, recipe: { primary: 'Au', equivalent: false, elements: [{ name: 'Au', unit: 'g/t', price: null, recovery: 100 }], cutoff: 0, minLength: 0, maxDilution: 0 } }];
+  await page.route('**/rest/v1/release_packs*', route => route.fulfill({ json: [pack] }));
+  await page.route('**/rest/v1/release_pack_approvals*', route => route.fulfill({ json: [approval] }));
+  await page.route('**/rest/v1/figure_versions*', route => route.fulfill({ json: [] }));
+  await page.route('**/rest/v1/drill_import_batches*', route => route.fulfill({ json: fake.drill.batches }));
+  let capped = true, pages = 0, downloads = 0;
+  // Real 1,000-row pages reach the production loader's limit without rendering a partial table.
+  await page.route('**/rest/v1/drill_assays*', route => {
+    const start = pages++ * 1000;
+    return route.fulfill({ json: capped ? Array.from({ length: 1000 }, (_, i) => ({ hole_id: `CAP-${String(start + i).padStart(6, '0')}`, from_m: 0, to_m: 1, values: {}, bdl: {}, units: {} })) : [] });
+  });
+  page.on('download', () => { downloads++; });
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold?tab=release');
+  await expect(page.getByText(/Up to date: approved/)).toBeVisible();
+  await page.getByRole('button', { name: 'Download pack', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('200,000-assay loading limit', { timeout: 90_000 });
+  expect(pages).toBe(200); expect(downloads).toBe(0);
+  await expect(page.getByRole('dialog', { name: 'Export a package' })).toHaveCount(0);
+  // A subsequent complete read can be exported; the failure leaves no cached partial outputs.
+  capped = false;
+  await page.getByRole('button', { name: 'Download pack', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Export a package' });
+  await expect(dialog).toBeVisible();
+  const pending = page.waitForEvent('download');
+  await dialog.getByRole('button', { name: /Download package/ }).click();
+  const downloaded = await pending, path = testInfo.outputPath('complete-retry.zip');
+  await downloaded.saveAs(path);
+  const zip = unzipSync(await readFile(path));
+  const record = JSON.parse(new TextDecoder().decode(zip['release-pack.json']));
+  expect(record.status).toContain('Up to date: approved');
+  expect(Object.keys(zip)).toEqual(expect.arrayContaining(['rails-copper-gold-results.xlsx', 'rails-copper-gold-results.pdf']));
+});
+
 test('release pack: a site without the migration shows a notice', async ({ page }) => {
   await fakeSupabase(page, { role: 'viewer' });
   await page.route('**/rest/v1/release_pack*', (route) => route.fulfill({ status: 404, json: { code: 'PGRST205', message: "Could not find the table 'public.release_packs' in the schema cache" } }));

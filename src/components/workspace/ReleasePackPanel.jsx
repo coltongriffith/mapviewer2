@@ -119,9 +119,9 @@ export default function ReleasePackPanel({ property, perms, onOpenMap }) {
     const it = savedItems.find(x => x.kind === 'results_table'), r = it && snapshot.recipes[it.ref];
     if (r) {
       const a = await drillResultsDb(supabase).assays(property.id); ensureScope();
+      if (a.capped) throw new Error(`The results table reached the ${MAX_ASSAYS.toLocaleString('en-US')}-assay loading limit. The complete release pack could not be generated. Contact support for a complete export.`);
       const out = computeResults(a.rows, r.recipe);
-      const options = { propertyName: property.name, recipeName: it.ref, recipeVersion: r.version, unsaved: false,
-        warnings: a.capped ? [`Incomplete assay load: only the first ${MAX_ASSAYS.toLocaleString('en-US')} assays are included.`] : [] };
+      const options = { propertyName: property.name, recipeName: it.ref, recipeVersion: r.version, unsaved: false };
       const [{ resultsTableXlsx }, { resultsTablePages }] = await Promise.all([import('../../utils/drillResultsXlsx.js'), import('../../utils/drillResultsPages.js')]);
       files[`${base}-results.xlsx`] = await bytes(await resultsTableXlsx(out, r.recipe, options));
       files[`${base}-results.pdf`] = await bytes((await resultsTablePages(out, r.recipe, options, 'pdf')).blob);
