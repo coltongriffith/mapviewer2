@@ -174,11 +174,11 @@ describe('calls', () => {
     expect(await ws.getProjectHome('m1')).toBeNull();
     expect(calls.some((c) => c.table === 'projects')).toBe(false);
     ws.forgetWorkspaces();
-    rpcResults.get_my_workspaces = [{ id: 'org1', name: 'Star', slug: 'star', role: 'viewer' }];
+    rpcResults.get_my_workspaces = [{ id: 'org1', name: 'Star', slug: 'star', role: 'viewer', plan: 'team' }];
     tableRows.projects = [{ org_id: 'org1', property_id: 'p1' }];
     tableRows.properties = [{ id: 'p1', name: 'Rails', slug: 'rails' }];
     expect(await ws.getProjectHome('m1')).toEqual({
-      orgId: 'org1', orgName: 'Star', orgSlug: 'star', role: 'viewer', readOnly: true, propertyId: 'p1', propertyName: 'Rails', propertySlug: 'rails',
+      orgId: 'org1', orgName: 'Star', orgSlug: 'star', role: 'viewer', orgPlan: 'team', readOnly: true, propertyId: 'p1', propertyName: 'Rails', propertySlug: 'rails',
     });
   });
 

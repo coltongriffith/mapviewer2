@@ -8348,7 +8348,7 @@ export default function App({ initialAction = null }) {
               </>
             )}
             <button type="button" className="share-embed-link" onClick={() => { setShowShareModal(false); setShowEmbedDialog(true); }}>
-              Embed a live map on your website{entitlements.live_embed ? '' : ' (Pro)'}
+              Embed a live map on your website{entitlements.live_embed || (projectHome && !projectHome.readOnly && projectHome.orgPlan !== 'free') ? '' : ' (Pro)'}
             </button>
           </div>
         </div>
@@ -8358,6 +8358,7 @@ export default function App({ initialAction = null }) {
           projectId={user ? projectId : null}
           canPublish={Boolean(user && projectId && !projectHome?.readOnly)}
           entitlements={entitlements}
+          workspacePaid={Boolean(projectHome && !projectHome.readOnly && projectHome.orgPlan !== 'free')}
           title={project.layout?.title}
           getState={() => ({ ...project, layers: layersWithNearbyClaims(project) })}
           onUpgrade={(reason) => { setShowEmbedDialog(false); setUpgradeReason(reason); }}

@@ -6,14 +6,14 @@ import { trackEvent } from '../utils/track';
 const when = (iso) => { try { return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(iso)); } catch { return ''; } };
 
 // "Embed on your website": the saved map's live web map (one link, republished in place) and its <iframe> code.
-// Pro; a free account sees the upsell. getState: the map as it would be shared now, read only when publishing.
-export default function EmbedCodeDialog({ projectId, canPublish, entitlements, title, getState, onUpgrade, onClose }) {
+// Pro, or an editor of a paid company workspace's map (as publish_live_map); otherwise the upsell. getState: the map as it would be shared now, read only when publishing.
+export default function EmbedCodeDialog({ projectId, canPublish, entitlements, workspacePaid, title, getState, onUpgrade, onClose }) {
   const [live, setLive] = useState(undefined); // undefined: loading; null: never published
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [opts, setOpts] = useState({ width: 960, aspect: '16:9', responsive: true });
   const [copied, setCopied] = useState(false);
-  const allowed = Boolean(entitlements?.live_embed);
+  const allowed = Boolean(entitlements?.live_embed || workspacePaid);
 
   useEffect(() => {
     if (!allowed || !projectId) return undefined;

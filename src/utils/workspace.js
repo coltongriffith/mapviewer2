@@ -361,6 +361,7 @@ export async function getProjectHome(projectId) {
     orgName: org.name,
     orgSlug: org.slug || null,
     role: org.role,
+    orgPlan: org.plan || 'free',
     readOnly: !hasRole(org.role, 'editor'),
     propertyId: property?.id || data.property_id || null,
     propertyName: property?.name || null,

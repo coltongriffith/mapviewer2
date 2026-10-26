@@ -49,8 +49,8 @@ describe('embed helpers', () => {
     const fixed = embedCode('abc123def456', { origin: 'https://www.explorationmaps.com', title: 'Rails "Project"', width: 800, aspect: '4:3', responsive: false });
     expect(fixed).toBe('<iframe src="https://www.explorationmaps.com/embed/map/abc123def456" title="Rails &quot;Project&quot;" loading="lazy" allowfullscreen width="800" height="600" style="border:0;max-width:100%"></iframe>');
     const fluid = embedCode('abc123def456', { origin: 'https://x.test', width: 960, height: 400 });
-    expect(fluid).toContain('max-width:960px;padding-top:41.6667%');
-    expect(fluid).toMatch(/^<div style="position:relative;width:100%;[^"]*"><iframe [^>]*style="position:absolute;top:0;left:0;width:100%;height:100%;border:0"><\/iframe><\/div>$/);
+    expect(fluid).toContain('<div style="width:100%;max-width:960px"><div style="position:relative;padding-top:41.6667%">');
+    expect(fluid).toMatch(/^<div style="[^"]*"><div style="position:relative;[^"]*"><iframe [^>]*style="position:absolute;top:0;left:0;width:100%;height:100%;border:0"><\/iframe><\/div><\/div>$/);
     expect(embedCode('abc123def456', { origin: 'https://x.test', width: 1e6, aspect: 'bogus', responsive: false })).toContain('width="4000" height="2250"');
   });
 
@@ -128,6 +128,13 @@ describe('EmbedCodeDialog', () => {
     expect(onUpgrade).toHaveBeenCalledWith('live_embed');
     expect(rpc).not.toHaveBeenCalled();
     expect(screen.queryByLabelText('Embed code')).toBeNull();
+  });
+
+  it('lets an editor of a paid company map publish on a free personal plan', async () => {
+    rpc.mockResolvedValueOnce({ data: null, error: null });
+    render(<EmbedCodeDialog projectId="p1" canPublish entitlements={entitlementsFor(TIERS.FREE)} workspacePaid getState={() => state} onUpgrade={() => {}} onClose={() => {}} />);
+    expect(await screen.findByRole('button', { name: 'Publish live map' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'See Pro' })).toBeNull();
   });
 
   it('asks for a saved map before publishing', () => {

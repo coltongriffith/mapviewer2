@@ -17,7 +17,8 @@ export function embedCode(id, { origin, title, width = 960, height, aspect = '16
   const attrs = `src="${esc(embedUrl(id, origin))}" title="${esc(title || 'Interactive project map')}" loading="lazy" allowfullscreen`;
   if (!responsive) return `<iframe ${attrs} width="${w}" height="${h}" style="border:0;max-width:100%"></iframe>`;
   const pad = +((h / w) * 100).toFixed(4);
-  return `<div style="position:relative;width:100%;max-width:${w}px;padding-top:${pad}%"><iframe ${attrs} style="position:absolute;top:0;left:0;width:100%;height:100%;border:0"></iframe></div>`;
+  // The padding box sits inside the width cap: percentage padding resolves against the parent's width.
+  return `<div style="width:100%;max-width:${w}px"><div style="position:relative;padding-top:${pad}%"><iframe ${attrs} style="position:absolute;top:0;left:0;width:100%;height:100%;border:0"></iframe></div></div>`;
 }
 
 // The page that embeds the map, as a host and path: never its query string or fragment.
