@@ -435,8 +435,10 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
       // Styling one shape needs that shape's identity, which a dissolved
       // outline does not have — so, like trim mode, it lifts the dissolve.
       const styling = featureStyleLayerId === layer.id;
+      // An embedded registry layer answers a click with each claim's record, so it keeps them too.
+      const registry = layer.claimInfo === 'registry';
       const geojsonData = geometryCache.current(layer, {
-        dissolve: canDissolve(layer) && !trimming && !styling && geomType !== 'line' && !isDrillholes,
+        dissolve: canDissolve(layer) && !trimming && !styling && !registry && geomType !== 'line' && !isDrillholes,
       });
 
       const geoLayer = L.geoJSON(geojsonData, {
