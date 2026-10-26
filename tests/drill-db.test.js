@@ -220,6 +220,17 @@ describe('checking an import', () => {
 });
 
 describe('the diff in words', () => {
+  it.each([undefined, null, {}, { note: 'Published collars only' }, { new: 0, changed: 0 }, { unchanged: null }, { unchanged: 'unknown' }, { unchanged: -1 }])('handles missing or invalid change counts without inventing zeroes: %j', summary => {
+    expect(diffSentence('collars', summary)).toBe('Change counts unavailable.');
+  });
+
+  it('keeps known counts when the rest of a historical summary is missing', () => {
+    expect(diffSentence('collars', { new: 13 })).toBe('13 new holes');
+    expect(diffSentence('assays', { changed: 2, unchanged: null })).toBe('2 changed assays');
+    expect(diffSentence('assays', { new: {}, changed: 2 })).toBe('2 changed assays');
+    expect(diffSentence('surveys', { new: 0, changed: 0, unchanged: 0 })).toBe('No changes: 0 survey stations already stored as they are');
+  });
+
   it('reads like the plan: new holes, new rows, changed rows', () => {
     expect(diffSentence('assays', { new: 1340, changed: 0, unchanged: 0, new_holes: 12 })).toBe('12 new holes, 1,340 new assays');
     expect(diffSentence('collars', { new: 12, changed: 3, unchanged: 40, new_holes: 12 })).toBe('12 new holes, 3 changed collars, 40 unchanged');

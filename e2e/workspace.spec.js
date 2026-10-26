@@ -33,6 +33,107 @@ const BATCH0 = '00000000-0000-4000-8000-0000000000e0';
 const collarBatch = { id: BATCH0, kind: 'collars', filename: 'Rails collars.csv', rows: 12, rows_written: 12, summary: { new: 12, changed: 0, unchanged: 0, new_holes: 12 }, created_at: '2026-10-18T00:00:00Z', created_by_email: 'cfo@star.test', rolled_back_at: null, blocked_by: null };
 const drillSummary = () => ({ collars: 12, planned: 2, metres: 3420.5, surveys: 40, assays: 0, lithology: 0, holes: 12, elements: [], limit: 20000, batches: [{ ...collarBatch }] });
 
+test('property data tabs: historical imports without counts survive repeated and in-flight switches', async ({ page }) => {
+  const errors = []; page.on('pageerror', error => errors.push(error.message));
+  const fake = await fakeSupabase(page);
+  // Direct imports can record provenance without the browser importer's diff.
+  fake.drill.batches = [
+    { ...collarBatch, summary: { method: 'published collars only', source_urls: [] } },
+    { ...collarBatch, id: '00000000-0000-4000-8000-0000000000e2', filename: 'Other collars.csv', summary: { note: 'Published collar and orientation' } },
+    { ...collarBatch, id: '00000000-0000-4000-8000-0000000000e3', filename: 'Normal collars.csv' },
+  ];
+  const reports = [];
+  page.on('request', request => { if (request.url().endsWith('/api/client-error')) reports.push(request.postDataJSON()); });
+  let releaseSummary;
+  const pendingSummary = new Promise(resolve => { releaseSummary = resolve; });
+  let requested;
+  const summaryRequested = new Promise(resolve => { requested = resolve; });
+  await page.route('**/rest/v1/rpc/drill_property_summary', async route => {
+    requested(); await pendingSummary; await route.fulfill({ json: fake.drill });
+  });
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold');
+  await page.getByRole('tab', { name: 'Drill data', exact: true }).click();
+  await summaryRequested;
+  await page.getByRole('tab', { name: 'Data library', exact: true }).click();
+  await expect(page.getByRole('table', { name: 'Data files' })).toBeVisible();
+  releaseSummary();
+  for (let i = 0; i < 4; i++) {
+    await page.getByRole('tab', { name: 'Drill data', exact: true }).click();
+    await expect(page.getByRole('table', { name: 'Import history' })).toBeVisible();
+    await expect(page.getByText('Change counts unavailable.', { exact: true })).toHaveCount(2);
+    await expect(page.getByText('12 new holes', { exact: true })).toBeVisible();
+    await page.getByRole('tab', { name: 'Data library', exact: true }).click();
+    await expect(page.getByRole('table', { name: 'Data files' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Download assays.csv', exact: true })).toBeEnabled();
+  }
+  expect(errors).toEqual([]);
+  expect(reports.filter(report => report.kind === 'react')).toEqual([]);
+});
+
+test('assay import completion: optional certificate step pins the returned batch and clears on navigation', async ({ page }) => {
+  const fake = await fakeSupabase(page);
+  fake.files = [{ ...assays, name: 'Lab.pdf', kind: 'document', role: null }];
+  const links = []; let reads = 0;
+  await page.route('**/rest/v1/rpc/drill_batch_certificates', route => { reads++; return route.fulfill({ json: links }); });
+  await page.route('**/rest/v1/drill_batch_files*', route => {
+    const body = route.request().postDataJSON();
+    expect(body).toEqual({ batch_id: fake.drill.batches[0].id, file_id: FILE, version: 2 });
+    links.push({ file_id: FILE, version: 2, name: 'Lab.pdf', storage_path: fake.files[0].path });
+    return route.fulfill({ json: links });
+  });
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold');
+  await page.getByRole('tab', { name: 'Drill data', exact: true }).click();
+  await page.getByLabel('Drill data file').setInputFiles({ name: 'assays.csv', mimeType: 'text/csv', buffer: Buffer.from('HoleID,From,To,Au_gpt\nH1,0,1,2.5') });
+  await page.getByRole('button', { name: 'Check against stored data' }).click();
+  await page.getByRole('button', { name: 'Commit import' }).click();
+  const step = page.getByRole('region', { name: 'Import certificate step' });
+  await expect(step).toBeVisible(); expect(reads).toBe(0);
+  await step.getByRole('button', { name: 'Attach lab certificates' }).click();
+  await step.getByLabel('Certificate PDF').selectOption(FILE);
+  await step.getByRole('button', { name: 'Link certificate' }).click();
+  await expect(step.getByText('Certificate linked to this assay import.')).toBeVisible();
+  await expect(step.getByRole('button', { name: 'Lab.pdf · v2' })).toBeVisible();
+  // Starting another import clears the old receipt; it cannot attach to the next file.
+  await page.getByLabel('Drill data file').setInputFiles({ name: 'next.csv', mimeType: 'text/csv', buffer: Buffer.from('HoleID,From,To,Au_gpt\nH2,0,1,3') });
+  await expect(step).toHaveCount(0);
+  await page.getByRole('form', { name: 'Import drill data' }).getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.getByRole('tab', { name: 'Data library', exact: true }).click();
+  await page.getByRole('tab', { name: 'Drill data', exact: true }).click();
+  await expect(step).toHaveCount(0);
+  await page.getByRole('button', { name: 'Lab certificates', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Lab.pdf · v2' })).toBeVisible();
+  expect(fake.rpc.filter(r => r.fn === 'drill_import_batch' && !r.args.p_dry_run)).toHaveLength(1);
+});
+
+test('assay import completion: failed certificate link is retryable without reimport and rollback clears the step', async ({ page }) => {
+  const fake = await fakeSupabase(page); let failLink = true; const links = [];
+  await page.route('**/rest/v1/rpc/drill_batch_certificates', route => route.fulfill({ json: links }));
+  await page.route('**/rest/v1/drill_batch_files*', route => {
+    if (failLink) return route.fulfill({ status: 503, json: { message: 'Temporary link failure' } });
+    const body = route.request().postDataJSON(); const file = fake.files.find(f => f.id === body.file_id);
+    expect(body.batch_id).toBe(fake.drill.batches[0].id);
+    links.push({ file_id: file.id, version: file.version, name: file.name, storage_path: file.path });
+    return route.fulfill({ json: links });
+  });
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold');
+  await page.getByRole('tab', { name: 'Drill data', exact: true }).click();
+  await page.getByLabel('Drill data file').setInputFiles({ name: 'assays.csv', mimeType: 'text/csv', buffer: Buffer.from('HoleID,From,To,Au_gpt\nH1,0,1,2.5') });
+  await page.getByRole('button', { name: 'Check against stored data' }).click();
+  await page.getByRole('button', { name: 'Commit import' }).click();
+  const step = page.getByRole('region', { name: 'Import certificate step' });
+  await step.getByRole('button', { name: 'Attach lab certificates' }).click();
+  await step.getByLabel('Upload lab certificate').setInputFiles({ name: 'New lab.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n% synthetic fixture') });
+  await expect(step.getByRole('alert')).toContainText('was saved in the property library, but was not linked');
+  expect(fake.drill.assays).toBe(1); failLink = false;
+  await step.getByRole('button', { name: 'Link certificate' }).click();
+  await expect(step.getByText('Certificate linked to this assay import.')).toBeVisible();
+  expect(fake.rpc.filter(r => r.fn === 'drill_import_batch' && !r.args.p_dry_run)).toHaveLength(1);
+  page.once('dialog', d => d.accept());
+  await page.getByRole('button', { name: 'Roll back assays.csv' }).click();
+  await expect(step).toHaveCount(0);
+  expect(fake.files.some(f => f.name === 'New lab.pdf')).toBe(true);
+});
+
 test('lab certificates: pin a PDF version, download it and retract a mistaken link', async ({ page }) => {
   const fake = await fakeSupabase(page);
   fake.drill.batches = [{ ...collarBatch, kind: 'assays', filename: 'assays.csv' }];
