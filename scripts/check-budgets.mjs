@@ -587,7 +587,9 @@ const BUDGETS = {
   // Recipe/cursor composition plus result-ownership guard: 162.5 plain / 162.7 configured.
   // Explicit property geology source and selected-table paging: 163.3 plain / 163.5 configured.
   // Picker, source/legend ownership and missing-alteration handling remain lazy; startup is unchanged.
-  threeDLazyJsGzipKb: 163.8,
+  // Optional sign-off lookup recovery and explicit unknown-status notice: 164.0 configured.
+  // These controls stay in the lazy versions dialog; 3D startup is unchanged.
+  threeDLazyJsGzipKb: 164.2,
   // 161.2 → 162.7 (P2-8, measured 162.2 plain / 162.4 configured): explicit
   // recipe selection, snapshot ownership, collision/edited-wording guards and
   // recipe-only update notices in property-data. No eager 3D page growth.
