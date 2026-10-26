@@ -270,7 +270,8 @@ const BUDGETS = {
   // P2-2 vendor import presets and assay quirks, lazy drill tab only: measured 1133.1.
   // With blanks (#365) and vendor presets (#366): measured 1140.6.
   // Datum conversion and structure import with all of the above: measured 1145.0.
-  totalAuthJsGzipKb: 1145.3,
+  // Optional assay-import certificate completion step: measured 1145.5; startup routes unchanged.
+  totalAuthJsGzipKb: 1145.8,
   // 1009.4 → 1026.3 (measured 1026.0): lazy XLSX reader (~13.8 KiB), sheet/header preview
   // (~1.1 KiB), import wiring and numeric-format handling. Shared fflate adds ~1.2 KiB
   // for async ZIP workers; it remains one copy with the existing draft compression.
@@ -341,7 +342,8 @@ const BUDGETS = {
   // Same lazy blank comparison and CRM rules; measured 1072.1 plain.
   // P2-2 vendor import presets, as totalAuthJsGzipKb above: measured 1065.8.
   // With blanks, presets, datum and structure: measured 1077.7.
-  totalJsGzipKb: 1078.0,
+  // Same optional certificate completion step: measured 1078.2 plain.
+  totalJsGzipKb: 1078.5,
   // 940.9 → 957.8 (measured 957.5): Excel import, as totalAuthJsGzipKb above.
   // 940.9 → 944.8 (P2-8, measured 944.6): the same lazy property recipe path
   // in the unconfigured build. Its initial route budgets also stay unchanged.

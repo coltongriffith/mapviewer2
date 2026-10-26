@@ -58,7 +58,7 @@ function Problems({ errors, errorCount, warnings }) {
   );
 }
 
-export function Importer({ db, property, orgId, onDone }) {
+export function Importer({ db, property, orgId, onDone, onStart }) {
   const [file, setFile] = useState(null); // { name, header, rows }
   const [workbook, setWorkbook] = useState(null);
   const [kind, setKind] = useState('assays');
@@ -97,6 +97,7 @@ export function Importer({ db, property, orgId, onDone }) {
   };
 
   const open = async (f) => {
+    onStart?.();
     setError(null); setNote(null); reset();
     const version = readVersion.current;
     if (/\.xls$/i.test(f.name)) { setError('This is an older .xls file. Save it as .xlsx or CSV in Excel, then try again.'); return; }
@@ -144,8 +145,12 @@ export function Importer({ db, property, orgId, onDone }) {
     const r = await db.commit({ ...args(), batchId: batchId.current });
     if (!current()) return;
     setNote(r.nothing_to_do ? `Nothing to import: everything in ${file.name} is already stored.` : `Imported ${file.name}: ${diffSentence(kind, r)}.`);
+    // Only the server's committed batch can receive certificate evidence. A no-op
+    // has no new batch; a rolled-back replay must not invite a new attachment.
+    const certificateBatch = kind === 'assays' && r.committed && !r.nothing_to_do && !r.rolled_back && r.batch_id
+      ? { id: r.batch_id, filename: file.name, kind, propertyId: property.id } : null;
     reset();
-    onDone();
+    onDone(certificateBatch);
   });
 
   if (!file && workbook) return <Suspense fallback={<p role="status">Preparing sheet preview…</p>}><ExcelSheetPicker workbook={workbook} onCancel={reset}
@@ -293,6 +298,7 @@ export default function DrillPanel({ property, perms }) {
   const [busy, setBusy] = useState(null);
   const [results, setResults] = useState(false);
   const [qaqc, setQaqc] = useState(false);
+  const [certificateBatch, setCertificateBatch] = useState(null);
   const [revision, setRevision] = useState(0); // bumped by each import and roll-back, so Results reloads its assays
   const load = useCallback(async () => {
     try {
@@ -304,13 +310,19 @@ export default function DrillPanel({ property, perms }) {
   const back = (b) => window.confirm(`Roll back the import of ${b.filename || kindLabel(b.kind)}? Its rows stop being current and what it replaced comes back. The import stays in the history.`)
     && (async () => {
       setBusy(b.id); setError(null);
-      try { await db.rollback(b.id); setRevision((v) => v + 1); await load(); } catch (e) { setError(e.message); } finally { setBusy(null); }
+      try { await db.rollback(b.id); setCertificateBatch(current => current?.id === b.id ? null : current); setRevision((v) => v + 1); await load(); } catch (e) { setError(e.message); } finally { setBusy(null); }
     })();
   return (
     <section aria-label="Drill data" className="ws-stack">
       <ErrorNote error={error} onDismiss={() => setError(null)} />
       <div className="dash-panel"><Summary s={s} /></div>
-      {perms.edit && db && <div className="dash-panel"><Importer key={property.id} db={db} property={property} orgId={property.org_id} onDone={() => { setRevision((v) => v + 1); load(); }} /></div>}
+      {perms.edit && db && <div className="dash-panel"><Importer key={property.id} db={db} property={property} orgId={property.org_id} onStart={() => setCertificateBatch(null)} onDone={batch => { setCertificateBatch(batch); setRevision((v) => v + 1); load(); }} /></div>}
+      {perms.edit && certificateBatch?.propertyId === property.id && <section className="dash-panel" aria-label="Import certificate step">
+        <h3 style={{ margin: '0 0 8px', fontSize: 15 }}>Add supporting lab certificates (optional)</h3>
+        <p className="dash-muted">{certificateBatch.filename} is already imported. Link a library PDF or upload one now; you can also do this later from its import history. Linking a certificate does not verify the assay results.</p>
+        <Suspense fallback={<p role="status">Loading certificate options…</p>}><BatchCertificates key={certificateBatch.id} client={supabase} property={property} batch={certificateBatch} canEdit={perms.edit} label="Attach lab certificates" /></Suspense>
+        <button type="button" className="dash-link" style={{ marginTop: 10 }} onClick={() => setCertificateBatch(null)}>Done / skip for now</button>
+      </section>}
       <section className="dash-panel" aria-label="QA/QC">
         <h3 style={{ margin: '0 0 8px', fontSize: 15 }}>QA/QC</h3>
         {qaqc ? <Suspense fallback={<p role="status">Loading QA/QC…</p>}><QaqcPanel property={property} perms={perms} /></Suspense> : <div className="ws-row"><button type="button" className="btn" onClick={() => setQaqc(true)}>Open QA/QC register</button><span className="dash-muted">Routine samples, standards, blanks and duplicates, with their lab provenance.</span></div>}

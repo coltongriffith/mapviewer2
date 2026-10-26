@@ -1,6 +1,10 @@
 # Lab certificate links
 
-In a property's Drill data tab, open **Lab certificates** on an assay import.
+After committing an assay import, the optional **Add supporting lab certificates**
+step offers **Attach lab certificates** for that exact committed batch. You can
+skip it and later open **Lab certificates** on the assay import in history.
+A no-op import or a replay of a rolled-back batch does not offer this step.
+Starting another import or leaving the property clears the completion step.
 An editor can select a PDF already in the property's data library, or upload
 and link a new PDF using the existing private-library uploader. Importing assay
 data stays independent: a failed certificate attachment never rolls back a
@@ -18,9 +22,9 @@ file/version cannot be reinstated in this first slice; attach the correct file
 or version. Viewers can inspect/download but cannot link or retract. Rolled-back
 assay batches retain certificates; new attachments to them are refused.
 
-This slice provides batch-level links after import. Per-assay row links,
-selection within the import wizard and QA/QC failure-list links are not yet
-implemented. Current history displays the existing latest 50 import batches.
+This slice provides batch-level links after import, including the completion
+step. Pre-commit certificate selection, per-assay row links and QA/QC failure-list
+links are not yet implemented. Current history displays the existing latest 50 import batches.
 
 ## Deployment and security
 
