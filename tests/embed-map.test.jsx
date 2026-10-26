@@ -9,6 +9,9 @@ vi.mock('../src/utils/track', () => ({ trackEvent, trackEventOnce: vi.fn() }));
 vi.mock('leaflet', () => ({ default: { control: { zoom: () => ({ addTo: vi.fn() }) } } }));
 vi.mock('../src/components/AnnotationOverlay', () => ({ default: () => null }));
 const callouts = vi.hoisted(() => ({ seen: null }));
+const drill = vi.hoisted(() => ({ plan: null }));
+vi.mock('../src/components/DrillPlanOverlay', () => ({ default: ({ plan }) => { drill.plan = plan; return null; } }));
+vi.mock('../src/utils/drillPlanLegend.js', () => ({ drillPlanLegendItems: () => [{ id: 'dp-ok', type: 'line', label: 'Drill traces', style: {} }] }));
 vi.mock('../src/components/CalloutsOverlay', () => ({ default: ({ callouts: c }) => { callouts.seen = c; return null; } }));
 const canvas = vi.hoisted(() => ({ project: null }));
 vi.mock('../src/components/MapCanvas', () => ({
@@ -120,6 +123,14 @@ describe('EmbedMapPage', () => {
     render(<EmbedMapPage shareId="abc123def456" />);
     expect((await screen.findByRole('alert')).textContent).toContain('could not be loaded');
     expect(trackEvent).not.toHaveBeenCalled();
+  });
+
+  it('draws a published drill plan and lists it in the legend', async () => {
+    const plan = { holes: [{ id: 'RL-01' }] };
+    rpc.mockResolvedValue({ data: { ...state, drillPlan: plan }, error: null });
+    render(<EmbedMapPage shareId="abc123def456" />);
+    await waitFor(() => expect(drill.plan).toEqual(plan));
+    await waitFor(() => expect(screen.getByRole('region', { name: 'Legend' }).textContent).toContain('Drill traces'));
   });
 
   it('shows a malformed embed link as unavailable without asking the server', async () => {

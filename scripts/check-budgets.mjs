@@ -271,8 +271,9 @@ const BUDGETS = {
   // With blanks (#365) and vendor presets (#366): measured 1140.6.
   // Datum conversion and structure import with all of the above: measured 1145.0.
   // Optional assay-import certificate completion step: measured 1145.5; startup routes unchanged.
-  // Live web map (/embed/map): its page and the modules it shares with the editor split out of App; measured 1155.8 with main.
-  totalAuthJsGzipKb: 1156.1,
+  // Live web map (/embed/map): its page and the modules it shares with the editor split out of App; measured 1155.8 with main;
+  // with its callouts and drill-plan overlay, 1156.5.
+  totalAuthJsGzipKb: 1156.8,
   // 1009.4 → 1026.3 (measured 1026.0): lazy XLSX reader (~13.8 KiB), sheet/header preview
   // (~1.1 KiB), import wiring and numeric-format handling. Shared fflate adds ~1.2 KiB
   // for async ZIP workers; it remains one copy with the existing draft compression.
@@ -344,8 +345,8 @@ const BUDGETS = {
   // P2-2 vendor import presets, as totalAuthJsGzipKb above: measured 1065.8.
   // With blanks, presets, datum and structure: measured 1077.7.
   // Same optional certificate completion step: measured 1078.2 plain.
-  // Live web map, as totalAuthJsGzipKb above: measured 1088.3 plain with main.
-  totalJsGzipKb: 1088.6,
+  // Live web map, as totalAuthJsGzipKb above: measured 1088.3 plain with main; 1089.1 with the embed's callouts and drill plan.
+  totalJsGzipKb: 1089.4,
   // 940.9 → 957.8 (measured 957.5): Excel import, as totalAuthJsGzipKb above.
   // 940.9 → 944.8 (P2-8, measured 944.6): the same lazy property recipe path
   // in the unconfigured build. Its initial route budgets also stay unchanged.
@@ -648,10 +649,10 @@ const BUDGETS = {
   // Same chunk split for the live web map; measured 360.4 configured, 292.2 plain.
   claimsAuthJsGzipKb: 360.7,
   claimsJsGzipKb: 292.5,
-  // Live investor web map (/embed/map/<id>): map, legend, layer list and drill-result callouts, no editor;
-  // measured 242.9 configured, 176.5 plain.
-  embedAuthJsGzipKb: 243.2,
-  embedJsGzipKb: 176.8,
+  // Live investor web map (/embed/map/<id>): map, legend, layer list, drill-result callouts and the drill plan
+  // (its overlay loaded only when published with one), no editor; measured 243.3 configured, 177.0 plain.
+  embedAuthJsGzipKb: 243.6,
+  embedJsGzipKb: 177.3,
   // Stylesheet, gzipped. Today ~29 kB.
   maxCssGzipKb: 40,
   // Any single image shipped from public/, including legacy PNG downloads.

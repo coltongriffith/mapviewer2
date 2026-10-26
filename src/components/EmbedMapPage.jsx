@@ -12,9 +12,11 @@ import { savedViewFor, zoomForSize } from '../utils/savedView';
 import { LegendPointSwatch, LegendLineSwatch, LegendAreaSwatch } from './LegendSwatches.jsx';
 import AnnotationOverlay from './AnnotationOverlay';
 import CalloutsOverlay from './CalloutsOverlay';
+import { useLazyDrillLegend } from '../utils/useDrillLegend.js';
 import '../styles/embed-map.css';
 
 const MapCanvas = lazyGuarded(() => import('./MapCanvas'));
+const DrillPlanOverlay = lazyGuarded(() => import('./DrillPlanOverlay'));
 const layerName = (l) => l.displayName || l.legend?.label || l.name || 'Layer';
 const swatch = (item) => (item.type === 'points' ? <LegendPointSwatch style={item.style} size={14} />
   : item.type === 'line' ? <LegendLineSwatch style={item.style} fx={item.fx} /> : <LegendAreaSwatch style={item.style} fx={item.fx} />);
@@ -47,10 +49,11 @@ export default function EmbedMapPage({ shareId }) {
   const template = useMemo(() => getTemplate(layout.templateId || 'technical_results_v2'), [layout.templateId]);
   const toggleable = useMemo(() => (project?.layers || []).filter((l) => l.visible !== false && (l.geojson || l.raster)), [project]);
   const shown = useMemo(() => project && { ...project, layers: project.layers.map((l) => (hidden.has(l.id) ? { ...l, visible: false } : l)) }, [project, hidden]);
+  const drillLegend = useLazyDrillLegend(project?.drillPlan);
   const legendGroups = useMemo(() => {
     if (!shown) return [];
-    return groupLegendItems(applyLegendCustomization(buildLegendItems(template, shown.layers, layout), layout), layout);
-  }, [shown, template, layout]);
+    return groupLegendItems(applyLegendCustomization([...buildLegendItems(template, shown.layers, layout), ...drillLegend], layout), layout);
+  }, [shown, template, layout, drillLegend]);
   const swatches = useMemo(() => new Map(legendGroups.flatMap((g) => g.items).map((i) => [i.id, i])), [legendGroups]);
 
   useEffect(() => {
@@ -84,6 +87,9 @@ export default function EmbedMapPage({ shareId }) {
         </React.Suspense>
         {map && <AnnotationOverlay map={map} markers={shown.markers || []} ellipses={shown.ellipses || []} polygons={shown.polygons || []}
           distanceLines={shown.distanceLines || []} labelFont={layout.fonts?.label} />}
+        {map && shown.drillPlan && <React.Suspense fallback={null}>
+          <DrillPlanOverlay map={map} plan={shown.drillPlan} layout={layout} />
+        </React.Suspense>}
         {map && <CalloutsOverlay map={map} callouts={shown.callouts || []} selectedCalloutId={null} onSelect={null} onMove={null}
           onUpdate={null} fontFamily={layout.fonts?.callout} layout={layout} />}
       </div>
