@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { getLiveMap, publishLiveMap } from '../utils/cloudStorage';
+import { getLiveMap, publishLiveMap, revokeLiveMap } from '../utils/cloudStorage';
 import { embedCode, embedUrl, EMBED_ASPECTS } from '../utils/embedCode';
 import { trackEvent } from '../utils/track';
 
@@ -29,6 +29,12 @@ export default function EmbedCodeDialog({ projectId, canPublish, entitlements, w
       setLive((await getLiveMap(projectId).catch(() => null)) || { id, updated_at: new Date().toISOString(), view_count: 0 });
       trackEvent('share_created', { mapId: id, live: true });
     } catch (e) { setError(e.message || 'The map could not be published.'); } finally { setBusy(false); }
+  };
+  // Stop the live link for every site embedding it; the next publish makes a new one.
+  const unpublish = async () => {
+    if (!window.confirm('Stop the live map? Every website embedding it will show it as unavailable.')) return;
+    setBusy(true); setError('');
+    try { await revokeLiveMap(projectId); setLive(null); } catch (e) { setError(e.message || 'The live map could not be stopped.'); } finally { setBusy(false); }
   };
   const code = live?.id ? embedCode(live.id, { title, ...opts }) : '';
   const copy = () => navigator.clipboard.writeText(code).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }).catch(() => {});
@@ -61,6 +67,7 @@ export default function EmbedCodeDialog({ projectId, canPublish, entitlements, w
             <div className="share-url-row">
               <button className={`share-copy-btn${copied ? ' copied' : ''}`} onClick={copy}>{copied ? '✓ Copied!' : 'Copy embed code'}</button>
               <a className="share-copy-btn" href={embedUrl(live.id)} target="_blank" rel="noopener">Preview</a>
+              <button className="share-copy-btn" disabled={busy} onClick={unpublish}>Stop live map</button>
             </div>
           </>)}
         </>)}

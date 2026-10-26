@@ -70,4 +70,14 @@ describe('publish_live_map', () => {
     expect((await live(F, S.company)).id).toBe(shareId);
     expect(await live(X, S.company)).toBeNull();
   });
+
+  it('lets the company, not just the first publisher, revoke its live link', async () => {
+    const revoke = (uid) => val(uid, 'select public.revoke_live_map($1)', [S.company]);
+    await su(`delete from public.organization_members where org_id = $1 and user_id = $2`, [S.org, E]);
+    await expect(revoke(E)).rejects.toThrow(/NOT_FOUND/);
+    await expect(revoke(X)).rejects.toThrow(/NOT_FOUND/);
+    expect(await revoke(F)).toBe(true);
+    expect(await live(F, S.company)).toBeNull();
+    expect(await revoke(F)).toBe(false);
+  });
 });

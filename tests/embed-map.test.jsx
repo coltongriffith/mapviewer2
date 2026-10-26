@@ -63,7 +63,7 @@ describe('embed helpers', () => {
 
   it('gives claim layers their registry popup and leaves the rest alone', () => {
     const [claims, roads] = embedLayers(state.layers);
-    expect(claims.claimInfo).toBe(true);
+    expect(claims.claimInfo).toBe('registry');
     expect(roads).toBe(state.layers[1]);
   });
 
@@ -97,7 +97,7 @@ describe('EmbedMapPage', () => {
     expect(screen.getByAltText('Star Copper Corp.')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Made with ExplorationMaps' }).getAttribute('target')).toBe('_blank');
     expect(screen.queryByLabelText('Switched off')).toBeNull();
-    expect(canvas.project.layers.find((l) => l.id === 'claims').claimInfo).toBe(true);
+    expect(canvas.project.layers.find((l) => l.id === 'claims').claimInfo).toBe('registry');
     const legend = screen.getByRole('region', { name: 'Legend' });
     expect(legend.textContent).toContain('Roads');
     fireEvent.click(screen.getByLabelText('Roads'));
@@ -162,5 +162,10 @@ describe('EmbedCodeDialog', () => {
     expect(screen.getByLabelText('Embed code').value).toContain('width="960" height="960"');
     expect(screen.getByText(/3 views/)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Republish with the current map' })).toBeTruthy();
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    rpc.mockResolvedValueOnce({ data: true, error: null });
+    fireEvent.click(screen.getByRole('button', { name: 'Stop live map' }));
+    expect(await screen.findByRole('button', { name: 'Publish live map' })).toBeTruthy();
+    expect(rpc).toHaveBeenLastCalledWith('revoke_live_map', { p_project: 'p1' });
   });
 });

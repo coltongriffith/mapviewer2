@@ -14,12 +14,16 @@
 --     id, created/updated time and view_count (link and embed loads, through
 --     get_shared_map's throttled counter). Null when there is none.
 --
--- The live link is an ordinary shared_maps row (get_shared_map reads it,
--- revoke_shared_map revokes it, list_my_shared_maps lists it for the user
--- who first published it). Revoked, the next publish makes a new link.
+--   revoke_live_map(p_project)  stop the map's live link: the same callers as
+--     publish_live_map (the map's current owner or editors, not whoever first
+--     published it). True when a link was revoked.
+--
+-- The live link is an ordinary shared_maps row (get_shared_map reads it;
+-- revoke_shared_map and list_my_shared_maps still work for the user who first
+-- published it). Revoked, the next publish makes a new link.
 --
 -- Additive and idempotent: new nullable columns, a partial unique index and
--- two new functions. Existing shares and their RPCs are untouched.
+-- three new functions. Existing shares and their RPCs are untouched.
 -- Depends on: 20260728000004_shared_maps_bounds.sql,
 -- 20261023100000_workspaces_properties.sql (has_org_role,
 -- ws_personal_map_limit).
@@ -27,6 +31,7 @@
 -- Rollback:
 --   drop function if exists public.publish_live_map(uuid, jsonb);
 --   drop function if exists public.get_live_map(uuid);
+--   drop function if exists public.revoke_live_map(uuid);
 --   drop index if exists public.shared_maps_live_project_idx;
 --   alter table public.shared_maps drop column if exists project_id, drop column if exists updated_at;
 -- ============================================================
@@ -104,7 +109,29 @@ as $$
     and ((p.org_id is null and p.user_id = auth.uid()) or (p.org_id is not null and public.has_org_role(p.org_id, 'viewer')))
 $$;
 
+create or replace function public.revoke_live_map(p_project uuid)
+returns boolean
+language plpgsql security definer set search_path = ''
+as $$
+declare
+  v_org uuid;
+  v_owner uuid;
+begin
+  if auth.uid() is null then raise exception 'not authenticated' using errcode = '42501'; end if;
+  select p.org_id, p.user_id into v_org, v_owner from public.projects p
+    where p.id = p_project and p.deleted_at is null;
+  if not found or (v_org is null and v_owner is distinct from auth.uid())
+     or (v_org is not null and not public.has_org_role(v_org, 'editor')) then
+    raise exception 'NOT_FOUND: no map of yours with that id' using errcode = 'P0002';
+  end if;
+  update public.shared_maps s set revoked_at = now() where s.project_id = p_project and s.revoked_at is null;
+  return found;
+end;
+$$;
+
 revoke all on function public.publish_live_map(uuid, jsonb) from public, anon, authenticated;
 revoke all on function public.get_live_map(uuid) from public, anon, authenticated;
+revoke all on function public.revoke_live_map(uuid) from public, anon, authenticated;
 grant execute on function public.publish_live_map(uuid, jsonb) to authenticated;
 grant execute on function public.get_live_map(uuid) to authenticated;
+grant execute on function public.revoke_live_map(uuid) to authenticated;

@@ -493,7 +493,7 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
         onEachFeature: isDrillholes ? undefined : (feature, featureLayer) => {
           if (layer.claimInfo) {
             const props = feature.properties || {};
-            const ownerName = layer.displayName || layer.name || null;
+            const ownerName = layer.claimInfo === 'registry' ? null : (layer.displayName || layer.name || null);
             featureLayer.bindTooltip(claimTooltipHtml(props, ownerName), { sticky: true, className: 'area-claims-tooltip' });
             featureLayer.bindPopup(`<div class="area-claims-popup">${claimPopupRowsHtml(props, ownerName)}</div>`);
           }

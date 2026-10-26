@@ -29,5 +29,6 @@ export function embedReferrer(referrer = document.referrer) {
   } catch { return null; }
 }
 
-// The map as an investor sees it: claim layers answer a click with their public registry record (utils/claimInfo).
-export const embedLayers = (layers = []) => layers.map((l) => (l.role === 'claims' && !l.claimInfo ? { ...l, claimInfo: true } : l));
+// The map as an investor sees it: claim layers answer a click with their public registry record (utils/claimInfo),
+// the holder from each feature ('registry'), never the layer's project label.
+export const embedLayers = (layers = []) => layers.map((l) => (l.role === 'claims' && !l.claimInfo ? { ...l, claimInfo: 'registry' } : l));

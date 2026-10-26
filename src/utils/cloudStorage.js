@@ -341,6 +341,12 @@ export async function publishLiveMap(projectId, state) {
   return data;
 }
 
+export async function revokeLiveMap(projectId) {
+  const { data, error } = await requireSupabase().rpc('revoke_live_map', { p_project: projectId });
+  if (error) throw error;
+  return data === true;
+}
+
 export async function getLiveMap(projectId) {
   const { data, error } = await requireSupabase().rpc('get_live_map', { p_project: projectId });
   if (error) throw error;
