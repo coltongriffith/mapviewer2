@@ -38,6 +38,26 @@ export function releasePackDb(sb) {
       const rows = await q(sb.from('release_pack_approvals').insert(request).select('*'));
       return rows[0];
     },
+    /** Complete live batch identities, not the summary's latest-50 history window.
+     * UUID keyset paging is bounded; an excessive history fails closed rather than approving a subset.
+     */
+    async liveBatches(propertyId) {
+      const out = [], pageSize = 500, max = 20000;
+      let cursor = null;
+      while (out.length <= max) {
+        let request = sb.from('drill_import_batches').select('id, kind, filename, created_at, rolled_back_at, summary')
+          .eq('property_id', propertyId).is('rolled_back_at', null).order('id').limit(pageSize);
+        if (cursor) request = request.gt('id', cursor);
+        const rows = await q(request) || [];
+        for (const row of rows) {
+          if (typeof row.id !== 'string' || (cursor && row.id <= cursor)) throw new Error('Could not verify the complete import history. Try again.');
+          cursor = row.id;
+          out.push(row);
+        }
+        if (out.length > max) throw new Error('This release pack has too many imports to verify safely. Contact support before approving it.');
+        if (rows.length < pageSize) return out;
+      }
+    },
     /** The status of every batch an approval used, read directly (the property summary lists only the latest 50). */
     async batchStatus(ids) {
       const out = [];
