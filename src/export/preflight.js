@@ -20,6 +20,8 @@ import {
 } from './renderScene.js';
 import { disclosureChecks, standardOf } from '../../shared/disclosure.js';
 import { projectionLabel, NI_TEMPLATE_ID } from '../utils/coordinateFrame.js';
+import { studioOn } from '../utils/studioLayout.js';
+import { resolveTitleStripFields } from '../templates/technicalReportTemplate.js';
 import { panelObstacles } from '../utils/calloutLayout';
 import { PDF_SIZES } from './exportPDF.js';
 import { hasVisibleFeatures, layerFeatures } from '../utils/featureIdentity.js';
@@ -280,13 +282,19 @@ export function disclosureFacts(scene) {
   const shown = (p.layers || []).filter((l) => l.visible !== false && !String(l.id).startsWith('__ac_'));
   const footer = layout.footerEnabled !== false ? layout.footerText : '';
   // Only text the export draws: renderScene skips a hidden title or legend.
-  const title = layout.showTitle !== false ? [layout.title, layout.subtitle] : [];
+  const titleFields = ni ? resolveTitleStripFields(layout) : layout;
+  const title = layout.showTitle !== false ? [titleFields.title, titleFields.subtitle] : [];
+  // Studio draws its own datum above/beside the scale, regardless of the ordinary projection toggle.
+  // An explicit empty datum suppresses its derived fallback, just as in studioCards.scaleRow.
+  const scaleDatum = studioOn(layout)
+    ? layout.studio?.datumNote ?? projectionLabel(layout, scene.map)
+    : layout.showProjectionLabel ? projectionLabel(layout, scene.map) : '';
   const legend = layout.showLegend !== false ? (layout.legendItems || []).map((i) => i.label) : [];
   const texts = [...title, footer, ...legend,
     ...(p.callouts || []).flatMap((c) => [c.text, c.subtext, c.label]), ...(p.markers || []).map((m) => m.label)];
   return {
     scaleBar, northArrow: layout.showNorthArrow !== false, texts,
-    crs: ni ? projectionLabel(layout, scene.map) : layout.showProjectionLabel && scaleBar ? projectionLabel(layout, scene.map) || 'stated' : '',
+    crs: ni ? projectionLabel(layout, scene.map) : scaleBar ? scaleDatum : '',
     credits: creditLinesFor(scene).filter((l) => l !== layout.footerText),
     intercepts: Boolean(p.drillPlan?.results?.length) || (p.callouts || []).some((c) => c.resultId),
     pending: Boolean(layout.disclosurePending) || shown.some((l) => layerFeatures(l).some((f) => Object.entries(f?.properties || {}).some(pendingValue))),
@@ -322,6 +330,17 @@ export async function runPreflight(scene, options = {}) {
   sizes.push(...titleTextSizes(s).map((t) => ({ ...t, id: 'title' })));
   checkTextSize(s, options, sizes, out);
   const standard = standardOf(s.project.layout);
-  if (standard) out.push(...disclosureChecks(standard, disclosureFacts(s)));
+  if (standard) {
+    const checks = disclosureChecks(standard, disclosureFacts(s));
+    if (studioOn(s.project.layout)) {
+      const crs = checks.find((d) => d.code === 'disclosure-crs');
+      if (crs) {
+        const layout = s.project.layout;
+        crs.fix.layout = { showScaleBar: true, studio: { ...layout.studio,
+          datumNote: String(layout.studio?.datumNote ?? '').trim() || projectionLabel(layout, s.map) } };
+      }
+    }
+    out.push(...checks);
+  }
   return mergeDiagnostics(out, context.diagnostics);
 }
