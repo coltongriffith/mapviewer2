@@ -1,4 +1,4 @@
-import React, { Suspense, useState } from 'react';
+import React, { Suspense, useEffect, useRef, useState } from 'react';
 import { zipSync } from 'fflate';
 import Dialog from './Dialog';
 import { useAuth } from '../hooks/useAuth.jsx';
@@ -31,6 +31,8 @@ async function fileCanvas(file) {
 
 export default function PackageExport({ projects, onClose, preset = null }) {
   const { entitlements } = useAuth();
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const [picked, setPicked] = useState(preset?.picked || []); // ids, in figure order
   const [names, setNames] = useState({});
   const [files, setFiles] = useState([]); // extra PNG figures (from /3d)
@@ -65,11 +67,14 @@ export default function PackageExport({ projects, onClose, preset = null }) {
   const build = async () => {
     setBusy(true); setError(null);
     try {
+      if (preset?.validate) await preset.validate();
       const figs = [];
       const maps = picked.map((id) => projects.find((p) => p.id === id)).filter(Boolean);
       for (const [i, p] of maps.entries()) {
         setStatus(`Drawing ${i + 1} of ${maps.length + files.length}: ${nameOf(p)}…`);
-        const { payload } = await loadCloudProject(p.id);
+        // Release packs render their captured revision; ordinary exports still load the saved map.
+        const payload = preset?.mapPayloads ? preset.mapPayloads[p.id] : (await loadCloudProject(p.id)).payload;
+        if (!payload) throw new Error('A captured map is unavailable. Prepare the release pack again.');
         const dflt = free || isSample(payload), on = band ?? dflt;
         const canvas = await draw(payload, { ...(on && { watermarkBand: { client: meta.client || payload.layout?.companyName } }), ...((draft ?? dflt) && { draftOverlay: true }) });
         figs.push({ name: nameOf(p), canvas, bytes: await canvasBytes(canvas) });
@@ -87,7 +92,10 @@ export default function PackageExport({ projects, onClose, preset = null }) {
         out[packageFileName(meta, 'pdf')] = new Uint8Array(pdf.output('arraybuffer'));
       }
       const zipName = packageFileName(meta, 'zip');
-      downloadBlob(zipName, new Blob([zipSync(out)], { type: 'application/zip' }));
+      const blob = new Blob([zipSync(out)], { type: 'application/zip' });
+      if (preset?.validate) await preset.validate();
+      if (!mounted.current) return;
+      downloadBlob(zipName, blob);
       setStatus(`Downloaded ${zipName}: ${Object.keys(out).length} files.`);
     } catch (e) {
       setError(`The package could not be made: ${String(e?.message || e).slice(0, 160)}`);

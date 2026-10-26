@@ -1,11 +1,12 @@
-import React, { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { releasePackDb, UNAVAILABLE } from '../../utils/releasePackDb';
-import { drillDb } from '../../utils/drillDb';
+import { loadCloudProject } from '../../utils/cloudStorage';
+import { useAuth } from '../../hooks/useAuth.jsx';
 import { drillResultsDb, MAX_ASSAYS } from '../../utils/drillResultsDb';
 import { listPropertyMaps, listPropertyFigures, formatWhen } from '../../utils/workspace';
 import { lazyGuarded } from '../../utils/preloadGuard';
-import { packStatus, approvalRequest, canAddKind, ITEM_KINDS, itemKindLabel } from '../../../shared/releasePack.js';
+import { packStatus, approvalRequest, packSourceKey, canAddKind, ITEM_KINDS, itemKindLabel } from '../../../shared/releasePack.js';
 import { computeResults } from '../../../shared/drillResults.js';
 import { ErrorNote } from './shared';
 
@@ -20,6 +21,8 @@ const slug = (t) => String(t || 'property').toLowerCase().replace(/[^a-z0-9]+/g,
 const bytes = async (blob) => new Uint8Array(await blob.arrayBuffer());
 
 export default function ReleasePackPanel({ property, perms, onOpenMap }) {
+  const { user } = useAuth();
+  const scope = useRef(0);
   const db = useMemo(() => (supabase ? releasePackDb(supabase) : null), []);
   const [data, setData] = useState(null);
   const [items, setItems] = useState(null); // the items being edited (null: as saved)
@@ -31,12 +34,11 @@ export default function ReleasePackPanel({ property, perms, onOpenMap }) {
   const [note, setNote] = useState(null);
   const [unavailable, setUnavailable] = useState(false);
 
-  const load = useCallback(async () => {
-    try {
+  const read = useCallback(async () => {
       if (!db) throw new Error('Release packs are not available on this site right now.');
-      const [{ pack, approvals }, maps, figs, summary, recipeList] = await Promise.all([
+      const [{ pack, approvals }, maps, figs, batches, recipeList] = await Promise.all([
         db.load(property.id), listPropertyMaps(property.id), listPropertyFigures(property.id),
-        drillDb(supabase).summary(property.id).catch(() => ({ batches: [] })), drillResultsDb(supabase).recipes(property.id).catch(() => []),
+        db.liveBatches(property.id), drillResultsDb(supabase).recipes(property.id),
       ]);
       const versions = await db.latestVersions(figs.map((f) => f.id));
       const figures = {};
@@ -44,25 +46,35 @@ export default function ReleasePackPanel({ property, perms, onOpenMap }) {
       figs.forEach((f) => { figures[f.id] = { name: f.name, savedAt: f.updatedAt, ...versions[f.id] }; });
       const recipes = Object.fromEntries((recipeList || []).map((r) => [r.name, { id: r.id, version: r.version, recipe: r.recipe }]));
       const used = new Set(approvals[0]?.batch_ids || []);
-      const added = (summary.batches || []).filter((b) => !b.rolled_back_at && !used.has(b.id)).slice(0, 10);
+      const added = batches.filter((b) => !b.rolled_back_at && !used.has(b.id)).slice(0, 10);
       const [holes, approvedBatches] = await Promise.all([
         Promise.all(added.map(async (b) => [b.id, await db.holes(b).catch(() => [])])).then(Object.fromEntries),
-        // Every batch the approval used, by id: the summary lists only the latest 50.
-        approvals[0] ? db.batchStatus(approvals[0].batch_ids || []).catch(() => null) : null,
+        // Include rolled-back or deleted imports from the last approval, too.
+        approvals[0] ? db.batchStatus(approvals[0].batch_ids || []) : null,
       ]);
-      setData({ pack, approvals, maps, figs, figures, recipes, batches: summary.batches || [], approvedBatches, holes });
-      // New data, pack or approval: earlier draft outputs no longer describe it.
-      setOutputs(null);
-      setUnavailable(false);
-    } catch (e) {
-      if (e.code === 'UNAVAILABLE') setUnavailable(true); else setError(e.message);
-      setData((d) => d || { pack: null, approvals: [], maps: [], figs: [], figures: {}, recipes: {}, batches: [], holes: {} });
-    }
+      return { pack, approvals, maps, figs, figures, recipes, batches, approvedBatches, holes };
   }, [db, property.id]);
-  useEffect(() => { load(); }, [load]);
+  const load = useCallback(async () => {
+    const version = scope.current;
+    setOutputs(null); setPkg(null); setError(null);
+    try {
+      const next = await read();
+      if (version !== scope.current) return;
+      setData(next); setUnavailable(false);
+    } catch (e) {
+      if (version !== scope.current) return;
+      // Unknown freshness must never be presented as an approved pack.
+      setData(null);
+      if (e.code === 'UNAVAILABLE') setUnavailable(true); else setError(e.message);
+    }
+  }, [read]);
+  useEffect(() => {
+    const version = ++scope.current; setData(null); setItems(null); load();
+    return () => { scope.current = version + 1; };
+  }, [load, user?.id]);
 
   if (unavailable) return <p className="ws-notice">{UNAVAILABLE}</p>;
-  if (!data) return <p className="dash-muted">Loading the release pack…</p>;
+  if (!data) return error ? <div><ErrorNote error={error} /><button type="button" className="btn" onClick={load}>Retry release pack</button></div> : <p className="dash-muted">Loading the release pack…</p>;
   const saved = data.pack?.items || [];
   const list = items || saved;
   const dirty = !!items && JSON.stringify(items) !== JSON.stringify(saved);
@@ -82,28 +94,55 @@ export default function ReleasePackPanel({ property, perms, onOpenMap }) {
 
   // The draft outputs, from the current data through the results tab's own exports. Maps are drawn by the package export.
   const regenerate = async () => {
-    const files = {}, summary = [];
-    const it = saved.find((x) => x.kind === 'results_table'), r = it && data.recipes[it.ref];
+    const version = scope.current;
+    const ensureScope = () => { if (scope.current !== version) throw new Error('The workspace changed. Reopen the release pack.'); };
+    setOutputs(null); setPkg(null);
+    const fresh = async () => {
+      try { return await read(); } catch (e) {
+        ensureScope(); setData(null); setError(e.message); throw e;
+      }
+    };
+    const snapshot = await fresh(); ensureScope(); setData(snapshot);
+    const savedItems = snapshot.pack?.items || [];
+    const latestApproval = snapshot.approvals[0] || null;
+    const state = packStatus({ ...snapshot, pack: snapshot.pack, approval: latestApproval });
+    const key = packSourceKey(snapshot);
+    const validate = async () => {
+      ensureScope();
+      const now = await fresh(); ensureScope();
+      if (packSourceKey(now) !== key) {
+        setData(now); setOutputs(null);
+        throw new Error('The release pack sources changed. Close the download dialog and regenerate the draft before downloading.');
+      }
+    };
+    const files = {}, summary = [], mapPayloads = {};
+    const it = savedItems.find(x => x.kind === 'results_table'), r = it && snapshot.recipes[it.ref];
     if (r) {
-      const a = await drillResultsDb(supabase).assays(property.id);
+      const a = await drillResultsDb(supabase).assays(property.id); ensureScope();
       const out = computeResults(a.rows, r.recipe);
       const options = { propertyName: property.name, recipeName: it.ref, recipeVersion: r.version, unsaved: false,
         warnings: a.capped ? [`Incomplete assay load: only the first ${MAX_ASSAYS.toLocaleString('en-US')} assays are included.`] : [] };
       const [{ resultsTableXlsx }, { resultsTablePages }] = await Promise.all([import('../../utils/drillResultsXlsx.js'), import('../../utils/drillResultsPages.js')]);
       files[`${base}-results.xlsx`] = await bytes(await resultsTableXlsx(out, r.recipe, options));
       files[`${base}-results.pdf`] = await bytes((await resultsTablePages(out, r.recipe, options, 'pdf')).blob);
-      summary.push(`Results table: ${out.results.length} intercept${out.results.length === 1 ? '' : 's'} in ${new Set(out.results.map((x) => x.holeId)).size} holes (recipe "${it.ref}" v${r.version})`);
+      summary.push(`Results table: ${out.results.length} intercept${out.results.length === 1 ? '' : 's'} in ${new Set(out.results.map(x => x.holeId)).size} holes (recipe "${it.ref}" v${r.version})`);
     }
-    const maps = saved.filter((x) => x.kind === 'drill_plan' || x.kind === 'location_map').filter((x) => data.figures[x.ref]);
-    // Missing items are named, never silently left out.
-    const missing = saved.map((x, i) => ({ ...x, name: nameOf(x), why: status.items[i]?.notes.join('; ') })).filter((_, i) => status.items[i]?.state === 'missing');
-    missing.forEach((x) => summary.push(`Missing, not in the download: ${x.name} (${x.why})`));
-    if (maps.length) summary.push(`${maps.map((x) => data.figures[x.ref].name).join(', ')}: drawn from the saved map${maps.length === 1 ? '' : 's'} when you download the pack`);
-    const record = { property: property.name, generated_at: new Date().toISOString(), status: status.label, changes: status.changes,
-      items: saved.map((x, i) => ({ ...x, name: nameOf(x), state: status.items[i]?.state || 'ok' })), missing: missing.map(({ kind, ref, why }) => ({ kind, ref, why })), approval: approval && { id: approval.id, approved_at: approval.approved_at, approved_by: approval.approved_by_email,
-        batch_ids: approval.batch_ids, recipe: approval.recipe, figures: approval.figures } };
+    const maps = savedItems.filter(x => (x.kind === 'drill_plan' || x.kind === 'location_map') && snapshot.figures[x.ref]);
+    for (const item of maps) {
+      const map = await loadCloudProject(item.ref); ensureScope();
+      if (map.revision !== snapshot.figures[item.ref].revision || map.property_id !== property.id || map.deleted_at) throw new Error('A map changed while preparing the pack. Regenerate the draft.');
+      mapPayloads[item.ref] = map.payload;
+    }
+    const itemName = x => x.kind === 'results_table' ? `Results table · recipe "${x.ref}"` : snapshot.figures[x.ref]?.name || 'Missing item';
+    const missing = savedItems.map((x, i) => ({ ...x, name: itemName(x), why: state.items[i]?.notes.join('; ') })).filter((_, i) => state.items[i]?.state === 'missing');
+    missing.forEach(x => summary.push(`Missing, not in the download: ${x.name} (${x.why})`));
+    if (maps.length) summary.push(`${maps.map(x => snapshot.figures[x.ref].name).join(', ')}: captured from the saved map${maps.length === 1 ? '' : 's'} for this download`);
+    const record = { property: property.name, generated_at: new Date().toISOString(), status: state.label, changes: state.changes,
+      items: savedItems.map((x, i) => ({ ...x, name: itemName(x), state: state.items[i]?.state || 'ok' })), missing: missing.map(({ kind, ref, why }) => ({ kind, ref, why })), approval: latestApproval && { id: latestApproval.id, approved_at: latestApproval.approved_at, approved_by: latestApproval.approved_by_email,
+        batch_ids: latestApproval.batch_ids, recipe: latestApproval.recipe, figures: latestApproval.figures } };
     files['release-pack.json'] = new TextEncoder().encode(JSON.stringify(record, null, 2));
-    const o = { files, summary, maps, draft: status.state !== 'up_to_date' };
+    await validate();
+    const o = { files, summary, maps: maps.map(x => ({ ...x, name: snapshot.figures[x.ref].name })), mapPayloads, validate, draft: state.state !== 'up_to_date' };
     setOutputs(o);
     return o;
   };
@@ -178,8 +217,8 @@ export default function ReleasePackPanel({ property, perms, onOpenMap }) {
       {saved.length > 0 && (
         <div className="dash-panel ws-stack">
           <div className="ws-row">
-            <button type="button" className="btn" disabled={!!busy} onClick={() => run('regen', async () => { await regenerate(); setNote('Regenerated the draft from the current data.'); })}>{busy === 'regen' ? 'Regenerating…' : 'Regenerate draft'}</button>
-            <button type="button" className="btn" disabled={!!busy} onClick={() => run('pkg', async () => { setPkg(await regenerate()); })}>{busy === 'pkg' ? 'Preparing…' : 'Download pack'}</button>
+            <button type="button" className="btn" disabled={!!busy || dirty} onClick={() => run('regen', async () => { await regenerate(); setNote('Regenerated the draft from the current data.'); })}>{busy === 'regen' ? 'Regenerating…' : 'Regenerate draft'}</button>
+            <button type="button" className="btn" disabled={!!busy || dirty} onClick={() => run('pkg', async () => { setPkg(await regenerate()); })}>{busy === 'pkg' ? 'Preparing…' : 'Download pack'}</button>
             {perms.edit && (
               <button type="button" className="btn primary" disabled={!!busy || dirty || blocked || status.state === 'up_to_date'}
                 title={blocked ? 'Fix the items marked above first' : dirty ? 'Save the pack first' : undefined}
@@ -208,8 +247,8 @@ export default function ReleasePackPanel({ property, perms, onOpenMap }) {
 
       {pkg && (
         <Suspense fallback={null}>
-          <PackageExport projects={pkg.maps.map((x) => ({ id: x.ref, name: data.figures[x.ref].name }))} onClose={() => setPkg(null)}
-            preset={{ picked: pkg.maps.map((x) => x.ref), extra: pkg.files, meta: { project: property.name }, draft: pkg.draft }} />
+          <PackageExport projects={pkg.maps.map((x) => ({ id: x.ref, name: x.name }))} onClose={() => setPkg(null)}
+            preset={{ picked: pkg.maps.map((x) => x.ref), extra: pkg.files, mapPayloads: pkg.mapPayloads, validate: pkg.validate, meta: { project: property.name }, draft: pkg.draft }} />
         </Suspense>
       )}
     </section>

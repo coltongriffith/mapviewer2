@@ -192,20 +192,17 @@ begin
   -- The drill import lock: no import or roll back lands while this is checked.
   perform pg_advisory_xact_lock(hashtextextended('drill:' || p.property_id::text, 0));
   v_live := array(select b.id from public.drill_import_batches b where b.property_id = p.property_id and b.rolled_back_at is null order by b.created_at, b.id);
-  -- What the reviewer saw: live batches, every live one from the oldest listed on (the property summary lists the latest 50).
-  if not (coalesce(new.batch_ids, '{}') <@ v_live)
-     or (cardinality(coalesce(new.batch_ids, '{}')) = 0 and cardinality(v_live) > 0)
-     or exists (select 1 from public.drill_import_batches b where b.property_id = p.property_id and b.rolled_back_at is null
-                and not b.id = any(new.batch_ids)
-                and b.created_at >= (select min(c.created_at) from public.drill_import_batches c where c.id = any(new.batch_ids))) then
+  -- Require the complete live set reviewed by the browser, including imports older than 50 rows.
+  if not (coalesce(new.batch_ids, '{}') <@ v_live and v_live <@ coalesce(new.batch_ids, '{}'))
+     or cardinality(coalesce(new.batch_ids, '{}')) <> cardinality(v_live) then
     raise exception 'APPROVAL_STALE: the drill data changed since the pack was checked' using errcode = 'P0001';
   end if;
   v_figs := public.release_pack_figures(p.property_id, p.items);
   if (select count(*) from jsonb_array_elements(p.items) e where e->>'kind' <> 'results_table') <> jsonb_array_length(v_figs) then
     raise exception 'APPROVAL_INCOMPLETE: a map or 3D figure in the pack is no longer in the property' using errcode = '22023';
   end if;
-  if (select coalesce(jsonb_agg(jsonb_build_array(f->'kind', f->'id', f->'version_id', f->'revision') order by o), '[]') from jsonb_array_elements(v_figs) with ordinality x(f, o))
-     is distinct from (select coalesce(jsonb_agg(jsonb_build_array(f->'kind', f->'id', f->'version_id', f->'revision') order by o), '[]') from jsonb_array_elements(coalesce(new.figures, '[]')) with ordinality x(f, o)) then
+  if (select coalesce(jsonb_agg(jsonb_build_array(f->'kind', f->'id', f->'version_id', f->'revision', (f->>'saved_at')::timestamptz) order by o), '[]') from jsonb_array_elements(v_figs) with ordinality x(f, o))
+     is distinct from (select coalesce(jsonb_agg(jsonb_build_array(f->'kind', f->'id', f->'version_id', f->'revision', (f->>'saved_at')::timestamptz) order by o), '[]') from jsonb_array_elements(coalesce(new.figures, '[]')) with ordinality x(f, o)) then
     raise exception 'APPROVAL_STALE: a map or 3D figure changed since the pack was checked' using errcode = 'P0001';
   end if;
   v_name := (select e->>'ref' from jsonb_array_elements(p.items) e where e->>'kind' = 'results_table' limit 1);

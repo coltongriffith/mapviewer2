@@ -80,9 +80,9 @@ describe('approvalRequest', () => {
   it('sends the live batches, each map revision and 3D figure version in item order, and the recipe', () => {
     expect(approvalRequest({ pack, batches: [b2, { ...b1, rolled_back_at: 'x' }], figures, recipes }, '  NR 26-14 ')).toEqual({
       pack_id: 'p1', items: pack.items, batch_ids: ['b2'], recipe: { id: 'r1' }, note: 'NR 26-14',
-      figures: [{ kind: 'map', id: MAP, version_id: null, revision: 3 }, { kind: 'figure', id: FIG, version_id: 'v2', revision: null }, { kind: 'map', id: LOC, version_id: null, revision: 1 }],
+      figures: [{ kind: 'map', id: MAP, version_id: null, revision: 3, saved_at: null }, { kind: 'figure', id: FIG, version_id: 'v2', revision: null, saved_at: figures[FIG].savedAt }, { kind: 'map', id: LOC, version_id: null, revision: 1, saved_at: null }],
     });
-    expect(approvalRequest({ pack: { id: 'p', items: [{ kind: 'figure_3d', ref: 'x' }] } }).figures).toEqual([{ kind: 'figure', id: 'x', version_id: null, revision: null }]);
+    expect(approvalRequest({ pack: { id: 'p', items: [{ kind: 'figure_3d', ref: 'x' }] } }).figures).toEqual([{ kind: 'figure', id: 'x', version_id: null, revision: null, saved_at: null }]);
   });
 });
 

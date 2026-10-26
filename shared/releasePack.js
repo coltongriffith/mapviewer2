@@ -1,6 +1,6 @@
 // Release packs (supabase/migrations/20261103120000_release_packs.sql): is the pack's last approval still what the
 // property's data and figures give, and if not, what changed, in words. Pure; the workspace's Release pack panel
-// passes the current drill batches (drill_property_summary), the current maps, 3D figures and recipe.
+// passes the complete live drill batches, the current maps, 3D figures and recipe.
 
 export const ITEM_KINDS = [
   { value: 'results_table', label: 'Results table' },
@@ -32,7 +32,7 @@ export function batchSentence(b, holes = null) {
 /**
  * The pack against its last approval.
  *   pack: { items: [{ kind, ref }] }, approval: the latest release_pack_approvals row (or null)
- *   batches: drill_property_summary().batches (the latest 50); holes: { [batchId]: [hole ids] }
+ *   batches: every live drill_import_batches row; holes: { [batchId]: [hole ids] }
  *   approvedBatches: drill_import_batches rows for every id the approval used, read directly so a roll back of an
  *     approval's batch older than the summary's window is still seen ({ id, kind, filename, rolled_back_at }); null: not read
  *   figures: { [id]: { name, revision, savedAt, versionId, version } } for the pack's maps and 3D figures, as they are now
@@ -56,7 +56,7 @@ export function packStatus({ pack, approval = null, batches = [], approvedBatche
   if (key(pack.items) !== key(approval.items)) changes.push('The pack’s items changed');
   const used = new Set(approval.batch_ids || []);
   const added = batches.filter((b) => !b.rolled_back_at && !used.has(b.id)).sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
-  // Each approved batch's status: read directly when given (every one), else what the summary's window shows.
+  // Each approved batch's status, including imports that have since been rolled back.
   const status = new Map(batches.map((b) => [b.id, b]));
   for (const b of approvedBatches || []) status.set(b.id, { ...status.get(b.id), ...b });
   const undone = [...used].map((id) => status.get(id)).filter((b) => b?.rolled_back_at);
@@ -106,9 +106,23 @@ export function approvalRequest({ pack, batches = [], figures = {}, recipes = {}
     batch_ids: batches.filter((b) => !b.rolled_back_at).map((b) => b.id),
     figures: items.filter((it) => it.kind !== 'results_table').map((it) => {
       const f = figures[it.ref] || {};
-      return { kind: it.kind === 'figure_3d' ? 'figure' : 'map', id: it.ref, version_id: it.kind === 'figure_3d' ? f.versionId ?? null : null, revision: it.kind === 'figure_3d' ? null : f.revision ?? null };
+      return { kind: it.kind === 'figure_3d' ? 'figure' : 'map', id: it.ref, version_id: it.kind === 'figure_3d' ? f.versionId ?? null : null, revision: it.kind === 'figure_3d' ? null : f.revision ?? null, saved_at: f.savedAt ?? null };
     }),
     recipe: recipeItem && recipes[recipeItem.ref] ? { id: recipes[recipeItem.ref].id } : null,
     note: String(note || '').trim() || null,
   };
+}
+
+/** Identity of a complete read, used to reject changes while outputs are generated. */
+export function packSourceKey(data) {
+  const pack = data.pack;
+  const figureIds = [...new Set((pack?.items || []).filter(it => it.kind !== 'results_table').map(it => it.ref))].sort();
+  const recipeNames = (pack?.items || []).filter(it => it.kind === 'results_table').map(it => it.ref).sort();
+  return JSON.stringify({
+    pack: pack && { id: pack.id, items: pack.items }, approval: data.approvals[0]?.id || null,
+    batches: data.batches.map(b => b.id).sort(),
+    approvedBatches: (data.approvedBatches || []).map(b => [b.id, b.rolled_back_at || null]).sort(),
+    figures: figureIds.map(id => { const f = data.figures[id]; return [id, f ? [f.revision ?? null, f.versionId ?? null, f.savedAt || null] : null]; }),
+    recipes: recipeNames.map(name => [name, data.recipes[name]?.id || null]),
+  });
 }

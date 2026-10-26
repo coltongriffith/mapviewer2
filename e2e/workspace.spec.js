@@ -1272,9 +1272,11 @@ test('release pack: approve, a new assay import makes a draft with the diff, app
   // Each approved batch's status, read by id (not only the summary's latest 50).
   const statusReads = [];
   await page.route('**/rest/v1/drill_import_batches*', (route) => {
-    const ids = (new URL(route.request().url()).searchParams.get('id') || '').replace(/^in\.\(|\)$/g, '').split(',').map((x) => x.replace(/"/g, ''));
+    const params = new URL(route.request().url()).searchParams, filter = params.get('id') || '';
+    if (!filter.startsWith('in.')) return route.fulfill({ json: fake.drill.batches.filter(b => !b.rolled_back_at && (!filter || b.id > filter.slice(3))).sort((a, b) => a.id.localeCompare(b.id)).slice(0, Number(params.get('limit')) || 500) });
+    const ids = filter.replace(/^in\.\(|\)$/g, '').split(',').map(x => x.replace(/"/g, ''));
     statusReads.push(ids);
-    return route.fulfill({ json: fake.drill.batches.filter((b) => ids.includes(b.id)) });
+    return route.fulfill({ json: fake.drill.batches.filter(b => ids.includes(b.id)) });
   });
   await page.route('**/rest/v1/figure_versions*', (route) => route.fulfill({ json: [] }));
   await page.route('**/rest/v1/drill_assays*', (route) => (new URL(route.request().url()).searchParams.get('batch_id')
@@ -1290,6 +1292,11 @@ test('release pack: approve, a new assay import makes a draft with the diff, app
     }
     return route.fulfill({ json: approvals });
   });
+  await page.route('**/rest/v1/projects*', route => {
+    const params = new URL(route.request().url()).searchParams;
+    if (!params.get('id')) return route.fallback();
+    return route.fulfill({ json: { id: MAP, property_id: PROP, revision: 3, payload: { layers: [], layout: {} } } });
+  });
   await page.goto('/workspace/star-copper-corp/p/rails-copper-gold');
   await page.getByRole('tab', { name: 'Release pack' }).click();
   const region = page.getByRole('region', { name: 'Release pack' });
@@ -1304,7 +1311,7 @@ test('release pack: approve, a new assay import makes a draft with the diff, app
   await region.getByRole('button', { name: 'Approve' }).click();
   await expect(status).toContainText('Up to date: approved 2026-10-21 by geo@star.test');
   expect(posted[0]).toEqual({ pack_id: 'pk1', items: pack.items, batch_ids: [BATCH0], recipe: { id: 'r1' }, note: null,
-    figures: [{ kind: 'map', id: MAP, version_id: null, revision: 3 }, { kind: 'figure', id: FIG, version_id: null, revision: null }] });
+    figures: [{ kind: 'map', id: MAP, version_id: null, revision: 3, saved_at: '2026-10-19T00:00:00Z' }, { kind: 'figure', id: FIG, version_id: null, revision: null, saved_at: '2026-10-18T00:00:00Z' }] });
   await expect(region.getByRole('button', { name: 'Approve' })).toBeDisabled();
 
   // A new assay import: the pack becomes a draft, naming what changed; nothing is approved or published by itself.
@@ -1322,7 +1329,7 @@ test('release pack: approve, a new assay import makes a draft with the diff, app
   page.once('dialog', (d) => d.accept());
   await region.getByRole('button', { name: 'Approve' }).click();
   await expect(status).toContainText('Up to date: approved 2026-10-22');
-  expect(posted[1].batch_ids).toEqual([fake.drill.batches[0].id, BATCH0]);
+  expect(posted[1].batch_ids).toEqual([fake.drill.batches[0].id, BATCH0].sort());
   expect(statusReads.at(-1)).toEqual([fake.drill.batches[0].id, BATCH0]);
   await expect(region.getByRole('list', { name: 'Approval history' }).getByRole('listitem')).toHaveCount(2);
   expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
@@ -1350,6 +1357,32 @@ test('release pack: approve, a new assay import makes a draft with the diff, app
   // One results table per pack.
   await expect(region.getByLabel('Add').locator('option', { hasText: 'Results table' })).toHaveText('Results table (one per pack)');
   await expect(region.getByLabel('Add').locator('option[value=results_table]')).toHaveAttribute('disabled', '');
+});
+
+test('release pack: an import made with the tab open makes the downloaded snapshot a draft', async ({ page }, testInfo) => {
+  const fake = await fakeSupabase(page);
+  const pack = { id: 'p1', items: [{ kind: 'results_table', ref: 'Default' }] };
+  const approval = { id: 'a1', items: pack.items, batch_ids: [BATCH0], recipe: { id: 'r1', name: 'Default', version: 1 }, figures: [], approved_at: '2026-10-25T00:00:00Z' };
+  fake.recipes = [{ id: 'r1', name: 'Default', version: 1, recipe: { primary: 'Au', equivalent: false, elements: [{ name: 'Au', unit: 'g/t', price: null, recovery: 100 }], cutoff: 0, minLength: 0, maxDilution: 0 } }];
+  await page.route('**/rest/v1/release_packs*', route => route.fulfill({ json: [pack] }));
+  await page.route('**/rest/v1/release_pack_approvals*', route => route.fulfill({ json: [approval] }));
+  await page.route('**/rest/v1/figure_versions*', route => route.fulfill({ json: [] }));
+  await page.route('**/rest/v1/drill_import_batches*', route => route.fulfill({ json: fake.drill.batches.filter(b => !b.rolled_back_at).sort((a,b) => a.id.localeCompare(b.id)) }));
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold?tab=release');
+  await expect(page.getByText(/Up to date: approved/)).toBeVisible();
+  // Another editor imports while this page stays open: no tab switch/reload.
+  fake.drill.batches.push({ ...collarBatch, id: '00000000-0000-4000-8000-0000000000e9', kind: 'assays', summary: { new: 2 } });
+  await page.getByRole('button', { name: 'Download pack', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Export a package' });
+  await expect(dialog.getByRole('checkbox', { name: /Draft watermark/ })).toBeChecked();
+  const pending = page.waitForEvent('download');
+  await dialog.getByRole('button', { name: /Download package/ }).click();
+  const downloaded = await pending, path = testInfo.outputPath('fresh-pack.zip');
+  await downloaded.saveAs(path);
+  const zip = unzipSync(await readFile(path));
+  const record = JSON.parse(new TextDecoder().decode(zip['release-pack.json']));
+  expect(record.status).toContain('Draft:'); expect(record.changes).toContain('2 new assays');
+  expect(Object.keys(zip)).toEqual(expect.arrayContaining(['rails-copper-gold-results.xlsx', 'rails-copper-gold-results.pdf']));
 });
 
 test('release pack: a site without the migration shows a notice', async ({ page }) => {

@@ -23,7 +23,7 @@ const approve = (uid, { items, batches, figs, recipe, note = null } = {}) => one
 const current = async () => ({
   items: (await su(`select items from public.release_packs where id = $1`, [S.pack]))[0].items,
   batches: await live(),
-  figs: (await figures()).map((f) => ({ kind: f.kind, id: f.id, version_id: f.version_id, revision: f.revision })),
+  figs: (await figures()).map((f) => ({ kind: f.kind, id: f.id, version_id: f.version_id, revision: f.revision, saved_at: f.saved_at })),
   recipe: await one(E, `select id from public.drill_result_recipes where property_id = $1 and superseded_at is null`, [S.prop]),
 });
 
@@ -120,12 +120,20 @@ describe('approvals', () => {
     const old = await current();
     S.b2 = await imp([assay('R-77', 0), assay('R-78', 0)]);
     await expect(approve(E, old)).rejects.toThrow(/APPROVAL_STALE: the drill data/);
+    await expect(approve(E, { ...(await current()), batches: [S.b2] })).rejects.toThrow(/APPROVAL_STALE/);
     const a = await approve(E, await current());
     expect(a.batch_ids).toEqual([S.b1, S.b2]);
     // A reviewer that saw only the latest batches (the summary's window) still approves every live one.
     await val(E, `select public.drill_rollback_batch($1)`, [S.b2]);
     await expect(approve(E, { ...(await current()), batches: [S.b1, S.b2] })).rejects.toThrow(/APPROVAL_STALE/);
     expect((await approve(E, await current())).batch_ids).toEqual([S.b1]);
+  });
+
+  it('refuses a 3D working save changed after review, even without a new published version', async () => {
+    const seen = await current();
+    await su(`update public.three_d_projects set updated_at = updated_at + interval '1 second' where id = $1`, [S.fig]);
+    await expect(approve(E, seen)).rejects.toThrow(/APPROVAL_STALE: a map or 3D figure/);
+    expect((await approve(E, await current())).figures.find(f => f.id === S.fig).saved_at).not.toBe(seen.figs.find(f => f.id === S.fig).saved_at);
   });
 
   it('a pack reordered by another editor after the check is stale until reviewed again', async () => {
