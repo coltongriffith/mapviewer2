@@ -273,7 +273,8 @@ const BUDGETS = {
   // Lazy release pack tab (staleness, approvals, package preset): measured 1151.8 configured; review fixes 1152.4.
   // Complete release source reads, captured-map export guards and fail-closed retries: measured 1153.4.
   // Optional assay-import certificate completion step: measured 1145.5; startup routes unchanged.
-  totalAuthJsGzipKb: 1153.7,
+  // Release packs plus main's certificate completion, stamped build: measured 1153.7; add 0.3 KiB for commit/chunk variation.
+  totalAuthJsGzipKb: 1154.0,
   // 1009.4 → 1026.3 (measured 1026.0): lazy XLSX reader (~13.8 KiB), sheet/header preview
   // (~1.1 KiB), import wiring and numeric-format handling. Shared fflate adds ~1.2 KiB
   // for async ZIP workers; it remains one copy with the existing draft compression.
@@ -347,7 +348,8 @@ const BUDGETS = {
   // Lazy release pack tab (staleness, approvals, package preset): measured 1083.9; review fixes 1084.3.
   // Same lazy release source verification; measured 1084.9 plain. Startup limits unchanged.
   // Same optional certificate completion step: measured 1078.2 plain.
-  totalJsGzipKb: 1085.2,
+  // Same stamped integration: measured 1085.2 plain (fractionally over that limit); keep 0.3 KiB allowance.
+  totalJsGzipKb: 1085.5,
   // 940.9 → 957.8 (measured 957.5): Excel import, as totalAuthJsGzipKb above.
   // 940.9 → 944.8 (P2-8, measured 944.6): the same lazy property recipe path
   // in the unconfigured build. Its initial route budgets also stay unchanged.
