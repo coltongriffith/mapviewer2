@@ -8,6 +8,8 @@ const trackEvent = vi.hoisted(() => vi.fn());
 vi.mock('../src/utils/track', () => ({ trackEvent, trackEventOnce: vi.fn() }));
 vi.mock('leaflet', () => ({ default: { control: { zoom: () => ({ addTo: vi.fn() }) } } }));
 vi.mock('../src/components/AnnotationOverlay', () => ({ default: () => null }));
+const callouts = vi.hoisted(() => ({ seen: null }));
+vi.mock('../src/components/CalloutsOverlay', () => ({ default: ({ callouts: c }) => { callouts.seen = c; return null; } }));
 const canvas = vi.hoisted(() => ({ project: null }));
 vi.mock('../src/components/MapCanvas', () => ({
   default: function MockCanvas({ project, onReady }) {
@@ -29,6 +31,7 @@ const square = (x) => ({ type: 'FeatureCollection', features: [{ type: 'Feature'
 const state = {
   layout: { title: 'Rails Project', companyName: 'Star Copper Corp.', logo: 'data:image/png;base64,AAAA', basemap: 'blank' },
   mapView: { center: { lat: 55, lng: -130 }, zoom: 9 },
+  callouts: [{ id: 'k1', text: 'RL-01: 12 m @ 1.4% Cu' }],
   layers: [
     { id: 'claims', name: 'Rails claims', role: 'claims', type: 'polygons', visible: true, geojson: square(-130), style: { fill: '#c65322' }, legend: { enabled: true } },
     { id: 'roads', name: 'Roads', role: 'other', type: 'polygons', visible: true, geojson: square(-129), legend: { enabled: true } },
@@ -98,6 +101,7 @@ describe('EmbedMapPage', () => {
     expect(screen.getByRole('link', { name: 'Made with ExplorationMaps' }).getAttribute('target')).toBe('_blank');
     expect(screen.queryByLabelText('Switched off')).toBeNull();
     expect(canvas.project.layers.find((l) => l.id === 'claims').claimInfo).toBe('registry');
+    expect(callouts.seen).toEqual(state.callouts);
     const legend = screen.getByRole('region', { name: 'Legend' });
     expect(legend.textContent).toContain('Roads');
     fireEvent.click(screen.getByLabelText('Roads'));
@@ -116,6 +120,12 @@ describe('EmbedMapPage', () => {
     render(<EmbedMapPage shareId="abc123def456" />);
     expect((await screen.findByRole('alert')).textContent).toContain('could not be loaded');
     expect(trackEvent).not.toHaveBeenCalled();
+  });
+
+  it('shows a malformed embed link as unavailable without asking the server', async () => {
+    render(<EmbedMapPage shareId={null} />);
+    expect((await screen.findByRole('alert')).textContent).toContain('not available');
+    expect(rpc).not.toHaveBeenCalled();
   });
 });
 

@@ -53,9 +53,10 @@ export default function AppRouter() {
     window.history.pushState({}, '', path + (query ? `?${query}` : ''));
     setWorkspace(true);
   };
-  // The live investor web map, framed by other sites: the map alone, never the editor.
+  // The live investor web map, framed by other sites: the map alone, never the editor. vercel.json lets any
+  // /embed/map/<x> be framed, so a malformed id still renders the embed page (as unavailable).
   const embedId = embedShareId(window.location.pathname);
-  if (embedId) return <React.Suspense fallback={<div className="shared-map-loading" role="status">Loading map…</div>}><EmbedMapPage shareId={embedId} /></React.Suspense>;
+  if (embedId || window.location.pathname.startsWith('/embed/map/')) return <React.Suspense fallback={<div className="shared-map-loading" role="status">Loading map…</div>}><EmbedMapPage shareId={embedId} /></React.Suspense>;
   // Supabase's OAuth server sends an assistant's account-connection request here.
   if (window.location.pathname === '/oauth/consent') {
     return <React.Suspense fallback={<div className="shared-map-loading" role="status">Loading…</div>}><OAuthConsentPage /></React.Suspense>;

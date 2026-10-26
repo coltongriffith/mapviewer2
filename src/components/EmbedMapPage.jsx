@@ -11,6 +11,7 @@ import { fitProjectToTemplate } from '../utils/frameMapForTemplate';
 import { savedViewFor, zoomForSize } from '../utils/savedView';
 import { LegendPointSwatch, LegendLineSwatch, LegendAreaSwatch } from './LegendSwatches.jsx';
 import AnnotationOverlay from './AnnotationOverlay';
+import CalloutsOverlay from './CalloutsOverlay';
 import '../styles/embed-map.css';
 
 const MapCanvas = lazyGuarded(() => import('./MapCanvas'));
@@ -31,6 +32,7 @@ export default function EmbedMapPage({ shareId }) {
 
   useEffect(() => {
     let cancelled = false;
+    if (!shareId) { setError('not_found'); return undefined; }
     loadSharedMap(shareId).then((state) => {
       if (cancelled) return;
       if (!state) { setError('not_found'); return; }
@@ -82,6 +84,8 @@ export default function EmbedMapPage({ shareId }) {
         </React.Suspense>
         {map && <AnnotationOverlay map={map} markers={shown.markers || []} ellipses={shown.ellipses || []} polygons={shown.polygons || []}
           distanceLines={shown.distanceLines || []} labelFont={layout.fonts?.label} />}
+        {map && <CalloutsOverlay map={map} callouts={shown.callouts || []} selectedCalloutId={null} onSelect={null} onMove={null}
+          onUpdate={null} fontFamily={layout.fonts?.callout} layout={layout} />}
       </div>
       <button type="button" className="embed-map-toggle" aria-expanded={panelOpen} aria-controls="embed-map-panel" onClick={() => setPanelOpen((o) => !o)}>
         {panelOpen ? 'Hide layers' : 'Layers'}

@@ -648,9 +648,10 @@ const BUDGETS = {
   // Same chunk split for the live web map; measured 360.4 configured, 292.2 plain.
   claimsAuthJsGzipKb: 360.7,
   claimsJsGzipKb: 292.5,
-  // Live investor web map (/embed/map/<id>): map, legend and layer list, no editor; measured 238.9 configured, 172.6 plain.
-  embedAuthJsGzipKb: 239.2,
-  embedJsGzipKb: 172.9,
+  // Live investor web map (/embed/map/<id>): map, legend, layer list and drill-result callouts, no editor;
+  // measured 242.9 configured, 176.5 plain.
+  embedAuthJsGzipKb: 243.2,
+  embedJsGzipKb: 176.8,
   // Stylesheet, gzipped. Today ~29 kB.
   maxCssGzipKb: 40,
   // Any single image shipped from public/, including legacy PNG downloads.
