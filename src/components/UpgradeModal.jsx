@@ -13,6 +13,7 @@ const REASON_COPY = {
   projects: `The free plan saves up to ${FREE_PROJECT_LIMIT} cloud projects — Pro is unlimited.`,
   export_resolution: `Free PNG exports stop at ${FREE_MAX_EXPORT_PIXELS.toLocaleString()} px — Pro goes up to ${PRO_MAX_EXPORT_PIXELS.toLocaleString()} px.`,
   brand_kit: 'Saving a reusable brand kit is part of Pro.',
+  live_embed: 'A live map for your company website, updated each time you republish, is part of Pro.',
   watermark: 'Pro exports are fully clean — no watermark or corner credit.',
   // Tenure Monitor gates. Each names the specific limit the user just hit,
   // rather than a generic upsell — somebody who selected 30 claims wants to

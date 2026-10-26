@@ -325,6 +325,28 @@ export async function revokeSharedMap(id) {
   return Boolean(data);
 }
 
+// The saved map's live web map (one share link, republished in place for every site that embeds it): migration
+// 20261103110000. Publishing is always the owner's explicit action; edits never reach the link on their own.
+export async function publishLiveMap(projectId, state) {
+  const { data, error } = await requireSupabase().rpc('publish_live_map', { p_project: projectId, p_state: state });
+  if (error) {
+    const msg = error.message || '';
+    if (msg.includes('LIVE_MAP_PLAN')) throw new Error('Live web maps are part of Pro.');
+    if (msg.includes('SHARE_RATE_LIMIT')) throw new Error('This map was published moments ago. Try again in a few seconds.');
+    if (msg.includes('SHARE_TOO_LARGE')) throw new Error('This map is too large to publish. Remove some layers or simplify the geometry.');
+    if (msg.includes('SHARE_TOO_COMPLEX')) throw new Error('This map has too many features to publish. Simplify or split it.');
+    if (msg.includes('NOT_FOUND')) throw new Error('Save this map to your account first.');
+    throw error;
+  }
+  return data;
+}
+
+export async function getLiveMap(projectId) {
+  const { data, error } = await requireSupabase().rpc('get_live_map', { p_project: projectId });
+  if (error) throw error;
+  return data ?? null;
+}
+
 // Fork a shared map's state into the signed-in user's own account as a brand-new
 // project. The shared `state` is the exact same shape as a project `payload`, so
 // it can be inserted directly; the recipient gets a fully independent copy and

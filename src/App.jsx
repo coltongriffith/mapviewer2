@@ -44,6 +44,7 @@ const FigureLayerControls = lazyGuarded(() => import('./components/FigureLayerCo
 const ClassificationPanel = lazyGuarded(() => import('./components/ClassificationPanel'));
 const AddClaimsModal = lazyGuarded(() => import('./components/AddClaimsModal'));
 const UpgradeModal = lazyGuarded(() => import('./components/UpgradeModal'));
+const EmbedCodeDialog = lazyGuarded(() => import('./components/EmbedCodeDialog'));
 const FullResOfferModal = lazyGuarded(() => import('./components/FullResOfferModal'));
 const PublicationCheck = lazyGuarded(() => import('./components/PublicationCheck'));
 const ExportBackground = lazyGuarded(() => import('./components/ExportBackground'));
@@ -743,6 +744,7 @@ export default function App({ initialAction = null }) {
   const [preflight, setPreflight] = useState(null);
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [showEmbedDialog, setShowEmbedDialog] = useState(false);
   const [showAddClaimsModal, setShowAddClaimsModal] = useState(false);
   const [addClaimsModalPath, setAddClaimsModalPath] = useState(null);
   const [addClaimsProvince, setAddClaimsProvince] = useState(null);
@@ -8345,9 +8347,23 @@ export default function App({ initialAction = null }) {
                 <p className="share-note">This link is permanent. Viewers see the map exactly as it is now.</p>
               </>
             )}
+            <button type="button" className="share-embed-link" onClick={() => { setShowShareModal(false); setShowEmbedDialog(true); }}>
+              Embed a live map on your website{entitlements.live_embed ? '' : ' (Pro)'}
+            </button>
           </div>
         </div>
       )}
+      {showEmbedDialog && <React.Suspense fallback={null}>
+        <EmbedCodeDialog
+          projectId={user ? projectId : null}
+          canPublish={Boolean(user && projectId && !projectHome?.readOnly)}
+          entitlements={entitlements}
+          title={project.layout?.title}
+          getState={() => ({ ...project, layers: layersWithNearbyClaims(project) })}
+          onUpgrade={(reason) => { setShowEmbedDialog(false); setUpgradeReason(reason); }}
+          onClose={() => setShowEmbedDialog(false)}
+        />
+      </React.Suspense>}
       <React.Suspense fallback={null}>
         {rasterPlacement ? (
           <RasterPlacementModal

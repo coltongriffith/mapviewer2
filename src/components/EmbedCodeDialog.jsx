@@ -1,0 +1,70 @@
+import React, { useEffect, useState } from 'react';
+import { getLiveMap, publishLiveMap } from '../utils/cloudStorage';
+import { embedCode, embedUrl, EMBED_ASPECTS } from '../utils/embedCode';
+import { trackEvent } from '../utils/track';
+
+const when = (iso) => { try { return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(iso)); } catch { return ''; } };
+
+// "Embed on your website": the saved map's live web map (one link, republished in place) and its <iframe> code.
+// Pro; a free account sees the upsell. getState: the map as it would be shared now, read only when publishing.
+export default function EmbedCodeDialog({ projectId, canPublish, entitlements, title, getState, onUpgrade, onClose }) {
+  const [live, setLive] = useState(undefined); // undefined: loading; null: never published
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [opts, setOpts] = useState({ width: 960, aspect: '16:9', responsive: true });
+  const [copied, setCopied] = useState(false);
+  const allowed = Boolean(entitlements?.live_embed);
+
+  useEffect(() => {
+    if (!allowed || !projectId) return undefined;
+    let cancelled = false;
+    getLiveMap(projectId).then((d) => { if (!cancelled) setLive(d); }).catch(() => { if (!cancelled) setLive(null); });
+    return () => { cancelled = true; };
+  }, [allowed, projectId]);
+
+  const publish = async () => {
+    setBusy(true); setError('');
+    try {
+      const id = await publishLiveMap(projectId, getState());
+      setLive((await getLiveMap(projectId).catch(() => null)) || { id, updated_at: new Date().toISOString(), view_count: 0 });
+      trackEvent('share_created', { mapId: id, live: true });
+    } catch (e) { setError(e.message || 'The map could not be published.'); } finally { setBusy(false); }
+  };
+  const code = live?.id ? embedCode(live.id, { title, ...opts }) : '';
+  const copy = () => navigator.clipboard.writeText(code).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }).catch(() => {});
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="share-modal embed-dialog" role="dialog" aria-modal="true" aria-labelledby="embed-dialog-title" onClick={(e) => e.stopPropagation()}>
+        <button className="export-hd-close" aria-label="Close embed dialog" onClick={onClose}>✕</button>
+        <h3 className="share-modal-title" id="embed-dialog-title">Embed on your website</h3>
+        {!allowed ? (<>
+          <p className="share-modal-desc">Put this map on your company website as a live, interactive investor map: pan and zoom, layer switches, the legend and claim records. Republish after new results and every page showing it updates.</p>
+          <button className="share-generate-btn" onClick={() => onUpgrade('live_embed')}>See Pro</button>
+        </>) : !canPublish ? (
+          <p className="share-modal-desc">Save this map to your account first. A live web map is published from a saved map, so you can republish it after every update.</p>
+        ) : live === undefined ? <p className="share-modal-desc" role="status">Loading…</p> : (<>
+          <p className="share-modal-desc">{live
+            ? `Published ${when(live.updated_at)} · ${live.view_count} view${live.view_count === 1 ? '' : 's'} (link and embeds). Edits stay private until you republish; then every site showing the map updates on its next load.`
+            : 'Publish this map as a live web map. Edits stay private until you republish.'}</p>
+          {error && <p className="share-note" role="alert">{error}</p>}
+          <button className="share-generate-btn" disabled={busy} onClick={publish}>{busy ? 'Publishing…' : live ? 'Republish with the current map' : 'Publish live map'}</button>
+          {live && (<>
+            <div className="embed-dialog-options">
+              <label>Width <input type="number" min="200" max="4000" step="10" value={opts.width} onChange={(e) => setOpts({ ...opts, width: e.target.value })} /> px</label>
+              <label>Shape <select value={opts.aspect} onChange={(e) => setOpts({ ...opts, aspect: e.target.value })}>
+                {Object.keys(EMBED_ASPECTS).map((a) => <option key={a} value={a}>{a}</option>)}
+              </select></label>
+              <label><input type="checkbox" checked={opts.responsive} onChange={(e) => setOpts({ ...opts, responsive: e.target.checked })} /> Fit the page width</label>
+            </div>
+            <textarea className="share-url-input embed-dialog-code" readOnly rows={4} value={code} aria-label="Embed code" onFocus={(e) => e.target.select()} />
+            <div className="share-url-row">
+              <button className={`share-copy-btn${copied ? ' copied' : ''}`} onClick={copy}>{copied ? '✓ Copied!' : 'Copy embed code'}</button>
+              <a className="share-copy-btn" href={embedUrl(live.id)} target="_blank" rel="noopener">Preview</a>
+            </div>
+          </>)}
+        </>)}
+      </div>
+    </div>
+  );
+}

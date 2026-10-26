@@ -271,7 +271,8 @@ const BUDGETS = {
   // With blanks (#365) and vendor presets (#366): measured 1140.6.
   // Datum conversion and structure import with all of the above: measured 1145.0.
   // Optional assay-import certificate completion step: measured 1145.5; startup routes unchanged.
-  totalAuthJsGzipKb: 1145.8,
+  // Live web map (/embed/map): its page and the modules it shares with the editor split out of App; measured 1155.8 with main.
+  totalAuthJsGzipKb: 1156.1,
   // 1009.4 → 1026.3 (measured 1026.0): lazy XLSX reader (~13.8 KiB), sheet/header preview
   // (~1.1 KiB), import wiring and numeric-format handling. Shared fflate adds ~1.2 KiB
   // for async ZIP workers; it remains one copy with the existing draft compression.
@@ -343,7 +344,8 @@ const BUDGETS = {
   // P2-2 vendor import presets, as totalAuthJsGzipKb above: measured 1065.8.
   // With blanks, presets, datum and structure: measured 1077.7.
   // Same optional certificate completion step: measured 1078.2 plain.
-  totalJsGzipKb: 1078.5,
+  // Live web map, as totalAuthJsGzipKb above: measured 1088.3 plain with main.
+  totalJsGzipKb: 1088.6,
   // 940.9 → 957.8 (measured 957.5): Excel import, as totalAuthJsGzipKb above.
   // 940.9 → 944.8 (P2-8, measured 944.6): the same lazy property recipe path
   // in the unconfigured build. Its initial route budgets also stay unchanged.
@@ -622,7 +624,8 @@ const BUDGETS = {
   // 341.5 to 342.6 (Oct 2026): 2D API bridge and accessible control names; API/help load after editor startup; measured 342.3 configured.
   // Combined API bridge + shared XLSX compression support, measured 343.8 configured.
   // XLSX writing uses shared fflate async zip support (+~0.5 KiB); writer remains lazy. Measured 344.3.
-  editorAuthJsGzipKb: 344.6,
+  // Live web map: modules shared with /embed/map leave App as four chunks of their own; measured 347.6.
+  editorAuthJsGzipKb: 347.9,
   // Excel import: shared fflate's async ZIP worker support adds ~1.2 KiB (342.5 measured).
   // The XLSX parser and sheet picker remain lazy; the homepage does not load compression.
   // 270 → 271.0 (Oct 2026, production errors, measured 270.7, 269.6 on main): the same as editorAuthJsGzipKb above.
@@ -635,14 +638,19 @@ const BUDGETS = {
   // 273.4 to 274.5 (Oct 2026): Same bridge and control names; measured 274.2 plain.
   // Same combined bridge/compression support, measured 275.7 plain.
   // Same shared async zip support; measured 276.3 plain.
-  editorJsGzipKb: 276.6,
+  // Same chunk split for the live web map; measured 279.5 plain.
+  editorJsGzipKb: 279.8,
   // 355 to 355.3 (Oct 2026): claims shares the editor API bridge/control names; measured 355.0 in CI.
   // Same shared compression increase as above (274.4 measured).
   // Claims also restores drafts through shared compression (355.3 measured).
   // Claims shares that editor/compression graph, measured 356.5 configured.
   // Same shared async zip support; measured 357.0 configured.
-  claimsAuthJsGzipKb: 357.3,
-  claimsJsGzipKb: 290,
+  // Same chunk split for the live web map; measured 360.4 configured, 292.2 plain.
+  claimsAuthJsGzipKb: 360.7,
+  claimsJsGzipKb: 292.5,
+  // Live investor web map (/embed/map/<id>): map, legend and layer list, no editor; measured 238.9 configured, 172.6 plain.
+  embedAuthJsGzipKb: 239.2,
+  embedJsGzipKb: 172.9,
   // Stylesheet, gzipped. Today ~29 kB.
   maxCssGzipKb: 40,
   // Any single image shipped from public/, including legacy PNG downloads.
@@ -777,6 +785,8 @@ for (const [name, entries, limit, forbidden] of [
     authConfigured ? BUDGETS.editorAuthJsGzipKb : BUDGETS.editorJsGzipKb, /\/vendor-export-/],
   ['claims', ['index.html', appKey, 'src/components/MapCanvas.jsx', 'src/components/AddClaimsModal.jsx'],
     authConfigured ? BUDGETS.claimsAuthJsGzipKb : BUDGETS.claimsJsGzipKb, /\/(vendor-export-|vendor-geo-|vendor-zip-)/],
+  ['embed', ['index.html', 'src/components/EmbedMapPage.jsx', 'src/components/MapCanvas.jsx'],
+    authConfigured ? BUDGETS.embedAuthJsGzipKb : BUDGETS.embedJsGzipKb, /\/(App-|vendor-export-|vendor-geo-|vendor-zip-)/],
 ]) {
   const files = new Set();
   for (const entry of entries) {
