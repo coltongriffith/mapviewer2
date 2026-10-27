@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { Card, StatTile, EmptyHint } from './primitives';
 import { fmtNum, relTime } from './metrics';
+import { ENTITLEMENTS, TIERS } from '../../utils/entitlements';
 
 
 // Tenure Monitor operations.
@@ -244,7 +245,7 @@ export default function TenureTab({ data, loading, onReload }) {
               </thead>
               <tbody>
                 {portfolios.map((p) => {
-                  const limit = p.plan === 'pro' ? 50 : 10;
+                  const limit = (ENTITLEMENTS[p.plan] || ENTITLEMENTS[TIERS.FREE]).max_monitored_tenures;
                   const nearLimit = p.monitored >= limit * 0.8;
                   return (
                     <tr key={p.portfolio_id}>

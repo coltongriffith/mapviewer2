@@ -285,6 +285,8 @@ const BUDGETS = {
   // Combined storage/classification/current main: stamped total 1159.8; retain 0.4 KiB for commit/chunk variation.
   // Optional read-only Point-column inspector: new lazy panel/summary, measured
   // 1162.8 configured (+3.0 KiB). Initial route limits remain unchanged.
+  // Company + workspace receipt integration (5dc1e071 stamped): configured total
+  // rounds to1163.2 but exceeds that cap; retain0.3 KiB commit/chunk hash headroom.
   // Live web map (/embed/map): its page and the modules it shares with the editor split out of App; measured 1155.8 with main;
   // with its callouts and drill-plan overlay, 1156.5.
   // Live-map availability/retry and stale-response guards (89622a70 stamped): measured 1157.1 configured.

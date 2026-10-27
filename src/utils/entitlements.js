@@ -137,12 +137,12 @@ export function hasProGrace(userId, now = Date.now()) {
  *
  * @param {object|null} user      Supabase user, or null when anonymous.
  * @param {object} planState      { plan, source, ready } from useAuth.
- * @returns {'anonymous'|'free'|'pro'}
+ * @returns {'anonymous'|'free'|'pro'|'company'}
  */
 export function resolveTier(user, planState, now = Date.now()) {
   if (!user) return TIERS.ANONYMOUS;
   if (planState?.ready) {
-    return planState.plan === 'pro' ? TIERS.PRO : TIERS.FREE;
+    return planState.plan === 'company' ? TIERS.COMPANY : planState.plan === 'pro' ? TIERS.PRO : TIERS.FREE;
   }
   // Plan unknown (still loading, or the lookup failed). Fail CLOSED to free
   // unless this exact user was recently confirmed Pro.
