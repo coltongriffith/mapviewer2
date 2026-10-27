@@ -1,6 +1,6 @@
 import React from 'react';
 import ColorField from './ColorField.jsx';
-import { attributeFields, buildGraduated, buildCategorical, classLabel, MAX_CATEGORIES, hasClassSizes, withClassSizes, withoutClassSizes } from '../utils/classification.js';
+import { attributeFields, buildGraduated, buildCategorical, classLabel, MAX_CATEGORIES, NUMERIC_POLICY, numericSummary, hasClassSizes, withClassSizes, withoutClassSizes } from '../utils/classification.js';
 import { DEFAULT_POINT_SIZE, clampPointSize } from '../utils/pointSymbol.js';
 
 // Colour by attribute: ranges of a numeric column or one colour per unique
@@ -16,6 +16,7 @@ export default function ClassificationPanel({ layer, isPoint, updateLayer, brand
   const setCls = (next) => updateLayer(selectedLayer.id, { classification: next });
   const baseSize = Number(selectedLayer.style?.markerSize) || DEFAULT_POINT_SIZE;
   const sizedByClass = isPt && hasClassSizes(cls);
+  const numbers = cls?.mode === 'graduated' ? numericSummary(selectedLayer, cls.field) : null;
   // Rebuilding classes (new field, method or count) keeps "Size by class" on
   // when it was on, and keeps each edited size where the class still exists:
   // matched by value for categories, by position when the break count holds.
@@ -72,12 +73,22 @@ export default function ClassificationPanel({ layer, isPoint, updateLayer, brand
               {cls.mode === 'graduated' && (
                 <div>
                   <label htmlFor="f-class-count">Classes</label>
-                  <select id="f-class-count" value={cls.classes.length} onChange={(e) => setCls(build(cls.field, 'graduated', Number(e.target.value)))}>
+                  <select id="f-class-count" value={cls.classes.length || 2} disabled={cls.numericPolicy === NUMERIC_POLICY && numbers.excluded === numbers.total} onChange={(e) => setCls(build(cls.field, 'graduated', Number(e.target.value)))}>
+                    {cls.classes.length === 1 && <option value="1">1</option>}
                     {[2, 3, 4, 5, 6].map((n) => <option key={n} value={n}>{n}</option>)}
                   </select>
                 </div>
               )}
             </div>
+            {numbers && (
+              <div className="small-note" role="status">
+                {cls.numericPolicy === NUMERIC_POLICY
+                  ? <p>{numbers.excluded} of {numbers.total} values excluded from ranges. Blank values, limits such as &lt;0.005, comma-formatted numbers and other text keep the layer's own style. Ranges use only plain numbers; original values are unchanged.</p>
+                  : <><p>These saved ranges keep their original number interpretation. Rebuilding uses only plain numbers and excludes {numbers.excluded} of {numbers.total} values. Review the new classes before exporting.</p>
+                    <button type="button" className="btn" onClick={() => setCls(build(cls.field, 'graduated', cls.classes.length))}>Rebuild using plain numbers</button></>}
+                <button type="button" className="btn" onClick={() => setCls(build(cls.field, 'categorical'))}>Use unique values</button>
+              </div>
+            )}
             {!isPt && selectedLayer.type !== 'line' && (
               <label className="toggle-row" title="On: each area's outline takes its class colour as well as its fill.">
                 <input type="checkbox" checked={!!cls.outlineFollowsClass}

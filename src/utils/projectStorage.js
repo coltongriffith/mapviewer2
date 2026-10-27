@@ -31,10 +31,39 @@ export function migratePayload(payload, fromVersion) {
   return current;
 }
 
-// Trim GeoJSON coordinate precision to 6 decimal places (sub-meter accuracy).
-// Reduces JSON size by ~35% for dense geometries with no visible quality loss.
+// Only geographic coordinates may be rounded for compact browser storage.
+// A regex over JSON also rewrote assay values, sample IDs, labels and even
+// numeric text inside quoted strings. Work on a serialization copy instead,
+// following the actual layer GeoJSON structure, never feature properties.
+function roundCoordinates(value) {
+  if (Array.isArray(value)) return value.map(roundCoordinates);
+  return typeof value === 'number' && Number.isFinite(value) ? Number(value.toFixed(6)) : value;
+}
+
+function trimGeojson(geojson) {
+  if (!geojson || typeof geojson !== 'object') return;
+  if (geojson.type === 'FeatureCollection') {
+    if (Array.isArray(geojson.features)) geojson.features.forEach(trimGeojson);
+  } else if (geojson.type === 'Feature') {
+    trimGeojson(geojson.geometry);
+  } else if (geojson.type === 'GeometryCollection') {
+    if (Array.isArray(geojson.geometries)) geojson.geometries.forEach(trimGeojson);
+  } else if (['Point', 'MultiPoint', 'LineString', 'MultiLineString', 'Polygon', 'MultiPolygon'].includes(geojson.type)) {
+    if (Array.isArray(geojson.coordinates)) geojson.coordinates = roundCoordinates(geojson.coordinates);
+  } else return;
+  if (Array.isArray(geojson.bbox)) geojson.bbox = roundCoordinates(geojson.bbox);
+}
+
+// Keep the existing six-decimal GeoJSON storage precision. Other numbers and
+// strings keep JSON's normal round-trip behavior; the open project is untouched.
 function trimCoordinatePrecision(str) {
-  return str.replace(/(-?\d+\.\d{7,})/g, (m) => parseFloat(m).toFixed(6));
+  const record = JSON.parse(str);
+  const trimPayload = (payload) => {
+    if (Array.isArray(payload?.layers)) payload.layers.forEach((layer) => trimGeojson(layer?.geojson));
+  };
+  trimPayload(record?.payload); // draft or pending account save
+  if (Array.isArray(record?.items)) record.items.forEach((item) => trimPayload(item?.payload));
+  return JSON.stringify(record);
 }
 
 function compress(str) {

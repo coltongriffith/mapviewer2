@@ -16,11 +16,15 @@
 import { diagnostic, mergeDiagnostics, unionBounds, needsReview } from '../../shared/figureDiagnostics.js';
 import {
   createExportContext, ensureExportFonts, getTileImages, loadImage, placeCallouts, calloutCardMetrics,
-  legendLayoutReport, exportFrame, getTheme, fitText, titleTextSizes, getOverlayMetrics, mapLabelOverlaps,
+  legendLayoutReport, exportFrame, getTheme, fitText, titleTextSizes, getOverlayMetrics, mapLabelOverlaps, creditLinesFor,
 } from './renderScene.js';
+import { disclosureChecks, standardOf } from '../../shared/disclosure.js';
+import { projectionLabel, NI_TEMPLATE_ID } from '../utils/coordinateFrame.js';
+import { studioOn } from '../utils/studioLayout.js';
+import { resolveTitleStripFields } from '../templates/technicalReportTemplate.js';
 import { panelObstacles } from '../utils/calloutLayout';
 import { PDF_SIZES } from './exportPDF.js';
-import { hasVisibleFeatures } from '../utils/featureIdentity.js';
+import { hasVisibleFeatures, layerFeatures } from '../utils/featureIdentity.js';
 import { legendEntryIds } from '../utils/legendCustomization.js';
 
 // For the editor: whether the findings need the user to look before downloading.
@@ -269,6 +273,35 @@ function checkTextSize(scene, options, sizes, out) {
   }
 }
 
+// "Assays pending" in a hole's attributes (not a claim's "Pending" status).
+const pendingValue = ([k, v]) => /\b(assays?|results?)\s+(are\s+)?pending\b/i.test(String(v ?? '')) || (/assay|result/i.test(k) && /^\s*pending\s*$/i.test(String(v ?? '')));
+// What a figure filed under its disclosure standard shows (shared/disclosure.js checks it).
+export function disclosureFacts(scene) {
+  const p = scene.project, layout = p.layout || {}, scaleBar = layout.showScaleBar !== false;
+  const ni = (scene.template?.id || layout.templateId) === NI_TEMPLATE_ID && layout.showTitle !== false; // the title strip states the projection
+  const shown = (p.layers || []).filter((l) => l.visible !== false && !String(l.id).startsWith('__ac_'));
+  const footer = layout.footerEnabled !== false ? layout.footerText : '';
+  // Only text the export draws: renderScene skips a hidden title or legend.
+  const titleFields = ni ? resolveTitleStripFields(layout) : layout;
+  const title = layout.showTitle !== false ? [titleFields.title, titleFields.subtitle] : [];
+  // Studio draws its own datum above/beside the scale, regardless of the ordinary projection toggle.
+  // An explicit empty datum suppresses its derived fallback, just as in studioCards.scaleRow.
+  const scaleDatum = studioOn(layout)
+    ? layout.studio?.datumNote ?? projectionLabel(layout, scene.map)
+    : layout.showProjectionLabel ? projectionLabel(layout, scene.map) : '';
+  const legend = layout.showLegend !== false ? (layout.legendItems || []).map((i) => i.label) : [];
+  const texts = [...title, footer, ...legend,
+    ...(p.callouts || []).flatMap((c) => [c.text, c.subtext, c.label]), ...(p.markers || []).map((m) => m.label)];
+  return {
+    scaleBar, northArrow: layout.showNorthArrow !== false, texts,
+    crs: ni ? projectionLabel(layout, scene.map) : scaleBar ? scaleDatum : '',
+    credits: creditLinesFor(scene).filter((l) => l !== layout.footerText),
+    intercepts: Boolean(p.drillPlan?.results?.length) || (p.callouts || []).some((c) => c.resultId),
+    pending: Boolean(layout.disclosurePending) || shown.some((l) => layerFeatures(l).some((f) => Object.entries(f?.properties || {}).some(pendingValue))),
+    historical: Boolean(layout.disclosureHistorical) || shown.some((l) => /\bhistoric/i.test(`${l.displayName || ''} ${l.name || ''}`)),
+  };
+}
+
 /**
  * Diagnostics for the figure the export is about to draw.
  * options: format ('png' | 'svg' | 'svg_ai' | 'pdf'), pdfSize, timeoutMs (each
@@ -296,5 +329,18 @@ export async function runPreflight(scene, options = {}) {
   await mapLabelOverlaps(s);
   sizes.push(...titleTextSizes(s).map((t) => ({ ...t, id: 'title' })));
   checkTextSize(s, options, sizes, out);
+  const standard = standardOf(s.project.layout);
+  if (standard) {
+    const checks = disclosureChecks(standard, disclosureFacts(s));
+    if (studioOn(s.project.layout)) {
+      const crs = checks.find((d) => d.code === 'disclosure-crs');
+      if (crs) {
+        const layout = s.project.layout;
+        crs.fix.layout = { showScaleBar: true, studio: { ...layout.studio,
+          datumNote: String(layout.studio?.datumNote ?? '').trim() || projectionLabel(layout, s.map) } };
+      }
+    }
+    out.push(...checks);
+  }
   return mergeDiagnostics(out, context.diagnostics);
 }

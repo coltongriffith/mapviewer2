@@ -42,6 +42,7 @@ const RasterPlacementModal = lazyGuarded(() => import('./components/RasterPlacem
 const FigureImport = lazyGuarded(() => import('./components/FigureImport'));
 const FigureLayerControls = lazyGuarded(() => import('./components/FigureLayerControls'));
 const ClassificationPanel = lazyGuarded(() => import('./components/ClassificationPanel'));
+const NumericColumnInspector = lazyGuarded(() => import('./components/NumericColumnInspector'));
 const AddClaimsModal = lazyGuarded(() => import('./components/AddClaimsModal'));
 const UpgradeModal = lazyGuarded(() => import('./components/UpgradeModal'));
 const EmbedCodeDialog = lazyGuarded(() => import('./components/EmbedCodeDialog'));
@@ -50,6 +51,7 @@ const PublicationCheck = lazyGuarded(() => import('./components/PublicationCheck
 const ExportBackground = lazyGuarded(() => import('./components/ExportBackground'));
 // The watermark band toggle and the designer layers ZIP, in the Export step.
 const ExportExtras = lazyGuarded(() => import('./components/ExportExtras'));
+const DisclosureControls = lazyGuarded(() => import('./components/DisclosureControls'));
 const StudioCard = lazyGuarded(() => import('./components/StudioCard'));
 const StudioControls = lazyGuarded(() => import('./components/StudioControls'));
 const GeoStyleControls = lazyGuarded(() => import('./components/GeoStyleControls'));
@@ -736,8 +738,10 @@ export default function App({ initialAction = null }) {
   // allowedPx, returning } for the one free full-resolution export.
   const [fullResOffer, setFullResOffer] = useState(null);
   const [fullResLink, setFullResLink] = useState(null);
-  // Opt-in publication check (export/preflight.js): off unless ticked, per session.
-  const [pubCheck, setPubCheck] = useState(false);
+  // Opt-in publication check (export/preflight.js): off unless ticked, per session; on by default for a figure
+  // with a disclosure standard (shared/disclosure.js).
+  const [pubCheck, setPubCheck] = useState(null);
+  const pubCheckOn = pubCheck ?? Boolean(project.layout.disclosureStandard);
   // The watermark band (item 38) and the draft mark over the map are on unless switched off for the free plan and
   // sample maps, off otherwise.
   const bandDefault = !entitlements.clean_export || project.layers.some((l) => l.dataSource === 'demo');
@@ -4658,7 +4662,7 @@ export default function App({ initialAction = null }) {
       // Publication check: findings are shown before anything downloads;
       // "Export anyway" comes back here with preflightOk.
       let checked = false;
-      if (pubCheck && !preflightOk) {
+      if (pubCheckOn && !preflightOk) {
         const { runPreflight, needsReview } = await import('./export/preflight');
         const diagnostics = await runPreflight(scene, { ...opts, format });
         if (needsReview(diagnostics)) { setPreflight({ format, extraOptions, diagnostics }); return; }
@@ -6818,6 +6822,7 @@ export default function App({ initialAction = null }) {
                 )}
                 <React.Suspense fallback={null}>
                   <ClassificationPanel layer={selectedLayer} isPoint={isPointStyledLayer(selectedLayer)} updateLayer={updateLayer} brandColors={brandColors} />
+                  {selectedLayer.geojson && <NumericColumnInspector layer={selectedLayer} />}
                 </React.Suspense>
                 {selectedLayer.geojson && !isPointStyledLayer(selectedLayer) && (
                   <React.Suspense fallback={null}><GeoStyleControls layer={selectedLayer} setProject={setProject} map={leafletMapRef.current} /></React.Suspense>
@@ -7493,9 +7498,10 @@ export default function App({ initialAction = null }) {
                 <button className={`btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('pdf'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export PDF'}</button>
               </div>
               <label className="toggle-row">
-                <input type="checkbox" checked={pubCheck} onChange={(e) => setPubCheck(e.target.checked)} />
+                <input type="checkbox" checked={pubCheckOn} onChange={(e) => setPubCheck(e.target.checked)} />
                 <span>Publication check before download</span>
               </label>
+              <React.Suspense fallback={null}><DisclosureControls layout={project.layout} updateLayout={updateLayout} /></React.Suspense>
               <React.Suspense fallback={null}><ExportExtras layout={project.layout} updateLayout={updateLayout} bandDefault={bandDefault} svgAllowed={canExportFormat(entitlements, 'svg')} disabled={!mapReady || exporting} onLayers={() => handleExportClick('layers')} /></React.Suspense>
               {project.layout.basemap === 'blank' && <React.Suspense fallback={null}><ExportBackground layout={project.layout} updateLayout={updateLayout} /></React.Suspense>}
               {exportError && <div className="export-error-msg">{exportError}</div>}
@@ -8239,6 +8245,11 @@ export default function App({ initialAction = null }) {
             diagnostics={preflight.diagnostics}
             onClose={() => setPreflight(null)}
             onExport={() => { setPreflight(null); handleExport(preflight.format, { ...preflight.extraOptions, preflightOk: true }); }}
+            onFix={async (d) => {
+              const { applyFix } = await import('../shared/disclosure.js');
+              updateLayout(applyFix(project.layout, d.fix));
+              setPreflight((p) => p && { ...p, diagnostics: p.diagnostics.filter((x) => x !== d) });
+            }}
           />
         )}
         {showExportModal ? (

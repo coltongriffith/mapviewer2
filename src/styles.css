@@ -955,6 +955,7 @@ button, input, select, textarea { font: inherit; }
 .pubcheck-item.is-error .pubcheck-mark { color: var(--ui-danger); }
 .pubcheck-item.is-warning .pubcheck-mark { color: #b45309; }
 .pubcheck-action { color: var(--ui-text-muted); }
+.pubcheck-fix { margin-left: 4px; padding: 2px 8px; font-size: 12px; }
 /* Import a company figure: the figure and a satellite map side by side, the
    step's controls below. */
 .fig-import-card { width: min(1240px, 96vw); height: min(860px, 94vh); padding: 18px 20px 16px; gap: 10px; grid-template-rows: auto minmax(0, 1fr) auto auto; }

@@ -1,15 +1,16 @@
 import React from 'react';
 import Dialog from './Dialog.jsx';
-import { summaryLine, hasErrors } from '../../shared/figureDiagnostics.js';
+import { summaryLine, hasErrors, needsReview } from '../../shared/figureDiagnostics.js';
 
 // The opt-in publication check's result, shown before a download when the
 // preflight (export/preflight.js) found something. One summary line and the
 // findings in a list that opens on demand. A visual warning can be accepted
 // and exported anyway; an error (wrong geometry) has to be fixed, or the check
-// turned off for an ordinary export.
+// turned off for an ordinary export. A finding with a fix (a disclosure default the editor draws: scale bar,
+// north arrow, coordinate system note, a footer label) has a button that applies it.
 const MARK = { error: 'Problem', warning: 'Warning', info: 'Note' };
 
-export default function PublicationCheck({ diagnostics, onExport, onClose }) {
+export default function PublicationCheck({ diagnostics, onExport, onClose, onFix }) {
   const blocked = hasErrors(diagnostics);
   return (
     <Dialog onClose={onClose} panelClassName="export-hd-card pubcheck-card" labelledBy="pubcheck-title">
@@ -22,7 +23,8 @@ export default function PublicationCheck({ diagnostics, onExport, onClose }) {
           {diagnostics.map((d, i) => (
             <li key={`${d.code}-${d.elementId}-${i}`} className={`pubcheck-item is-${d.severity}`}>
               <span className="pubcheck-mark">{MARK[d.severity]}</span>
-              <span>{d.message}.{d.action ? <span className="pubcheck-action"> {d.action}.</span> : null}</span>
+              <span>{d.message}.{d.action ? <span className="pubcheck-action"> {d.action}.</span> : null}
+                {d.fix && onFix ? <> <button className="btn pubcheck-fix" type="button" onClick={() => onFix(d)}>{d.fix.label}</button></> : null}</span>
             </li>
           ))}
         </ul>
@@ -30,7 +32,7 @@ export default function PublicationCheck({ diagnostics, onExport, onClose }) {
       <div className="export-hd-actions">
         {blocked
           ? <p className="export-hd-small">Fix the problems to export with the check, or turn the check off for an ordinary export.</p>
-          : <button className="btn primary export-hd-btn-primary" type="button" onClick={onExport}>Export anyway</button>}
+          : <button className="btn primary export-hd-btn-primary" type="button" onClick={onExport}>{needsReview(diagnostics) ? 'Export anyway' : 'Export'}</button>}
         <button className="export-hd-skip" type="button" onClick={onClose}>Back to the map</button>
       </div>
     </Dialog>
