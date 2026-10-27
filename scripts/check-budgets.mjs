@@ -283,7 +283,9 @@ const BUDGETS = {
   // Combined release/certificate/disclosure/sign-off integration, final stamped build: measured 1159.2; retain 0.3 KiB headroom.
   // Numeric classification integrated with current main: stamped total measured 1159.6.
   // Combined storage/classification/current main: stamped total 1159.8; retain 0.4 KiB for commit/chunk variation.
-  totalAuthJsGzipKb: 1160.2,
+  // Optional read-only Point-column inspector: new lazy panel/summary, measured
+  // 1162.8 configured (+3.0 KiB). Initial route limits remain unchanged.
+  totalAuthJsGzipKb: 1163.2,
   // 1009.4 → 1026.3 (measured 1026.0): lazy XLSX reader (~13.8 KiB), sheet/header preview
   // (~1.1 KiB), import wiring and numeric-format handling. Shared fflate adds ~1.2 KiB
   // for async ZIP workers; it remains one copy with the existing draft compression.
@@ -366,7 +368,8 @@ const BUDGETS = {
   // Same combined integration: measured 1090.7 plain; retain 0.3 KiB headroom.
   // Same numeric integration: stamped plain total measured 1091.3.
   // Same combined integration: stamped plain total 1091.6; retain 0.3 KiB headroom.
-  totalJsGzipKb: 1091.9,
+  // Same lazy Point-column inspector: measured 1094.4 plain (+2.8 KiB).
+  totalJsGzipKb: 1094.8,
   // 940.9 → 957.8 (measured 957.5): Excel import, as totalAuthJsGzipKb above.
   // 940.9 → 944.8 (P2-8, measured 944.6): the same lazy property recipe path
   // in the unconfigured build. Its initial route budgets also stay unchanged.

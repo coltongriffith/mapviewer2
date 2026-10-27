@@ -1,12 +1,13 @@
 import * as toGeoJSON from "@tmcw/togeojson";
 import { addDrillTraces } from './drillTraces.js';
+import { MAX_FEATURES } from './importLimits.js';
 
 const MAX_UPLOAD_SIZE = 50 * 1024 * 1024; // 50 MB
 
 // Complexity ceilings applied to EVERY importer, not just the compressed
 // byte count. A 3 MB zip can hold a million-vertex polygon that freezes the
 // browser and bloats every later save, share, and export (audit P0-12).
-export const MAX_FEATURES = 200_000;
+export { MAX_FEATURES };
 export const MAX_VERTICES = 3_000_000;
 export const MAX_ZIP_ENTRIES = 500;
 export const MAX_UNCOMPRESSED_BYTES = 300 * 1024 * 1024; // decompression-bomb ceiling

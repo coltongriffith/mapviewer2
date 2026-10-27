@@ -49,7 +49,7 @@ function legacyNumber(v) {
 }
 
 export const NUMERIC_POLICY = 'finite-decimal-v1';
-function toNumber(v) {
+export function toNumber(v) {
   if (typeof v === 'number') return Number.isFinite(v) ? v : NaN;
   if (typeof v !== 'string') return NaN;
   const s = v.trim();
