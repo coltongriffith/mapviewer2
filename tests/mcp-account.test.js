@@ -1,20 +1,28 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const db = vi.hoisted(() => ({ shares: [], plans: {}, created: [], oauthEnabled: true, kits: [], projects: [] }));
+const db = vi.hoisted(() => ({ shares: [], plans: {}, created: [], oauthEnabled: true, kits: [], projects: [], planReads: [], planError: null, planThrows: false, rateCalls: [] }));
 
 vi.mock('../api/_lib/supabase-server.js', () => ({
   serverSupabase: () => ({
     from: (table) => {
+      let userId;
       const query = {
         select: () => query,
-        eq: () => query,
+        eq: (column, value) => { if (column === 'user_id') userId = value; return query; },
         gt: () => query,
         order: () => Promise.resolve({ data: db.shares.map((at) => ({ created_at: at })), error: null }),
-        maybeSingle: () => Promise.resolve({ data: table === 'user_plans' ? db.plans.current : null, error: null }),
+        maybeSingle: () => {
+          if (table === 'user_plans') {
+            db.planReads.push(userId);
+            if (db.planThrows) return Promise.reject(new Error('Plan lookup unavailable'));
+            return Promise.resolve({ data: db.plans[userId] ?? null, error: db.planError });
+          }
+          return Promise.resolve({ data: null, error: null });
+        },
       };
       return query;
     },
-    rpc: (name) => Promise.resolve({ data: name === 'check_rate_limit' ? false : null, error: null }),
+    rpc: (name, args) => { db.rateCalls.push({ name, args }); return Promise.resolve({ data: name === 'check_rate_limit' ? false : null, error: null }); },
   }),
   // Signed-in previews must be created as the user, never with a creator key.
   userSupabase: (token) => ({
@@ -42,8 +50,8 @@ vi.mock('../api/_lib/supabase-server.js', () => ({
 vi.mock('../api/_lib/user-auth.js', () => ({
   authenticateUserBearer: async (req) => {
     const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
-    if (token.startsWith('free-') || token.startsWith('pro-')) {
-      db.plans.current = { plan: token.startsWith('pro-') ? 'pro' : 'free' };
+    if (/^(free|pro|company)-/.test(token)) {
+      if (!Object.hasOwn(db.plans, `user-${token}`)) db.plans[`user-${token}`] = { plan: token.split('-')[0] };
       return { ok: true, user: { id: `user-${token}`, email: 'geo@example.com' } };
     }
     return { ok: false, status: 401, message: 'Session is not valid.' };
@@ -112,7 +120,7 @@ describe('MCP account connector', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(NOW);
     process.env.SUPABASE_URL = 'https://proj.supabase.co';
-    Object.assign(db, { shares: [], plans: {}, created: [], oauthEnabled: true, kits: [], projects: [] });
+    Object.assign(db, { shares: [], plans: {}, created: [], oauthEnabled: true, kits: [], projects: [], planReads: [], planError: null, planThrows: false, rateCalls: [] });
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: db.oauthEnabled })));
   });
   afterEach(() => {
@@ -198,6 +206,70 @@ describe('MCP account connector', () => {
     db.shares = shares(30, 50);
     const res = await call({ token: 'pro-a', body: previewBody });
     expect(res.body.result.structuredContent.allowance).toMatchObject({ tier: 'pro', limit: 200, remaining: 169 });
+  });
+
+  it.each([30, 199, 200])('gives an explicitly stored Company account the bounded Pro preview allowance at %i existing previews', async count => {
+    db.shares = Array.from({ length: count }, (_, i) => new Date(NOW - 3_000_000 + i * 1000).toISOString());
+    const res = await call({ token: 'company-a', body: previewBody });
+    const result = res.body.result.structuredContent;
+    expect(db.planReads).toEqual(['user-company-a']);
+    if (count < 200) {
+      expect(result.allowance).toMatchObject({ tier: 'company', limit: 200, remaining: 199 - count });
+      expect(result.warnings.join(' ')).toContain('Company');
+      expect(db.created).toHaveLength(1);
+      expect(db.created[0].token).toBe('company-a');
+    } else {
+      expect(result.error).toMatchObject({ code: 'RATE_LIMITED', tier: 'company', limit: 200 });
+      expect(result.error.upgrade_url).toBeUndefined();
+      expect(result.error.message).not.toContain('Upgrade to Pro');
+      expect(db.created).toHaveLength(0);
+    }
+  });
+
+  it.each([
+    { plan: null },
+    { plan: { plan: 'future-tier' } },
+    { plan: { plan: 'company' }, error: { message: 'Plan query failed' } },
+    { plan: { plan: 'company' }, throws: true },
+  ])('uses only the Free allowance when the plan is missing, unknown or unavailable: %j', async scenario => {
+    db.plans['user-free-safe'] = scenario.plan;
+    db.planError = scenario.error || null; db.planThrows = scenario.throws || false;
+    db.shares = shares(30, 50);
+    const res = await call({ token: 'free-safe', body: previewBody });
+    expect(res.body.result.structuredContent.error).toMatchObject({ code: 'RATE_LIMITED', tier: 'free', limit: 30 });
+    expect(db.created).toHaveLength(0);
+  });
+
+  it('does not reuse another account’s Company plan or trust a caller-supplied plan', async () => {
+    const handler = await freshHandler();
+    const company = await send(handler, { token: 'company-owner', body: previewBody });
+    expect(company.body.result.structuredContent.allowance.limit).toBe(200);
+    db.shares = shares(30, 50);
+    const res = await send(handler, { token: 'free-other', body: { ...previewBody, params: { ...previewBody.params, arguments: { ...previewBody.params.arguments, plan: 'company', user_id: 'user-company-owner' } } } });
+    expect(res.body.result.structuredContent.error).toMatchObject({ tier: 'free', limit: 30 });
+    expect(db.planReads).toEqual(['user-company-owner', 'user-free-other']);
+    expect(db.created).toHaveLength(1);
+  });
+
+  it('keeps Company registry searches bounded by the existing Pro search allowance', async () => {
+    await call({ token: 'company-search', body: { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'search_mineral_claims', arguments: { jurisdiction: 'bc', query: 'Star' } } } });
+    expect(db.rateCalls).toContainEqual({ name: 'check_rate_limit', args: expect.objectContaining({ p_bucket: 'mcp-search-account', p_max: 600, p_window_seconds: 3600 }) });
+  });
+
+  it('does not look up a Company plan for an unauthenticated account request', async () => {
+    db.plans['user-company-owner'] = { plan: 'company' };
+    const res = await call({ token: 'invalid', body: previewBody });
+    expect(res.statusCode).toBe(401);
+    expect(db.planReads).toEqual([]);
+    expect(db.created).toEqual([]);
+  });
+
+  it('keeps the public connector anonymous even if a Company bearer is supplied', async () => {
+    db.shares = shares(10, 40);
+    const res = await call({ query: {}, token: 'company-owner', body: previewBody });
+    expect(res.body.result.structuredContent.error).toMatchObject({ code: 'RATE_LIMITED', tier: 'anonymous', limit: 10 });
+    expect(db.planReads).toEqual([]);
+    expect(db.created).toEqual([]);
   });
 
   it('tells a capped anonymous caller about the account connector once sign-in is live', async () => {

@@ -13,19 +13,19 @@ import { clientIp, rateLimited, rateLimitedShared } from './_lib/guard.js';
 // Hourly preview allowance by tier. create_shared_map enforces the same
 // numbers over a rolling hour (per creator key when anonymous, per account when
 // signed in), so these are the figures users are told.
-const PREVIEWS_PER_HOUR = { anonymous: 10, free: 30, pro: 200 };
+const PREVIEWS_PER_HOUR = { anonymous: 10, free: 30, pro: 200, company: 200 };
 // A map usually takes one to three claim searches.
-const SEARCHES_PER_HOUR = { anonymous: 30, free: 90, pro: 600 };
+const SEARCHES_PER_HOUR = { anonymous: 30, free: 90, pro: 600, company: 600 };
 // Abuse ceilings per egress IP, for anonymous calls only. Hosted assistants
 // share egress IPs, so hitting one says nothing about the individual caller.
 const NETWORK_PREVIEWS_PER_HOUR = 300;
 const NETWORK_SEARCHES_PER_HOUR = 300;
-const PLAN_LABEL = { free: 'the Free plan', pro: 'Pro' };
+const PLAN_LABEL = { free: 'the Free plan', pro: 'Pro', company: 'Company' };
 // Public connector URLs, on the host the docs and server.json advertise.
 const CONNECTOR_ORIGIN = 'https://www.explorationmaps.com';
 const LIMIT_TEXT = {
   anonymous: `Free use allows ${PREVIEWS_PER_HOUR.anonymous} previews per hour; allowance in the result reports how many remain.`,
-  account: `Signed-in use allows ${PREVIEWS_PER_HOUR.free} previews per hour on the Free plan and ${PREVIEWS_PER_HOUR.pro} on Pro; allowance in the result reports how many remain.`,
+  account: `Signed-in use allows ${PREVIEWS_PER_HOUR.free} previews per hour on the Free plan and ${PREVIEWS_PER_HOUR.pro} on Pro or Company; allowance in the result reports how many remain.`,
 };
 
 const SERVER_NAME = 'ExplorationMaps';
@@ -33,7 +33,7 @@ const SERVER_VERSION = '1.1.1'; // keep in step with server.json
 const SERVER_INSTRUCTIONS = `ExplorationMaps creates mineral exploration maps from public registry records. For a request naming a company or project, identify the specific project before mapping. Search its claims, group records geographically, and pass verified claim_numbers to preview_exploration_map so unrelated projects stay out. If the project cannot be identified reliably, ask the user. When available, pass the company's HTTPS website in branding and verified project facts in facts_panel and claims_callout; do not invent ownership, grades, targets or coordinates. Choose a map type and basemap that match the request. The preview defaults to supported context overlays, nearby claims, a locator inset and a claim callout. After the call, report claims_found_primary separately from claims_found_neighbours, describe only layers_applied, and give the share_url. For an image file, give png_download_url: opening it downloads the map as a PNG in the user's browser. This tool does not return image data itself. Public registry data is informational and is not a legal title opinion or survey.`;
 const LIMIT_INSTRUCTIONS = {
   anonymous: ` Free use allows ${PREVIEWS_PER_HOUR.anonymous} map previews per hour: tell the user how many remain after each preview, and if the limit is reached, give them the reset time and links from the error. This connection is anonymous: it cannot see the user's ExplorationMaps account, brand kit or saved maps. If the user wants their account branding or saved maps, tell them to add ${CONNECTOR_ORIGIN}/mcp/account as a custom connector (Settings, Connectors, Add custom connector) and sign in there.`,
-  account: ` The user is signed in to ExplorationMaps: ${PREVIEWS_PER_HOUR.free} map previews per hour on the Free plan, ${PREVIEWS_PER_HOUR.pro} on Pro. Tell the user how many remain after each preview, and if the limit is reached, give them the reset time and links from the error. Previews use the user's default brand kit (logo, colours, fonts, layout), or their only kit, automatically; omit style so the kit's theme applies. If the user has several kits and none is the default, none is applied: call list_my_maps, pick the kit for the company being mapped and pass its id as brand_kit, and ask the user if it is unclear. To match one of the user's saved maps, pass its id as style_from_map. Previews are saved to the user's account.`,
+  account: ` The user is signed in to ExplorationMaps: ${PREVIEWS_PER_HOUR.free} map previews per hour on the Free plan, ${PREVIEWS_PER_HOUR.pro} on Pro or Company. Tell the user how many remain after each preview, and if the limit is reached, give them the reset time and links from the error. Previews use the user's default brand kit (logo, colours, fonts, layout), or their only kit, automatically; omit style so the kit's theme applies. If the user has several kits and none is the default, none is applied: call list_my_maps, pick the kit for the company being mapped and pass its id as brand_kit, and ask the user if it is unclear. To match one of the user's saved maps, pass its id as style_from_map. Previews are saved to the user's account.`,
 };
 
 function instructionsFor(req) {
@@ -925,8 +925,8 @@ async function accountFor(req) {
   if (!auth.ok) return { status: auth.status === 401 ? 'invalid' : 'unavailable' };
   let tier = 'free';
   try {
-    const { data } = await serverSupabase().from('user_plans').select('plan').eq('user_id', auth.user.id).maybeSingle();
-    if (data?.plan === 'pro') tier = 'pro';
+    const { data, error } = await serverSupabase().from('user_plans').select('plan').eq('user_id', auth.user.id).maybeSingle();
+    if (!error && (data?.plan === 'pro' || data?.plan === 'company')) tier = data.plan;
   } catch {
     // Plan unknown: the free allowance, never Pro by accident.
   }
