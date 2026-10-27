@@ -1,4 +1,4 @@
-import React, { Suspense, useState } from 'react';
+import React, { Suspense, useEffect, useRef, useState } from 'react';
 import { zipSync } from 'fflate';
 import Dialog from './Dialog';
 import { useAuth } from '../hooks/useAuth.jsx';
@@ -18,7 +18,8 @@ const ReadOnlyMapStage = lazyGuarded(() => import('./ReadOnlyMapStage'));
 // download there: the plan's pixel cap and corner credit. The watermark band and the draft mark over the map follow
 // the editor's default (on for the free plan and sample maps) until ticked or unticked here; an added PNG goes in
 // as it came. The PDF needs a plan with PDF export; on
-// other plans the ZIP holds the PNGs.
+// other plans the ZIP holds the PNGs. A property's release pack opens it with `preset`: its maps ticked, its meta and
+// draft mark, and `extra` files (the results table, the pack's record) written into the ZIP as they are.
 
 const isSample = (payload) => (payload?.layers || []).some((l) => l.dataSource === 'demo');
 const canvasBytes = (c) => new Promise((resolve, reject) => c.toBlob((b) => (b ? b.arrayBuffer().then((a) => resolve(new Uint8Array(a)), reject) : reject(new Error('The PNG could not be encoded.'))), 'image/png'));
@@ -28,14 +29,16 @@ async function fileCanvas(file) {
   return c;
 }
 
-export default function PackageExport({ projects, onClose }) {
+export default function PackageExport({ projects, onClose, preset = null }) {
   const { entitlements } = useAuth();
-  const [picked, setPicked] = useState([]); // ids, in figure order
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const [picked, setPicked] = useState(preset?.picked || []); // ids, in figure order
   const [names, setNames] = useState({});
   const [files, setFiles] = useState([]); // extra PNG figures (from /3d)
-  const [meta, setMeta] = useState({ client: '', project: '', date: todayStamp(), version: '1' });
+  const [meta, setMeta] = useState({ client: '', project: '', date: todayStamp(), version: '1', ...preset?.meta });
   const [band, setBand] = useState(null); // null: each map's default
-  const [draft, setDraft] = useState(null); // the draft mark across each map; null: each map's default
+  const [draft, setDraft] = useState(preset?.draft ?? null); // the draft mark across each map; null: each map's default
   const [stage, setStage] = useState(null); // the map being drawn off screen
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
@@ -64,11 +67,14 @@ export default function PackageExport({ projects, onClose }) {
   const build = async () => {
     setBusy(true); setError(null);
     try {
+      if (preset?.validate) await preset.validate();
       const figs = [];
       const maps = picked.map((id) => projects.find((p) => p.id === id)).filter(Boolean);
       for (const [i, p] of maps.entries()) {
         setStatus(`Drawing ${i + 1} of ${maps.length + files.length}: ${nameOf(p)}…`);
-        const { payload } = await loadCloudProject(p.id);
+        // Release packs render their captured revision; ordinary exports still load the saved map.
+        const payload = preset?.mapPayloads ? preset.mapPayloads[p.id] : (await loadCloudProject(p.id)).payload;
+        if (!payload) throw new Error('A captured map is unavailable. Prepare the release pack again.');
         const dflt = free || isSample(payload), on = band ?? dflt;
         const canvas = await draw(payload, { ...(on && { watermarkBand: { client: meta.client || payload.layout?.companyName } }), ...((draft ?? dflt) && { draftOverlay: true }) });
         figs.push({ name: nameOf(p), canvas, bytes: await canvasBytes(canvas) });
@@ -77,7 +83,8 @@ export default function PackageExport({ projects, onClose }) {
       setStatus('Writing the package…');
       const out = {};
       figs.forEach((f, i) => { out[figureFileName(meta, i + 1, f.name)] = [f.bytes, { level: 0 }]; });
-      if (pdfOk) {
+      Object.assign(out, preset?.extra);
+      if (pdfOk && figs.length) {
         const [{ jsPDF }, { PDF_SIZES, pdfPage, onWhite }] = await Promise.all([import('jspdf'), import('../export/exportPDF')]);
         const size = PDF_SIZES.letter_landscape, pdf = new jsPDF({ orientation: 'landscape', unit: 'in', format: [size.w, size.h] });
         // On white for the PDF only (its pages are JPEG); the PNGs above keep their transparency.
@@ -85,7 +92,10 @@ export default function PackageExport({ projects, onClose }) {
         out[packageFileName(meta, 'pdf')] = new Uint8Array(pdf.output('arraybuffer'));
       }
       const zipName = packageFileName(meta, 'zip');
-      downloadBlob(zipName, new Blob([zipSync(out)], { type: 'application/zip' }));
+      const blob = new Blob([zipSync(out)], { type: 'application/zip' });
+      if (preset?.validate) await preset.validate();
+      if (!mounted.current) return;
+      downloadBlob(zipName, blob);
       setStatus(`Downloaded ${zipName}: ${Object.keys(out).length} files.`);
     } catch (e) {
       setError(`The package could not be made: ${String(e?.message || e).slice(0, 160)}`);
@@ -95,11 +105,11 @@ export default function PackageExport({ projects, onClose }) {
     }
   };
 
-  const count = picked.length + files.length;
+  const count = picked.length + files.length, ready = count > 0 || !!preset?.extra;
   return (
     <>
       <Dialog onClose={busy ? undefined : onClose} title="Export a package" titleId="pkg-title" panelClassName="modal-panel auth-modal pkg-dialog">
-        <form className="auth-form" onSubmit={(e) => { e.preventDefault(); if (count) build(); }}>
+        <form className="auth-form" onSubmit={(e) => { e.preventDefault(); if (ready) build(); }}>
           <p className="dash-muted" style={{ margin: 0 }}>
             Tick the maps in figure order. You get one ZIP: {pdfOk ? 'a PDF with a page per figure, and ' : ''}each figure as a PNG named Client_Project_Date_FigN_Name_vX.png.
           </p>
@@ -143,7 +153,7 @@ export default function PackageExport({ projects, onClose }) {
           {status && <p className="dash-muted" role="status" style={{ margin: 0 }}>{status}</p>}
           {error && <p className="auth-error-msg" role="alert" style={{ margin: 0 }}>{error}</p>}
           <div className="dash-hero-actions">
-            <button className="btn primary" type="submit" disabled={busy || !count}>{busy ? 'Making the package…' : `Download package (${count} figure${count === 1 ? '' : 's'})`}</button>
+            <button className="btn primary" type="submit" disabled={busy || !ready}>{busy ? 'Making the package…' : `Download package (${count} figure${count === 1 ? '' : 's'})`}</button>
             <button className="btn" type="button" disabled={busy} onClick={onClose}>Close</button>
           </div>
         </form>

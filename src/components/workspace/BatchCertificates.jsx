@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { drillCertificates } from '../../utils/drillCertificates';
 
 /** Open on demand: importing never depends on the optional certificate migration. */
-export default function BatchCertificates({ client, property, batch, canEdit }) {
+export default function BatchCertificates({ client, property, batch, canEdit, label = 'Lab certificates' }) {
   const api = useMemo(() => client ? drillCertificates(client) : null, [client]);
   const [open, setOpen] = useState(false);
   const [links, setLinks] = useState([]);
@@ -36,7 +36,7 @@ export default function BatchCertificates({ client, property, batch, canEdit }) 
     catch { setError('The link was saved, but the list could not refresh. Close and reopen Lab certificates.'); }
   };
   return <div style={{ marginTop: 6 }}>
-    <button type="button" className="dash-link" aria-expanded={open} onClick={() => setOpen(v => !v)}>Lab certificates</button>
+    <button type="button" className="dash-link" aria-expanded={open} onClick={() => setOpen(v => !v)}>{label}</button>
     {open && <div aria-label={`Certificates for ${batch.filename || 'assay import'}`}>
       {error && <p className="ws-error" role="alert">{error}</p>}
       {notice && <p className="ws-ok" role="status">{notice}</p>}

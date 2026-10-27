@@ -30,7 +30,7 @@ it('imports source intensity text, retains UUID on an uncertain retry and clears
   check(); await screen.findByRole('button', { name: 'Commit import' });
   fireEvent.click(screen.getByRole('button', { name: 'Commit import' }));
   await screen.findByText('Imported alteration.csv: 1 new alteration interval.');
-  expect(db.commit.mock.calls[2][0].batchId).not.toBe(first.batchId); expect(db.commit.mock.calls[2][0].rows[0]).not.toHaveProperty('intensity'); expect(done).toHaveBeenCalledOnce();
+  expect(db.commit.mock.calls[2][0].batchId).not.toBe(first.batchId); expect(db.commit.mock.calls[2][0].rows[0]).not.toHaveProperty('intensity'); expect(done).toHaveBeenCalledWith(null);
 });
 
 it.each(['alteration', 'lithology'])('does not reinstate a stale %s preview after mapping changes', async kind => {
