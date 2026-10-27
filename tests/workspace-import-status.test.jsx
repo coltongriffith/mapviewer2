@@ -75,3 +75,27 @@ it('preserves a different in-progress import and its checked columns during roll
   expect(screen.getByLabelText('Template name')).toHaveValue('Next lab mapping');
   expect(screen.getByRole('button', { name: 'Commit import' })).toBeEnabled();
 });
+
+it('does not restore a receipt when its delayed commit response arrives after rollback, even after another rollback', async () => {
+  let finish;
+  batches.push({ id: 'other-batch', filename: 'other.csv', kind: 'assays', summary: diff });
+  db.commit.mockImplementationOnce(() => {
+    batches.push({ id: 'server-batch', filename: 'assays.csv', kind: 'assays', summary: diff });
+    return new Promise(resolve => { finish = resolve; });
+  });
+  render(<DrillPanel property={property} perms={{ edit: true }} />);
+  await openFile();
+  fireEvent.click(screen.getByRole('button', { name: 'Check against stored data' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Commit import' }));
+  // The server committed, but its response is delayed. A separate rollback's
+  // history refresh can already discover the batch before that response.
+  fireEvent.click(screen.getByRole('button', { name: 'Roll back older.csv' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Roll back assays.csv' }));
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Roll back assays.csv' })).toBeNull());
+  fireEvent.click(screen.getByRole('button', { name: 'Roll back other.csv' }));
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Roll back other.csv' })).toBeNull());
+  await act(async () => finish({ ...diff, committed: true, batch_id: 'server-batch' }));
+  await screen.findByRole('button', { name: '+ Import CSV or Excel' });
+  expect(screen.queryByText(/^Imported assays\.csv:/)).toBeNull();
+  expect(screen.queryByRole('region', { name: 'Import certificate step' })).toBeNull();
+});
