@@ -37,6 +37,13 @@ export function AuthProvider({ children }) {
     // Grandfather backstop: any account created before the billing launch is
     // Pro forever, even if its user_plans row is missing for some reason.
     if (isGrandfathered(target)) {
+      // This entitlement is already known: an optional Company lookup must
+      // not delay Pro access on a fresh browser or an unavailable network.
+      // Keep a confirmed Company tier during a same-account refresh; account
+      // changes reset planState before reaching this branch.
+      rememberProGrace(target.id);
+      setPlanState(previous => previous.ready && previous.plan === 'company'
+        ? previous : { plan: 'pro', source: 'grandfathered', ready: true });
       // Existing grandfathered accounts stay Pro even if the plan service
       // fails, but an explicit Company assignment must not be hidden by
       // that fallback. Only the authenticated user's own plan is read.
