@@ -13,6 +13,7 @@ import { jurisdictionLabel } from '../utils/jurisdictions';
 import { mapName, copyName } from '../utils/mapName.js';
 import { SORTS, filterAndSort, fmtRelative } from '../utils/dashboardList.js';
 import { lazyGuarded } from '../utils/preloadGuard';
+import ProjectDataDownloadButton from './ProjectDataDownloadButton';
 
 // The 3D figures section (list, rename, duplicate, move, delete) is its own chunk.
 const FiguresSection = lazyGuarded(() => import('./FiguresSection'));
@@ -84,6 +85,7 @@ function ProjectTile({ entry, onOpen, onRename, onDelete, onDuplicate }) {
           </>
         ) : (
           <>
+            <ProjectDataDownloadButton project={entry} />
             <button className="dash-icon-btn" type="button" title="Rename" aria-label={`Rename ${entry.name}`} onClick={() => setEditing(true)}>✎</button>
             <button className="dash-icon-btn" type="button" title="Duplicate" aria-label={`Duplicate ${entry.name}`} onClick={() => onDuplicate(entry)}>⧉</button>
             <button className="dash-icon-btn danger" type="button" title="Delete" aria-label={`Delete ${entry.name}`} onClick={() => setConfirmDelete(true)}>✕</button>
