@@ -277,8 +277,8 @@ const BUDGETS = {
   // Complete release source reads, captured-map export guards and fail-closed retries: measured 1153.4.
   // Optional assay-import certificate completion step: measured 1145.5; startup routes unchanged.
   // Release packs plus main's certificate completion, stamped build: measured 1153.7; add 0.3 KiB for commit/chunk variation.
-  // Combined release/certificate/disclosure/sign-off integration: measured 1159.0; retain 0.3 KiB headroom.
-  totalAuthJsGzipKb: 1159.3,
+  // Combined release/certificate/disclosure/sign-off integration, final stamped build: measured 1159.2; retain 0.3 KiB headroom.
+  totalAuthJsGzipKb: 1159.5,
   // 1009.4 → 1026.3 (measured 1026.0): lazy XLSX reader (~13.8 KiB), sheet/header preview
   // (~1.1 KiB), import wiring and numeric-format handling. Shared fflate adds ~1.2 KiB
   // for async ZIP workers; it remains one copy with the existing draft compression.
