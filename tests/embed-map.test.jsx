@@ -38,6 +38,7 @@ const state = {
   layers: [
     { id: 'claims', name: 'Rails claims', role: 'claims', type: 'polygons', visible: true, geojson: square(-130), style: { fill: '#c65322' }, legend: { enabled: true } },
     { id: 'roads', name: 'Roads', role: 'other', type: 'polygons', visible: true, geojson: square(-129), legend: { enabled: true } },
+    { id: 'mag', name: 'Magnetics', type: 'tiles', geojson: null, visible: true, tiles: { kind: 'xyz', url: 'https://t.test/{z}/{x}/{y}.png' } },
     { id: 'off', name: 'Switched off', role: 'other', type: 'polygons', visible: false, geojson: square(-128) },
   ],
 };
@@ -103,6 +104,9 @@ describe('EmbedMapPage', () => {
     expect(screen.getByAltText('Star Copper Corp.')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Made with ExplorationMaps' }).getAttribute('target')).toBe('_blank');
     expect(screen.queryByLabelText('Switched off')).toBeNull();
+    fireEvent.click(screen.getByLabelText('Magnetics'));
+    await waitFor(() => expect(canvas.project.layers.find((l) => l.id === 'mag').visible).toBe(false));
+    fireEvent.click(screen.getByLabelText('Magnetics'));
     expect(canvas.project.layers.find((l) => l.id === 'claims').claimInfo).toBe('registry');
     expect(callouts.seen).toEqual(state.callouts);
     const legend = screen.getByRole('region', { name: 'Legend' });

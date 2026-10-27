@@ -47,7 +47,7 @@ export default function EmbedMapPage({ shareId }) {
 
   const layout = useMemo(() => project?.layout || {}, [project]);
   const template = useMemo(() => getTemplate(layout.templateId || 'technical_results_v2'), [layout.templateId]);
-  const toggleable = useMemo(() => (project?.layers || []).filter((l) => l.visible !== false && (l.geojson || l.raster)), [project]);
+  const toggleable = useMemo(() => (project?.layers || []).filter((l) => l.visible !== false && (l.geojson || l.raster || l.tiles)), [project]);
   const shown = useMemo(() => project && { ...project, layers: project.layers.map((l) => (hidden.has(l.id) ? { ...l, visible: false } : l)) }, [project, hidden]);
   const drillLegend = useLazyDrillLegend(project?.drillPlan);
   const legendGroups = useMemo(() => {
