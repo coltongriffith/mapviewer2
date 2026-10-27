@@ -16,11 +16,14 @@ export default function EmbedCodeDialog({ projectId, canPublish, entitlements, w
   const allowed = Boolean(entitlements?.live_embed || workspacePaid);
 
   useEffect(() => {
-    if (!allowed || !projectId) return undefined;
+    // A plan downgrade may block republishing, never stopping an existing
+    // publication. Read its management metadata independently of paid access.
+    if (!canPublish || !projectId) return undefined;
     let cancelled = false;
+    setLive(undefined);
     getLiveMap(projectId).then((d) => { if (!cancelled) setLive(d); }).catch(() => { if (!cancelled) setLive(null); });
     return () => { cancelled = true; };
-  }, [allowed, projectId]);
+  }, [canPublish, projectId]);
 
   const publish = async () => {
     setBusy(true); setError('');
@@ -44,7 +47,7 @@ export default function EmbedCodeDialog({ projectId, canPublish, entitlements, w
       <div className="share-modal embed-dialog" role="dialog" aria-modal="true" aria-labelledby="embed-dialog-title" onClick={(e) => e.stopPropagation()}>
         <button className="export-hd-close" aria-label="Close embed dialog" onClick={onClose}>✕</button>
         <h3 className="share-modal-title" id="embed-dialog-title">Embed on your website</h3>
-        {!allowed ? (<>
+        {!allowed && !live ? (<>
           <p className="share-modal-desc">Put this map on your company website as a live, interactive investor map: pan and zoom, layer switches, the legend and claim records. Republish after new results and every page showing it updates.</p>
           <button className="share-generate-btn" onClick={() => onUpgrade('live_embed')}>See Pro</button>
         </>) : !canPublish ? (
@@ -54,7 +57,9 @@ export default function EmbedCodeDialog({ projectId, canPublish, entitlements, w
             ? `Published ${when(live.updated_at)} · ${live.view_count} view${live.view_count === 1 ? '' : 's'} (link and embeds). Edits stay private until you republish; then every site showing the map updates on its next load.`
             : 'Publish this map as a live web map. Edits stay private until you republish.'}</p>
           {error && <p className="share-note" role="alert">{error}</p>}
-          <button className="share-generate-btn" disabled={busy} onClick={publish}>{busy ? 'Publishing…' : live ? 'Republish with the current map' : 'Publish live map'}</button>
+          {allowed ? <button className="share-generate-btn" disabled={busy} onClick={publish}>{busy ? 'Publishing…' : live ? 'Republish with the current map' : 'Publish live map'}</button>
+            : <><p className="share-note">You can still copy or stop this live map. Pro or a paid company plan is needed to republish it.</p>
+              <button className="share-generate-btn" onClick={() => onUpgrade('live_embed')}>See Pro</button></>}
           {live && (<>
             <div className="embed-dialog-options">
               <label>Width <input type="number" min="200" max="4000" step="10" value={opts.width} onChange={(e) => setOpts({ ...opts, width: e.target.value })} /> px</label>

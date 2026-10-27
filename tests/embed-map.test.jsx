@@ -143,12 +143,28 @@ describe('EmbedMapPage', () => {
 describe('EmbedCodeDialog', () => {
   const pro = entitlementsFor(TIERS.PRO);
   it('shows a free account the upsell', () => {
+    rpc.mockResolvedValueOnce({ data: null, error: null });
     const onUpgrade = vi.fn();
     render(<EmbedCodeDialog projectId="p1" canPublish entitlements={entitlementsFor(TIERS.FREE)} getState={() => state} onUpgrade={onUpgrade} onClose={() => {}} />);
     fireEvent.click(screen.getByRole('button', { name: 'See Pro' }));
     expect(onUpgrade).toHaveBeenCalledWith('live_embed');
-    expect(rpc).not.toHaveBeenCalled();
+    expect(rpc).toHaveBeenCalledWith('get_live_map', { p_project: 'p1' });
     expect(screen.queryByLabelText('Embed code')).toBeNull();
+  });
+
+  it('keeps stopping an existing live map available after a plan downgrade without enabling republication', async () => {
+    const id = 'd'.repeat(32);
+    rpc.mockResolvedValueOnce({ data: { id, updated_at: '2026-10-25T10:00:00Z', view_count: 3 }, error: null });
+    render(<EmbedCodeDialog projectId="p1" canPublish entitlements={entitlementsFor(TIERS.FREE)} getState={() => state} onUpgrade={() => {}} onClose={() => {}} />);
+    const stop = await screen.findByRole('button', { name: 'Stop live map' });
+    expect(screen.getByLabelText('Embed code').value).toContain(id);
+    expect(screen.queryByRole('button', { name: /Republish with|Publish live map/ })).toBeNull();
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    rpc.mockResolvedValueOnce({ data: true, error: null });
+    fireEvent.click(stop);
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Stop live map' })).toBeNull());
+    expect(rpc).toHaveBeenLastCalledWith('revoke_live_map', { p_project: 'p1' });
+    expect(screen.getByRole('button', { name: 'See Pro' })).toBeTruthy();
   });
 
   it('lets an editor of a paid company map publish on a free personal plan', async () => {

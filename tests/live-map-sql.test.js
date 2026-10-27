@@ -32,6 +32,11 @@ beforeAll(async () => {
 afterAll(async () => db?.close());
 
 describe('publish_live_map', () => {
+  const companyLink = async () => {
+    await su(`insert into public.organization_members (org_id, user_id, role) values ($1, $2, 'editor') on conflict (org_id, user_id) do update set role = 'editor'`, [S.org, E]);
+    const project = (await su(`insert into public.projects (user_id, org_id, name) values ($1, $2, 'Another company map') returning id`, [F, S.org]))[0].id;
+    return { project, share: await publish(E, project) };
+  };
   it('creates one live link for a map and republishes the same link in place', async () => {
     const first = await publish(P, S.mine, state('v1'));
     expect(first).toMatch(/^[0-9a-f]{32}$/);
@@ -79,5 +84,32 @@ describe('publish_live_map', () => {
     expect(await revoke(F)).toBe(true);
     expect(await live(F, S.company)).toBeNull();
     expect(await revoke(F)).toBe(false);
+  });
+
+  it('removes legacy discovery and revocation rights when the original publisher leaves', async () => {
+    const { share } = await companyLink();
+    await su(`delete from public.organization_members where org_id = $1 and user_id = $2`, [S.org, E]);
+    const listed = (uid) => val(uid, 'select exists(select 1 from public.list_my_shared_maps() where id = $1)', [share]);
+    expect({ removedListed: await listed(E), ownerListed: await listed(F), removedRevoke: await val(E, 'select public.revoke_shared_map($1)', [share]) })
+      .toEqual({ removedListed: false, ownerListed: true, removedRevoke: false });
+    expect(await val(null, 'select public.get_shared_map($1)', [share])).not.toBeNull();
+  });
+
+  it('lets the current company owner revoke through the existing account share controls, even after trashing the map', async () => {
+    const { project, share } = await companyLink();
+    await su(`update public.projects set deleted_at = now() where id = $1`, [project]);
+    expect(await val(F, 'select public.revoke_shared_map($1)', [share])).toBe(true);
+    expect(await val(null, 'select public.get_shared_map($1)', [share])).toBeNull();
+    expect((await su('select state from public.shared_maps where id = $1', [share]))[0].state).toEqual({});
+  });
+
+  it('preserves publisher ownership of ordinary snapshots and denies company viewers live revocation', async () => {
+    const snapshot = await val(E, 'select public.create_shared_map($1::jsonb, null)', [JSON.stringify(state())]);
+    expect(await val(F, 'select public.revoke_shared_map($1)', [snapshot])).toBe(false);
+    expect(await val(E, 'select public.revoke_shared_map($1)', [snapshot])).toBe(true);
+    const { share } = await companyLink();
+    await su(`update public.organization_members set role = 'viewer' where org_id = $1 and user_id = $2`, [S.org, E]);
+    expect(await val(E, 'select public.revoke_shared_map($1)', [share])).toBe(false);
+    expect(await val(E, 'select exists(select 1 from public.list_my_shared_maps() where id = $1)', [share])).toBe(false);
   });
 });
