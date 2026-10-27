@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import React from 'react';
 
 const rpc = vi.hoisted(() => vi.fn());
@@ -28,7 +28,7 @@ import EmbedMapPage from '../src/components/EmbedMapPage';
 import EmbedCodeDialog from '../src/components/EmbedCodeDialog';
 import { embedCode, embedShareId, embedReferrer, embedLayers } from '../src/utils/embedCode';
 import { entitlementsFor, TIERS } from '../src/utils/entitlements';
-import { publishLiveMap, getLiveMap } from '../src/utils/cloudStorage';
+import { publishLiveMap, getLiveMap, revokeLiveMap } from '../src/utils/cloudStorage';
 
 const square = (x) => ({ type: 'FeatureCollection', features: [{ type: 'Feature', properties: { TENURE_NUMBER_ID: '1234567', OWNER_NAME: 'Star Copper', PRIVATE_NOTE: 'x' }, geometry: { type: 'Polygon', coordinates: [[[x, 55], [x + 0.1, 55], [x + 0.1, 55.1], [x, 55.1], [x, 55]]] } }] });
 const state = {
@@ -142,13 +142,90 @@ describe('EmbedMapPage', () => {
 
 describe('EmbedCodeDialog', () => {
   const pro = entitlementsFor(TIERS.PRO);
-  it('shows a free account the upsell', () => {
+  it.each(['PGRST202', '42883'])('maps missing-function %s from every live RPC to a plain unavailable error', async (code) => {
+    for (const call of [() => getLiveMap('p1'), () => publishLiveMap('p1', state), () => revokeLiveMap('p1')]) {
+      rpc.mockResolvedValueOnce({ data: null, error: { code, message: 'internal function signature schema cache' } });
+      await expect(call()).rejects.toMatchObject({ code: 'LIVE_MAP_UNAVAILABLE', message: 'Live maps are not available yet. Your saved map is unchanged.' });
+    }
+  });
+  it('shows a free account the upsell', async () => {
+    rpc.mockResolvedValueOnce({ data: null, error: null });
     const onUpgrade = vi.fn();
     render(<EmbedCodeDialog projectId="p1" canPublish entitlements={entitlementsFor(TIERS.FREE)} getState={() => state} onUpgrade={onUpgrade} onClose={() => {}} />);
-    fireEvent.click(screen.getByRole('button', { name: 'See Pro' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'See Pro' }));
     expect(onUpgrade).toHaveBeenCalledWith('live_embed');
-    expect(rpc).not.toHaveBeenCalled();
+    expect(rpc).toHaveBeenCalledWith('get_live_map', { p_project: 'p1' });
     expect(screen.queryByLabelText('Embed code')).toBeNull();
+  });
+
+  it('keeps stopping an existing live map available after a plan downgrade without enabling republication', async () => {
+    const id = 'd'.repeat(32);
+    rpc.mockResolvedValueOnce({ data: { id, updated_at: '2026-10-25T10:00:00Z', view_count: 3 }, error: null });
+    render(<EmbedCodeDialog projectId="p1" canPublish entitlements={entitlementsFor(TIERS.FREE)} getState={() => state} onUpgrade={() => {}} onClose={() => {}} />);
+    const stop = await screen.findByRole('button', { name: 'Stop live map' });
+    expect(screen.getByLabelText('Embed code').value).toContain(id);
+    expect(screen.queryByRole('button', { name: /Republish with|Publish live map/ })).toBeNull();
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    rpc.mockResolvedValueOnce({ data: true, error: null });
+    fireEvent.click(stop);
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Stop live map' })).toBeNull());
+    expect(rpc).toHaveBeenLastCalledWith('revoke_live_map', { p_project: 'p1' });
+    expect(screen.getByRole('button', { name: 'See Pro' })).toBeTruthy();
+  });
+
+  it('shows a plain unavailable state for a missing live-map RPC and can retry after activation', async () => {
+    rpc.mockResolvedValueOnce({ data: null, error: { code: 'PGRST202', message: 'Could not find public.get_live_map in schema cache' } });
+    render(<EmbedCodeDialog projectId="p1" canPublish entitlements={pro} getState={() => state} onUpgrade={() => {}} onClose={() => {}} />);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Live maps are not available yet');
+    expect(screen.queryByText(/schema cache/)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Publish live map' })).toBeNull();
+    rpc.mockResolvedValueOnce({ data: null, error: null });
+    fireEvent.click(screen.getByRole('button', { name: 'Retry live map status' }));
+    expect(await screen.findByRole('button', { name: 'Publish live map' })).toBeTruthy();
+    expect(rpc.mock.calls.every(([fn]) => fn === 'get_live_map')).toBe(true);
+  });
+
+  it('keeps known live metadata and Stop available when a refresh fails, and retries the read without publishing', async () => {
+    const id = 'e'.repeat(32);
+    rpc.mockResolvedValueOnce({ data: { id, updated_at: '2026-10-25T10:00:00Z', view_count: 3 }, error: null });
+    const props = { projectId: 'p1', canPublish: true, entitlements: pro, getState: () => state, onUpgrade: () => {}, onClose: () => {} };
+    const view = render(<EmbedCodeDialog {...props} />);
+    expect(await screen.findByLabelText('Embed code')).toBeTruthy();
+    view.rerender(<EmbedCodeDialog {...props} canPublish={false} />);
+    rpc.mockRejectedValueOnce(new Error('Network request failed'));
+    view.rerender(<EmbedCodeDialog {...props} />);
+    expect(await screen.findByRole('alert')).toHaveTextContent('The live map status could not be loaded');
+    expect(screen.getByLabelText('Embed code').value).toContain(id);
+    expect(screen.getByRole('button', { name: 'Stop live map' })).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Republish with the current map' })).toBeDisabled();
+    rpc.mockResolvedValueOnce({ data: { id, updated_at: '2026-10-25T10:00:00Z', view_count: 4 }, error: null });
+    fireEvent.click(screen.getByRole('button', { name: 'Retry live map status' }));
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+    expect(screen.getByText(/4 views/)).toBeTruthy();
+    expect(rpc.mock.calls.every(([fn]) => fn === 'get_live_map')).toBe(true);
+  });
+
+  it('does not restore a stopped publication when an older status retry finishes late', async () => {
+    const live = { id: 'f'.repeat(32), updated_at: '2026-10-25T10:00:00Z', view_count: 3 };
+    rpc.mockResolvedValueOnce({ data: live, error: null });
+    const props = { projectId: 'p1', canPublish: true, entitlements: pro, getState: () => state, onUpgrade: () => {}, onClose: () => {} };
+    const view = render(<EmbedCodeDialog {...props} />);
+    await screen.findByLabelText('Embed code');
+    view.rerender(<EmbedCodeDialog {...props} canPublish={false} />);
+    rpc.mockRejectedValueOnce(new Error('Network request failed'));
+    view.rerender(<EmbedCodeDialog {...props} />);
+    const retry = await screen.findByRole('button', { name: 'Retry live map status' });
+    let resolveStatus;
+    rpc.mockImplementationOnce(() => new Promise((resolve) => { resolveStatus = resolve; }));
+    fireEvent.click(retry);
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    rpc.mockResolvedValueOnce({ data: true, error: null });
+    fireEvent.click(screen.getByRole('button', { name: 'Stop live map' }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Stop live map' })).toBeNull());
+    await act(async () => resolveStatus({ data: live, error: null }));
+    expect(screen.queryByLabelText('Embed code')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Stop live map' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Publish live map' })).not.toBeDisabled();
   });
 
   it('lets an editor of a paid company map publish on a free personal plan', async () => {

@@ -327,9 +327,16 @@ export async function revokeSharedMap(id) {
 
 // The saved map's live web map (one share link, republished in place for every site that embeds it): migration
 // 20261103110000. Publishing is always the owner's explicit action; edits never reach the link on their own.
+function liveMapError(error) {
+  if (error?.code !== 'PGRST202' && error?.code !== '42883') return error;
+  return Object.assign(new Error('Live maps are not available yet. Your saved map is unchanged.'), { code: 'LIVE_MAP_UNAVAILABLE' });
+}
+
 export async function publishLiveMap(projectId, state) {
   const { data, error } = await requireSupabase().rpc('publish_live_map', { p_project: projectId, p_state: state });
   if (error) {
+    const unavailable = liveMapError(error);
+    if (unavailable !== error) throw unavailable;
     const msg = error.message || '';
     if (msg.includes('LIVE_MAP_PLAN')) throw new Error('Live web maps are part of Pro.');
     if (msg.includes('SHARE_RATE_LIMIT')) throw new Error('This map was published moments ago. Try again in a few seconds.');
@@ -343,13 +350,13 @@ export async function publishLiveMap(projectId, state) {
 
 export async function revokeLiveMap(projectId) {
   const { data, error } = await requireSupabase().rpc('revoke_live_map', { p_project: projectId });
-  if (error) throw error;
+  if (error) throw liveMapError(error);
   return data === true;
 }
 
 export async function getLiveMap(projectId) {
   const { data, error } = await requireSupabase().rpc('get_live_map', { p_project: projectId });
-  if (error) throw error;
+  if (error) throw liveMapError(error);
   return data ?? null;
 }
 
