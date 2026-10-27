@@ -277,11 +277,13 @@ const BUDGETS = {
   // Lazy release pack tab (staleness, approvals, package preset): measured 1151.8 configured; review fixes 1152.4.
   // Complete release source reads, captured-map export guards and fail-closed retries: measured 1153.4.
   // Optional assay-import certificate completion step: measured 1145.5; startup routes unchanged.
+  // Structural GeoJSON-only storage precision preserves assay/text values; stamped build 1145.9 KiB.
   // Versioned numeric classification and excluded-value/rebuild controls add ~0.8 KiB; startup budgets unchanged.
   // Release packs plus main's certificate completion, stamped build: measured 1153.7; add 0.3 KiB for commit/chunk variation.
   // Combined release/certificate/disclosure/sign-off integration, final stamped build: measured 1159.2; retain 0.3 KiB headroom.
   // Numeric classification integrated with current main: stamped total measured 1159.6.
-  totalAuthJsGzipKb: 1159.9,
+  // Combined storage/classification/current main: stamped total 1159.8; retain 0.4 KiB for commit/chunk variation.
+  totalAuthJsGzipKb: 1160.2,
   // 1009.4 → 1026.3 (measured 1026.0): lazy XLSX reader (~13.8 KiB), sheet/header preview
   // (~1.1 KiB), import wiring and numeric-format handling. Shared fflate adds ~1.2 KiB
   // for async ZIP workers; it remains one copy with the existing draft compression.
@@ -358,11 +360,13 @@ const BUDGETS = {
   // Lazy release pack tab (staleness, approvals, package preset): measured 1083.9; review fixes 1084.3.
   // Same lazy release source verification; measured 1084.9 plain. Startup limits unchanged.
   // Same optional certificate completion step: measured 1078.2 plain.
+  // Same storage fix: stamped plain build 1078.6 KiB, with 0.3 KiB hash headroom.
   // Same numeric classification policy and lazy UI add ~0.8 KiB.
   // Same stamped integration: measured 1085.2 plain (fractionally over that limit); keep 0.3 KiB allowance.
   // Same combined integration: measured 1090.7 plain; retain 0.3 KiB headroom.
   // Same numeric integration: stamped plain total measured 1091.3.
-  totalJsGzipKb: 1091.6,
+  // Same combined integration: stamped plain total 1091.6; retain 0.3 KiB headroom.
+  totalJsGzipKb: 1091.9,
   // 940.9 → 957.8 (measured 957.5): Excel import, as totalAuthJsGzipKb above.
   // 940.9 → 944.8 (P2-8, measured 944.6): the same lazy property recipe path
   // in the unconfigured build. Its initial route budgets also stay unchanged.
@@ -644,7 +648,8 @@ const BUDGETS = {
   // Combined API bridge + shared XLSX compression support, measured 343.8 configured.
   // XLSX writing uses shared fflate async zip support (+~0.5 KiB); writer remains lazy. Measured 344.3.
   // Same integration: measured 344.6 configured.
-  editorAuthJsGzipKb: 344.9,
+  // Combined storage/classification graph: measured configured editor 344.9.
+  editorAuthJsGzipKb: 345.2,
   // Excel import: shared fflate's async ZIP worker support adds ~1.2 KiB (342.5 measured).
   // The XLSX parser and sheet picker remain lazy; the homepage does not load compression.
   // 270 → 271.0 (Oct 2026, production errors, measured 270.7, 269.6 on main): the same as editorAuthJsGzipKb above.
@@ -658,14 +663,16 @@ const BUDGETS = {
   // Same combined bridge/compression support, measured 275.7 plain.
   // Same shared async zip support; measured 276.3 plain.
   // Numeric classification on current main: measured 276.6 plain; retain 0.3 KiB headroom.
-  editorJsGzipKb: 276.9,
+  // Same combined graph: measured plain editor 276.9.
+  editorJsGzipKb: 277.2,
   // 355 to 355.3 (Oct 2026): claims shares the editor API bridge/control names; measured 355.0 in CI.
   // Same shared compression increase as above (274.4 measured).
   // Claims also restores drafts through shared compression (355.3 measured).
   // Claims shares that editor/compression graph, measured 356.5 configured.
   // Same shared async zip support; measured 357.0 configured.
   // Same integration: measured 357.4 configured.
-  claimsAuthJsGzipKb: 357.7,
+  // Same combined graph: measured configured claims 357.6.
+  claimsAuthJsGzipKb: 357.9,
   claimsJsGzipKb: 290,
   // Stylesheet, gzipped. Today ~29 kB.
   maxCssGzipKb: 40,
