@@ -27,7 +27,7 @@ function CreateWorkspace({ onCreated, onCancel }) {
     <section className="dash-panel" style={{ maxWidth: 560 }}>
       <h2>Create a company workspace</h2>
       <p className="dash-panel-lead">
-        One place for your company&apos;s properties, maps, 3D figures and claims. Invite geologists and consultants as
+        One place for your company&apos;s properties, drill data, source files, maps, 3D figures and claims. Invite geologists and consultants as
         editors, and investors, JV partners or auditors as read-only viewers.
       </p>
       <ErrorNote error={error} />
@@ -180,7 +180,7 @@ function Properties({ org, properties, onChanged, onOpenProperty }) {
       {properties.length === 0 && !creating ? (
         <div className="dash-empty">
           <p><strong>No properties yet.</strong></p>
-          <p className="dash-muted">A property is one exploration project: its maps, 3D figures and claims live together.</p>
+          <p className="dash-muted">Create a property to keep an exploration project&apos;s drill data, source files, maps, 3D figures and claims together.</p>
         </div>
       ) : (
         <div className="ws-properties">

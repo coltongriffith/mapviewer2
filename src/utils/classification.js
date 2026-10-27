@@ -39,11 +39,32 @@ export const MAX_CLASSES = 6;
 
 const SAMPLE = 500;
 
-function toNumber(v) {
+// Unversioned saved maps retain their original interpretation until the owner
+// explicitly rebuilds the ranges. Never change an existing figure on load.
+function legacyNumber(v) {
   if (v == null || v === '') return NaN;
   if (typeof v === 'number') return v;
   const n = Number(String(v).replace(/[<>,\s]/g, ''));
   return Number.isFinite(n) ? n : NaN;
+}
+
+export const NUMERIC_POLICY = 'finite-decimal-v1';
+export function toNumber(v) {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : NaN;
+  if (typeof v !== 'string') return NaN;
+  const s = v.trim();
+  // No guess at censoring, decimal commas, thousands separators or lab codes.
+  // Negative numbers are numbers: no vendor-specific sentinel is inferred.
+  if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(s)) return NaN;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : NaN;
+}
+
+/** Counts for the actual observations, including blanks; traces are not samples. */
+export function numericSummary(layer, field) {
+  const features = observations(layer);
+  const numeric = features.filter(f => Number.isFinite(toNumber(f?.properties?.[field]))).length;
+  return { total: features.length, excluded: features.length - numeric };
 }
 
 /** Property keys of a layer's features, with whether each reads as numeric. */
@@ -98,16 +119,17 @@ export function suggestBreaks(values, n = 4) {
 
 export function buildGraduated(layer, field, n = 4) {
   const count = Math.max(2, Math.min(MAX_CLASSES, n));
-  const breaks = suggestBreaks(fieldValues(layer, field), count);
+  const values = fieldValues(layer, field).map(toNumber).filter(Number.isFinite);
+  const breaks = suggestBreaks(values, count);
   const classes = [];
-  for (let i = 0; i <= breaks.length; i += 1) {
+  for (let i = 0; values.length && i <= breaks.length; i += 1) {
     classes.push({
       max: i < breaks.length ? breaks[i] : null,
       color: GRADUATED_PALETTE[Math.min(i, GRADUATED_PALETTE.length - 1)],
       label: '',
     });
   }
-  return { field, mode: 'graduated', classes };
+  return { field, mode: 'graduated', numericPolicy: NUMERIC_POLICY, classes };
 }
 
 export function buildCategorical(layer, field) {
@@ -160,7 +182,8 @@ export function classIndexFor(classification, feature) {
   if (classification.mode === 'categorical') {
     return classification.classes.findIndex((c) => String(c.value) === String(raw));
   }
-  const v = toNumber(raw);
+  const v = classification.numericPolicy == null ? legacyNumber(raw)
+    : classification.numericPolicy === NUMERIC_POLICY ? toNumber(raw) : NaN;
   if (!Number.isFinite(v)) return -1;
   const idx = classification.classes.findIndex((c) => c.max == null || v <= c.max);
   return idx;

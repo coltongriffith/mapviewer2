@@ -58,7 +58,7 @@ function Problems({ errors, errorCount, warnings }) {
   );
 }
 
-export function Importer({ db, property, orgId, onDone }) {
+export function Importer({ db, property, orgId, onDone, onStart, rolledBackBatchIds }) {
   const [file, setFile] = useState(null); // { name, header, rows }
   const [workbook, setWorkbook] = useState(null);
   const [kind, setKind] = useState('assays');
@@ -74,6 +74,10 @@ export function Importer({ db, property, orgId, onDone }) {
   const [conversion, setConversion] = useState(null);
   const [preset, setPreset] = useState(null); // a vendor preset the header matches, offered until used or dismissed
   const batchId = useRef(null);
+  const [receiptBatchId, setReceiptBatchId] = useState(null);
+  // Derive visibility from both identities: a commit response may arrive after
+  // its batch was already found in history and successfully rolled back.
+  const receiptRolledBack = receiptBatchId && rolledBackBatchIds?.has(`${property.id}:${receiptBatchId}`);
   const input = useRef(null);
   const readVersion = useRef(0);
   const operationVersion = useRef(0);
@@ -87,7 +91,7 @@ export function Importer({ db, property, orgId, onDone }) {
 
   const built = useMemo(() => (file && mapping ? buildImport(kind, file, mapping) : null), [file, kind, mapping]);
   const change = (m) => { operationVersion.current++; setBusy(null); setMapping(m); setDiff(null); setNote(null); batchId.current = null; };
-  const reset = () => { readVersion.current++; operationVersion.current++; setWorkbook(null); setFile(null); setMapping(null); setDiff(null); setTplName(''); setBusy(null); setPreset(null); batchId.current = null; };
+  const reset = () => { readVersion.current++; operationVersion.current++; setWorkbook(null); setFile(null); setMapping(null); setDiff(null); setTplName(''); setBusy(null); setPreset(null); batchId.current = null; setReceiptBatchId(null); };
   const choose = (t, name, excel = null) => {
     if (excel) setWorkbook(w => ({ ...w, selection: excel }));
     const k = detectKind(t.header, t.rows, excel?.sheet || name) || 'assays';
@@ -97,6 +101,7 @@ export function Importer({ db, property, orgId, onDone }) {
   };
 
   const open = async (f) => {
+    onStart?.();
     setError(null); setNote(null); reset();
     const version = readVersion.current;
     if (/\.xls$/i.test(f.name)) { setError('This is an older .xls file. Save it as .xlsx or CSV in Excel, then try again.'); return; }
@@ -144,8 +149,13 @@ export function Importer({ db, property, orgId, onDone }) {
     const r = await db.commit({ ...args(), batchId: batchId.current });
     if (!current()) return;
     setNote(r.nothing_to_do ? `Nothing to import: everything in ${file.name} is already stored.` : `Imported ${file.name}: ${diffSentence(kind, r)}.`);
+    // Only the server's committed batch can receive certificate evidence. A no-op
+    // has no new batch; a rolled-back replay must not invite a new attachment.
+    const certificateBatch = kind === 'assays' && r.committed && !r.nothing_to_do && !r.rolled_back && r.batch_id
+      ? { id: r.batch_id, filename: file.name, kind, propertyId: property.id } : null;
     reset();
-    onDone();
+    setReceiptBatchId(r.committed && !r.nothing_to_do && !r.rolled_back ? r.batch_id : null);
+    onDone(certificateBatch);
   });
 
   if (!file && workbook) return <Suspense fallback={<p role="status">Preparing sheet preview…</p>}><ExcelSheetPicker workbook={workbook} onCancel={reset}
@@ -153,7 +163,7 @@ export function Importer({ db, property, orgId, onDone }) {
   if (!file) {
     return (
       <div>
-        {note && <p className="ws-ok" role="status" style={{ marginBottom: 10 }}>{note}</p>}
+        {note && !receiptRolledBack && <p className="ws-ok" role="status" style={{ marginBottom: 10 }}>{note}</p>}
         <ErrorNote error={error} onDismiss={() => setError(null)} />
         <div className="ws-row">
           <button type="button" className="btn primary" onClick={() => input.current?.click()}>+ Import CSV or Excel</button>
@@ -189,7 +199,7 @@ export function Importer({ db, property, orgId, onDone }) {
     <form className="ws-form" aria-label="Import drill data" onSubmit={(e) => { e.preventDefault(); if (diff?.ok) commit(); else check(); }}>
       <fieldset disabled={busy === 'commit'} className="ws-stack" style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
       <ErrorNote error={error} onDismiss={() => setError(null)} />
-      {note && <p className="ws-notice" role="status">{note}</p>}
+      {note && !receiptRolledBack && <p className="ws-notice" role="status">{note}</p>}
       {preset && (
         <div className="ws-notice ws-row" role="group" aria-label="Import preset">
           <span>Looks like {preset.label}: use its mapping?</span>
@@ -293,6 +303,8 @@ export default function DrillPanel({ property, perms }) {
   const [busy, setBusy] = useState(null);
   const [results, setResults] = useState(false);
   const [qaqc, setQaqc] = useState(false);
+  const [certificateBatch, setCertificateBatch] = useState(null);
+  const [rolledBackBatchIds, setRolledBackBatchIds] = useState(() => new Set());
   const [revision, setRevision] = useState(0); // bumped by each import and roll-back, so Results reloads its assays
   const load = useCallback(async () => {
     try {
@@ -304,13 +316,20 @@ export default function DrillPanel({ property, perms }) {
   const back = (b) => window.confirm(`Roll back the import of ${b.filename || kindLabel(b.kind)}? Its rows stop being current and what it replaced comes back. The import stays in the history.`)
     && (async () => {
       setBusy(b.id); setError(null);
-      try { await db.rollback(b.id); setRevision((v) => v + 1); await load(); } catch (e) { setError(e.message); } finally { setBusy(null); }
+      try { await db.rollback(b.id); setRolledBackBatchIds(ids => new Set(ids).add(`${property.id}:${b.id}`)); setCertificateBatch(current => current?.id === b.id ? null : current); setRevision((v) => v + 1); await load(); } catch (e) { setError(e.message); } finally { setBusy(null); }
     })();
   return (
     <section aria-label="Drill data" className="ws-stack">
       <ErrorNote error={error} onDismiss={() => setError(null)} />
+      <p className="dash-muted" style={{ margin: 0 }}>Drill data contains records, QA/QC comparisons and intercept results. Data library keeps source files and reports.</p>
       <div className="dash-panel"><Summary s={s} /></div>
-      {perms.edit && db && <div className="dash-panel"><Importer key={property.id} db={db} property={property} orgId={property.org_id} onDone={() => { setRevision((v) => v + 1); load(); }} /></div>}
+      {perms.edit && db && <div className="dash-panel"><Importer key={property.id} db={db} property={property} orgId={property.org_id} rolledBackBatchIds={rolledBackBatchIds} onStart={() => setCertificateBatch(null)} onDone={batch => { setCertificateBatch(batch); setRevision((v) => v + 1); load(); }} /></div>}
+      {perms.edit && certificateBatch?.propertyId === property.id && !rolledBackBatchIds.has(`${property.id}:${certificateBatch.id}`) && <section className="dash-panel" aria-label="Import certificate step">
+        <h3 style={{ margin: '0 0 8px', fontSize: 15 }}>Add supporting lab certificates (optional)</h3>
+        <p className="dash-muted">{certificateBatch.filename} is already imported. Link a library PDF or upload one now; you can also do this later from its import history. Linking a certificate does not verify the assay results.</p>
+        <Suspense fallback={<p role="status">Loading certificate options…</p>}><BatchCertificates key={certificateBatch.id} client={supabase} property={property} batch={certificateBatch} canEdit={perms.edit} label="Attach lab certificates" /></Suspense>
+        <button type="button" className="dash-link" style={{ marginTop: 10 }} onClick={() => setCertificateBatch(null)}>Done / skip for now</button>
+      </section>}
       <section className="dash-panel" aria-label="QA/QC">
         <h3 style={{ margin: '0 0 8px', fontSize: 15 }}>QA/QC</h3>
         {qaqc ? <Suspense fallback={<p role="status">Loading QA/QC…</p>}><QaqcPanel property={property} perms={perms} /></Suspense> : <div className="ws-row"><button type="button" className="btn" onClick={() => setQaqc(true)}>Open QA/QC register</button><span className="dash-muted">Routine samples, standards, blanks and duplicates, with their lab provenance.</span></div>}

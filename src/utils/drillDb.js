@@ -460,19 +460,22 @@ const NOUN = { collars: ['collar', 'collars'], surveys: ['survey station', 'surv
 
 /** "12 new holes, 1,340 new assays, 3 changed assays" (or "No changes: 120 assays already stored"). */
 export function diffSentence(kind, d) {
-  if (!d) return '';
+  // Direct/historical imports may store provenance without the importer's diff.
+  // Missing counts are unknown, not zero; never let one history row crash the workspace.
+  const count = key => Number.isSafeInteger(d?.[key]) && d[key] >= 0 ? d[key] : null;
+  const added = count('new'), changed = count('changed'), unchanged = count('unchanged'), holes = count('new_holes');
   const [one, many] = NOUN[kind] || ['row', 'rows'];
   const noun = (n) => (n === 1 ? one : many);
   const parts = [];
   if (kind === 'collars') {
-    if (d.new) parts.push(`${plural(d.new, 'new hole')}`);
+    if (added) parts.push(`${plural(added, 'new hole')}`);
   } else {
-    if (d.new_holes) parts.push(plural(d.new_holes, 'new hole'));
-    if (d.new) parts.push(`${d.new.toLocaleString('en-US')} new ${noun(d.new)}`);
+    if (holes) parts.push(plural(holes, 'new hole'));
+    if (added) parts.push(`${added.toLocaleString('en-US')} new ${noun(added)}`);
   }
-  if (d.changed) parts.push(`${d.changed.toLocaleString('en-US')} changed ${noun(d.changed)}`);
-  if (!parts.length) return `No changes: ${d.unchanged.toLocaleString('en-US')} ${noun(d.unchanged)} already stored as they are`;
-  if (d.unchanged) parts.push(`${d.unchanged.toLocaleString('en-US')} unchanged`);
+  if (changed) parts.push(`${changed.toLocaleString('en-US')} changed ${noun(changed)}`);
+  if (!parts.length) return unchanged === null ? 'Change counts unavailable.' : `No changes: ${unchanged.toLocaleString('en-US')} ${noun(unchanged)} already stored as they are`;
+  if (unchanged) parts.push(`${unchanged.toLocaleString('en-US')} unchanged`);
   return parts.join(', ');
 }
 

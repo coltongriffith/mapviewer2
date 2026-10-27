@@ -57,3 +57,29 @@ test('the publication check lists findings before the download and can be overri
   expect((await download).suggestedFilename()).toMatch(/\.png$/);
   await expect(check).toHaveCount(0);
 });
+
+test('an NI 43-101 figure is checked for its disclosure defaults, fixed in one click each', async ({ page }) => {
+  await page.getByLabel('Disclosure standard').selectOption('ni43101');
+  await expect(page.getByLabel('Publication check before download')).toBeChecked(); // on for a figure with a standard
+  await page.getByRole('button', { name: 'Hide scale bar' }).dispatchEvent('click'); // the stage's hover-only ×
+  await page.getByRole('button', { name: 'Hide compass rose' }).dispatchEvent('click');
+  await exportPng(page);
+
+  const check = page.getByRole('dialog', { name: 'Publication check' });
+  await expect(check).toBeVisible({ timeout: 30_000 });
+  if (!(await check.locator('details').evaluate((d) => d.open))) await check.getByText('Show details').click();
+  await expect(check.getByText('NI 43-101: the figure has no scale bar.')).toBeVisible();
+  await expect(check.getByText('NI 43-101: the figure has no north arrow.')).toBeVisible();
+  await expect(check.getByText('NI 43-101: the figure does not state its coordinate system or datum.')).toBeVisible();
+  for (const fix of ['Add scale bar', 'Add north arrow', 'Add coordinate system note']) {
+    await check.getByRole('button', { name: fix }).click();
+    await expect(check.getByRole('button', { name: fix })).toHaveCount(0);
+  }
+  await expect(check.getByText(/NI 43-101: the figure (has no|does not state)/)).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Hide scale bar' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Hide compass rose' })).toBeVisible();
+
+  const download = page.waitForEvent('download', { timeout: 60_000 });
+  await check.getByRole('button', { name: /^Export( anyway)?$/ }).click();
+  expect((await download).suggestedFilename()).toMatch(/\.png$/);
+});
