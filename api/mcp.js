@@ -13,19 +13,19 @@ import { clientIp, rateLimited, rateLimitedShared } from './_lib/guard.js';
 // Hourly preview allowance by tier. create_shared_map enforces the same
 // numbers over a rolling hour (per creator key when anonymous, per account when
 // signed in), so these are the figures users are told.
-const PREVIEWS_PER_HOUR = { anonymous: 10, free: 30, pro: 200 };
+const PREVIEWS_PER_HOUR = { anonymous: 10, free: 30, pro: 200, company: 200 };
 // A map usually takes one to three claim searches.
-const SEARCHES_PER_HOUR = { anonymous: 30, free: 90, pro: 600 };
+const SEARCHES_PER_HOUR = { anonymous: 30, free: 90, pro: 600, company: 600 };
 // Abuse ceilings per egress IP, for anonymous calls only. Hosted assistants
 // share egress IPs, so hitting one says nothing about the individual caller.
 const NETWORK_PREVIEWS_PER_HOUR = 300;
 const NETWORK_SEARCHES_PER_HOUR = 300;
-const PLAN_LABEL = { free: 'the Free plan', pro: 'Pro' };
+const PLAN_LABEL = { free: 'the Free plan', pro: 'Pro', company: 'Company' };
 // Public connector URLs, on the host the docs and server.json advertise.
 const CONNECTOR_ORIGIN = 'https://www.explorationmaps.com';
 const LIMIT_TEXT = {
   anonymous: `Free use allows ${PREVIEWS_PER_HOUR.anonymous} previews per hour; allowance in the result reports how many remain.`,
-  account: `Signed-in use allows ${PREVIEWS_PER_HOUR.free} previews per hour on the Free plan and ${PREVIEWS_PER_HOUR.pro} on Pro; allowance in the result reports how many remain.`,
+  account: `Signed-in use allows ${PREVIEWS_PER_HOUR.free} previews per hour on the Free plan and ${PREVIEWS_PER_HOUR.pro} on Pro. Company uses 200 only when server support is confirmed; otherwise 30. Allowance in the result reports how many remain.`,
 };
 
 const SERVER_NAME = 'ExplorationMaps';
@@ -33,7 +33,7 @@ const SERVER_VERSION = '1.1.1'; // keep in step with server.json
 const SERVER_INSTRUCTIONS = `ExplorationMaps creates mineral exploration maps from public registry records. For a request naming a company or project, identify the specific project before mapping. Search its claims, group records geographically, and pass verified claim_numbers to preview_exploration_map so unrelated projects stay out. If the project cannot be identified reliably, ask the user. When available, pass the company's HTTPS website in branding and verified project facts in facts_panel and claims_callout; do not invent ownership, grades, targets or coordinates. Choose a map type and basemap that match the request. The preview defaults to supported context overlays, nearby claims, a locator inset and a claim callout. After the call, report claims_found_primary separately from claims_found_neighbours, describe only layers_applied, and give the share_url. For an image file, give png_download_url: opening it downloads the map as a PNG in the user's browser. This tool does not return image data itself. Public registry data is informational and is not a legal title opinion or survey.`;
 const LIMIT_INSTRUCTIONS = {
   anonymous: ` Free use allows ${PREVIEWS_PER_HOUR.anonymous} map previews per hour: tell the user how many remain after each preview, and if the limit is reached, give them the reset time and links from the error. This connection is anonymous: it cannot see the user's ExplorationMaps account, brand kit or saved maps. If the user wants their account branding or saved maps, tell them to add ${CONNECTOR_ORIGIN}/mcp/account as a custom connector (Settings, Connectors, Add custom connector) and sign in there.`,
-  account: ` The user is signed in to ExplorationMaps: ${PREVIEWS_PER_HOUR.free} map previews per hour on the Free plan, ${PREVIEWS_PER_HOUR.pro} on Pro. Tell the user how many remain after each preview, and if the limit is reached, give them the reset time and links from the error. Previews use the user's default brand kit (logo, colours, fonts, layout), or their only kit, automatically; omit style so the kit's theme applies. If the user has several kits and none is the default, none is applied: call list_my_maps, pick the kit for the company being mapped and pass its id as brand_kit, and ask the user if it is unclear. To match one of the user's saved maps, pass its id as style_from_map. Previews are saved to the user's account.`,
+  account: ` The user is signed in to ExplorationMaps: ${PREVIEWS_PER_HOUR.free} map previews per hour on the Free plan, ${PREVIEWS_PER_HOUR.pro} on Pro. Company uses 200 only when server support is confirmed; otherwise 30. Tell the user how many remain after each preview, and if the limit is reached, give them the reset time and links from the error. Previews use the user's default brand kit (logo, colours, fonts, layout), or their only kit, automatically; omit style so the kit's theme applies. If the user has several kits and none is the default, none is applied: call list_my_maps, pick the kit for the company being mapped and pass its id as brand_kit, and ask the user if it is unclear. To match one of the user's saved maps, pass its id as style_from_map. Previews are saved to the user's account.`,
 };
 
 function instructionsFor(req) {
@@ -443,6 +443,12 @@ function tierOf(req) {
   return req.account?.tier || 'anonymous';
 }
 
+// Preserve the account's Company identity while older databases still enforce
+// Free-sized quotas. Both preview and search limits use the confirmed capability.
+function quotaTierOf(req) {
+  return tierOf(req) === 'company' && !req.account.companyAllowance ? 'free' : tierOf(req);
+}
+
 // Creation times (ms) of the caller's shares in the rolling hour, oldest first:
 // by account when signed in, else by creator key. Fails open (null) like the
 // other limiters; create_shared_map still enforces the cap.
@@ -498,6 +504,7 @@ async function accountSignInAvailable() {
 
 async function previewLimitError(req, scope, resetsAt) {
   const tier = tierOf(req);
+  const limit = PREVIEWS_PER_HOUR[quotaTierOf(req)];
   const editor = `${siteUrl()}/`;
   const upgradeUrl = `${siteUrl()}/account`;
   const when = whenText(resetsAt);
@@ -511,14 +518,14 @@ async function previewLimitError(req, scope, resetsAt) {
     message = `Free preview limit reached: ${PREVIEWS_PER_HOUR.anonymous} map previews per hour. The next free preview is available at ${when}.${signIn} To keep mapping now, use the ExplorationMaps editor at ${editor}, which has no preview limit.`;
   } else {
     const upgrade = tier === 'free' ? ` Upgrade to Pro for ${PREVIEWS_PER_HOUR.pro} per hour at ${upgradeUrl}.` : '';
-    message = `Preview limit reached: ${PREVIEWS_PER_HOUR[tier]} map previews per hour on ${PLAN_LABEL[tier]}. The next preview is available at ${when}.${upgrade}`;
+    message = `Preview limit reached: ${limit} map previews per hour on ${PLAN_LABEL[tier]}. The next preview is available at ${when}.${upgrade}`;
   }
   const error = new Error(message);
   error.code = 'RATE_LIMITED';
   error.details = {
     scope,
     tier,
-    limit: scope === 'network' ? NETWORK_PREVIEWS_PER_HOUR : PREVIEWS_PER_HOUR[tier],
+    limit: scope === 'network' ? NETWORK_PREVIEWS_PER_HOUR : limit,
     window_seconds: HOUR_MS / 1000,
     resets_at: resetsAt.toISOString(),
     retry_after_seconds: secondsUntil(resetsAt),
@@ -581,7 +588,7 @@ async function createPreview(req, args) {
   const sb = serverSupabase();
   const subject = callerSubject(req, 'preview_exploration_map');
   const tier = tierOf(req);
-  const limit = PREVIEWS_PER_HOUR[tier];
+  const limit = PREVIEWS_PER_HOUR[quotaTierOf(req)];
   // Read the caller's allowance from the shares create_shared_map counts, so
   // the stated number and reset time are exact and failed calls cost nothing.
   // Checked before the registry and branding work so a capped call fails fast.
@@ -798,7 +805,7 @@ async function searchClaims(req, args) {
 
   const sb = serverSupabase();
   const limited = req.account
-    ? await rateLimitedShared(sb, req, { max: SEARCHES_PER_HOUR[tierOf(req)], windowSeconds: HOUR_MS / 1000, bucket: 'mcp-search-account', subject: callerSubject(req, 'search_mineral_claims') })
+    ? await rateLimitedShared(sb, req, { max: SEARCHES_PER_HOUR[quotaTierOf(req)], windowSeconds: HOUR_MS / 1000, bucket: 'mcp-search-account', subject: callerSubject(req, 'search_mineral_claims') })
     : await overToolLimit(sb, req, 'search_mineral_claims', { perCaller: SEARCHES_PER_HOUR.anonymous, perIp: NETWORK_SEARCHES_PER_HOUR, bucket: 'mcp-search' });
   if (limited) {
     const resetsAt = nextClockHour();
@@ -915,25 +922,38 @@ function signInChallenge(req, res, id, invalidToken) {
 const ACCOUNT_CACHE_MS = 60_000;
 const accountCache = new Map();
 
+async function withCompanyAllowance(result) {
+  if (result.account?.tier !== 'company') return result;
+  let companyAllowance = false;
+  try {
+    // Do not cache this marker with the plan: a later SQL rollback must take
+    // effect on the next request, including an already cached bearer account.
+    const { data, error } = await userSupabase(result.account.token).rpc('get_company_connector_allowance');
+    companyAllowance = !error && data?.version === 1 && data.subject === result.account.user.id
+      && data.previews === PREVIEWS_PER_HOUR.company && data.searches === SEARCHES_PER_HOUR.company;
+  } catch { /* Missing/older/unavailable schema keeps the conservative allowance. */ }
+  return { ...result, account: { ...result.account, companyAllowance } };
+}
+
 async function accountFor(req) {
   const token = String(req.headers?.authorization || '').match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
   if (!token) return { status: 'missing' };
   const key = hashSubject(`account:${token}`);
   const hit = accountCache.get(key);
-  if (hit && hit.until > Date.now()) return hit.result;
+  if (hit && hit.until > Date.now()) return withCompanyAllowance(hit.result);
   const auth = await authenticateUserBearer(req);
   if (!auth.ok) return { status: auth.status === 401 ? 'invalid' : 'unavailable' };
   let tier = 'free';
   try {
-    const { data } = await serverSupabase().from('user_plans').select('plan').eq('user_id', auth.user.id).maybeSingle();
-    if (data?.plan === 'pro') tier = 'pro';
+    const { data, error } = await serverSupabase().from('user_plans').select('plan').eq('user_id', auth.user.id).maybeSingle();
+    if (!error && (data?.plan === 'pro' || data?.plan === 'company')) tier = data.plan;
   } catch {
     // Plan unknown: the free allowance, never Pro by accident.
   }
   const result = { status: 'ok', account: { user: auth.user, token, tier } };
   accountCache.set(key, { result, until: Date.now() + ACCOUNT_CACHE_MS });
   if (accountCache.size > 1000) accountCache.delete(accountCache.keys().next().value);
-  return result;
+  return withCompanyAllowance(result);
 }
 
 function setCors(req, res) {
