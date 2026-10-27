@@ -285,7 +285,9 @@ const BUDGETS = {
   // Combined storage/classification/current main: stamped total 1159.8; retain 0.4 KiB for commit/chunk variation.
   // Optional read-only Point-column inspector: new lazy panel/summary, measured
   // 1162.8 configured (+3.0 KiB). Initial route limits remain unchanged.
-  totalAuthJsGzipKb: 1163.2,
+  // Company + workspace receipt integration (5dc1e071 stamped): configured total
+  // rounds to1163.2 but exceeds that cap; retain0.3 KiB commit/chunk hash headroom.
+  totalAuthJsGzipKb: 1163.5,
   // 1009.4 → 1026.3 (measured 1026.0): lazy XLSX reader (~13.8 KiB), sheet/header preview
   // (~1.1 KiB), import wiring and numeric-format handling. Shared fflate adds ~1.2 KiB
   // for async ZIP workers; it remains one copy with the existing draft compression.
