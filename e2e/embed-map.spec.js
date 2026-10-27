@@ -14,6 +14,7 @@ const state = {
     { id: 'claims', name: 'Rails claims', type: 'polygons', role: 'claims', visible: true, style: { fill: '#c65322', fillOpacity: 0.5, stroke: '#c65322', strokeWidth: 2 }, legend: { enabled: true, label: 'Rails claims' },
       geojson: square(-130, { TENURE_NUMBER_ID: '1098765', OWNER_NAME: 'Star Copper Corp.', TENURE_STATUS: 'GOOD', INTERNAL_NOTE: 'do not show' }) },
     { id: 'targets', name: 'Targets', type: 'polygons', role: 'other', visible: true, style: { fill: '#2563eb', stroke: '#2563eb' }, legend: { enabled: true, label: 'Targets' }, geojson: square(-129.5) },
+    { id: 'mag', name: 'Magnetics', type: 'tiles', visible: true, tiles: { kind: 'xyz', url: 'https://tiles.example.test/{z}/{x}/{y}.png' } },
   ],
 };
 
@@ -52,6 +53,8 @@ test.describe('framed on a company website', () => {
     page.on('pageerror', (e) => errors.push(e.message));
     page.on('request', (r) => { if (r.resourceType() === 'script') scripts.push(r.url()); });
     await page.route('**/api/track', (route) => { events.push(route.request().postDataJSON()); return route.fulfill({ status: 204 }); });
+    await page.route('https://tiles.example.test/**', (route) => route.fulfill({ status: 200, contentType: 'image/png',
+      body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aE9sAAAAASUVORK5CYII=', 'base64') }));
     await page.route('https://example.supabase.co/**', (route) => {
       const fn = new URL(route.request().url()).pathname.split('/').at(-1);
       rpcs.push(fn);
@@ -77,6 +80,15 @@ test.describe('framed on a company website', () => {
     await expect(legend).toContainText('Rails claims');
     await frame.getByLabel('Targets').check();
     await expect(legend).toContainText('Targets');
+
+    // Exercise the real Leaflet tile lifecycle, not only the switch's React state.
+    const tiles = frame.locator('img.leaflet-tile[src^="https://tiles.example.test/"]');
+    await expect.poll(() => tiles.count()).toBeGreaterThan(0);
+    await frame.getByLabel('Magnetics').uncheck();
+    await expect(tiles).toHaveCount(0);
+    await frame.getByLabel('Magnetics').check();
+    await expect.poll(() => tiles.count()).toBeGreaterThan(0);
+    expect(published.layers.find(layer => layer.id === 'mag').visible).toBe(true);
 
     // The claim sits under the saved view's centre: a click there opens its registry record, and nothing else.
     await frame.getByRole('button', { name: 'Hide layers' }).click();
