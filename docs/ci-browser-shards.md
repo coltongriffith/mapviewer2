@@ -1,13 +1,29 @@
 # Browser checks in CI
 
-The browser job runs six standard Ubuntu jobs: three shards of the anonymous suite and three of the configured admin suite. Playwright's existing `fullyParallel` setting distributes individual tests between shards ([Playwright sharding](https://playwright.dev/docs/test-sharding)). The workflow changes scheduling only: existing selectors, skip conditions, two workers per job, one retry in CI, and real production-build serving remain unchanged.
+Six standard Ubuntu jobs run the browser suites: three measured anonymous buckets and three configured admin shards. The original selectors, skip conditions, two workers per job, one retry in CI, and real production-build serving remain unchanged. Product and test sources are not modified by the scheduling configuration.
 
-Each anonymous shard runs the original build and `npm run test:e2e -- --shard=N/3`. Each admin shard generates the same static pages and redirects, builds only `dist-auth-check` with the existing placeholder configuration, and runs `npm run test:e2e:admin -- --shard=N/3`. No live account credentials are required.
+Anonymous jobs use `playwright.ci-anonymous.config.js` with `E2E_ANONYMOUS_BUCKET=1`, `2`, or `3`; missing/invalid values fail. It adds exclusions to the original `testIgnore` and keeps its `testMatch` and projects. Two explicit sets distribute expensive software-rendered 3D files; bucket 1 receives every other file, including future files. Do not also pass `--shard`: that would partition a bucket again and omit tests.
 
-The stable `e2e` check waits for the whole matrix and succeeds only when every shard succeeds. Failure, cancellation, or skipped matrix work cannot produce a successful gate. `fail-fast: false` lets other shards finish to collect independent failures. Failed jobs upload both the HTML report and test results, including traces/screenshots, under suite/shard/attempt-specific artifact names for seven days. Unit/build/budget and dependency-audit jobs are unchanged.
+Admin jobs still run `npm run test:e2e:admin -- --shard=N/3`, with the original configured build, static-page generation and fixtures. [Playwright's sharding](https://playwright.dev/docs/test-sharding) divides tests by count; configured-suite scheduling is unchanged. Anonymous jobs retain the original plain production build. Neither suite needs live account credentials.
 
-To check coverage after changing shard count, list the unsharded suite and each shard with `--list --reporter=json`, using `CI=1` and the matching admin environment/config. Compare each spec ID plus project ID: the union must equal the original list, with no duplicate IDs. Include statically skipped tests in this comparison; runtime skips cannot be determined by listing alone and their original predicates must stay unchanged.
+The stable `e2e` check waits for all six jobs and succeeds only when all succeed. Failure, cancellation or skipped matrix work cannot produce a green gate. `fail-fast: false` lets independent failures finish. Failed jobs upload HTML reports and test results (traces/screenshots) with suite/group/attempt-specific names and seven-day retention.
 
-Local verification on the integration source (2026-10-26): anonymous 273 IDs split 91/91/91, including all 95 static skips; configured 218 IDs split 73/73/72. Both unions exactly matched their original suite with no duplicates, missing IDs, or extras. YAML parsing and comparison confirmed unchanged test/audit jobs, permissions, triggers, and concurrency. The gate shell was exercised with success, failure, cancelled, skipped, and empty results; only success returned zero. Actionlint was unavailable locally. Representative checks passed against separately built bundles using the unchanged configs and shard 1/3: anonymous ordinary PNG download (1 test), configured workspace tab switching and certificate import completion (2 tests). The anonymous job used its Windows-equivalent generate/build/admin-copy steps locally; GitHub retains the original npm build script. The full matrix runs in GitHub CI.
+## Why anonymous selection changed
 
-This reduces serial browser work but does not promise a fixed speedup: runner availability, repeated setup/builds, and the slowest shard determine completion time.
+[CI run 40431963159](https://github.com/coltongriffith/mapviewer2/actions/runs/40431963159) passed, but its count-based anonymous shards took 1.2, 2.6 and 31.6 minutes. The last shard held all 62 active tests from twelve expensive 3D files. No test retried or failed. Its tests accounted for 87.2% of the previous run's work, so equal test counts were misleading.
+
+Measured file durations from that run give these approximate aggregate totals (two workers execute each bucket):
+
+| Bucket | Aggregate test seconds |
+| --- | ---: |
+| 1: default remainder | 1,307 |
+| 2: four specified files | 1,333 |
+| 3: six specified files | 1,297 |
+
+This suggests roughly 11–12 minutes plus setup/overhead if those timings recur. It is an unmeasured projection: software rendering, runner availability and individual durations vary. The same 62 tests were 1.63× slower than their preceding run; logs show broad rendering-heavy slowdown but do not establish a host or network cause. No runtime workaround is included.
+
+## Coverage guard
+
+`node scripts/check-browser-buckets.mjs` runs once in the existing `test` job after install. It invokes real JSON discovery without starting browsers or building. The original 273 test-ID/project-ID pairs (178 active, 95 static skips) must appear exactly once across the buckets with unchanged expected status. A temporary unique future file adds one active and one skipped test; both must appear only in the remainder. Invalid/missing bucket checks must fail. Failed discovery, missing/extra IDs, duplicates or changed statuses fail the guard; the temporary file is removed in `finally`.
+
+Local validation took 8.3 seconds. Actual bucket inventories were 222/19/32 IDs (136/19/23 active and 86/0/9 static skips), with exact union equality. Keep this guard when adjusting bucket membership. Runtime skip predicates remain in the unchanged test sources; JSON listing can only account for static skips.
