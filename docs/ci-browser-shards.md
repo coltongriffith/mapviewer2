@@ -10,7 +10,7 @@ The stable `e2e` check waits for all six jobs and succeeds only when all succeed
 
 ## Why anonymous selection changed
 
-[CI run 40431963159](https://github.com/coltongriffith/mapviewer2/actions/runs/40431963159) passed, but its count-based anonymous shards took 1.2, 2.6 and 31.6 minutes. The last shard held all 62 active tests from twelve expensive 3D files. No test retried or failed. Its tests accounted for 87.2% of the previous run's work, so equal test counts were misleading.
+CI run `40431963159` (in this repository's Actions history) passed, but its count-based anonymous shards took 1.2, 2.6 and 31.6 minutes. The last shard held all 62 active tests from twelve expensive 3D files. No test retried or failed. Its tests accounted for 87.2% of the previous run's work, so equal test counts were misleading.
 
 Measured file durations from that run give these approximate aggregate totals (two workers execute each bucket):
 
