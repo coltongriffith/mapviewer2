@@ -273,7 +273,8 @@ const BUDGETS = {
   // Optional assay-import certificate completion step: measured 1145.5; startup routes unchanged.
   // Live web map (/embed/map): its page and the modules it shares with the editor split out of App; measured 1155.8 with main;
   // with its callouts and drill-plan overlay, 1156.5.
-  totalAuthJsGzipKb: 1156.8,
+  // Live-map availability/retry and stale-response guards (89622a70 stamped): measured 1157.1 configured.
+  totalAuthJsGzipKb: 1157.5,
   // 1009.4 → 1026.3 (measured 1026.0): lazy XLSX reader (~13.8 KiB), sheet/header preview
   // (~1.1 KiB), import wiring and numeric-format handling. Shared fflate adds ~1.2 KiB
   // for async ZIP workers; it remains one copy with the existing draft compression.
@@ -346,7 +347,8 @@ const BUDGETS = {
   // With blanks, presets, datum and structure: measured 1077.7.
   // Same optional certificate completion step: measured 1078.2 plain.
   // Live web map, as totalAuthJsGzipKb above: measured 1088.3 plain with main; 1089.1 with the embed's callouts and drill plan.
-  totalJsGzipKb: 1089.4,
+  // Same guarded dialog/RPC path: measured 1089.5 plain; retain 0.4 KiB commit/chunk headroom.
+  totalJsGzipKb: 1089.9,
   // 940.9 → 957.8 (measured 957.5): Excel import, as totalAuthJsGzipKb above.
   // 940.9 → 944.8 (P2-8, measured 944.6): the same lazy property recipe path
   // in the unconfigured build. Its initial route budgets also stay unchanged.
@@ -626,7 +628,8 @@ const BUDGETS = {
   // Combined API bridge + shared XLSX compression support, measured 343.8 configured.
   // XLSX writing uses shared fflate async zip support (+~0.5 KiB); writer remains lazy. Measured 344.3.
   // Live web map: modules shared with /embed/map leave App as four chunks of their own; measured 347.6.
-  editorAuthJsGzipKb: 347.9,
+  // Narrow missing-RPC messages in shared cloud storage: measured 347.9 configured.
+  editorAuthJsGzipKb: 348.2,
   // Excel import: shared fflate's async ZIP worker support adds ~1.2 KiB (342.5 measured).
   // The XLSX parser and sheet picker remain lazy; the homepage does not load compression.
   // 270 → 271.0 (Oct 2026, production errors, measured 270.7, 269.6 on main): the same as editorAuthJsGzipKb above.
@@ -640,15 +643,17 @@ const BUDGETS = {
   // Same combined bridge/compression support, measured 275.7 plain.
   // Same shared async zip support; measured 276.3 plain.
   // Same chunk split for the live web map; measured 279.5 plain.
-  editorJsGzipKb: 279.8,
+  // Same shared error helper: measured 279.8 plain, fractionally over the former cap.
+  editorJsGzipKb: 280.1,
   // 355 to 355.3 (Oct 2026): claims shares the editor API bridge/control names; measured 355.0 in CI.
   // Same shared compression increase as above (274.4 measured).
   // Claims also restores drafts through shared compression (355.3 measured).
   // Claims shares that editor/compression graph, measured 356.5 configured.
   // Same shared async zip support; measured 357.0 configured.
   // Same chunk split for the live web map; measured 360.4 configured, 292.2 plain.
-  claimsAuthJsGzipKb: 360.7,
-  claimsJsGzipKb: 292.5,
+  // Same measured shared helper graph: 360.7 configured / 292.5 plain.
+  claimsAuthJsGzipKb: 361.0,
+  claimsJsGzipKb: 292.8,
   // Live investor web map (/embed/map/<id>): map, legend, layer list, drill-result callouts and the drill plan
   // (its overlay loaded only when published with one), no editor; measured 243.3 configured, 177.0 plain.
   embedAuthJsGzipKb: 243.6,
