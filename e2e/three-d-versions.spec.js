@@ -24,7 +24,7 @@ const session = { user, access_token: token, refresh_token: 'synthetic-refresh',
 const AUTH_KEY = 'sb-example-auth-token';
 
 async function fakeSupabase(context) {
-  const fake = { rows: new Map(), objects: new Map(), versions: [], upserts: [], calls: [], signoffs: [], noSignoffs: false };
+  const fake = { rows: new Map(), objects: new Map(), versions: [], upserts: [], calls: [], signoffs: [], noSignoffs: false, signoffFailure: false };
   const frozen = (key) => fake.versions.some((v) => v.file_names.includes(key.replace(/^three-d-files\//, '')));
   await context.route('https://example.supabase.co/**', async (route) => {
     const req = route.request(), url = new URL(req.url()), path = url.pathname, method = req.method();
@@ -68,6 +68,7 @@ async function fakeSupabase(context) {
     if (path === '/rest/v1/figure_version_signoffs') {
       if (fake.noSignoffs) return json({ code: 'PGRST205', message: "Could not find the table 'public.figure_version_signoffs' in the schema cache" }, 404);
       if (method === 'GET') {
+        if (fake.signoffFailure) return json({ message: 'Sign-off lookup unavailable' }, 503);
         const ids = (url.searchParams.get('version_id') || '').replace(/^in\.\(|\)$/g, '').split(',').map((x) => x.replace(/"/g, ''));
         return json(fake.signoffs.filter((x) => ids.includes(x.version_id) && !x.retracted_at));
       }
@@ -293,8 +294,36 @@ test.describe('published versions', () => {
     expect(png.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
     expect(png.toString('utf8')).toMatch(/iTXtComment\0{5}Signed off by B\. Person, P\.Eng\., on [\d-]+\. Published version 1 · News release 2026-10-21 · SHA-256 1{64}/);
 
+    // A transient sign-off failure keeps versions readable, but never claims they are unsigned or verified.
+    await page.getByRole('button', { name: 'Back to the current figure' }).click();
+    fake.signoffFailure = true;
+    await page.getByRole('button', { name: 'My 3D maps' }).click();
+    await menu.getByRole('button', { name: 'Versions…' }).click();
+    await expect(versions.getByText(/QP sign-off status could not be loaded/)).toBeVisible();
+    await expect(versions.getByRole('button', { name: /Sign off version|Retract/ })).toHaveCount(0);
+    await expect(versions.getByText(/Signed off by/)).toHaveCount(0);
+    await expect(versions.getByRole('button', { name: 'Copy link to version 1' })).toBeVisible();
+    fake.signoffFailure = false;
+    await versions.getByRole('button', { name: 'Retry sign-off status' }).click();
+    await expect(versions.getByText(/^Signed off by B\. Person/)).toBeVisible();
+    await expect(versions.getByRole('button', { name: 'Retract the sign-off of version 1' })).toBeVisible();
+
+    // An opening-time failure also clears stale verified status; the ordinary PNG still downloads.
+    fake.signoffFailure = true;
+    await versions.getByRole('button', { name: 'Open version 1' }).click();
+    await expect(page.locator('#ver-banner')).toContainText('QP sign-off status could not be loaded.');
+    await expect(page.locator('#ver-banner')).not.toContainText('Signed off by');
+    await expect(page.locator('#ver-inc-signoff')).toHaveCount(0);
+    const [ordinary] = await Promise.all([page.waitForEvent('download'), page.locator('#ver-bar').getByRole('button', { name: 'Download PNG' }).click()]);
+    expect(ordinary.suggestedFilename()).not.toMatch(/signed-off/);
+    const ordinaryPng = readFileSync(await ordinary.path());
+    expect(ordinaryPng.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
+    expect(ordinaryPng.toString('utf8')).not.toContain('Signed off by');
+    expect(fake.signoffs).toHaveLength(2); // no new signature or retraction from retrying a read
+
     // Without the sign-off migration: no sign-off controls, and a notice; publishing still works.
     await page.getByRole('button', { name: 'Back to the current figure' }).click();
+    fake.signoffFailure = false;
     fake.noSignoffs = true;
     await page.getByRole('button', { name: 'My 3D maps' }).click();
     await menu.getByRole('button', { name: 'Versions…' }).click();

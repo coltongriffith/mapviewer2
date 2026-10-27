@@ -271,7 +271,9 @@ const BUDGETS = {
   // With blanks (#365) and vendor presets (#366): measured 1140.6.
   // Datum conversion and structure import with all of the above: measured 1145.0.
   // Phase 5 disclosure checks and QP sign-off, lazy (Export step, publication check, figureSignoffs.js): measured 1150.6.
-  totalAuthJsGzipKb: 1150.9,
+  // Optional sign-off failure/retry handling stays lazy; keep 0.3 KiB of additional
+  // total-bundle allowance for it and the CI commit-stamp/chunk-hash variation.
+  totalAuthJsGzipKb: 1151.2,
   // 1009.4 → 1026.3 (measured 1026.0): lazy XLSX reader (~13.8 KiB), sheet/header preview
   // (~1.1 KiB), import wiring and numeric-format handling. Shared fflate adds ~1.2 KiB
   // for async ZIP workers; it remains one copy with the existing draft compression.
@@ -343,7 +345,9 @@ const BUDGETS = {
   // P2-2 vendor import presets, as totalAuthJsGzipKb above: measured 1065.8.
   // With blanks, presets, datum and structure: measured 1077.7.
   // Phase 5 disclosure checks and QP sign-off, as totalAuthJsGzipKb above: measured 1083.1.
-  totalJsGzipKb: 1083.4,
+  // Sign-off recovery: CI's stamped plain build rounds to 1083.4 KiB but exceeds
+  // that exact threshold. Add 0.3 KiB here as for the configured total above.
+  totalJsGzipKb: 1083.7,
   // 940.9 → 957.8 (measured 957.5): Excel import, as totalAuthJsGzipKb above.
   // 940.9 → 944.8 (P2-8, measured 944.6): the same lazy property recipe path
   // in the unconfigured build. Its initial route budgets also stay unchanged.
@@ -587,7 +591,9 @@ const BUDGETS = {
   // Recipe/cursor composition plus result-ownership guard: 162.5 plain / 162.7 configured.
   // Explicit property geology source and selected-table paging: 163.3 plain / 163.5 configured.
   // Picker, source/legend ownership and missing-alteration handling remain lazy; startup is unchanged.
-  threeDLazyJsGzipKb: 163.8,
+  // Optional sign-off lookup recovery and explicit unknown-status notice: 164.0 configured.
+  // These controls stay in the lazy versions dialog; 3D startup is unchanged.
+  threeDLazyJsGzipKb: 164.2,
   // 161.2 → 162.7 (P2-8, measured 162.2 plain / 162.4 configured): explicit
   // recipe selection, snapshot ownership, collision/edited-wording guards and
   // recipe-only update notices in property-data. No eager 3D page growth.

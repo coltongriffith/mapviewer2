@@ -110,13 +110,23 @@ export async function publish({ label, releaseDate = today() } = {}) {
 export async function list(id = figureId()) {
   if (!id) return [];
   const rows = await rpc('list_figure_versions', { p_kind: 'figure', p_figure_id: id }, 'load the published versions');
-  return (await signoffs()).withSignoffs((rows || []).map(toVersion));
+  return withOptionalSignoffs((rows || []).map(toVersion));
 }
 // QP sign-offs (src/utils/figureSignoffs.js), loaded with the first list or opened version.
 let SO = null;
+const SIGNOFF_UNAVAILABLE = 'QP sign-off status could not be loaded.';
 async function signoffs() {
   SO ||= await import('../utils/figureSignoffs.js');
   return SO.figureSignoffs(await host.client());
+}
+async function withOptionalSignoffs(versions) {
+  try { return await (await signoffs()).withSignoffs(versions); }
+  catch {
+    // The saved figure is still readable. Unknown approval status must never
+    // become an unsigned version or retain a previously verified sign-off.
+    versions.forEach((v) => { delete v.signoff; v.signoffUnavailable = true; });
+    return Object.assign(versions, { signoffs: false, signoffError: SIGNOFF_UNAVAILABLE });
+  }
 }
 
 let shown = null; // { version, project, figureId } while a version is on screen
@@ -154,7 +164,7 @@ export async function open(n, { force = false, figure = null } = {}) {
     throw plain(`That version could not be opened (${err.message}).`, err);
   }
   const v = toVersion(row), live = await liveFigure(sb, row.figure_id);
-  try { await (await signoffs()).withSignoffs([v]); } catch { /* the bar works without it */ }
+  await withOptionalSignoffs([v]);
   shown = { version: v, project, figureId: row.figure_id, live };
   host.setFrozen({ ...v, figureId: row.figure_id });
   bar(v, live);
@@ -216,6 +226,7 @@ function bar(v, live) {
   box.className = 'share-bar'; box.id = 'ver-bar';
   const note = document.createElement('span');
   note.className = 'share-note'; note.id = 'ver-banner'; note.setAttribute('role', 'status'); note.textContent = banner(v);
+  if (v.signoffUnavailable) note.textContent += ` · ${SIGNOFF_UNAVAILABLE} Reopen this version to retry.`;
   note.title = `Published ${new Date(v.createdAt).toLocaleString()}${v.publishedBy ? ` by ${v.publishedBy}` : ''} · SHA-256 ${v.contentHash}`;
   box.append(note, ...(v.signoff ? SO.barExtras(note, v) : []),
     // Ticked, the sign-off goes in the PNG's metadata (an iTXt Comment).
@@ -252,11 +263,13 @@ function render(loading = false) {
     : `<ul class="share-list" aria-label="Versions of ${esc(cur?.name || 'this figure')}">${items.map((v) => `<li><b title="${esc(v.label)}">v${v.version} · ${esc(v.label)}</b>
         <span class="acct-acts"><button class="btn" type="button" data-ver="${v.version}" aria-label="Open version ${v.version}">Open</button><button class="btn" type="button" data-link="${v.version}" aria-label="Copy link to version ${v.version}">Copy link</button></span>
         <small>${v.releaseDate ? `Release ${esc(v.releaseDate)} · ` : ''}published ${esc(new Date(v.createdAt).toLocaleDateString())}${v.publishedBy ? ` by ${esc(v.publishedBy)}` : ''} · <span title="SHA-256 ${esc(v.contentHash)}">${esc(String(v.contentHash).slice(0, 10))}</span></small>
-        ${items.signoffs ? SO.signoffHtml(v, { canSign: mayPublish, open: signing === v, date: today() }) : ''}</li>`).join('')}</ul>${items.signoffs ? '' : SO.UNAVAILABLE}`}</div>
+        ${items.signoffs ? SO.signoffHtml(v, { canSign: mayPublish, open: signing === v, date: today() }) : ''}</li>`).join('')}</ul>${items.signoffs ? '' : items.signoffError ? `<p class="note" role="status">${esc(items.signoffError)} Saved versions can still be opened and downloaded.</p><button class="btn" type="button" data-refresh="1">Retry sign-off status</button>` : SO.UNAVAILABLE}`}</div>
     <div class="actions"><button class="btn" type="button" data-close="1">Close</button></div>
   </div>`;
 }
 async function refresh() {
+  signing = null;
+  render(true);
   try { items = await list(); } catch (err) { items = Object.assign([], { error: err.message }); }
   render();
 }
@@ -276,8 +289,10 @@ async function doPublish() {
 async function onClick(e) {
   const b = e.target.closest('button'); if (!b || b.disabled) return;
   if (b.dataset.close) { dlg.close(); return; }
-  if (b.dataset.sign) { signing = items.find((v) => v.version === +b.dataset.sign); msg = { text: '', bad: false }; render(); return; }
+  if (b.dataset.refresh) { await refresh(); return; }
+  if (b.dataset.sign) { if (!items.signoffs) return; signing = items.find((v) => v.version === +b.dataset.sign); msg = { text: '', bad: false }; render(); return; }
   if (b.dataset.so) { // sign, retract or cancel: null when refused (said in place, so the form keeps what was typed)
+    if (!items.signoffs || !items.includes(signing)) return;
     b.disabled = true;
     const text = await (await signoffs()).submit(dlg, signing, b.dataset.so);
     if (text !== null) { msg = { text, bad: false }; signing = null; await refresh(); }

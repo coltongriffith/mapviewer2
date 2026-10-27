@@ -231,6 +231,50 @@ describe('export context', () => {
     expect(ctx.warnings).toEqual([]);
   });
 
+  it('checks the displayed technical title-strip overrides, not the displaced title', () => {
+    const wording = 'Source: company data; assays pending; historical drilling; true widths unknown';
+    const technical = (layout) => ({ ...scene({ layout: { showTitle: true, ...layout } }), template: getTemplate('ni_43101_technical') });
+    const displaced = disclosureFacts(technical({ title: wording, subtitle: wording, stripTitle: 'Rails project', stripSubtitle: 'Drill plan' }));
+    expect(displaced.texts).toEqual(expect.arrayContaining(['Rails project', 'Drill plan']));
+    expect(displaced.texts).not.toContain(wording);
+    const displayed = disclosureFacts(technical({ title: 'Rails project', subtitle: 'Drill plan', stripTitle: wording, stripSubtitle: wording }));
+    expect(displayed.texts).toContain(wording);
+    expect(displayed.texts).not.toContain('Rails project');
+    expect(disclosureFacts(technical({ title: wording, stripTitle: '', showTitle: true })).texts).toContain(wording);
+    expect(disclosureFacts(technical({ stripTitle: wording, showTitle: false })).texts).not.toContain(wording);
+    // Ordinary templates do not draw strip overrides.
+    expect(disclosureFacts(scene({ layout: { showTitle: true, title: 'Rails project', stripTitle: wording } })).texts).not.toContain(wording);
+  });
+
+  it('reads Studio datum settings independently of the ordinary projection toggle', () => {
+    const studio = (layout) => scene({ layout: { themeId: 'studio', showScaleBar: true, showProjectionLabel: false, projectionName: 'NAD83 / UTM 10N', ...layout } });
+    expect(disclosureFacts(studio({})).crs).toBe('NAD83 / UTM 10N');
+    expect(disclosureFacts(studio({ studio: { datumNote: 'Local mine grid' } })).crs).toBe('Local mine grid');
+    // An explicit empty Studio datum suppresses the derived projection, even if the unused toggle is on.
+    expect(disclosureFacts(studio({ showProjectionLabel: true, studio: { datumNote: '' } })).crs).toBe('');
+    expect(disclosureFacts(studio({ showScaleBar: false, studio: { datumNote: 'Local mine grid' } })).crs).toBe('');
+    expect(disclosureFacts(studio({ showTitle: true, studio: { titleScale: true, datumNote: 'Local mine grid' } })).crs).toBe('Local mine grid');
+    expect(disclosureFacts(studio({ showTitle: false, studio: { titleScale: true, datumNote: 'Local mine grid' } })).crs).toBe('Local mine grid');
+    expect(disclosureFacts(studio({ themeId: 'light' })).crs).toBe('');
+    const technical = studio({ templateId: 'ni_43101_technical', showTitle: false });
+    technical.template = getTemplate('ni_43101_technical');
+    expect(disclosureFacts(technical).crs).toBe('');
+  });
+
+  it('repairs a missing Studio datum using the setting its renderer reads', async () => {
+    const s = scene({ layout: { themeId: 'studio', basemap: 'blank', disclosureStandard: 'ni43101',
+      showScaleBar: true, showProjectionLabel: false, projectionName: 'NAD83 / UTM 10N', studio: { datumNote: '', datumSub: 'Project grid', scaleNorth: false } } });
+    const missing = (await runPreflight(s, { loadImage })).find(d => d.code === 'disclosure-crs');
+    expect(missing.fix.layout).toEqual({ showScaleBar: true, studio: { datumNote: 'NAD83 / UTM 10N', datumSub: 'Project grid', scaleNorth: false } });
+    Object.assign(s.project.layout, missing.fix.layout);
+    expect(codes(await runPreflight(s, { loadImage }))).not.toContain('disclosure-crs');
+    expect(s.project.layout.showProjectionLabel).toBe(false);
+    // A hidden bar can already have a custom datum: showing it must preserve that text.
+    Object.assign(s.project.layout, { showScaleBar: false, studio: { datumNote: 'Local mine grid', datumSub: 'Project grid' } });
+    const hidden = (await runPreflight(s, { loadImage })).find(d => d.code === 'disclosure-crs');
+    expect(hidden.fix.layout.studio.datumNote).toBe('Local mine grid');
+  });
+
   it('checks disclosure defaults only for a figure with a standard, from what it draws', async () => {
     expect(codes(await runPreflight(scene({ layout: { basemap: 'blank' } }), { loadImage })).filter((c) => c.startsWith('disclosure-'))).toEqual([]);
     const pending = { id: 'h', name: 'Holes', visible: true, geojson: { type: 'FeatureCollection', features: [
