@@ -2,6 +2,63 @@ import { test, expect } from '@playwright/test';
 import { unzipSync } from 'fflate';
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { readFile } from 'node:fs/promises';
+import { pathToFileURL } from 'node:url';
+
+for (const [name,width,height] of [['desktop',1280,900],['mobile',390,844]]) {
+  test('3D Tour preview and standalone download: '+name, async ({page})=>{
+    test.setTimeout(120000);
+    await page.setViewportSize({width,height});
+    await page.route('https://s3.amazonaws.com/**',r=>r.abort());
+    await page.route('https://server.arcgisonline.com/**',r=>r.abort());
+    await page.goto('/3d');
+    await page.waitForFunction(()=>!!window.EM3D?.openTour);
+    expect(await page.evaluate(()=>performance.getEntriesByType('resource').some(r=>r.name.includes('tour-three-source')))).toBe(false);
+    await page.evaluate(async()=>{
+      window.EM3D.clearFiles();
+      await window.EM3D.addFiles([
+        {name:'collars.csv',text:'HoleID,Longitude,Latitude,Elevation,Azimuth,Dip,Depth\nH1,-129.005,55.005,1000,0,-60,100\nH2,-129.003,55.005,1010,45,-60,80'},
+        {name:'assays.csv',text:'HoleID,From,To,Cu_pct\nH1,0,10,0.5\nH2,0,10,0.8'},
+      ]);
+      await window.EM3D.setCRS('EPSG:4326');
+      await window.EM3D.addOverlay({name:'Project claims',role:'claims',group:'project',crs:'EPSG:4326',data:{
+        type:'FeatureCollection',features:[{type:'Feature',properties:{number:'1'},geometry:{type:'Polygon',coordinates:[
+          [[-129.01,55],[-129,55],[-129,55.01],[-129.01,55.01],[-129.01,55]],
+        ]}}],
+      }});
+      await window.EM3D.openTour();
+    });
+    const dialog=page.getByRole('dialog',{name:'3D Tour'});
+    await expect(dialog.getByRole('status')).toContainText('2 holes');
+    const frame=page.frameLocator('iframe[title="3D Tour preview"]');
+    await expect(frame.getByRole('button',{name:'Pause',exact:true})).toBeVisible();
+    await frame.getByRole('button',{name:'Pause',exact:true}).click();
+    await expect(frame.getByRole('button',{name:'Play',exact:true})).toBeVisible();
+    await dialog.getByLabel('Title',{exact:true}).fill('My project');
+    await expect(dialog.getByRole('button',{name:'Download tour (HTML)'})).toBeDisabled();
+    await dialog.getByRole('button',{name:'Update preview'}).click();
+    const downloading=page.waitForEvent('download');
+    await dialog.getByRole('button',{name:'Download tour (HTML)'}).click();
+    const download=await downloading;
+    expect(download.suggestedFilename()).toBe('my-project-3d-tour.html');
+    const html=await readFile(await download.path(),'utf8');
+    const path=test.info().outputPath('tour.html');
+    writeFileSync(path,html);
+    expect(html).not.toContain('Star Project');
+    expect(html).not.toContain('<script>__THREE__</script>');
+    expect(html).toContain('My project');
+    const standalone=await page.context().newPage();
+    await standalone.route('https://s3.amazonaws.com/**',r=>r.abort());
+    await standalone.route('https://server.arcgisonline.com/**',r=>r.abort());
+    await standalone.goto(pathToFileURL(path).href);
+    await expect(standalone.getByRole('button',{name:'Pause',exact:true})).toBeVisible();
+    await standalone.waitForFunction(()=>!!window.S3D);
+    await expect(standalone).toHaveTitle('My project · Interactive 3D');
+    await standalone.close();
+    await dialog.getByRole('button',{name:'Close',exact:true}).click();
+    await expect(dialog).toHaveCount(0);
+  });
+}
 
 // Exploration Maps 3D export options: a transparent background, the block's drop shadow off, and "Map use"
 // (a standalone map's details in the legend). A figure that sets none of them exports exactly as before.
