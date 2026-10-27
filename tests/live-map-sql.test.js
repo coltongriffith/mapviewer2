@@ -112,4 +112,15 @@ describe('publish_live_map', () => {
     expect(await val(E, 'select public.revoke_shared_map($1)', [share])).toBe(false);
     expect(await val(E, 'select exists(select 1 from public.list_my_shared_maps() where id = $1)', [share])).toBe(false);
   });
+
+  it('withdraws linked live data when an authorized company owner permanently deletes a map, preserving snapshots', async () => {
+    const { project, share } = await companyLink();
+    const snapshot = await val(F, 'select public.create_shared_map($1::jsonb, null)', [JSON.stringify(state('Snapshot'))]);
+    expect((await as(F, 'delete from public.projects where id = $1', [project])).affectedRows).toBe(1);
+    expect(await val(null, 'select public.get_shared_map($1)', [share])).toBeNull();
+    const retained = (await su('select state, revoked_at from public.shared_maps where id = $1', [share]))[0];
+    expect(retained.state).toEqual({});
+    expect(retained.revoked_at).not.toBeNull();
+    expect((await val(null, 'select public.get_shared_map($1)', [snapshot])).layout.title).toBe('Snapshot');
+  });
 });

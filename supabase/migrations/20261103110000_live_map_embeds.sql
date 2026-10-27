@@ -31,6 +31,8 @@
 -- ws_personal_map_limit).
 --
 -- Rollback:
+--   drop trigger if exists withdraw_live_map_before_delete on public.projects;
+--   drop function if exists public.withdraw_deleted_live_map();
 --   Restore revoke_shared_map/list_my_shared_maps from 20260728000004 before
 --   dropping the project_id column they reference below.
 --   drop function if exists public.publish_live_map(uuid, jsonb);
@@ -60,8 +62,10 @@ declare
   v_features int;
 begin
   if v_user is null then raise exception 'not authenticated' using errcode = '42501'; end if;
+  -- Serialize publish with permanent deletion and first-publish attempts.
+  -- A delete must not leave a new live row inserted after its cleanup trigger.
   select p.org_id, p.user_id into v_org, v_owner from public.projects p
-    where p.id = p_project and p.deleted_at is null;
+    where p.id = p_project and p.deleted_at is null for update;
   if not found or (v_org is null and v_owner is distinct from v_user)
      or (v_org is not null and not public.has_org_role(v_org, 'editor')) then
     raise exception 'NOT_FOUND: no map of yours with that id' using errcode = 'P0002';
@@ -176,11 +180,31 @@ as $$
   limit 200;
 $$;
 
+-- projects has an authenticated DELETE policy for current owners/admins.
+-- Its live publication must not survive without a project to authorize revoke.
+-- The trigger's scope is exactly the deleted project's linked live rows;
+-- ordinary snapshots (project_id null) retain their existing lifetime.
+create or replace function public.withdraw_deleted_live_map()
+returns trigger
+language plpgsql security definer set search_path = ''
+as $$
+begin
+  update public.shared_maps set revoked_at = coalesce(revoked_at, now()), state = '{}'::jsonb
+    where project_id = old.id;
+  return old;
+end;
+$$;
+
+drop trigger if exists withdraw_live_map_before_delete on public.projects;
+create trigger withdraw_live_map_before_delete before delete on public.projects
+  for each row execute function public.withdraw_deleted_live_map();
+
 revoke all on function public.publish_live_map(uuid, jsonb) from public, anon, authenticated;
 revoke all on function public.get_live_map(uuid) from public, anon, authenticated;
 revoke all on function public.revoke_live_map(uuid) from public, anon, authenticated;
 revoke all on function public.revoke_shared_map(text) from public, anon, authenticated;
 revoke all on function public.list_my_shared_maps() from public, anon, authenticated;
+revoke all on function public.withdraw_deleted_live_map() from public, anon, authenticated;
 grant execute on function public.publish_live_map(uuid, jsonb) to authenticated;
 grant execute on function public.get_live_map(uuid) to authenticated;
 grant execute on function public.revoke_live_map(uuid) to authenticated;
