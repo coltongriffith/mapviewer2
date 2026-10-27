@@ -11,7 +11,8 @@
 //             charge.refunded
 //
 // INVARIANT: rows with source='grandfathered' (or 'admin') are NEVER
-// downgraded OR overwritten here. Grandfathered accounts keep full Pro access
+// downgraded OR overwritten here. Explicit Company assignments on those
+// protected sources keep Company; other grandfathered accounts keep Pro access
 // no matter what Stripe says. This holds even if such a user also subscribes:
 // checkout records the Stripe relationship WITHOUT replacing `source`, so a
 // later cancellation cannot demote them. Every downgrade path is additionally
@@ -236,13 +237,14 @@ export default async function handler(req, res) {
         // Blindly upserting source='stripe' here was the bug that let a later
         // cancellation downgrade a "Pro forever" account.
         const existing = must(
-          await sb.from('user_plans').select('source, pro_since').eq('user_id', userId).maybeSingle(),
+          await sb.from('user_plans').select('plan, source, pro_since').eq('user_id', userId).maybeSingle(),
           'checkout plan lookup',
         );
         const protectedSource = ['grandfathered', 'admin'].includes(existing.data?.source);
         must(await sb.from('user_plans').upsert({
           user_id: userId,
-          plan: 'pro',
+          // A Pro subscription must not replace an explicit protected Company grant.
+          plan: protectedSource && existing.data?.plan === 'company' ? 'company' : 'pro',
           status: 'active',
           // Preserve a protected origin; only a previously unprotected row
           // becomes stripe-sourced.
@@ -285,13 +287,13 @@ export default async function handler(req, res) {
         // checkout.session.completed, which would otherwise leave the row as
         // source='signup' and permanently unrevocable.
         const existing = must(
-          await sb.from('user_plans').select('source, pro_since').eq(match.column, match.value).maybeSingle(),
+          await sb.from('user_plans').select('plan, source, pro_since').eq(match.column, match.value).maybeSingle(),
           'subscription plan lookup',
         );
         const protectedSource = ['grandfathered', 'admin'].includes(existing.data?.source);
         must(await sb.from('user_plans')
           .update({
-            plan: 'pro',
+            plan: protectedSource && existing.data?.plan === 'company' ? 'company' : 'pro',
             status: mapped.status,
             ...(protectedSource ? {} : { source: 'stripe' }),
             stripe_subscription_id: sub.id || null,
