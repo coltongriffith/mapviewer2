@@ -1,0 +1,13 @@
+# Browser checks in CI
+
+The browser job runs six standard Ubuntu jobs: three shards of the anonymous suite and three of the configured admin suite. Playwright's existing `fullyParallel` setting distributes individual tests between shards ([Playwright sharding](https://playwright.dev/docs/test-sharding)). The workflow changes scheduling only: existing selectors, skip conditions, two workers per job, one retry in CI, and real production-build serving remain unchanged.
+
+Each anonymous shard runs the original build and `npm run test:e2e -- --shard=N/3`. Each admin shard generates the same static pages and redirects, builds only `dist-auth-check` with the existing placeholder configuration, and runs `npm run test:e2e:admin -- --shard=N/3`. No live account credentials are required.
+
+The stable `e2e` check waits for the whole matrix and succeeds only when every shard succeeds. Failure, cancellation, or skipped matrix work cannot produce a successful gate. `fail-fast: false` lets other shards finish to collect independent failures. Failed jobs upload both the HTML report and test results, including traces/screenshots, under suite/shard/attempt-specific artifact names for seven days. Unit/build/budget and dependency-audit jobs are unchanged.
+
+To check coverage after changing shard count, list the unsharded suite and each shard with `--list --reporter=json`, using `CI=1` and the matching admin environment/config. Compare each spec ID plus project ID: the union must equal the original list, with no duplicate IDs. Include statically skipped tests in this comparison; runtime skips cannot be determined by listing alone and their original predicates must stay unchanged.
+
+Local verification on the integration source (2026-10-26): anonymous 273 IDs split 91/91/91, including all 95 static skips; configured 218 IDs split 73/73/72. Both unions exactly matched their original suite with no duplicates, missing IDs, or extras. YAML parsing and comparison confirmed unchanged test/audit jobs, permissions, triggers, and concurrency. The gate shell was exercised with success, failure, cancelled, skipped, and empty results; only success returned zero. Actionlint was unavailable locally. Representative checks passed against separately built bundles using the unchanged configs and shard 1/3: anonymous ordinary PNG download (1 test), configured workspace tab switching and certificate import completion (2 tests). The anonymous job used its Windows-equivalent generate/build/admin-copy steps locally; GitHub retains the original npm build script. The full matrix runs in GitHub CI.
+
+This reduces serial browser work but does not promise a fixed speedup: runner availability, repeated setup/builds, and the slowest shard determine completion time.

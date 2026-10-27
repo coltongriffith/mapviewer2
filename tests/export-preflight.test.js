@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { runPreflight, textScale, isBlankImage } from '../src/export/preflight.js';
+import { runPreflight, textScale, isBlankImage, disclosureFacts } from '../src/export/preflight.js';
 import { renderSceneToSvg, createExportContext, getExportWarnings, ensureExportFonts } from '../src/export/renderScene.js';
 import { getTemplate } from '../src/templates';
 
@@ -229,5 +229,69 @@ describe('export context', () => {
     expect(res).toEqual({ timedOut: true, missing: ['Lato'] });
     expect(ctx.diagnostics[0]).toMatchObject({ code: 'font-timeout' });
     expect(ctx.warnings).toEqual([]);
+  });
+
+  it('checks the displayed technical title-strip overrides, not the displaced title', () => {
+    const wording = 'Source: company data; assays pending; historical drilling; true widths unknown';
+    const technical = (layout) => ({ ...scene({ layout: { showTitle: true, ...layout } }), template: getTemplate('ni_43101_technical') });
+    const displaced = disclosureFacts(technical({ title: wording, subtitle: wording, stripTitle: 'Rails project', stripSubtitle: 'Drill plan' }));
+    expect(displaced.texts).toEqual(expect.arrayContaining(['Rails project', 'Drill plan']));
+    expect(displaced.texts).not.toContain(wording);
+    const displayed = disclosureFacts(technical({ title: 'Rails project', subtitle: 'Drill plan', stripTitle: wording, stripSubtitle: wording }));
+    expect(displayed.texts).toContain(wording);
+    expect(displayed.texts).not.toContain('Rails project');
+    expect(disclosureFacts(technical({ title: wording, stripTitle: '', showTitle: true })).texts).toContain(wording);
+    expect(disclosureFacts(technical({ stripTitle: wording, showTitle: false })).texts).not.toContain(wording);
+    // Ordinary templates do not draw strip overrides.
+    expect(disclosureFacts(scene({ layout: { showTitle: true, title: 'Rails project', stripTitle: wording } })).texts).not.toContain(wording);
+  });
+
+  it('reads Studio datum settings independently of the ordinary projection toggle', () => {
+    const studio = (layout) => scene({ layout: { themeId: 'studio', showScaleBar: true, showProjectionLabel: false, projectionName: 'NAD83 / UTM 10N', ...layout } });
+    expect(disclosureFacts(studio({})).crs).toBe('NAD83 / UTM 10N');
+    expect(disclosureFacts(studio({ studio: { datumNote: 'Local mine grid' } })).crs).toBe('Local mine grid');
+    // An explicit empty Studio datum suppresses the derived projection, even if the unused toggle is on.
+    expect(disclosureFacts(studio({ showProjectionLabel: true, studio: { datumNote: '' } })).crs).toBe('');
+    expect(disclosureFacts(studio({ showScaleBar: false, studio: { datumNote: 'Local mine grid' } })).crs).toBe('');
+    expect(disclosureFacts(studio({ showTitle: true, studio: { titleScale: true, datumNote: 'Local mine grid' } })).crs).toBe('Local mine grid');
+    expect(disclosureFacts(studio({ showTitle: false, studio: { titleScale: true, datumNote: 'Local mine grid' } })).crs).toBe('Local mine grid');
+    expect(disclosureFacts(studio({ themeId: 'light' })).crs).toBe('');
+    const technical = studio({ templateId: 'ni_43101_technical', showTitle: false });
+    technical.template = getTemplate('ni_43101_technical');
+    expect(disclosureFacts(technical).crs).toBe('');
+  });
+
+  it('repairs a missing Studio datum using the setting its renderer reads', async () => {
+    const s = scene({ layout: { themeId: 'studio', basemap: 'blank', disclosureStandard: 'ni43101',
+      showScaleBar: true, showProjectionLabel: false, projectionName: 'NAD83 / UTM 10N', studio: { datumNote: '', datumSub: 'Project grid', scaleNorth: false } } });
+    const missing = (await runPreflight(s, { loadImage })).find(d => d.code === 'disclosure-crs');
+    expect(missing.fix.layout).toEqual({ showScaleBar: true, studio: { datumNote: 'NAD83 / UTM 10N', datumSub: 'Project grid', scaleNorth: false } });
+    Object.assign(s.project.layout, missing.fix.layout);
+    expect(codes(await runPreflight(s, { loadImage }))).not.toContain('disclosure-crs');
+    expect(s.project.layout.showProjectionLabel).toBe(false);
+    // A hidden bar can already have a custom datum: showing it must preserve that text.
+    Object.assign(s.project.layout, { showScaleBar: false, studio: { datumNote: 'Local mine grid', datumSub: 'Project grid' } });
+    const hidden = (await runPreflight(s, { loadImage })).find(d => d.code === 'disclosure-crs');
+    expect(hidden.fix.layout.studio.datumNote).toBe('Local mine grid');
+  });
+
+  it('checks disclosure defaults only for a figure with a standard, from what it draws', async () => {
+    expect(codes(await runPreflight(scene({ layout: { basemap: 'blank' } }), { loadImage })).filter((c) => c.startsWith('disclosure-'))).toEqual([]);
+    const pending = { id: 'h', name: 'Holes', visible: true, geojson: { type: 'FeatureCollection', features: [
+      { type: 'Feature', id: 1, properties: { hole: 'DDH-4', assay_status: 'Pending' }, geometry: { type: 'Point', coordinates: [100, 100] } }] } };
+    const s = scene({ layout: { basemap: 'blank', disclosureStandard: 'ni43101' }, layers: [pending], callouts: [{ id: 'r', resultId: 'R1', text: 'DDH-4 12 m @ 3 g/t', anchor: { lat: 100, lng: 100 } }] });
+    const list = (await runPreflight(s, { loadImage })).filter((d) => d.code.startsWith('disclosure-'));
+    expect(codes(list).sort()).toEqual(['disclosure-crs', 'disclosure-north-arrow', 'disclosure-pending', 'disclosure-scale-bar', 'disclosure-sources', 'disclosure-true-width']);
+    expect(list.find((d) => d.code === 'disclosure-scale-bar').fix).toEqual({ label: 'Add scale bar', layout: { showScaleBar: true } });
+    // A claim's "Pending" status is not a pending assay; the projection label under a scale bar states the CRS.
+    const claims = { ...pending, geojson: { type: 'FeatureCollection', features: [{ ...pending.geojson.features[0], properties: { status: 'PENDING' } }] } };
+    const f = disclosureFacts(scene({ layout: { showScaleBar: true, showProjectionLabel: true, projectionName: 'NAD83 / UTM 10N', footerText: 'Source: MTO' }, layers: [claims] }));
+    expect(f).toMatchObject({ scaleBar: true, crs: 'NAD83 / UTM 10N', pending: false, intercepts: false, historical: false });
+    expect(f.texts).toContain('Source: MTO');
+    // Hidden title and legend text is not in the export, so it satisfies nothing.
+    const hidden = disclosureFacts(scene({ layout: { title: 'Assays pending', showTitle: false, showLegend: false, legendItems: [{ label: 'Historical holes' }] } }));
+    expect(hidden.texts).not.toContain('Assays pending');
+    expect(hidden.texts).not.toContain('Historical holes');
+    expect(disclosureFacts(scene({ layout: { title: 'Assays pending', showTitle: true, legendItems: [{ label: 'Historical holes' }] } })).texts).toEqual(expect.arrayContaining(['Assays pending', 'Historical holes']));
   });
 });
