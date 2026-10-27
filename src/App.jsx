@@ -42,6 +42,7 @@ const RasterPlacementModal = lazyGuarded(() => import('./components/RasterPlacem
 const FigureImport = lazyGuarded(() => import('./components/FigureImport'));
 const FigureLayerControls = lazyGuarded(() => import('./components/FigureLayerControls'));
 const ClassificationPanel = lazyGuarded(() => import('./components/ClassificationPanel'));
+const NumericColumnInspector = lazyGuarded(() => import('./components/NumericColumnInspector'));
 const AddClaimsModal = lazyGuarded(() => import('./components/AddClaimsModal'));
 const UpgradeModal = lazyGuarded(() => import('./components/UpgradeModal'));
 const FullResOfferModal = lazyGuarded(() => import('./components/FullResOfferModal'));
@@ -6819,6 +6820,7 @@ export default function App({ initialAction = null }) {
                 )}
                 <React.Suspense fallback={null}>
                   <ClassificationPanel layer={selectedLayer} isPoint={isPointStyledLayer(selectedLayer)} updateLayer={updateLayer} brandColors={brandColors} />
+                  {selectedLayer.geojson && <NumericColumnInspector layer={selectedLayer} />}
                 </React.Suspense>
                 {selectedLayer.geojson && !isPointStyledLayer(selectedLayer) && (
                   <React.Suspense fallback={null}><GeoStyleControls layer={selectedLayer} setProject={setProject} map={leafletMapRef.current} /></React.Suspense>
