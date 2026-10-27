@@ -321,6 +321,7 @@ export default function DrillPanel({ property, perms }) {
   return (
     <section aria-label="Drill data" className="ws-stack">
       <ErrorNote error={error} onDismiss={() => setError(null)} />
+      <p className="dash-muted" style={{ margin: 0 }}>Drill data contains records, QA/QC comparisons and intercept results. Data library keeps source files and reports.</p>
       <div className="dash-panel"><Summary s={s} /></div>
       {perms.edit && db && <div className="dash-panel"><Importer key={property.id} db={db} property={property} orgId={property.org_id} rolledBackBatchIds={rolledBackBatchIds} onStart={() => setCertificateBatch(null)} onDone={batch => { setCertificateBatch(batch); setRevision((v) => v + 1); load(); }} /></div>}
       {perms.edit && certificateBatch?.propertyId === property.id && !rolledBackBatchIds.has(`${property.id}:${certificateBatch.id}`) && <section className="dash-panel" aria-label="Import certificate step">

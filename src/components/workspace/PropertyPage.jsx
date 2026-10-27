@@ -284,8 +284,8 @@ function DataTab({ property, perms, onNewMap }) {
     <section aria-label="Data library">
       <ErrorNote error={error} onDismiss={() => setError(null)} />
       <p className="dash-muted" style={{ marginBottom: 12 }}>
-        Shared data for this property: drill collars, surveys, assays and logs, claims and targets, geophysics and documents.
-        3D figures in this property use these files and offer to update when a new version is uploaded.
+        Keep versioned source files, reports and certificates here. Uploading a file does not import its rows into Drill data.
+        Linked 3D figures offer to use a new file version when you upload one.
       </p>
       {perms.edit && (pending ? (
         <form className="ws-row" style={{ marginBottom: 14 }} onSubmit={(e) => { e.preventDefault(); upload(pending.file, null, pending.kind); }}>
@@ -429,6 +429,7 @@ export default function PropertyPage({ orgSlug = null, slug, onExit, onOpenDashb
                 </div>
               ) : (
                 <section className="dash-panel">
+                  <p className="dash-muted" style={{ marginBottom: 12 }}><b>Drill data</b> manages records and results. <b>Data library</b> keeps files and reports. <b>Maps</b> and <b>3D figures</b> hold this property&apos;s visuals.</p>
                   <dl className="ws-dl">
                     <dt>Jurisdiction</dt><dd>{jurisdictionLabel(property.jurisdiction) || 'Not set'}</dd>
                     <dt>Commodities</dt><dd>{(property.commodities || []).join(', ') || '—'}</dd>
