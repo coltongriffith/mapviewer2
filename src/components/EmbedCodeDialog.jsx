@@ -17,6 +17,7 @@ export default function EmbedCodeDialog({ projectId, canPublish, entitlements, w
   const [reading, setReading] = useState(false);
   const [reload, setReload] = useState(0);
   const readProject = useRef(projectId);
+  const readVersion = useRef(0);
   const allowed = Boolean(entitlements?.live_embed || workspacePaid);
 
   useEffect(() => {
@@ -24,19 +25,28 @@ export default function EmbedCodeDialog({ projectId, canPublish, entitlements, w
     // publication. Read its management metadata independently of paid access.
     if (!canPublish || !projectId) return undefined;
     let cancelled = false;
+    const version = ++readVersion.current;
+    const current = () => !cancelled && version === readVersion.current;
     if (readProject.current !== projectId) { setLive(undefined); readProject.current = projectId; }
     setReading(true); setReadError('');
-    getLiveMap(projectId).then((d) => { if (!cancelled) setLive(d); }).catch((e) => {
-      if (!cancelled) setReadError(e?.code === 'LIVE_MAP_UNAVAILABLE' ? e.message : 'The live map status could not be loaded. Try again.');
-    }).finally(() => { if (!cancelled) setReading(false); });
+    getLiveMap(projectId).then((d) => { if (current()) setLive(d); }).catch((e) => {
+      if (current()) setReadError(e?.code === 'LIVE_MAP_UNAVAILABLE' ? e.message : 'The live map status could not be loaded. Try again.');
+    }).finally(() => { if (current()) setReading(false); });
     return () => { cancelled = true; };
   }, [canPublish, projectId, reload]);
+
+  const setConfirmedLive = (value) => {
+    // Stop stays available during a retry. Its success must outrank any older
+    // status response, which may have observed the still-published link.
+    readVersion.current += 1;
+    setReading(false); setReadError(''); setLive(value);
+  };
 
   const publish = async () => {
     setBusy(true); setError('');
     try {
       const id = await publishLiveMap(projectId, getState());
-      setLive((await getLiveMap(projectId).catch(() => null)) || { id, updated_at: new Date().toISOString(), view_count: 0 });
+      setConfirmedLive((await getLiveMap(projectId).catch(() => null)) || { id, updated_at: new Date().toISOString(), view_count: 0 });
       trackEvent('share_created', { mapId: id, live: true });
     } catch (e) { setError(e.message || 'The map could not be published.'); } finally { setBusy(false); }
   };
@@ -44,7 +54,7 @@ export default function EmbedCodeDialog({ projectId, canPublish, entitlements, w
   const unpublish = async () => {
     if (!window.confirm('Stop the live map? Every website embedding it will show it as unavailable.')) return;
     setBusy(true); setError('');
-    try { await revokeLiveMap(projectId); setLive(null); } catch (e) { setError(e.message || 'The live map could not be stopped.'); } finally { setBusy(false); }
+    try { await revokeLiveMap(projectId); setConfirmedLive(null); } catch (e) { setError(e.message || 'The live map could not be stopped.'); } finally { setBusy(false); }
   };
   const code = live?.id ? embedCode(live.id, { title, ...opts }) : '';
   const copy = () => navigator.clipboard.writeText(code).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }).catch(() => {});

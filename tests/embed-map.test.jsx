@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import React from 'react';
 
 const rpc = vi.hoisted(() => vi.fn());
@@ -203,6 +203,29 @@ describe('EmbedCodeDialog', () => {
     await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
     expect(screen.getByText(/4 views/)).toBeTruthy();
     expect(rpc.mock.calls.every(([fn]) => fn === 'get_live_map')).toBe(true);
+  });
+
+  it('does not restore a stopped publication when an older status retry finishes late', async () => {
+    const live = { id: 'f'.repeat(32), updated_at: '2026-10-25T10:00:00Z', view_count: 3 };
+    rpc.mockResolvedValueOnce({ data: live, error: null });
+    const props = { projectId: 'p1', canPublish: true, entitlements: pro, getState: () => state, onUpgrade: () => {}, onClose: () => {} };
+    const view = render(<EmbedCodeDialog {...props} />);
+    await screen.findByLabelText('Embed code');
+    view.rerender(<EmbedCodeDialog {...props} canPublish={false} />);
+    rpc.mockRejectedValueOnce(new Error('Network request failed'));
+    view.rerender(<EmbedCodeDialog {...props} />);
+    const retry = await screen.findByRole('button', { name: 'Retry live map status' });
+    let resolveStatus;
+    rpc.mockImplementationOnce(() => new Promise((resolve) => { resolveStatus = resolve; }));
+    fireEvent.click(retry);
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    rpc.mockResolvedValueOnce({ data: true, error: null });
+    fireEvent.click(screen.getByRole('button', { name: 'Stop live map' }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Stop live map' })).toBeNull());
+    await act(async () => resolveStatus({ data: live, error: null }));
+    expect(screen.queryByLabelText('Embed code')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Stop live map' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Publish live map' })).not.toBeDisabled();
   });
 
   it('lets an editor of a paid company map publish on a free personal plan', async () => {
