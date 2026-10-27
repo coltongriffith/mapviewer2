@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { readFileSync } from 'node:fs';
 
 // Exploration Maps 3D published versions (src/three-d/versions.js,
 // supabase/migrations/20261029100000_figure_versions.sql): publish a saved
@@ -23,7 +24,7 @@ const session = { user, access_token: token, refresh_token: 'synthetic-refresh',
 const AUTH_KEY = 'sb-example-auth-token';
 
 async function fakeSupabase(context) {
-  const fake = { rows: new Map(), objects: new Map(), versions: [], upserts: [], calls: [] };
+  const fake = { rows: new Map(), objects: new Map(), versions: [], upserts: [], calls: [], signoffs: [], noSignoffs: false, signoffFailure: false };
   const frozen = (key) => fake.versions.some((v) => v.file_names.includes(key.replace(/^three-d-files\//, '')));
   await context.route('https://example.supabase.co/**', async (route) => {
     const req = route.request(), url = new URL(req.url()), path = url.pathname, method = req.method();
@@ -62,6 +63,25 @@ async function fakeSupabase(context) {
       const eq = (k) => url.searchParams.get(k)?.slice(3);
       const rows = fake.versions.filter((v) => (!eq('id') || v.id === eq('id')) && (!eq('figure_id') || v.figure_id === eq('figure_id')) && (!eq('version') || String(v.version) === eq('version')));
       return json(single ? rows[0] ?? null : rows);
+    }
+    // QP sign-offs (20261103100000): insert once, retract with a reason; missing when the migration is not applied.
+    if (path === '/rest/v1/figure_version_signoffs') {
+      if (fake.noSignoffs) return json({ code: 'PGRST205', message: "Could not find the table 'public.figure_version_signoffs' in the schema cache" }, 404);
+      if (method === 'GET') {
+        if (fake.signoffFailure) return json({ message: 'Sign-off lookup unavailable' }, 503);
+        const ids = (url.searchParams.get('version_id') || '').replace(/^in\.\(|\)$/g, '').split(',').map((x) => x.replace(/"/g, ''));
+        return json(fake.signoffs.filter((x) => ids.includes(x.version_id) && !x.retracted_at));
+      }
+      const body = req.postDataJSON();
+      if (method === 'POST') {
+        if (fake.signoffs.some((x) => x.version_id === body.version_id && !x.retracted_at)) return json({ code: 'P0001', message: 'SIGNOFF_EXISTS: this version is already signed off; retract that first' }, 400);
+        const row = { id: `00000000-0000-4000-8000-${String(700 + fake.signoffs.length).padStart(12, '0')}`, ...body, signed_by: uid, created_at: new Date().toISOString(), retracted_at: null, retraction_reason: null };
+        fake.signoffs.push(row);
+        return json(row, 201);
+      }
+      const row = fake.signoffs.find((x) => `eq.${x.id}` === url.searchParams.get('id'));
+      Object.assign(row, { retraction_reason: body.retraction_reason, retracted_at: new Date().toISOString() });
+      return json(row);
     }
     if (path === '/rest/v1/three_d_projects') {
       if (method === 'GET') {
@@ -217,6 +237,99 @@ test.describe('published versions', () => {
     await expect(page.locator('#ver-bar').getByRole('button', { name: 'Start a new figure from this version' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Back to the current figure' })).toHaveCount(0);
     expect((await exports(page)).fig).toBe(v1.fig);
+    expect(errors).toEqual([]);
+  });
+
+  test('a QP signs off a published version once, retracts it with a reason, and the PNG can carry it', async ({ page, context }) => {
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    const fake = await fakeSupabase(context);
+    await context.addInitScript(([k, s]) => localStorage.setItem(k, JSON.stringify(s)), [AUTH_KEY, session]);
+    await open3d(page);
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await page.getByRole('dialog', { name: 'Save to your account' }).getByRole('button', { name: 'Save', exact: true }).click();
+    await expect.poll(() => fake.upserts.length).toBe(1);
+    const menu = page.getByRole('region', { name: 'My 3D maps' });
+    const versions = page.getByRole('dialog', { name: 'Published versions' });
+    await page.getByRole('button', { name: 'My 3D maps' }).click();
+    await menu.getByRole('button', { name: 'Versions…' }).click();
+    await versions.getByLabel('Label').fill('News release 2026-10-21');
+    await versions.getByRole('button', { name: 'Publish version' }).click();
+    await expect(versions.getByText('v1 · News release 2026-10-21')).toBeVisible();
+
+    // Sign off: the history shows who, with what credentials, on which date.
+    await versions.getByRole('button', { name: 'Sign off version 1' }).click();
+    const form = versions.getByRole('group', { name: 'Sign off version 1' });
+    await form.getByLabel('Qualified person').fill('A. Person');
+    await form.getByLabel('Credentials').fill('P.Geo.');
+    await form.getByLabel('Sign-off date').fill('2026-10-21');
+    await form.getByLabel('Note (optional)').fill('Reviewed the drill data.');
+    await form.getByRole('button', { name: 'Record sign-off' }).click();
+    await expect(versions.getByText('Signed off by A. Person, P.Geo., on 2026-10-21 · Reviewed the drill data.')).toBeVisible();
+    expect(fake.signoffs).toMatchObject([{ version_id: fake.versions[0].id, qp_name: 'A. Person', qp_credentials: 'P.Geo.', signed_on: '2026-10-21', note: 'Reviewed the drill data.' }]);
+
+    // Retract with a reason; then sign again.
+    await versions.getByRole('button', { name: 'Retract the sign-off of version 1' }).click();
+    const retract = versions.getByRole('group', { name: 'Retract the sign-off of version 1' });
+    await retract.getByRole('button', { name: 'Retract sign-off' }).click();
+    await expect(versions.getByRole('status')).toHaveText('Give a reason for the retraction, up to 500 characters.');
+    await retract.getByLabel('Reason for the retraction').fill('Wrong figure');
+    await retract.getByRole('button', { name: 'Retract sign-off' }).click();
+    await expect(versions.getByRole('status')).toHaveText('The sign-off of version 1 was retracted.');
+    await expect(versions.getByText(/Signed off by/)).toHaveCount(0);
+    expect(fake.signoffs[0]).toMatchObject({ retraction_reason: 'Wrong figure' });
+    await versions.getByRole('button', { name: 'Sign off version 1' }).click();
+    await form.getByLabel('Qualified person').fill('B. Person');
+    await form.getByLabel('Credentials').fill('P.Eng.');
+    await form.getByRole('button', { name: 'Record sign-off' }).click();
+    await expect(versions.getByText(/^Signed off by B\. Person, P\.Eng\., on \d{4}-\d{2}-\d{2}$/)).toBeVisible();
+
+    // The version on screen says it is signed off; ticked, its PNG carries the sign-off as metadata.
+    await versions.getByRole('button', { name: 'Open version 1' }).click();
+    await expect(page.locator('#ver-banner')).toContainText('· Signed off by B. Person, P.Eng., on', { timeout: 60_000 });
+    await page.locator('#ver-bar').getByLabel('Sign-off in the PNG’s metadata').check();
+    const [download] = await Promise.all([page.waitForEvent('download'), page.locator('#ver-bar').getByRole('button', { name: 'Download PNG' }).click()]);
+    expect(download.suggestedFilename()).toMatch(/-v1-signed-off\.png$/);
+    const png = readFileSync(await download.path());
+    expect(png.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
+    expect(png.toString('utf8')).toMatch(/iTXtComment\0{5}Signed off by B\. Person, P\.Eng\., on [\d-]+\. Published version 1 · News release 2026-10-21 · SHA-256 1{64}/);
+
+    // A transient sign-off failure keeps versions readable, but never claims they are unsigned or verified.
+    await page.getByRole('button', { name: 'Back to the current figure' }).click();
+    fake.signoffFailure = true;
+    await page.getByRole('button', { name: 'My 3D maps' }).click();
+    await menu.getByRole('button', { name: 'Versions…' }).click();
+    await expect(versions.getByText(/QP sign-off status could not be loaded/)).toBeVisible();
+    await expect(versions.getByRole('button', { name: /Sign off version|Retract/ })).toHaveCount(0);
+    await expect(versions.getByText(/Signed off by/)).toHaveCount(0);
+    await expect(versions.getByRole('button', { name: 'Copy link to version 1' })).toBeVisible();
+    fake.signoffFailure = false;
+    await versions.getByRole('button', { name: 'Retry sign-off status' }).click();
+    await expect(versions.getByText(/^Signed off by B\. Person/)).toBeVisible();
+    await expect(versions.getByRole('button', { name: 'Retract the sign-off of version 1' })).toBeVisible();
+
+    // An opening-time failure also clears stale verified status; the ordinary PNG still downloads.
+    fake.signoffFailure = true;
+    await versions.getByRole('button', { name: 'Open version 1' }).click();
+    await expect(page.locator('#ver-banner')).toContainText('QP sign-off status could not be loaded.');
+    await expect(page.locator('#ver-banner')).not.toContainText('Signed off by');
+    await expect(page.locator('#ver-inc-signoff')).toHaveCount(0);
+    const [ordinary] = await Promise.all([page.waitForEvent('download'), page.locator('#ver-bar').getByRole('button', { name: 'Download PNG' }).click()]);
+    expect(ordinary.suggestedFilename()).not.toMatch(/signed-off/);
+    const ordinaryPng = readFileSync(await ordinary.path());
+    expect(ordinaryPng.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
+    expect(ordinaryPng.toString('utf8')).not.toContain('Signed off by');
+    expect(fake.signoffs).toHaveLength(2); // no new signature or retraction from retrying a read
+
+    // Without the sign-off migration: no sign-off controls, and a notice; publishing still works.
+    await page.getByRole('button', { name: 'Back to the current figure' }).click();
+    fake.signoffFailure = false;
+    fake.noSignoffs = true;
+    await page.getByRole('button', { name: 'My 3D maps' }).click();
+    await menu.getByRole('button', { name: 'Versions…' }).click();
+    await expect(versions.getByText('QP sign-off is not available on this site yet.')).toBeVisible();
+    await expect(versions.getByRole('button', { name: /Sign off|Retract/ })).toHaveCount(0);
+    await expect(versions.getByRole('button', { name: 'Open version 1' })).toBeVisible();
     expect(errors).toEqual([]);
   });
 });

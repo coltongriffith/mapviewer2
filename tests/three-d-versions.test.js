@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { crc32 } from 'node:zlib';
 import { init, publish, list, checkForm, banner, versionLink, today, explain, projectOf } from '../src/three-d/versions.js';
+import { checkSignoff, signoffLine, pngWithText, figureSignoffs } from '../src/utils/figureSignoffs.js';
 
 // Published figure versions, the /3d client (src/three-d/versions.js). The
 // SQL is tested in figure-versions-sql.test.js, the whole flow in
@@ -88,8 +90,59 @@ describe('publishing from the editor', () => {
     expect(rpc).not.toHaveBeenCalled();
   });
 
-  it('lists a figure’s versions with who published them', async () => {
-    expect(await list()).toEqual([{ id: 'v-id', version: 2, label: 'L', releaseDate: null, name: 'Rails', contentHash: 'b'.repeat(64), publishedBy: 'geo@star.test', createdAt: 'x' }]);
+  it('lists a figure’s versions with who published them, and any live sign-off', async () => {
+    let signoffs = { data: null, error: { code: 'PGRST205', message: 'Could not find the table public.figure_version_signoffs' } };
+    const q = { select: () => q, in: () => q, is: () => Promise.resolve(signoffs) };
+    init({ ...host, client: async () => ({ rpc, from: () => q }) });
+    const listed = await list();
+    expect([...listed]).toEqual([{ id: 'v-id', version: 2, label: 'L', releaseDate: null, name: 'Rails', contentHash: 'b'.repeat(64), publishedBy: 'geo@star.test', createdAt: 'x', signoff: null }]);
+    expect(listed.signoffs).toBe(false); // the migration is not applied: the dialog hides sign-off
     expect(rpc).toHaveBeenCalledWith('list_figure_versions', { p_kind: 'figure', p_figure_id: 'fig-1' });
+    signoffs = { data: [{ id: 's1', version_id: 'v-id', qp_name: 'A. Person', qp_credentials: 'P.Geo.', signed_on: '2026-10-21', note: null, created_at: 't' }], error: null };
+    const signed = await list();
+    expect(signed.signoffs).toBe(true);
+    expect(signed[0].signoff).toMatchObject({ id: 's1', name: 'A. Person', credentials: 'P.Geo.', date: '2026-10-21', retractedAt: null });
+  });
+});
+
+describe('QP sign-off (src/utils/figureSignoffs.js)', () => {
+  it('needs a name, credentials and a real date; words the history line', () => {
+    expect(checkSignoff({ name: 'A. Person', credentials: 'P.Geo.', date: '2026-10-21' })).toBe('');
+    expect(checkSignoff({ name: ' ', credentials: 'P.Geo.', date: '2026-10-21' })).toMatch(/name/);
+    expect(checkSignoff({ name: 'A', credentials: '', date: '2026-10-21' })).toMatch(/credentials/);
+    expect(checkSignoff({ name: 'A', credentials: 'P.Eng.', date: '' })).toMatch(/date/);
+    expect(checkSignoff({ name: 'A', credentials: 'P.Eng.', date: '2026-10-21', note: 'x'.repeat(1001) })).toMatch(/1000/);
+    expect(signoffLine({ name: 'A. Person', credentials: 'P.Geo.', date: '2026-10-21' })).toBe('Signed off by A. Person, P.Geo., on 2026-10-21');
+  });
+
+  it('writes the sign-off into the PNG as an iTXt chunk before IEND, with a valid CRC', () => {
+    const iend = [0, 0, 0, 0, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82];
+    const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, ...iend]);
+    const out = pngWithText(png, 'Comment', 'Signed off by É. Person');
+    expect([...out.slice(0, 8)]).toEqual([...png.slice(0, 8)]);
+    expect([...out.slice(-12)]).toEqual(iend);
+    const dv = new DataView(out.buffer), len = dv.getUint32(8);
+    expect(new TextDecoder().decode(out.slice(12, 16))).toBe('iTXt');
+    expect(new TextDecoder().decode(out.slice(16, 16 + len))).toBe('Comment\0\0\0\0\0Signed off by É. Person');
+    expect(dv.getUint32(16 + len)).toBe(crc32(out.slice(12, 16 + len)));
+    expect(out.length).toBe(png.length + len + 12);
+  });
+
+  it('inserts and retracts through the table, and says when it is refused', async () => {
+    const calls = [];
+    const q = (result) => { const c = { insert: (r) => { calls.push(['insert', r]); return c; }, update: (r) => { calls.push(['update', r]); return c; }, eq: (k, v) => { calls.push(['eq', k, v]); return c; }, select: () => c, single: () => Promise.resolve(result) }; return c; };
+    let next = { data: { id: 's1', version_id: 'v1', qp_name: 'A. Person', qp_credentials: 'P.Geo.', signed_on: '2026-10-21', note: null, created_at: 't' }, error: null };
+    const so = figureSignoffs({ from: () => q(next) });
+    expect(await so.sign('v1', { name: ' A. Person ', credentials: 'P.Geo.', date: '2026-10-21', note: ' ' })).toMatchObject({ id: 's1', name: 'A. Person', credentials: 'P.Geo.', note: '' });
+    expect(calls[0]).toEqual(['insert', { version_id: 'v1', qp_name: 'A. Person', qp_credentials: 'P.Geo.', signed_on: '2026-10-21', note: null }]);
+    await expect(so.sign('v1', { name: '', credentials: 'P.Geo.', date: '2026-10-21' })).rejects.toThrow(/name/);
+    next = { data: null, error: { code: 'P0001', message: 'SIGNOFF_EXISTS: this version is already signed off' } };
+    await expect(so.sign('v1', { name: 'B', credentials: 'P.Eng.', date: '2026-10-21' })).rejects.toThrow('This version is already signed off. Retract that sign-off first.');
+    next = { data: null, error: { code: '42501', message: 'new row violates row-level security policy for table "figure_version_signoffs"' } };
+    await expect(so.sign('v1', { name: 'B', credentials: 'P.Eng.', date: '2026-10-21' })).rejects.toThrow(/Only editors/);
+    await expect(so.retract('s1', '  ')).rejects.toThrow(/reason/);
+    next = { data: { id: 's1', version_id: 'v1', qp_name: 'A', qp_credentials: 'P.Geo.', signed_on: '2026-10-21', retracted_at: 't2', retraction_reason: 'Wrong figure' }, error: null };
+    expect(await so.retract('s1', 'Wrong figure')).toMatchObject({ retractedAt: 't2', reason: 'Wrong figure' });
+    expect(calls.slice(-2)).toEqual([['update', { retraction_reason: 'Wrong figure' }], ['eq', 'id', 's1']]);
   });
 });
