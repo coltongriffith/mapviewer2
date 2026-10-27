@@ -1016,6 +1016,7 @@ test('drill data: import a CSV, map its columns, see the diff, commit and roll b
   page.once('dialog', (d) => d.accept());
   await history.getByRole('button', { name: 'Roll back assays-2026.csv' }).click();
   await expect(history.getByRole('row', { name: /assays-2026\.csv.*Rolled back/ })).toBeVisible();
+  await expect(region.getByText('Imported assays-2026.csv: 1 new hole, 3 new assays.')).toHaveCount(0);
   expect(fake.rpc.find((c) => c.fn === 'drill_rollback_batch').args).toEqual({ p_batch: commit.p_batch });
 });
 

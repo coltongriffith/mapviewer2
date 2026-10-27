@@ -58,7 +58,7 @@ function Problems({ errors, errorCount, warnings }) {
   );
 }
 
-export function Importer({ db, property, orgId, onDone, onStart }) {
+export function Importer({ db, property, orgId, onDone, onStart, rolledBackBatchId }) {
   const [file, setFile] = useState(null); // { name, header, rows }
   const [workbook, setWorkbook] = useState(null);
   const [kind, setKind] = useState('assays');
@@ -74,10 +74,18 @@ export function Importer({ db, property, orgId, onDone, onStart }) {
   const [conversion, setConversion] = useState(null);
   const [preset, setPreset] = useState(null); // a vendor preset the header matches, offered until used or dismissed
   const batchId = useRef(null);
+  const receiptBatchId = useRef(null);
   const input = useRef(null);
   const readVersion = useRef(0);
   const operationVersion = useRef(0);
   useEffect(() => () => { readVersion.current++; operationVersion.current++; }, []);
+  useEffect(() => {
+    // Only retract this receipt after its committed batch was rolled back.
+    // Do not reset a new file, mapping or check that the user is working on.
+    if (rolledBackBatchId && receiptBatchId.current === rolledBackBatchId) {
+      setNote(null); receiptBatchId.current = null;
+    }
+  }, [rolledBackBatchId]);
 
   useEffect(() => {
     let active = true; setTemplatePage(null);
@@ -87,7 +95,7 @@ export function Importer({ db, property, orgId, onDone, onStart }) {
 
   const built = useMemo(() => (file && mapping ? buildImport(kind, file, mapping) : null), [file, kind, mapping]);
   const change = (m) => { operationVersion.current++; setBusy(null); setMapping(m); setDiff(null); setNote(null); batchId.current = null; };
-  const reset = () => { readVersion.current++; operationVersion.current++; setWorkbook(null); setFile(null); setMapping(null); setDiff(null); setTplName(''); setBusy(null); setPreset(null); batchId.current = null; };
+  const reset = () => { readVersion.current++; operationVersion.current++; setWorkbook(null); setFile(null); setMapping(null); setDiff(null); setTplName(''); setBusy(null); setPreset(null); batchId.current = null; receiptBatchId.current = null; };
   const choose = (t, name, excel = null) => {
     if (excel) setWorkbook(w => ({ ...w, selection: excel }));
     const k = detectKind(t.header, t.rows, excel?.sheet || name) || 'assays';
@@ -150,6 +158,7 @@ export function Importer({ db, property, orgId, onDone, onStart }) {
     const certificateBatch = kind === 'assays' && r.committed && !r.nothing_to_do && !r.rolled_back && r.batch_id
       ? { id: r.batch_id, filename: file.name, kind, propertyId: property.id } : null;
     reset();
+    receiptBatchId.current = r.committed && !r.nothing_to_do && !r.rolled_back ? r.batch_id : null;
     onDone(certificateBatch);
   });
 
@@ -299,6 +308,7 @@ export default function DrillPanel({ property, perms }) {
   const [results, setResults] = useState(false);
   const [qaqc, setQaqc] = useState(false);
   const [certificateBatch, setCertificateBatch] = useState(null);
+  const [rolledBackBatch, setRolledBackBatch] = useState(null);
   const [revision, setRevision] = useState(0); // bumped by each import and roll-back, so Results reloads its assays
   const load = useCallback(async () => {
     try {
@@ -310,13 +320,13 @@ export default function DrillPanel({ property, perms }) {
   const back = (b) => window.confirm(`Roll back the import of ${b.filename || kindLabel(b.kind)}? Its rows stop being current and what it replaced comes back. The import stays in the history.`)
     && (async () => {
       setBusy(b.id); setError(null);
-      try { await db.rollback(b.id); setCertificateBatch(current => current?.id === b.id ? null : current); setRevision((v) => v + 1); await load(); } catch (e) { setError(e.message); } finally { setBusy(null); }
+      try { await db.rollback(b.id); setRolledBackBatch({ id: b.id, propertyId: property.id }); setCertificateBatch(current => current?.id === b.id ? null : current); setRevision((v) => v + 1); await load(); } catch (e) { setError(e.message); } finally { setBusy(null); }
     })();
   return (
     <section aria-label="Drill data" className="ws-stack">
       <ErrorNote error={error} onDismiss={() => setError(null)} />
       <div className="dash-panel"><Summary s={s} /></div>
-      {perms.edit && db && <div className="dash-panel"><Importer key={property.id} db={db} property={property} orgId={property.org_id} onStart={() => setCertificateBatch(null)} onDone={batch => { setCertificateBatch(batch); setRevision((v) => v + 1); load(); }} /></div>}
+      {perms.edit && db && <div className="dash-panel"><Importer key={property.id} db={db} property={property} orgId={property.org_id} rolledBackBatchId={rolledBackBatch?.propertyId === property.id ? rolledBackBatch.id : null} onStart={() => setCertificateBatch(null)} onDone={batch => { setCertificateBatch(batch); setRevision((v) => v + 1); load(); }} /></div>}
       {perms.edit && certificateBatch?.propertyId === property.id && <section className="dash-panel" aria-label="Import certificate step">
         <h3 style={{ margin: '0 0 8px', fontSize: 15 }}>Add supporting lab certificates (optional)</h3>
         <p className="dash-muted">{certificateBatch.filename} is already imported. Link a library PDF or upload one now; you can also do this later from its import history. Linking a certificate does not verify the assay results.</p>
