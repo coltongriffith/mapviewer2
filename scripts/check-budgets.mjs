@@ -282,7 +282,7 @@ const BUDGETS = {
   // Release packs plus main's certificate completion, stamped build: measured 1153.7; add 0.3 KiB for commit/chunk variation.
   // Combined release/certificate/disclosure/sign-off integration, final stamped build: measured 1159.2; retain 0.3 KiB headroom.
   // Numeric classification integrated with current main: stamped total measured 1159.6.
-  // Combined storage/classification/current main: prior measured total 1159.9, to verify on final head.
+  // Combined storage/classification/current main: stamped total 1159.8; retain 0.4 KiB for commit/chunk variation.
   totalAuthJsGzipKb: 1160.2,
   // 1009.4 → 1026.3 (measured 1026.0): lazy XLSX reader (~13.8 KiB), sheet/header preview
   // (~1.1 KiB), import wiring and numeric-format handling. Shared fflate adds ~1.2 KiB
@@ -365,7 +365,7 @@ const BUDGETS = {
   // Same stamped integration: measured 1085.2 plain (fractionally over that limit); keep 0.3 KiB allowance.
   // Same combined integration: measured 1090.7 plain; retain 0.3 KiB headroom.
   // Same numeric integration: stamped plain total measured 1091.3.
-  // Same combined integration: prior plain total 1091.6, to verify on final head.
+  // Same combined integration: stamped plain total 1091.6; retain 0.3 KiB headroom.
   totalJsGzipKb: 1091.9,
   // 940.9 → 957.8 (measured 957.5): Excel import, as totalAuthJsGzipKb above.
   // 940.9 → 944.8 (P2-8, measured 944.6): the same lazy property recipe path
@@ -648,7 +648,7 @@ const BUDGETS = {
   // Combined API bridge + shared XLSX compression support, measured 343.8 configured.
   // XLSX writing uses shared fflate async zip support (+~0.5 KiB); writer remains lazy. Measured 344.3.
   // Same integration: measured 344.6 configured.
-  // Combined storage/classification graph: prior measured configured editor 344.9.
+  // Combined storage/classification graph: measured configured editor 344.9.
   editorAuthJsGzipKb: 345.2,
   // Excel import: shared fflate's async ZIP worker support adds ~1.2 KiB (342.5 measured).
   // The XLSX parser and sheet picker remain lazy; the homepage does not load compression.
@@ -663,7 +663,7 @@ const BUDGETS = {
   // Same combined bridge/compression support, measured 275.7 plain.
   // Same shared async zip support; measured 276.3 plain.
   // Numeric classification on current main: measured 276.6 plain; retain 0.3 KiB headroom.
-  // Same combined graph: prior measured plain editor 276.9.
+  // Same combined graph: measured plain editor 276.9.
   editorJsGzipKb: 277.2,
   // 355 to 355.3 (Oct 2026): claims shares the editor API bridge/control names; measured 355.0 in CI.
   // Same shared compression increase as above (274.4 measured).
@@ -671,7 +671,7 @@ const BUDGETS = {
   // Claims shares that editor/compression graph, measured 356.5 configured.
   // Same shared async zip support; measured 357.0 configured.
   // Same integration: measured 357.4 configured.
-  // Same combined graph: prior measured configured claims 357.6.
+  // Same combined graph: measured configured claims 357.6.
   claimsAuthJsGzipKb: 357.9,
   claimsJsGzipKb: 290,
   // Stylesheet, gzipped. Today ~29 kB.
