@@ -53,6 +53,7 @@ test('property data tabs: historical imports without counts survive repeated and
   });
   await page.goto('/workspace/star-copper-corp/p/rails-copper-gold');
   await page.getByRole('tab', { name: 'Drill data', exact: true }).click();
+  await expect(page.getByText('Drill data contains records, QA/QC comparisons and intercept results. Data library keeps source files and reports.')).toBeVisible();
   await summaryRequested;
   await page.getByRole('tab', { name: 'Data library', exact: true }).click();
   await expect(page.getByRole('table', { name: 'Data files' })).toBeVisible();
@@ -671,6 +672,7 @@ test('the property page lists its map and its 3D figure', async ({ page }) => {
   await expect(page).toHaveURL(/\/workspace\/star-copper-corp\/p\/rails-copper-gold$/);
   await expect(page.getByRole('heading', { level: 1, name: /Rails Copper-Gold/ })).toBeVisible();
   await expect(page.getByText('Porphyry target')).toBeVisible();
+  await expect(page.getByText(/manages records and results/)).toContainText('Data library keeps files and reports.');
 
   await page.getByRole('tab', { name: 'Maps' }).click();
   await expect(page.getByRole('button', { name: 'Open Rails claims' })).toBeVisible();
@@ -685,9 +687,11 @@ test('the property page lists its map and its 3D figure', async ({ page }) => {
 
 test('the data library lists, adds, versions, downloads and deletes files', async ({ page }) => {
   const fake = await fakeSupabase(page, { role: 'admin' });
+  const originalDrill = JSON.parse(JSON.stringify(fake.drill));
   await page.goto('/workspace/star-copper-corp/p/rails-copper-gold');
   await page.getByRole('tab', { name: 'Data library' }).click();
   const region = page.getByRole('region', { name: 'Data library' });
+  await expect(region.getByText(/Uploading a file does not import its rows into Drill data/)).toBeVisible();
   const table = region.getByRole('table', { name: 'Data files' });
   await expect(table.getByRole('row', { name: /assays\.csv.*Drill data · assays.*v2.*cfo@star\.test/ })).toBeVisible();
 
@@ -703,6 +707,8 @@ test('the data library lists, adds, versions, downloads and deletes files', asyn
   expect(added).toMatchObject({ p_property: PROP, p_name: 'Rails collars.csv', p_kind: 'drill', p_role: 'collars', p_path: fake.uploads[0], p_bytes: 32 });
   expect(added.p_sha256).toMatch(/^[0-9a-f]{64}$/);
   await expect(table.getByRole('row', { name: /Rails collars\.csv.*v1.*geo@star\.test/ })).toBeVisible();
+  expect(fake.drill).toEqual(originalDrill);
+  expect(fake.rpc.filter(c => c.fn === 'drill_import_batch')).toEqual([]);
 
   // A new version of an existing file goes into its next folder.
   chooser = page.waitForEvent('filechooser');
