@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const db = vi.hoisted(() => ({ shares: [], plans: {}, created: [], oauthEnabled: true, kits: [], projects: [], planReads: [], planError: null, planThrows: false, rateCalls: [] }));
+const db = vi.hoisted(() => ({ shares: [], plans: {}, created: [], oauthEnabled: true, kits: [], projects: [], planReads: [], planError: null, planThrows: false, rateCalls: [], capability: undefined, capabilityReads: [] }));
 
 vi.mock('../api/_lib/supabase-server.js', () => ({
   serverSupabase: () => ({
@@ -41,6 +41,13 @@ vi.mock('../api/_lib/supabase-server.js', () => ({
       return query;
     },
     rpc: (name, args) => {
+      if (name === 'get_company_connector_allowance') {
+        db.capabilityReads.push({ token, args });
+        if (db.capability === 'throws') return Promise.reject(new Error('Unavailable'));
+        return Promise.resolve(db.capability === undefined
+          ? { data: { version: 1, subject: `user-${token}`, previews: 200, searches: 600 }, error: null }
+          : db.capability);
+      }
       db.created.push({ token, name, args });
       return Promise.resolve({ data: 'acct-share', error: null });
     },
@@ -120,7 +127,7 @@ describe('MCP account connector', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(NOW);
     process.env.SUPABASE_URL = 'https://proj.supabase.co';
-    Object.assign(db, { shares: [], plans: {}, created: [], oauthEnabled: true, kits: [], projects: [], planReads: [], planError: null, planThrows: false, rateCalls: [] });
+    Object.assign(db, { shares: [], plans: {}, created: [], oauthEnabled: true, kits: [], projects: [], planReads: [], planError: null, planThrows: false, rateCalls: [], capability: undefined, capabilityReads: [] });
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: db.oauthEnabled })));
   });
   afterEach(() => {
@@ -254,6 +261,68 @@ describe('MCP account connector', () => {
   it('keeps Company registry searches bounded by the existing Pro search allowance', async () => {
     await call({ token: 'company-search', body: { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'search_mineral_claims', arguments: { jurisdiction: 'bc', query: 'Star' } } } });
     expect(db.rateCalls).toContainEqual({ name: 'check_rate_limit', args: expect.objectContaining({ p_bucket: 'mcp-search-account', p_max: 600, p_window_seconds: 3600 }) });
+  });
+
+  it.each([
+    { data: null, error: { code: 'PGRST202' } },
+    { data: null, error: { code: '42883' } },
+    'throws',
+    { data: null, error: null },
+    { data: true, error: null },
+    { data: [{ version: 1, subject: 'user-company-safe', previews: 200, searches: 600 }], error: null },
+    ...[
+      { version: 2 }, { subject: 'user-company-other' }, { previews: '200' },
+      { previews: 201 }, { searches: 601 }, { version: undefined },
+    ].map(patch => ({ data: { version: 1, subject: 'user-company-safe', previews: 200, searches: 600, ...patch }, error: null })),
+    { data: { version: 1, subject: 'user-company-safe', previews: 200, searches: 600 }, error: { message: 'Unavailable' } },
+  ])('keeps Company at 30 previews/90 searches unless capability is explicitly confirmed: %j', async capability => {
+    db.capability = capability;
+    db.shares = shares(30, 50);
+    const handler = await freshHandler();
+    const res = await send(handler, { token: 'company-safe', body: previewBody });
+    const error = res.body.result.structuredContent.error;
+    expect(error).toMatchObject({ tier: 'company', limit: 30, code: 'RATE_LIMITED' });
+    expect(error.message).toContain('Company');
+    expect(error.message).not.toMatch(/Free plan|Upgrade to Pro/);
+    expect(error.upgrade_url).toBeUndefined();
+    expect(db.created).toEqual([]);
+    await send(handler, { token: 'company-safe', body: { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'search_mineral_claims', arguments: { jurisdiction: 'bc', query: 'Star' } } } });
+    expect(db.rateCalls).toContainEqual({ name: 'check_rate_limit', args: expect.objectContaining({ p_bucket: 'mcp-search-account', p_max: 90 }) });
+  });
+
+  it('rechecks capability on the same cached Company account after rollback and recovery', async () => {
+    const handler = await freshHandler();
+    db.shares = shares(30, 50);
+    expect((await send(handler, { token: 'company-cache', body: previewBody })).body.result.structuredContent.allowance.limit).toBe(200);
+    db.capability = { data: null, error: { code: 'PGRST202' } };
+    expect((await send(handler, { token: 'company-cache', body: previewBody })).body.result.structuredContent.error.limit).toBe(30);
+    db.capability = undefined;
+    expect((await send(handler, { token: 'company-cache', body: previewBody })).body.result.structuredContent.allowance.limit).toBe(200);
+    expect(db.planReads).toEqual(['user-company-cache']);
+    expect(db.capabilityReads).toEqual(Array.from({ length: 3 }, () => ({ token: 'company-cache', args: undefined })));
+  });
+
+  it('reports the conservative Company allowance truthfully below the old limit', async () => {
+    db.capability = { data: null, error: { code: 'PGRST202' } };
+    db.shares = shares(29, 50);
+    const result = (await call({ token: 'company-before-activation', body: previewBody })).body.result.structuredContent;
+    expect(result.allowance).toMatchObject({ tier: 'company', limit: 30, remaining: 0 });
+    expect(result.warnings.join(' ')).toContain('last of 30 previews this hour on Company');
+    expect(result.warnings.join(' ')).not.toMatch(/Free plan|Upgrade to Pro/);
+  });
+
+  it('does not add capability lookups to Free, Pro or anonymous requests', async () => {
+    for (const token of ['free-no-cap', 'pro-no-cap']) await call({ token, body: previewBody });
+    await call({ query: {}, token: 'company-no-cap', body: { jsonrpc: '2.0', id: 1, method: 'tools/list' } });
+    expect(db.capabilityReads).toEqual([]);
+  });
+
+  it('describes Company allowance as conditional until activation', async () => {
+    db.capability = { data: null, error: { code: 'PGRST202' } };
+    const tools = await call({ token: 'company-text', body: { jsonrpc: '2.0', id: 1, method: 'tools/list' } });
+    expect(tools.body.result.tools.find(t => t.name === 'preview_exploration_map').description).toContain('Company uses 200 only when server support is confirmed; otherwise 30');
+    const init = await call({ token: 'company-text', body: { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'test', version: '1' } } } });
+    expect(init.body.result.instructions).toContain('Company uses 200 only when server support is confirmed; otherwise 30');
   });
 
   it('does not look up a Company plan for an unauthenticated account request', async () => {

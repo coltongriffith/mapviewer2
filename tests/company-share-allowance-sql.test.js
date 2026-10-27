@@ -42,6 +42,47 @@ async function account(plan, count) {
 const create = (userId, creatorKey = null, payload = state) => as(userId, 'select public.create_shared_map($1::jsonb, $2)', [payload, creatorKey]);
 
 describe('authoritative Company share allowance', () => {
+  it('exposes an authenticated, subject-bound read-only capability without table privileges', async () => {
+    const company = await account('company', 0), other = await account('free', 0);
+    for (const userId of [company, other]) {
+      const rows = await as(userId, 'select public.get_company_connector_allowance() as capability');
+      expect(rows[0].capability).toEqual({ version: 1, subject: userId, previews: 200, searches: 600 });
+    }
+    await expect(as(company, 'select * from public.user_plans')).rejects.toThrow(/permission denied/);
+    const meta = (await db.query("select prosecdef, provolatile, proconfig from pg_proc where oid = 'public.get_company_connector_allowance()'::regprocedure")).rows[0];
+    expect(meta.prosecdef).toBe(false);
+    expect(meta.provolatile).toBe('s');
+    expect(meta.proconfig).toEqual(['search_path=""']);
+  });
+
+  it('denies anonymous/PUBLIC callers and returns no marker without an authenticated subject', async () => {
+    await expect(as(null, 'select public.get_company_connector_allowance()')).rejects.toThrow(/permission denied/);
+    const acl = (await db.query("select proacl::text as acl from pg_proc where oid = 'public.get_company_connector_allowance()'::regprocedure")).rows[0].acl;
+    expect(acl).toContain('authenticated=X/');
+    expect(acl).not.toMatch(/(?:\{|,)=X\/|anon=X\//);
+    await db.query("select set_config('request.jwt.claim.sub', '', false)");
+    await db.exec('set role authenticated');
+    try {
+      expect((await db.query('select public.get_company_connector_allowance() as capability')).rows[0].capability).toBeNull();
+    } finally { await db.exec('reset role'); }
+  });
+
+  it('rolls back capability and Company quota together, then safely reapplies both', async () => {
+    const company = await account('company', 30);
+    await db.exec('begin');
+    try {
+      await db.exec('revoke execute on function public.get_company_connector_allowance() from authenticated');
+      await db.exec(read('20261001180000_account_share_limits_by_plan.sql'));
+      await db.exec('commit');
+    } catch (error) { await db.exec('rollback'); throw error; }
+    try {
+      await expect(as(company, 'select public.get_company_connector_allowance()')).rejects.toThrow(/permission denied/);
+      await expect(create(company)).rejects.toThrow(/SHARE_RATE_LIMIT/);
+    } finally { await db.exec(read('20261027174653_company_share_allowance.sql')); }
+    expect((await as(company, 'select public.get_company_connector_allowance() as capability'))[0].capability.subject).toBe(company);
+    expect((await create(company))[0].create_shared_map).toMatch(/^[0-9a-f]{32}$/);
+  });
+
   it('retains the original function grants when applied repeatedly', async () => {
     const current = (await db.query("select proacl::text as acl from pg_proc where oid = 'public.create_shared_map(jsonb,text)'::regprocedure")).rows[0].acl;
     expect(current).toBe(originalAcl);

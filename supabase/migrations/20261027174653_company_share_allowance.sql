@@ -1,12 +1,18 @@
 -- Company uses the existing Pro share allowance (200 per rolling hour).
 -- Free/missing/unknown plans stay at 30; anonymous creator keys stay at 10.
 -- API allowance and authoritative insertion limits must agree. No plan rows,
--- account assignments, tables, grants or claim-monitoring limits are changed.
+-- account assignments, tables or claim-monitoring limits are changed.
 -- Prerequisites: shared_maps bounds/ownership from 20260728000004 and the
 -- existing account plan limits from 20261001180000. Apply this correction
--- before enabling the matching Company allowance in api/mcp.js.
+-- atomically with its capability RPC below. Older databases keep the API's
+-- conservative 30-preview/90-search Company allowance until this is applied.
 -- Source-only preparation: production application requires separate approval.
--- Rollback: restore create_shared_map from 20261001180000_account_share_limits_by_plan.sql.
+-- Rollback IN ONE TRANSACTION: revoke authenticated execution on
+-- get_company_connector_allowance(), then restore create_shared_map from
+-- 20261001180000_account_share_limits_by_plan.sql. Never restore only the quota
+-- function while leaving a positive capability accessible. API checks the
+-- marker on every Company request; an already in-flight insert is still bounded
+-- by create_shared_map. This file is applied transactionally by apply-migration.
 -- CREATE OR REPLACE preserves the function's existing explicit ACL.
 create or replace function public.create_shared_map(p_state jsonb, p_creator_key text default null::text)
  returns text
@@ -76,3 +82,21 @@ begin
   return v_id;
 end;
 $function$;
+
+-- Read-only deployment capability, not a plan grant. The API separately checks
+-- the authenticated account's stored plan; create_shared_map remains authoritative.
+-- SECURITY INVOKER needs no table access, exposes no other account's data, and
+-- cannot be used without an authenticated subject (even with a misplaced grant).
+create or replace function public.get_company_connector_allowance()
+returns jsonb
+language sql
+stable
+security invoker
+set search_path = ''
+as $function$
+  select case when auth.uid() is null then null else
+    jsonb_build_object('version', 1, 'subject', auth.uid(), 'previews', 200, 'searches', 600)
+  end;
+$function$;
+revoke all on function public.get_company_connector_allowance() from public, anon;
+grant execute on function public.get_company_connector_allowance() to authenticated;
