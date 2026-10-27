@@ -32,6 +32,9 @@ jobs:
       - name: Install (locked)
         run: npm ci
 
+      - name: Browser bucket coverage
+        run: node scripts/check-browser-buckets.mjs
+
       # Errors fail the build; the accessibility/unused-variable backlog is
       # reported as warnings so it stays visible without blocking unrelated work.
       - name: Lint
@@ -58,8 +61,8 @@ jobs:
           npx vite build --outDir dist-auth-check
           node scripts/check-budgets.mjs dist-auth-check
 
-  # Each suite keeps its original config and test selection. fullyParallel
-  # partitions individual tests across three standard runners per suite.
+  # Anonymous buckets balance measured rendering work; configured tests keep
+  # their original three shards. All six use the original workers/retries.
   e2e_shards:
     name: browser (${{ matrix.suite }}, ${{ matrix.shard }}/3)
     runs-on: ubuntu-latest
@@ -91,7 +94,9 @@ jobs:
       # Keep the real build and vercel.json semantics in both suites.
       - name: Browser smoke tests
         if: matrix.suite == 'anonymous'
-        run: npm run test:e2e -- --shard=${{ matrix.shard }}/3
+        env:
+          E2E_ANONYMOUS_BUCKET: ${{ matrix.shard }}
+        run: npx playwright test --config playwright.ci-anonymous.config.js
       - name: Admin browser flows (isolated auth and data fixtures)
         if: matrix.suite == 'admin'
         run: npm run test:e2e:admin -- --shard=${{ matrix.shard }}/3
