@@ -2,12 +2,14 @@ import React, { useEffect, useState } from 'react';
 import LandingPage from './components/LandingPage';
 import { useAuth } from './hooks/useAuth.jsx';
 import { lazyGuarded } from './utils/preloadGuard';
+import { embedShareId } from './utils/embedCode';
 
 // Guarded: a tab opened before a deploy reloads for the new build (or offers to) instead of crashing.
 const AdminPage = lazyGuarded(() => import('./components/AdminPage'), { page: true });
 const EditorApp = lazyGuarded(() => import('./App'), { page: true });
 const HowToUseModal = lazyGuarded(() => import('./components/HowToUseModal'));
 const OAuthConsentPage = lazyGuarded(() => import('./components/OAuthConsentPage'), { page: true });
+const EmbedMapPage = lazyGuarded(() => import('./components/EmbedMapPage'), { page: true });
 
 export function needsWorkspace(location = window.location) {
   const params = new URLSearchParams(location.search);
@@ -51,6 +53,10 @@ export default function AppRouter() {
     window.history.pushState({}, '', path + (query ? `?${query}` : ''));
     setWorkspace(true);
   };
+  // The live investor web map, framed by other sites: the map alone, never the editor. vercel.json lets any
+  // /embed/map/<x> be framed, so a malformed id still renders the embed page (as unavailable).
+  const embedId = embedShareId(window.location.pathname);
+  if (embedId || window.location.pathname.startsWith('/embed/map/')) return <React.Suspense fallback={<div className="shared-map-loading" role="status">Loading map…</div>}><EmbedMapPage shareId={embedId} /></React.Suspense>;
   // Supabase's OAuth server sends an assistant's account-connection request here.
   if (window.location.pathname === '/oauth/consent') {
     return <React.Suspense fallback={<div className="shared-map-loading" role="status">Loading…</div>}><OAuthConsentPage /></React.Suspense>;

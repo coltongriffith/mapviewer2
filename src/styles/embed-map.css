@@ -1,0 +1,26 @@
+/* Live investor web map (EmbedMapPage.jsx, /embed/map/<id>). Loaded only with it. */
+.embed-map { position: fixed; inset: 0; overflow: hidden; background: #eef1f4; color: #1f2937; font: 13px/1.35 Inter, Arial, Helvetica, sans-serif; }
+.embed-map--message { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; padding: 16px; }
+.embed-map--message a { color: #1d4ed8; }
+.embed-map-canvas, .embed-map-canvas .leaflet-map-canvas { position: absolute; inset: 0; }
+.embed-map-canvas .leaflet-container { width: 100%; height: 100%; }
+.embed-map-canvas .leaflet-control-attribution { font-size: 10px; max-width: 60vw; }
+.embed-map-toggle, .embed-map-panel { position: absolute; z-index: 1000; left: 10px; background: #fff; border: 1px solid #d4dbe3; border-radius: 6px; box-shadow: 0 1px 4px rgba(15, 23, 42, .15); }
+.embed-map-toggle { top: 10px; padding: 6px 10px; font: inherit; font-weight: 600; cursor: pointer; }
+.embed-map-panel { top: 46px; width: min(260px, calc(100vw - 20px)); max-height: calc(100% - 92px); overflow-y: auto; box-sizing: border-box; padding: 10px 12px; }
+.embed-map-title { margin: 0 0 8px; font-size: 15px; line-height: 1.25; }
+.embed-map-layers { margin: 0 0 10px; padding: 0; border: 0; }
+.embed-map-layers legend, .embed-map-legend h2 { margin: 0 0 6px; padding: 0; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #64748b; }
+.embed-map-layers label, .embed-map-item { display: flex; align-items: center; gap: 8px; min-height: 28px; }
+.embed-map-layers label { cursor: pointer; }
+.embed-map-layers input { margin: 0; width: 16px; height: 16px; flex: none; }
+.embed-map-swatch { display: inline-block; width: 14px; height: 14px; flex: none; }
+.embed-map-legend { border-top: 1px solid #e5e9ef; padding-top: 8px; }
+.embed-map-group { margin: 6px 0 2px; font-weight: 600; }
+.embed-map-logo { position: absolute; z-index: 1000; right: 10px; bottom: 26px; max-width: 120px; max-height: 48px; padding: 4px 6px; background: rgba(255, 255, 255, .9); border-radius: 4px; }
+.embed-map-attribution { position: absolute; z-index: 1000; left: 0; bottom: 0; display: flex; flex-wrap: wrap; gap: 0 8px; max-width: calc(100% - 200px); padding: 2px 8px; background: rgba(255, 255, 255, .85); font-size: 10px; color: #475569; }
+.embed-map-attribution a { color: #1d4ed8; }
+@media (max-width: 480px) {
+  .embed-map-attribution { max-width: 100%; bottom: 16px; }
+  .embed-map-logo { bottom: 44px; max-width: 90px; }
+}

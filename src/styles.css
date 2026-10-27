@@ -2306,6 +2306,12 @@ button.claim-notices-chip[aria-expanded="true"] { border-color: var(--ui-border-
 .share-copy-btn.copied { background: var(--ui-success); color: #fff; border-color: var(--ui-success); }
 .share-copy-btn.copied:hover { background: #1f5a41; }
 .share-note { margin: 0; font-size: 12px; color: var(--ui-text-muted); line-height: 1.5; }
+.share-embed-link { justify-self: start; padding: 0; border: 0; background: none; color: var(--ui-action); font-size: 13px; font-weight: 600; cursor: pointer; }
+.embed-dialog { width: min(520px, 92vw); }
+.embed-dialog-options { display: flex; flex-wrap: wrap; gap: 8px 14px; font-size: 13px; color: var(--ui-text); }
+.embed-dialog-options label { display: flex; align-items: center; gap: 6px; }
+.embed-dialog-options input[type=number] { width: 76px; }
+.embed-dialog-code { white-space: pre-wrap; word-break: break-all; resize: vertical; }
 .share-loading-state { display: flex; align-items: center; gap: 10px; justify-content: center; }
 .share-spinner { width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0; }
 

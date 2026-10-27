@@ -287,7 +287,11 @@ const BUDGETS = {
   // 1162.8 configured (+3.0 KiB). Initial route limits remain unchanged.
   // Company + workspace receipt integration (5dc1e071 stamped): configured total
   // rounds to1163.2 but exceeds that cap; retain0.3 KiB commit/chunk hash headroom.
-  totalAuthJsGzipKb: 1163.5,
+  // Live web map (/embed/map): its page and the modules it shares with the editor split out of App; measured 1155.8 with main;
+  // with its callouts and drill-plan overlay, 1156.5.
+  // Live-map availability/retry and stale-response guards (89622a70 stamped): measured 1157.1 configured.
+  // Live web map merged with main (Point inspector, numeric classification): measured 1174.8.
+  totalAuthJsGzipKb: 1175.2,
   // 1009.4 → 1026.3 (measured 1026.0): lazy XLSX reader (~13.8 KiB), sheet/header preview
   // (~1.1 KiB), import wiring and numeric-format handling. Shared fflate adds ~1.2 KiB
   // for async ZIP workers; it remains one copy with the existing draft compression.
@@ -371,7 +375,10 @@ const BUDGETS = {
   // Same numeric integration: stamped plain total measured 1091.3.
   // Same combined integration: stamped plain total 1091.6; retain 0.3 KiB headroom.
   // Same lazy Point-column inspector: measured 1094.4 plain (+2.8 KiB).
-  totalJsGzipKb: 1094.8,
+  // Live web map, as totalAuthJsGzipKb above: measured 1088.3 plain with main; 1089.1 with the embed's callouts and drill plan.
+  // Same guarded dialog/RPC path: measured 1089.5 plain; retain 0.4 KiB commit/chunk headroom.
+  // Live web map merged with main (Point inspector, numeric classification): measured 1106.1.
+  totalJsGzipKb: 1106.5,
   // 940.9 → 957.8 (measured 957.5): Excel import, as totalAuthJsGzipKb above.
   // 940.9 → 944.8 (P2-8, measured 944.6): the same lazy property recipe path
   // in the unconfigured build. Its initial route budgets also stay unchanged.
@@ -654,7 +661,10 @@ const BUDGETS = {
   // XLSX writing uses shared fflate async zip support (+~0.5 KiB); writer remains lazy. Measured 344.3.
   // Same integration: measured 344.6 configured.
   // Combined storage/classification graph: measured configured editor 344.9.
-  editorAuthJsGzipKb: 345.2,
+  // Live web map: modules shared with /embed/map leave App as four chunks of their own; measured 347.6.
+  // Narrow missing-RPC messages in shared cloud storage: measured 347.9 configured.
+  // Live web map merged with main (Point inspector, numeric classification): measured 348.6.
+  editorAuthJsGzipKb: 348.9,
   // Excel import: shared fflate's async ZIP worker support adds ~1.2 KiB (342.5 measured).
   // The XLSX parser and sheet picker remain lazy; the homepage does not load compression.
   // 270 → 271.0 (Oct 2026, production errors, measured 270.7, 269.6 on main): the same as editorAuthJsGzipKb above.
@@ -669,7 +679,10 @@ const BUDGETS = {
   // Same shared async zip support; measured 276.3 plain.
   // Numeric classification on current main: measured 276.6 plain; retain 0.3 KiB headroom.
   // Same combined graph: measured plain editor 276.9.
-  editorJsGzipKb: 277.2,
+  // Same chunk split for the live web map; measured 279.5 plain.
+  // Same shared error helper: measured 279.8 plain, fractionally over the former cap.
+  // Live web map merged with main (Point inspector, numeric classification): measured 280.5.
+  editorJsGzipKb: 280.8,
   // 355 to 355.3 (Oct 2026): claims shares the editor API bridge/control names; measured 355.0 in CI.
   // Same shared compression increase as above (274.4 measured).
   // Claims also restores drafts through shared compression (355.3 measured).
@@ -677,8 +690,16 @@ const BUDGETS = {
   // Same shared async zip support; measured 357.0 configured.
   // Same integration: measured 357.4 configured.
   // Same combined graph: measured configured claims 357.6.
-  claimsAuthJsGzipKb: 357.9,
-  claimsJsGzipKb: 290,
+  // Same chunk split for the live web map; measured 360.4 configured, 292.2 plain.
+  // Same measured shared helper graph: 360.7 configured / 292.5 plain.
+  // Live web map merged with main (Point inspector, numeric classification): measured 361.4.
+  claimsAuthJsGzipKb: 361.7,
+  // Live web map merged with main (Point inspector, numeric classification): measured 293.2.
+  claimsJsGzipKb: 293.5,
+  // Live investor web map (/embed/map/<id>): map, legend, layer list, drill-result callouts and the drill plan
+  // (its overlay loaded only when published with one), no editor; measured 243.9 configured, 177.5 plain with main.
+  embedAuthJsGzipKb: 244.2,
+  embedJsGzipKb: 177.8,
   // Stylesheet, gzipped. Today ~29 kB.
   maxCssGzipKb: 40,
   // Any single image shipped from public/, including legacy PNG downloads.
@@ -813,6 +834,8 @@ for (const [name, entries, limit, forbidden] of [
     authConfigured ? BUDGETS.editorAuthJsGzipKb : BUDGETS.editorJsGzipKb, /\/vendor-export-/],
   ['claims', ['index.html', appKey, 'src/components/MapCanvas.jsx', 'src/components/AddClaimsModal.jsx'],
     authConfigured ? BUDGETS.claimsAuthJsGzipKb : BUDGETS.claimsJsGzipKb, /\/(vendor-export-|vendor-geo-|vendor-zip-)/],
+  ['embed', ['index.html', 'src/components/EmbedMapPage.jsx', 'src/components/MapCanvas.jsx'],
+    authConfigured ? BUDGETS.embedAuthJsGzipKb : BUDGETS.embedJsGzipKb, /\/(App-|vendor-export-|vendor-geo-|vendor-zip-)/],
 ]) {
   const files = new Set();
   for (const entry of entries) {

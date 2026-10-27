@@ -47,6 +47,8 @@ export const ENTITLEMENTS = {
     allowed_export_formats: ['png'],
     max_cloud_projects: 0,
     max_brand_kits: 0,
+    // A live investor web map: an embeddable link republished in place (publish_live_map, which enforces it).
+    live_embed: false,
     // Anonymous visitors may SEARCH B.C. tenures — that is the acquisition
     // path — but saving a portfolio or receiving a reminder needs an account.
     max_monitored_tenures: 0,
@@ -60,6 +62,7 @@ export const ENTITLEMENTS = {
     allowed_export_formats: ['png'],
     max_cloud_projects: 2,
     max_brand_kits: 0,   // may capture/preview a kit; saving it is Pro
+    live_embed: false,
     max_monitored_tenures: 10,
     max_portfolios: 1,
     max_alert_recipients: 1,
@@ -76,6 +79,7 @@ export const ENTITLEMENTS = {
     allowed_export_formats: ['png', 'svg', 'svg_ai', 'pdf'],
     max_cloud_projects: Infinity,
     max_brand_kits: Infinity,
+    live_embed: true,
     max_monitored_tenures: 50,
     max_portfolios: Infinity,
     max_alert_recipients: 2,
@@ -88,6 +92,7 @@ export const ENTITLEMENTS = {
     allowed_export_formats: ['png', 'svg', 'svg_ai', 'pdf'],
     max_cloud_projects: Infinity,
     max_brand_kits: Infinity,
+    live_embed: true,
     max_monitored_tenures: 500,
     max_portfolios: Infinity,
     max_alert_recipients: 10,

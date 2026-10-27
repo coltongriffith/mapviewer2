@@ -1,11 +1,13 @@
 import { useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth.jsx';
 import { trackPageView, trackPing } from '../utils/track';
+import { embedShareId } from '../utils/embedCode';
 
 export default function SessionTelemetry() {
   const { loading } = useAuth();
   useEffect(() => {
-    if (loading) return;
+    // A map embedded on another site counts its views as share_viewed (EmbedMapPage), not as site traffic.
+    if (loading || embedShareId(window.location.pathname)) return undefined;
     const entry = window.emAcquisition?.entry || { path: window.location.pathname };
     const key = `em_pageview:${entry.path}`;
     let recorded = false;
