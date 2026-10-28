@@ -1,5 +1,9 @@
 {
   "functions": {
+    "api/agent.js": {
+      "maxDuration": 60,
+      "includeFiles": "{src/features/tour3d/tour-template.html,node_modules/three/build/three.min.js}"
+    },
     "api/claims.js": {
       "maxDuration": 60
     },
@@ -9,14 +13,19 @@
     "api/tenure-search.js": {
       "maxDuration": 30
     },
-    "api/agent.js": {
-      "maxDuration": 60
-    },
     "api/mcp.js": {
       "maxDuration": 60
     }
   },
   "rewrites": [
+    {
+      "source": "/tour/:id",
+      "destination": "/api/agent?action=tour&id=:id"
+    },
+    {
+      "source": "/api/tour",
+      "destination": "/api/agent?action=tour"
+    },
     {
       "source": "/mcp/server",
       "destination": "/api/mcp"
@@ -136,7 +145,7 @@
   ],
   "headers": [
     {
-      "source": "/((?!3d/embed/[^/]+/?$|embed/map/[^/]+/?$).*)",
+      "source": "/((?!3d/embed/[^/]+/?$|embed/map/[^/]+/?$|tour/[^/]+/?$|api/tour/?$|api/agent/?$).*)",
       "headers": [
         {
           "key": "Content-Security-Policy",

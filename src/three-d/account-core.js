@@ -370,6 +370,12 @@ export async function deleteProject(id) {
 }
 
 export const currentProject = () => (current ? { ...current } : null);
+// A published version is not the current saved figure's editable work. The
+// epoch also prevents a pending sharing request from following navigation.
+export const tourSharingContext = () => ({
+  project: current?.id || null, epoch: projectEpoch,
+  readOnly: !!frozen || !!(current?.home && !canEdit(current.home.role)),
+});
 
 // ── Work kept across the sign-in round trip ─────────────────────────────────
 // IndexedDB holds any size; localStorage is the fallback for small figures.

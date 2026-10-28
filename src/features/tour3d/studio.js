@@ -3,6 +3,7 @@ import three from '../../../node_modules/three/build/three.min.js?raw';
 import {packageFromModel} from './packageFromModel';
 import { exportTourHtml, downloadTour } from './export';
 import { tourSetup, unitOf } from './studioInput';
+import {mountTourSharing} from './sharingUI';
 import './studio.css';
 export {modelSnapshot} from './modelSnapshot';
 
@@ -17,14 +18,16 @@ export function openTour(getSnapshot) {
   dialog.id = 'tour3d-dialog'; dialog.className = 'acct-dialog tour3d-dialog';
   dialog.setAttribute('aria-labelledby','tour3d-title');
   // All values from the project are assigned through DOM properties below.
-  dialog.innerHTML = '<h2 id="tour3d-title">3D Tour</h2><p class="tour3d-notice" role="alert" hidden></p><button class="btn tour3d-data" type="button" hidden>Go to Data to finish setup</button><div class="tour3d-grid"><form><label>Title<input name="title" maxlength="160" required></label><label>Grade field<select name="field"></select></label><label>Grade unit<input name="unit" maxlength="20"></label><label>Grade bins (comma separated)<input name="bins" required></label><label>Target<select name="target"></select></label><label><span><input name="envelopes" type="checkbox"> Include model envelopes below the surface</span></label><p class="tour3d-envelope-note muted"></p><button class="btn tour3d-layout" type="button">Add or edit envelopes in Layout</button><details><summary>Labels and footprint</summary><label>Claims legend<input name="legend" maxlength="120"></label><label><span><input name="footprint" type="checkbox"> Include generalized footprint</span></label><p class="muted">The footprint is an illustrative outline of selected intercepts, not a geological boundary or resource estimate.</p><label>Footprint threshold<input name="threshold" type="number" step="any"></label><label>Extra labels (one per line: HoleID: Label)<textarea name="labels" rows="2"></textarea></label></details><p class="muted">Includes all loaded project claims and holes, including items hidden in the figure.</p><button class="btn" type="submit">Update preview</button><p class="muted">Terrain and imagery load online. If unavailable, the tour shows an approximate surface. Downloads include the viewer and project data; they still need a connection for terrain and imagery.</p><p class="muted">Hosted publishing will be available after its storage and access controls are activated.</p></form><div><p class="tour3d-placeholder">Your tour will appear here after the required project setup is complete.</p><iframe hidden title="3D Tour preview" sandbox="allow-scripts"></iframe><p class="tour3d-status" role="status"></p><ul class="tour3d-warnings"></ul><button class="btn primary tour3d-download" type="button" disabled>Download tour (HTML)</button><button class="btn tour3d-close" type="button">Close</button></div></div>';
+  dialog.innerHTML = '<h2 id="tour3d-title">3D Tour</h2><p class="tour3d-notice" role="alert" hidden></p><button class="btn tour3d-data" type="button" hidden>Go to Data to finish setup</button><div class="tour3d-grid"><form><label>Title<input name="title" maxlength="160" required></label><label>Grade field<select name="field"></select></label><label>Grade unit<input name="unit" maxlength="20"></label><label>Grade bins (comma separated)<input name="bins" required></label><label>Target<select name="target"></select></label><label><span><input name="envelopes" type="checkbox"> Include model envelopes below the surface</span></label><p class="tour3d-envelope-note muted"></p><button class="btn tour3d-layout" type="button">Add or edit envelopes in Layout</button><details><summary>Labels and footprint</summary><label>Claims legend<input name="legend" maxlength="120"></label><label><span><input name="footprint" type="checkbox"> Include generalized footprint</span></label><p class="muted">The footprint is an illustrative outline of selected intercepts, not a geological boundary or resource estimate.</p><label>Footprint threshold<input name="threshold" type="number" step="any"></label><label>Extra labels (one per line: HoleID: Label)<textarea name="labels" rows="2"></textarea></label></details><p class="muted">Includes all loaded project claims and holes, including items hidden in the figure.</p><button class="btn" type="submit">Update preview</button><p class="muted">Terrain and imagery load online. If unavailable, the tour shows an approximate surface. Downloads include the viewer and project data; they still need a connection for terrain and imagery.</p></form><div><p class="tour3d-placeholder">Your tour will appear here after the required project setup is complete.</p><iframe hidden title="3D Tour preview" sandbox="allow-scripts"></iframe><p class="tour3d-status" role="status"></p><ul class="tour3d-warnings"></ul><button class="btn primary tour3d-download" type="button" disabled>Download tour (HTML)</button><button class="btn tour3d-close" type="button">Close</button></div></div>';
   const form = dialog.querySelector('form'), el = name => form.elements.namedItem(name);
   const status = dialog.querySelector('[role=status]'), frame = dialog.querySelector('iframe');
   const download = dialog.querySelector('.tour3d-download');
   const notice=dialog.querySelector('[role=alert]'), dataButton=dialog.querySelector('.tour3d-data'), placeholder=dialog.querySelector('.tour3d-placeholder');
   dataButton.onclick=()=>{dialog.close();window.EM3D?.showStep('data');};
   let result = null, sourceSignature = null;
-  const fail = error => { notice.textContent=error.message || 'The tour could not be built.';notice.hidden=false;dataButton.hidden=false;frame.hidden=true;placeholder.hidden=false;status.textContent='Preview not created yet.';result=null;download.disabled=true; };
+  const shareHost=document.createElement('section');shareHost.className='tour3d-sharing';download.after(shareHost);
+  const sharing=mountTourSharing(shareHost,{getPackage:()=>{try{return result&&getSnapshot().signature===sourceSignature?result.package:null;}catch{return null;}}});
+  const fail = error => { notice.textContent=error.message || 'The tour could not be built.';notice.hidden=false;dataButton.hidden=false;frame.hidden=true;placeholder.hidden=false;status.textContent='Preview not created yet.';result=null;download.disabled=true;sharing.refresh(); };
   try {
     const snapshot=getSnapshot(),input = tourSetup(snapshot);
     const count=snapshot.envelopeSources?.length||0;el('envelopes').checked=count>0;el('envelopes').disabled=!count;
@@ -60,10 +63,11 @@ export function openTour(getSnapshot) {
       for (const warning of result.package.meta.warnings) { const li = document.createElement('li'); li.textContent = warning; list.append(li); }
       status.textContent = result.package.holes.length+' holes Â· '+result.package.runs.length+' grade runs. Preview updated.';
       download.disabled = false;
+      sharing.refresh();
     } catch (e) { fail(e); }
   };
   form.addEventListener('submit', e=>{e.preventDefault();update();});
-  form.addEventListener('input', ()=>{result=null;download.disabled=true;status.textContent='Settings changed. Update the preview before downloading.';});
+  form.addEventListener('input', ()=>{result=null;download.disabled=true;sharing.refresh();status.textContent='Settings changed. Update the preview before downloading.';});
   el('field').addEventListener('change',()=>{const setup=tourSetup(getSnapshot()),g=setup.grade,same=el('field').value===g.field;el('unit').value=setup.units[el('field').value]??(same?g.unit:unitOf(el('field').value));el('bins').value=same?g.bins.join(', '):'';});
   download.addEventListener('click',()=>{
     if (getSnapshot().signature !== sourceSignature) { changed(); return; }
@@ -73,10 +77,10 @@ export function openTour(getSnapshot) {
   dialog.querySelector('.tour3d-close').onclick = ()=>dialog.close();
   const changed = ()=>{
     if (!result || getSnapshot().signature === sourceSignature) return;
-    result=null;download.disabled=true;status.textContent='Project data changed. Update the preview before downloading.';
+    result=null;download.disabled=true;sharing.refresh();status.textContent='Project data changed. Update the preview before downloading.';
   };
   window.addEventListener('em3d:change',changed);
-  dialog.addEventListener('close',()=>{window.removeEventListener('em3d:change',changed);frame.srcdoc='';dialog.remove();},{once:true});
+  dialog.addEventListener('close',()=>{sharing.close();window.removeEventListener('em3d:change',changed);frame.srcdoc='';dialog.remove();},{once:true});
   document.body.append(dialog);dialog.showModal();
   update();
   return dialog;

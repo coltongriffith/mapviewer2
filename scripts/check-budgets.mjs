@@ -627,11 +627,19 @@ const BUDGETS = {
   // Picker, source/legend ownership and missing-alteration handling remain lazy; startup is unchanged.
   // Optional sign-off lookup recovery and explicit unknown-status notice: 164.0 configured.
   // These controls stay in the lazy versions dialog; 3D startup is unchanged.
-  threeDLazyJsGzipKb: 164.2,
+  // Hosted sharing introduces a dynamic path from Tour to account-core. The
+  // reachability walker now attributes ~23 KiB of existing account code to
+  // Tour instead of this bucket. Tighten here to keep that transfer bounded.
+  // Measured 141.0 plain/configured; initial maker load remains 175.3 KiB.
+  threeDLazyJsGzipKb: 141.5,
   // Self-contained 3D Tour export: separate lazy Three global source plus
   // template/builder/dialog: measured 173.4. Not part of the maker's initial load.
   // Model palette/derived-field handoff, existing envelope geometry and layer toggles: ~176.2 KiB.
-  threeDTourJsGzipKb: 176.6,
+  // Hosted publish/revoke UI + session guards: ~2.5 KiB new lazy code, plus
+  // the existing account-code transfer above (loaded only on availability
+  // check). Measured 201.9 plain / 202.1 configured, not eager startup growth.
+  // Combined lazy+Tour caps rise only 3.1 KiB (340.8 -> 343.9).
+  threeDTourJsGzipKb: 202.4,
   // 161.2 → 162.7 (P2-8, measured 162.2 plain / 162.4 configured): explicit
   // recipe selection, snapshot ownership, collision/edited-wording guards and
   // recipe-only update notices in property-data. No eager 3D page growth.
