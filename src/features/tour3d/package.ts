@@ -26,13 +26,14 @@ export function parseTourPackage(json: string): TourPackage {
   };
   const text = (x: any, max: number, field: string) => { if (typeof x !== 'string' || x.length > max) fail(field); };
   const bool = (x: any, field: string) => { if (typeof x !== 'boolean') fail(field); };
+  const colour = (x:any,field:string) => { if(typeof x!=='string'||!/^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(x))fail(field); };
   let vertices = 0;
   const coordinates = (x: any, dimension: number, min: number, field: string) => {
     const points = array(x,min*dimension,3000000,field);
     if (points.length % dimension || (vertices += points.length/dimension) > 1000000) fail('geometry budget');
     points.forEach(p=>number(p,-1000000,1000000,field));
   };
-  const d = object(data,['v','holes','runs','claims','fpoly','collars','terrain','config','meta'],'root');
+  const d = object(data,['v','holes','runs','claims','fpoly','collars','terrain','config','meta','envelopes'],'root');
   if (d.v !== 1) fail('version');
   const holes = array(d.holes,1,5000,'holes');
   holes.forEach(h=>{
@@ -40,7 +41,8 @@ export function parseTourPackage(json: string): TourPackage {
     if (h.yr != null) integer(h.yr,0,9999,'year');
     bool(h.pv,'provisional');bool(h.sm,'target');coordinates(h.p,3,2,'hole path');
   });
-  const config = object(d.config,['title','tag','tabs','legend','bins','labels','imagery'],'config');
+  const config = object(d.config,['title','tag','tabs','legend','bins','labels','imagery','traceColor','primary','accent','claimColors'],'config');
+  for(const k of ['traceColor','primary','accent'])if(config[k]!=null)colour(config[k],k);
   text(config.title,500,'title');text(config.tag,500,'tag');
   array(config.tabs,3,3,'tabs').forEach(t=>array(t,2,2,'tab').forEach(s=>text(s,500,'tab text')));
   const legend = object(config.legend,['claims','holes','grade'],'legend');
@@ -48,7 +50,7 @@ export function parseTourPackage(json: string): TourPackage {
   const bins = array(config.bins,1,8,'bins');
   bins.forEach(b=>{
     array(b,2,2,'bin');text(b[0],128,'bin label');
-    if (typeof b[1] !== 'string' || !/^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(b[1])) fail('bin colour');
+    colour(b[1],'bin colour');
   });
   // Hosted viewers must not fetch arbitrary URLs supplied by an uploaded package.
   if (config.imagery != null && config.imagery !== 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}') fail('imagery source');
@@ -62,6 +64,19 @@ export function parseTourPackage(json: string): TourPackage {
     array(r,3,3,'run');integer(r[0],0,holes.length-1,'run hole');coordinates(r[1],3,2,'run path');integer(r[2],0,bins.length-1,'run bin');
   });
   for (const k of ['claims','fpoly']) array(d[k],0,10000,k).forEach(r=>coordinates(r,2,3,k));
+  if(config.claimColors!=null)array(config.claimColors,d.claims.length,d.claims.length,'claim colours').forEach(c=>colour(c,'claim colour'));
+  let meshVertices=0,triangles=0;
+  for(const e of array(d.envelopes??[],0,32,'envelopes')){
+    object(e,['name','vertices','indices','color','opacity','kind'],'envelope');text(e.name,500,'envelope name');
+    coordinates(e.vertices,3,3,'envelope vertices');meshVertices+=e.vertices.length/3;
+    if(meshVertices>200000)fail('envelope vertex budget');
+    if(e.vertices.some((p:number)=>Math.abs(p)>200000))fail('envelope extent');
+    const indices=array(e.indices,3,1500000,'envelope indices');triangles+=indices.length/3;
+    if(indices.length%3||triangles>500000)fail('envelope triangle budget');
+    indices.forEach(i=>integer(i,0,e.vertices.length/3-1,'envelope index'));
+    colour(e.color,'envelope colour');number(e.opacity,0,1,'envelope opacity');
+    if(!['supplied','estimated'].includes(e.kind))fail('envelope source');
+  }
   array(d.collars,holes.length,holes.length,'collars').forEach(c=>{
     array(c,4,4,'collar');c.slice(0,3).forEach((p:any)=>number(p,-1000000,1000000,'collar position'));integer(c[3],0,1,'collar target');
   });

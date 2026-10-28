@@ -5,7 +5,7 @@ import { parseTourPackage,MAX_TOUR_BYTES } from '../src/features/tour3d/package'
 import { renderHostedTour } from '../api/_lib/tour-render';
 import { createHash } from 'node:crypto';
 
-const fixture=()=>buildTourPackage({
+const input=()=>({
   title:'</script><script>alert(1)</script>',crs:'EPSG:4326',
   claims:{type:'FeatureCollection',features:[{type:'Feature',geometry:{type:'Polygon',coordinates:[[
     [-129.01,55],[-129,55],[-129,55.01],[-129.01,55.01],[-129.01,55],
@@ -13,10 +13,21 @@ const fixture=()=>buildTourPackage({
   collars:[{holeId:'H1',x:-129.005,y:55.005,z:1000,azimuth:0,dip:-60,depth:100}],
   assays:[{holeId:'H1',from:0,to:10,values:{Cu:0.5}}],grade:{field:'Cu',unit:'%',bins:[0.1,0.2,0.5,1]},
 });
+const fixture=()=>buildTourPackage(input());
 describe('hosted tour package boundary',()=>{
   it('accepts actual builder output without altering positions, labels or metadata',()=>{
     const p=fixture();expect(parseTourPackage(JSON.stringify(p))).toEqual(p);
-    p.claims=[];expect(parseTourPackage(JSON.stringify(p)).claims).toEqual([]);
+    p.claims=[];p.config.claimColors=[];expect(parseTourPackage(JSON.stringify(p)).claims).toEqual([]);
+  });
+  it('roundtrips current model palettes and source envelope geometry through the trusted renderer',()=>{
+    const i=input();i.grade={...i.grade,includeBelow:true,colors:['#a3abaf','#e2dc4f','#ff9a1f','#ef3b2c','#e93ad1']};
+    i.appearance={traceColor:'#59646a',primary:'#123456',accent:'#abcdef'};
+    i.includeEnvelopes=true;i.envelopes=[{name:'Existing model',vertices:[-129.005,55.005,900,-129.004,55.005,900,-129.005,55.006,850],indices:[0,1,2],color:'#123456',opacity:.35,kind:'supplied'}];
+    const p=buildTourPackage(i),json=JSON.stringify(p);
+    expect(parseTourPackage(json)).toEqual(p);expect(renderHostedTour(json).html).toContain('Existing model');
+    for(const change of [x=>{x.envelopes[0].indices[0]=99;},x=>{x.envelopes[0].color='url(https://example.test)';},x=>{x.envelopes[0].opacity=2;},x=>{x.envelopes[0].kind='arbitrary';},x=>{x.config.traceColor='url(https://example.test)';},x=>{x.config.claimColors=[];},x=>{x.envelopes=Array(33).fill(x.envelopes[0]);}]){
+      const bad=JSON.parse(json);change(bad);expect(()=>parseTourPackage(JSON.stringify(bad))).toThrow('Invalid tour package');
+    }
   });
   it('bounds rendered bytes after script-safe JSON escaping',()=>{
     const p=fixture();p.meta.warnings=Array(1200).fill('<'.repeat(600));
