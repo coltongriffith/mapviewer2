@@ -114,6 +114,9 @@ textarea { font-family: var(--mono); font-size: 12px; resize: vertical; }
 .bins i { display: block; height: 6px; border-radius: 3px; margin-bottom: 3px; }
 details { border: 1px solid var(--slate-200); border-radius: 8px; padding: 8px 10px; }
 summary { cursor: pointer; font-weight: 600; font-size: 14px; }
+.layout-group { margin: 12px 0; padding: 0; overflow: hidden; }
+.layout-group > summary { padding: 12px; background: var(--slate-050); min-height: 24px; }
+.layout-group > section { margin: 0; padding: 12px; border-top: 1px solid var(--slate-200); }
 pre { font-family: var(--mono); font-size: 11.5px; background: var(--slate-050); padding: 8px; border-radius: 6px; overflow-x: auto; margin: 8px 0 0; white-space: pre; }
 .check { display: flex; gap: 8px; align-items: center; font-size: 14px; }
 .check input, input[type="range"] { accent-color: var(--slate-950); }
@@ -447,65 +450,9 @@ html.em3d-version .share-bar .btn { padding: 6px 11px; }
         <div class="row" style="margin-top:8px;gap:6px"><button class="btn" type="button" data-block="blockSection">Block section</button><button class="btn" type="button" data-block="holes">Choose the holes shown</button></div>
         <div id="block-ui" style="margin-top:8px"></div>
       </section>
-      <section>
-        <h3>Colour holes by</h3>
-        <div class="chips metric" id="metric-chips" role="group" aria-label="Grade column"></div>
-        <div class="grid2" style="margin-top:8px">
-          <label class="field"><span>Grade column</span><select id="value-col"></select></label>
-          <label class="field"><span>Label and unit</span><input type="text" id="value-label"></label>
-        </div>
-        <div class="grid4 bins" id="bins" style="margin-top:8px"></div>
-        <div class="row" style="margin-top:6px"><button class="btn" type="button" id="auto-bins">Suggest from data</button><span class="muted">Lower limit of each colour</span></div>
-        <div class="field" style="margin-top:10px"><span>Show intervals ≥ (lower ones draw as the plain trace; callouts are unaffected)</span>
-          <div class="row"><span class="chips" id="dcut-btns" role="group" aria-label="Show intervals at or above"></span><input type="number" id="dcut" step="any" min="0" placeholder="other" aria-label="Show intervals at or above this grade" style="width:84px"></div></div>
-        <details style="margin-top:10px" id="eq-box">
-          <summary>Metal equivalent (CuEq, AuEq…)</summary>
-          <p class="muted" style="margin:6px 0">Adds a calculated column from your prices and recoveries: % → lb/t × 22.0462, g/t → oz/t ÷ 31.1035. An interval missing any metal gets no value. The formula and assumptions are added to the footnote while it is in use.</p>
-          <div id="eq-body"></div>
-        </details>
-      </section>
-      <section>
-        <h3>Grade shell from assays</h3>
-        <label class="check"><input type="checkbox" id="shell-on">Show an exploratory grade shell</label>
-        <p class="muted" style="margin-top:4px">For drilling without a model OBJ: an envelope interpolated from the assays at a cut-off. Not a geological model or a resource; the footnote says so.</p>
-        <div class="grid2" style="margin-top:8px">
-          <label class="field"><span>Cut-off <output id="shell-unit" class="mono"></output></span><input type="number" id="shell-cut" step="any" min="0"></label>
-          <label class="field"><span>Colour</span><input type="color" id="shell-color" value="#1f9e96"></label>
-          <label class="field" style="grid-column:1/-1"><span>Shading</span><select id="shell-shade"><option value="solid+edges">Solid with outlines</option><option value="solid">Solid</option><option value="glass">Glass</option></select></label>
-        </div>
-        <label class="field" style="margin-top:8px"><span>Opacity <output id="shell-op-out" class="mono"></output></span><input type="range" id="shell-op" min="5" max="90"></label>
-        <label class="check" style="margin-top:6px"><input type="checkbox" id="shell-ghost">Show it faintly through the terrain</label>
-        <div class="shell-status"><progress id="shell-prog" max="1" value="0" hidden></progress><span class="muted" id="shell-msg" aria-live="polite"></span><button class="btn" type="button" id="shell-cancel" hidden>Cancel</button></div>
-        <details style="margin-top:8px">
-          <summary>Advanced</summary>
-          <div class="grid2" style="margin-top:8px">
-            <label class="field"><span>Search radius (m)</span><input type="number" id="shell-search" min="5" step="5" placeholder="auto"></label>
-            <label class="field"><span>Cell size (m)</span><input type="number" id="shell-cell" min="2" placeholder="auto"></label>
-            <label class="field" style="grid-column:1/-1"><span>Nested shells: up to three cut-offs (e.g. 0.2, 0.5, 1); empty for one</span><input type="text" id="shell-cuts" inputmode="decimal" placeholder="one shell at the cut-off above"></label>
-            <label class="field" style="grid-column:1/-1"><span>Nested shell colours</span><select id="shell-ramp"><option value="brand">Tones of the brand accent</option><option value="green">Mint, green, dark green</option></select></label>
-          </div>
-        </details>
-        <details style="margin-top:8px">
-          <summary>How the shell is built</summary>
-          <p class="muted" style="margin-top:6px">10 m length-weighted composites down each hole, from the grade column the holes are coloured by (only assayed lengths count; a composite needs 5 m assayed). On a grid over the block (cells about 1/40 of its width, 5–25 m), each point takes the nearest composite from each hole; holes whose collars are within 20 m form one collar group and count once. The nearest groups within the search radius, at most four, are combined with inverse-distance-squared weights (5 m minimum distance), and at least three groups must be in range. The search radius is 75 m, or 1.5 times the median spacing between collar groups for wider drilling. Nothing is estimated above the terrain or collar surface. The surface is drawn by marching cubes at the cut-off and lightly smoothed.</p>
-          <p class="muted" style="margin-top:6px">No geological domains, variography, top cuts, density or economic limits are applied, and the distances are screening choices. The shell can break up or close where the drilling ends; those edges are not geological limits. No tonnage or contained metal is implied.</p>
-        </details>
-      </section>
-      <section>
-        <h3>Intercept callouts</h3>
-        <div class="grid2">
-          <label class="field" style="grid-column:1/-1"><span>Callouts from</span><select id="co-mode" data-ext="style.calloutMode"><option value="calculated">Calculated from the assays</option><option value="published">Published results table</option><option value="manual">Holes I pick (fixed depths)</option></select></label>
-          <label class="field" data-co-calc><span>Number shown</span><input type="number" id="co-count" min="0" max="8"></label>
-          <label class="field" data-co-calc><span>Minimum length (m)</span><input type="number" id="co-min" min="1"></label>
-          <label class="field" data-co-calc><span>Broad cut-off</span><input type="number" id="co-cut" step="any"></label>
-          <label class="field" data-co-calc><span>"incl." cut-off</span><input type="number" id="co-incl" step="any"></label>
-          <label class="field" style="grid-column:1/-1" data-co-calc><span>Also show in callouts</span><select id="value-col2"></select></label>
-          <label class="field" style="grid-column:1/-1"><span>Callouts go</span><select id="co-place"><option value="column">In a column at the left</option><option value="beside">Beside each hole</option><option value="bracket">As a bracket on the hole</option></select></label>
-        </div>
-        <p class="muted" style="margin-top:6px">Drag a callout on the preview to move it; its leader follows.</p>
-        <div id="callout-editor" style="display:grid;gap:8px;margin-top:10px"></div>
-      </section>
-      <section>
+      <details class="layout-group" open>
+        <summary>View and terrain</summary>
+<section>
         <h3>Camera</h3>
         <div class="grid2">
           <button class="btn" type="button" data-view="a">Facing the section</button>
@@ -518,91 +465,7 @@ html.em3d-version .share-bar .btn { padding: 6px 11px; }
         <label class="field"><span>Plunge (angle down) <output id="cam-pl-out" class="mono"></output></span><input type="range" id="cam-pl" min="3" max="89"></label>
         <label class="field"><span>Zoom <output id="cam-zoom-out" class="mono"></output></span><input type="range" id="cam-zoom" min="40" max="250"></label>
       </section>
-      <section>
-        <h3>Legend</h3>
-        <div class="grid2">
-          <label class="field"><span>Cards</span><select id="lg-merge"><option value="auto">Automatic</option><option value="one">One card</option><option value="separate">Separate cards</option></select></label>
-          <label class="field"><span>Position</span><select id="lg-pos"><option value="auto">Automatic, off the block</option><option value="br">Bottom right</option><option value="bl">Bottom left</option><option value="tr">Top right</option><option value="tl">Top left</option><option value="moved" disabled>Moved by hand</option></select></label>
-        </div>
-        <p class="muted" style="margin-top:6px">Drag a legend on the preview to move it.</p>
-      </section>
-      <section>
-        <h3>Sections</h3>
-        <div id="sec-tabs"></div>
-        <label class="field"><span>Azimuth <output id="sec-az-out" class="mono"></output></span><input type="range" id="sec-az" min="0" max="179"></label>
-        <label class="field"><span>Projection either side (m)</span><input type="number" id="sec-w" min="5"></label>
-        <div class="field"><span>Holes in section</span><div class="chips" role="group" aria-label="Holes in section"><button type="button" class="chip" data-secmode="width" aria-pressed="true">Within width</button><button type="button" class="chip" data-secmode="chosen" aria-pressed="false">Chosen holes</button></div></div>
-        <div id="sec-holes"></div>
-        <button class="btn" type="button" id="sec-add" style="margin-top:8px">Add another section</button>
-        <p class="muted" style="margin-top:6px">Each section has its own line, width and holes, exports on its own, and can show as a fence in the 3D block.</p>
-      </section>
-      <section>
-        <h3>Text labels</h3>
-        <div class="grid2">
-          <label class="field" style="grid-column:1/-1"><span>Text</span><input type="text" id="lab-text" placeholder="e.g. TARGET ZONE" maxlength="200"></label>
-          <label class="field"><span>Style</span><select id="lab-size"><option value="title">Title (large, bold)</option><option value="normal">Normal</option></select></label>
-          <label class="check" style="align-self:end;padding-bottom:6px"><input type="checkbox" id="lab-arrow">With arrow</label>
-        </div>
-        <button class="btn" type="button" id="lab-add" style="margin-top:8px">Add text label</button>
-        <p class="muted" style="margin-top:6px">Drag a label on the preview to place it, and the ring to aim its arrow.</p>
-        <div class="files" id="label-list" style="margin-top:8px"></div>
-      </section>
-      <section>
-        <h3>Labels on the block</h3>
-        <div class="grid2">
-          <label class="field" style="grid-column:1/-1"><span>Text</span><input type="text" id="wall-text" placeholder="e.g. INTRUSIVES" maxlength="120"></label>
-          <label class="field"><span>Face</span><select id="wall-face"><option value="front">Facing the camera</option><option value="N">North</option><option value="S">South</option><option value="E">East</option><option value="W">West</option></select></label>
-          <label class="field"><span>Style</span><select id="wall-size"><option value="title">Title (large, bold)</option><option value="normal">Normal</option><option value="heading">Heading (title | subtitle lines)</option></select></label>
-        </div>
-        <button class="btn" type="button" id="wall-add" style="margin-top:8px">Add label on the block</button>
-        <p class="muted" style="margin-top:6px">Painted on the face in perspective. Drag it on the preview to move it along the face.</p>
-        <div class="files" id="wall-list" style="margin-top:8px"></div>
-      </section>
-      <!-- Map overlays and annotation shapes: their lists load with the first one (overlays.js, shapes.js). -->
-      <section id="ext-overlays">
-        <h3>Map overlays</h3>
-        <p class="muted">Claims, targets, faults or soil points draped on the terrain, from GeoJSON, KML or a zipped shapefile, or claims found in the registries.</p>
-        <div class="row" style="margin-top:8px"><label class="btn" for="ov-file">Add GeoJSON, KML or shapefile</label><button class="btn" type="button" id="ov-claims">Find claims</button></div>
-        <div id="ov-claims-ui" style="margin-top:8px"></div>
-        <input type="file" id="ov-file" multiple accept=".geojson,.json,.kml,.zip" hidden>
-        <div class="files" id="ov-ui" style="margin-top:8px"></div>
-      </section>
-      <section id="ext-shapes">
-        <h3>Shapes</h3>
-        <p class="muted">Ellipses, dimension lines and arrows, fixed in place as the camera turns; also on the section where they lie within its width.</p>
-        <div class="row" style="margin-top:8px"><button class="btn" type="button" data-shape="ellipse">Add ellipse</button><button class="btn" type="button" data-shape="dimension">Add dimension</button><button class="btn" type="button" data-shape="arrow">Add arrow</button></div>
-        <div class="files" id="shape-ui" style="margin-top:8px"></div>
-      </section>
-      <!-- Geology, geophysics and hole tags: the controls below load their layer (geology.js, geophys.js, tags.js) on first use. -->
-      <section id="ext-geology">
-        <h3>Geology on the block</h3>
-        <label class="check"><input type="checkbox" data-ext="geology.enabled">Paint lithology or alteration on the block faces</label>
-        <p class="muted" style="margin-top:4px">From a log with Hole ID, From, To and a code column (step 1), interpolated between holes; or a drawn section image per face.</p>
-        <div id="geo-ui" style="margin-top:8px"></div>
-        <div id="geo-fit" class="geo-fit" style="margin-top:8px" hidden></div>
-      </section>
-      <section id="ext-geophys">
-        <h3>Geophysics</h3>
-        <label class="field"><span>Show IP, MT or resistivity</span><select data-ext="geophys.mode"><option value="off">Off</option><option value="curtain">As curtains</option><option value="faces">On the block faces</option></select></label>
-        <div id="gp-ui" style="margin-top:8px"></div>
-      </section>
-      <section id="ext-tags">
-        <h3>Hole tags and callouts</h3>
-        <div class="grid2">
-          <label class="field"><span>Hole ID tags</span><select data-ext="tags.at"><option value="toe">At the end of the hole</option><option value="collar">Pills at the collar</option><option value="both">Both</option></select></label>
-          <label class="field"><span>Which holes get IDs and tags</span><select data-ext="tags.idMode"><option value="auto">Automatic (all up to 12 holes, else key holes)</option><option value="all">All holes</option><option value="key">Key holes only (callouts, new, ticked)</option></select></label>
-          <label class="field"><span>"Assays pending"</span><select data-ext="tags.pending"><option value="collar">Small tag at the collars</option><option value="trace">Along each hole</option></select></label>
-          <label class="field"><span>Inset</span><select data-ext="style.insetStyle"><option value="plan">Plan of drilling</option><option value="satellite">Location map, satellite</option><option value="topo">Location map, topographic</option><option value="claims">Claim map</option></select></label>
-        </div>
-        <label class="check" style="margin-top:6px"><input type="checkbox" data-ext="style.histograms">Grade histogram bars along holes</label>
-        <div id="tag-ui" style="margin-top:8px"></div>
-        <div class="grid2" style="margin-top:8px">
-          <label class="field" style="grid-column:1/-1"><span>Stat box title</span><input type="text" id="stat-title" placeholder="e.g. Mineral resource" maxlength="200"></label>
-          <label class="field" style="grid-column:1/-1"><span>Rows, one per line</span><textarea id="stat-rows" rows="3" placeholder="Indicated: 133 koz @ 1.07 g/t Au&#10;Inferred: 41 koz @ 0.88 g/t Au"></textarea></label>
-        </div>
-        <button class="btn" type="button" id="stat-add" style="margin-top:6px">Add stat box</button>
-      </section>
-      <section>
+<section>
         <h3>Display</h3>
         <div class="row" style="gap:14px">
           <label class="check"><input type="checkbox" id="opt-walls" data-ext="style.walls" checked>Glass block sides</label>
@@ -662,6 +525,158 @@ html.em3d-version .share-bar .btn { padding: 6px 11px; }
         </details>
         <div class="files" id="mesh-list" style="margin-top:8px"></div>
       </section>
+      </details>
+      <details class="layout-group" open>
+        <summary>Grades and envelopes</summary>
+<section>
+        <h3>Colour holes by</h3>
+        <div class="chips metric" id="metric-chips" role="group" aria-label="Grade column"></div>
+        <div class="grid2" style="margin-top:8px">
+          <label class="field"><span>Grade column</span><select id="value-col"></select></label>
+          <label class="field"><span>Label and unit</span><input type="text" id="value-label"></label>
+        </div>
+        <div class="grid4 bins" id="bins" style="margin-top:8px"></div>
+        <div class="row" style="margin-top:6px"><button class="btn" type="button" id="auto-bins">Suggest from data</button><span class="muted">Lower limit of each colour</span></div>
+        <div class="field" style="margin-top:10px"><span>Show intervals ≥ (lower ones draw as the plain trace; callouts are unaffected)</span>
+          <div class="row"><span class="chips" id="dcut-btns" role="group" aria-label="Show intervals at or above"></span><input type="number" id="dcut" step="any" min="0" placeholder="other" aria-label="Show intervals at or above this grade" style="width:84px"></div></div>
+        <details style="margin-top:10px" id="eq-box">
+          <summary>Metal equivalent (CuEq, AuEq…)</summary>
+          <p class="muted" style="margin:6px 0">Adds a calculated column from your prices and recoveries: % → lb/t × 22.0462, g/t → oz/t ÷ 31.1035. An interval missing any metal gets no value. The formula and assumptions are added to the footnote while it is in use.</p>
+          <div id="eq-body"></div>
+        </details>
+      </section>
+<section>
+        <h3>Grade shell from assays</h3>
+        <label class="check"><input type="checkbox" id="shell-on">Show an exploratory grade shell</label>
+        <p class="muted" style="margin-top:4px">For drilling without a model OBJ: an envelope interpolated from the assays at a cut-off. Not a geological model or a resource; the footnote says so.</p>
+        <div id="shell-controls" hidden>
+        <div class="grid2" style="margin-top:8px">
+          <label class="field"><span>Cut-off <output id="shell-unit" class="mono"></output></span><input type="number" id="shell-cut" step="any" min="0"></label>
+          <label class="field"><span>Colour</span><input type="color" id="shell-color" value="#1f9e96"></label>
+          <label class="field" style="grid-column:1/-1"><span>Shading</span><select id="shell-shade"><option value="solid+edges">Solid with outlines</option><option value="solid">Solid</option><option value="glass">Glass</option></select></label>
+        </div>
+        <label class="field" style="margin-top:8px"><span>Opacity <output id="shell-op-out" class="mono"></output></span><input type="range" id="shell-op" min="5" max="90"></label>
+        <label class="check" style="margin-top:6px"><input type="checkbox" id="shell-ghost">Show it faintly through the terrain</label>
+        <details style="margin-top:8px">
+          <summary>Advanced</summary>
+          <div class="grid2" style="margin-top:8px">
+            <label class="field"><span>Search radius (m)</span><input type="number" id="shell-search" min="5" step="5" placeholder="auto"></label>
+            <label class="field"><span>Cell size (m)</span><input type="number" id="shell-cell" min="2" placeholder="auto"></label>
+            <label class="field" style="grid-column:1/-1"><span>Nested shells: up to three cut-offs (e.g. 0.2, 0.5, 1); empty for one</span><input type="text" id="shell-cuts" inputmode="decimal" placeholder="one shell at the cut-off above"></label>
+            <label class="field" style="grid-column:1/-1"><span>Nested shell colours</span><select id="shell-ramp"><option value="brand">Tones of the brand accent</option><option value="green">Mint, green, dark green</option></select></label>
+          </div>
+        </details>
+        <details style="margin-top:8px">
+          <summary>How the shell is built</summary>
+          <p class="muted" style="margin-top:6px">10 m length-weighted composites down each hole, from the grade column the holes are coloured by (only assayed lengths count; a composite needs 5 m assayed). On a grid over the block (cells about 1/40 of its width, 5–25 m), each point takes the nearest composite from each hole; holes whose collars are within 20 m form one collar group and count once. The nearest groups within the search radius, at most four, are combined with inverse-distance-squared weights (5 m minimum distance), and at least three groups must be in range. The search radius is 75 m, or 1.5 times the median spacing between collar groups for wider drilling. Nothing is estimated above the terrain or collar surface. The surface is drawn by marching cubes at the cut-off and lightly smoothed.</p>
+          <p class="muted" style="margin-top:6px">No geological domains, variography, top cuts, density or economic limits are applied, and the distances are screening choices. The shell can break up or close where the drilling ends; those edges are not geological limits. No tonnage or contained metal is implied.</p>
+        </details>
+        </div>
+        <div class="shell-status"><progress id="shell-prog" max="1" value="0" hidden></progress><span class="muted" id="shell-msg" aria-live="polite"></span><button class="btn" type="button" id="shell-cancel" hidden>Cancel</button></div>
+      </section>
+      </details>
+      <details class="layout-group" open>
+        <summary>Labels and callouts</summary>
+<section>
+        <h3>Intercept callouts</h3>
+        <div class="grid2">
+          <label class="field" style="grid-column:1/-1"><span>Callouts from</span><select id="co-mode" data-ext="style.calloutMode"><option value="calculated">Calculated from the assays</option><option value="published">Published results table</option><option value="manual">Holes I pick (fixed depths)</option></select></label>
+          <label class="field" data-co-calc><span>Number shown</span><input type="number" id="co-count" min="0" max="8"></label>
+          <label class="field" data-co-calc><span>Minimum length (m)</span><input type="number" id="co-min" min="1"></label>
+          <label class="field" data-co-calc><span>Broad cut-off</span><input type="number" id="co-cut" step="any"></label>
+          <label class="field" data-co-calc><span>"incl." cut-off</span><input type="number" id="co-incl" step="any"></label>
+          <label class="field" style="grid-column:1/-1" data-co-calc><span>Also show in callouts</span><select id="value-col2"></select></label>
+          <label class="field" style="grid-column:1/-1"><span>Callouts go</span><select id="co-place"><option value="column">In a column at the left</option><option value="beside">Beside each hole</option><option value="bracket">As a bracket on the hole</option></select></label>
+        </div>
+        <p class="muted" style="margin-top:6px">Drag a callout on the preview to move it; its leader follows.</p>
+        <details style="margin-top:10px"><summary>Edit individual callouts</summary><div id="callout-editor" style="display:grid;gap:8px;margin-top:10px"></div></details>
+      </section>
+<section>
+        <h3>Legend</h3>
+        <div class="grid2">
+          <label class="field"><span>Cards</span><select id="lg-merge"><option value="auto">Automatic</option><option value="one">One card</option><option value="separate">Separate cards</option></select></label>
+          <label class="field"><span>Position</span><select id="lg-pos"><option value="auto">Automatic, off the block</option><option value="br">Bottom right</option><option value="bl">Bottom left</option><option value="tr">Top right</option><option value="tl">Top left</option><option value="moved" disabled>Moved by hand</option></select></label>
+        </div>
+        <p class="muted" style="margin-top:6px">Drag a legend on the preview to move it.</p>
+      </section>
+<section>
+        <h3>Text labels</h3>
+        <div class="grid2">
+          <label class="field" style="grid-column:1/-1"><span>Text</span><input type="text" id="lab-text" placeholder="e.g. TARGET ZONE" maxlength="200"></label>
+          <label class="field"><span>Style</span><select id="lab-size"><option value="title">Title (large, bold)</option><option value="normal">Normal</option></select></label>
+          <label class="check" style="align-self:end;padding-bottom:6px"><input type="checkbox" id="lab-arrow">With arrow</label>
+        </div>
+        <button class="btn" type="button" id="lab-add" style="margin-top:8px">Add text label</button>
+        <p class="muted" style="margin-top:6px">Drag a label on the preview to place it, and the ring to aim its arrow.</p>
+        <div class="files" id="label-list" style="margin-top:8px"></div>
+      </section>
+<section>
+        <h3>Labels on the block</h3>
+        <div class="grid2">
+          <label class="field" style="grid-column:1/-1"><span>Text</span><input type="text" id="wall-text" placeholder="e.g. INTRUSIVES" maxlength="120"></label>
+          <label class="field"><span>Face</span><select id="wall-face"><option value="front">Facing the camera</option><option value="N">North</option><option value="S">South</option><option value="E">East</option><option value="W">West</option></select></label>
+          <label class="field"><span>Style</span><select id="wall-size"><option value="title">Title (large, bold)</option><option value="normal">Normal</option><option value="heading">Heading (title | subtitle lines)</option></select></label>
+        </div>
+        <button class="btn" type="button" id="wall-add" style="margin-top:8px">Add label on the block</button>
+        <p class="muted" style="margin-top:6px">Painted on the face in perspective. Drag it on the preview to move it along the face.</p>
+        <div class="files" id="wall-list" style="margin-top:8px"></div>
+      </section>
+<section id="ext-tags">
+        <h3>Hole tags and callouts</h3>
+        <div class="grid2">
+          <label class="field"><span>Hole ID tags</span><select data-ext="tags.at"><option value="toe">At the end of the hole</option><option value="collar">Pills at the collar</option><option value="both">Both</option></select></label>
+          <label class="field"><span>Which holes get IDs and tags</span><select data-ext="tags.idMode"><option value="auto">Automatic (all up to 12 holes, else key holes)</option><option value="all">All holes</option><option value="key">Key holes only (callouts, new, ticked)</option></select></label>
+          <label class="field"><span>"Assays pending"</span><select data-ext="tags.pending"><option value="collar">Small tag at the collars</option><option value="trace">Along each hole</option></select></label>
+          <label class="field"><span>Inset</span><select data-ext="style.insetStyle"><option value="plan">Plan of drilling</option><option value="satellite">Location map, satellite</option><option value="topo">Location map, topographic</option><option value="claims">Claim map</option></select></label>
+        </div>
+        <label class="check" style="margin-top:6px"><input type="checkbox" data-ext="style.histograms">Grade histogram bars along holes</label>
+        <div id="tag-ui" style="margin-top:8px"></div>
+        <div class="grid2" style="margin-top:8px">
+          <label class="field" style="grid-column:1/-1"><span>Stat box title</span><input type="text" id="stat-title" placeholder="e.g. Mineral resource" maxlength="200"></label>
+          <label class="field" style="grid-column:1/-1"><span>Rows, one per line</span><textarea id="stat-rows" rows="3" placeholder="Indicated: 133 koz @ 1.07 g/t Au&#10;Inferred: 41 koz @ 0.88 g/t Au"></textarea></label>
+        </div>
+        <button class="btn" type="button" id="stat-add" style="margin-top:6px">Add stat box</button>
+      </section>
+      </details>
+      <details class="layout-group" open>
+        <summary>Sections and map layers</summary>
+<section>
+        <h3>Sections</h3>
+        <div id="sec-tabs"></div>
+        <label class="field"><span>Azimuth <output id="sec-az-out" class="mono"></output></span><input type="range" id="sec-az" min="0" max="179"></label>
+        <label class="field"><span>Projection either side (m)</span><input type="number" id="sec-w" min="5"></label>
+        <div class="field"><span>Holes in section</span><div class="chips" role="group" aria-label="Holes in section"><button type="button" class="chip" data-secmode="width" aria-pressed="true">Within width</button><button type="button" class="chip" data-secmode="chosen" aria-pressed="false">Chosen holes</button></div></div>
+        <div id="sec-holes"></div>
+        <button class="btn" type="button" id="sec-add" style="margin-top:8px">Add another section</button>
+        <p class="muted" style="margin-top:6px">Each section has its own line, width and holes, exports on its own, and can show as a fence in the 3D block.</p>
+      </section>
+<section id="ext-overlays">
+        <h3>Map overlays</h3>
+        <p class="muted">Claims, targets, faults or soil points draped on the terrain, from GeoJSON, KML or a zipped shapefile, or claims found in the registries.</p>
+        <div class="row" style="margin-top:8px"><label class="btn" for="ov-file">Add GeoJSON, KML or shapefile</label><button class="btn" type="button" id="ov-claims">Find claims</button></div>
+        <div id="ov-claims-ui" style="margin-top:8px"></div>
+        <input type="file" id="ov-file" multiple accept=".geojson,.json,.kml,.zip" hidden>
+        <div class="files" id="ov-ui" style="margin-top:8px"></div>
+      </section>
+<section id="ext-shapes">
+        <h3>Shapes</h3>
+        <p class="muted">Ellipses, dimension lines and arrows, fixed in place as the camera turns; also on the section where they lie within its width.</p>
+        <div class="row" style="margin-top:8px"><button class="btn" type="button" data-shape="ellipse">Add ellipse</button><button class="btn" type="button" data-shape="dimension">Add dimension</button><button class="btn" type="button" data-shape="arrow">Add arrow</button></div>
+        <div class="files" id="shape-ui" style="margin-top:8px"></div>
+      </section>
+<section id="ext-geology">
+        <h3>Geology on the block</h3>
+        <label class="check"><input type="checkbox" data-ext="geology.enabled">Paint lithology or alteration on the block faces</label>
+        <p class="muted" style="margin-top:4px">From a log with Hole ID, From, To and a code column (step 1), interpolated between holes; or a drawn section image per face.</p>
+        <div id="geo-ui" style="margin-top:8px"></div>
+        <div id="geo-fit" class="geo-fit" style="margin-top:8px" hidden></div>
+      </section>
+<section id="ext-geophys">
+        <h3>Geophysics</h3>
+        <label class="field"><span>Show IP, MT or resistivity</span><select data-ext="geophys.mode"><option value="off">Off</option><option value="curtain">As curtains</option><option value="faces">On the block faces</option></select></label>
+        <div id="gp-ui" style="margin-top:8px"></div>
+      </section>
+      </details>
       <button class="btn primary next" type="button" data-goto="export">Next: Export →</button>
     </div>
 

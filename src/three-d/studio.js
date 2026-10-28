@@ -922,6 +922,7 @@ function setShell(o = {}) {
 }
 function renderShellUI() {
   const sh = S.shell, busy = shell.busy, st = shell.mesh?.stats;
+  $('shell-controls').hidden = !sh.enabled;
   $('shell-on').checked = sh.enabled; $('shell-color').value = shellColor(); $('shell-ghost').checked = !!sh.throughTerrain;
   if (document.activeElement?.id !== 'shell-cut') $('shell-cut').value = +shellCut().toPrecision(4); $('shell-cut').disabled = !!sh.shells?.length;
   $('shell-unit').textContent = S.valueLabel; $('shell-op').value = Math.round(sh.opacity * 100); $('shell-op-out').textContent = `${Math.round(sh.opacity * 100)}%`;
