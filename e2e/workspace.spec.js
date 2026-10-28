@@ -642,6 +642,48 @@ async function fakeSupabase(page, { role = 'owner', orgs = [org(role)], properti
   return fake;
 }
 
+test('saved map data downloads preserve coordinates and work for company viewers', async ({ page }) => {
+  const fake = await fakeSupabase(page, { role: 'viewer' });
+  const geojson = { type: 'FeatureCollection', features: [
+    { type: 'Feature', id: '001', properties: { hole: '001', note: 'Copper,"gold"', grade: 0 },
+      geometry: { type: 'Point', coordinates: [-129.123456789012, 55.123456789012, 0] } },
+  ] };
+  const map = { id: MAP, name: 'Rails claims', user_id: uid, updated_at: '2026-10-19T00:00:00Z',
+    payload: { layers: [{ name: 'Collars', visible: false, geojson }, { name: 'Imagery', tiles: { url: 'https://example.test' } }] } };
+  const writes = [];
+  await page.route('**/rest/v1/projects*', route => {
+    const req = route.request(), url = new URL(req.url());
+    if (req.method() !== 'GET') writes.push(req.method());
+    const single = (req.headers().accept || '').includes('vnd.pgrst.object');
+    return route.fulfill({ json: url.searchParams.has('id') && single ? map : [map] });
+  });
+  await page.goto('/dashboard');
+  await page.getByRole('button', { name: 'Download data from Rails claims', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Download map data' });
+  await expect(dialog.getByLabel('Map layer')).toContainText('Collars');
+  await expect(dialog.getByLabel('Map layer')).not.toContainText('Imagery');
+  const jsonDownload = page.waitForEvent('download');
+  await dialog.getByRole('button', { name: 'Download GeoJSON', exact: true }).click();
+  const jsonFile = await jsonDownload;
+  expect(jsonFile.suggestedFilename()).toBe('Rails claims-Collars.geojson');
+  expect(JSON.parse(await readFile(await jsonFile.path(), 'utf8'))).toEqual(geojson);
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold');
+  await page.getByRole('tab', { name: 'Maps', exact: true }).click();
+  await page.getByRole('button', { name: 'Download data from Rails claims', exact: true }).click();
+  const csvDownload = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download CSV', exact: true }).click();
+  const csvFile = await csvDownload;
+  const csv = await readFile(await csvFile.path(), 'utf8');
+  expect(csvFile.suggestedFilename()).toBe('Rails claims-Collars.csv');
+  expect(csv).toContain('"-129.123456789012"');
+  expect(csv).toContain('"Copper,""gold"""');
+  expect(csv).toContain('"001"');
+  expect(writes).toEqual([]);
+  expect(fake.patches).toEqual([]);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+});
+
 test('creates a company workspace and invites a colleague', async ({ page }) => {
   const fake = await fakeSupabase(page, { orgs: [] });
   await page.goto('/workspace');
