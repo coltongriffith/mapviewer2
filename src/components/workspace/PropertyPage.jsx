@@ -11,6 +11,7 @@ import { library, FILE_KINDS, guessKind, kindLabel, formatBytes, opensInMap, MAP
 import { createPortfolio } from '../../utils/tenureMonitor';
 import { jurisdictionLabel } from '../../utils/jurisdictions';
 import { lazyGuarded } from '../../utils/preloadGuard';
+import ProjectDataDownloadButton from '../ProjectDataDownloadButton';
 import {
   useWorkspaces, WorkspaceHeader, RoleBadge, StatusBadge, ErrorNote, PropertyForm, ActivityFeed,
 } from './shared';
@@ -126,6 +127,7 @@ function MapsTab({ property, perms, onOpenMap, onNewMap }) {
         <div className="dash-grid">
           {maps.map((m) => (
             <ItemTile key={m.id} item={m} onOpen={() => onOpenMap(m)}>
+              <ProjectDataDownloadButton project={m} />
               {perms.moveOut && (
                 <button type="button" className="dash-icon-btn" title="Move to my personal maps"
                   onClick={async () => { try { await moveToPersonal('map', m.id); await load(); } catch (e) { setError(e.message); } }}>

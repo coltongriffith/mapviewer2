@@ -291,7 +291,8 @@ const BUDGETS = {
   // with its callouts and drill-plan overlay, 1156.5.
   // Live-map availability/retry and stale-response guards (89622a70 stamped): measured 1157.1 configured.
   // Live web map merged with main (Point inspector, numeric classification): measured 1174.8.
-  totalAuthJsGzipKb: 1175.2,
+  // Saved-map CSV/GeoJSON downloads: lazy dialog/serializer, measured 1177.9 (+3.0 KiB).
+  totalAuthJsGzipKb: 1178.3,
   // 1009.4 → 1026.3 (measured 1026.0): lazy XLSX reader (~13.8 KiB), sheet/header preview
   // (~1.1 KiB), import wiring and numeric-format handling. Shared fflate adds ~1.2 KiB
   // for async ZIP workers; it remains one copy with the existing draft compression.
@@ -378,7 +379,8 @@ const BUDGETS = {
   // Live web map, as totalAuthJsGzipKb above: measured 1088.3 plain with main; 1089.1 with the embed's callouts and drill plan.
   // Same guarded dialog/RPC path: measured 1089.5 plain; retain 0.4 KiB commit/chunk headroom.
   // Live web map merged with main (Point inspector, numeric classification): measured 1106.1.
-  totalJsGzipKb: 1106.5,
+  // Saved-map data downloads, as above: measured 1109.1; route caps unchanged.
+  totalJsGzipKb: 1109.5,
   // 940.9 → 957.8 (measured 957.5): Excel import, as totalAuthJsGzipKb above.
   // 940.9 → 944.8 (P2-8, measured 944.6): the same lazy property recipe path
   // in the unconfigured build. Its initial route budgets also stay unchanged.
