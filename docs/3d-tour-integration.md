@@ -62,3 +62,10 @@ storage, environment, billing or plan changes.
 
 Review follow-up: tours reuse the maker's CRS definitions (including NAD27, MGA and custom proj4). Complete supplied survey paths do not require redundant collar orientation; incomplete paths still fail validation. Playback stays above the measured navigation height when labels wrap in narrow previews.
 
+Setup choices now populate independently of strict geographic validation. Missing
+CRS produces a prominent explanation and a route back to Data instead of blank
+dropdowns and a blank iframe. The user must supply the source coordinate system;
+no location is guessed. Claims are optional: drilling/terrain-only tours show a
+notice and omit the claim outline and legend, with the camera fitted to the
+project extent. Existing claim overlays are retained when supplied.
+
