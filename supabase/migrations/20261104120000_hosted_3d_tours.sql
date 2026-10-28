@@ -11,7 +11,7 @@ create table if not exists public.three_d_tours (
   updated_at timestamptz not null default now(),
   revoked_at timestamptz,
   check ((package is null) = (revoked_at is not null)),
-  check (package is null or (jsonb_typeof(package)='object' and octet_length(package::text)<=8388608))
+  check (package is null or (jsonb_typeof(package)='object' and octet_length(package::text)<=3145728))
 );
 create unique index if not exists three_d_tours_active_project_idx on public.three_d_tours(project_id) where revoked_at is null;
 alter table public.three_d_tours enable row level security;
@@ -34,7 +34,7 @@ begin
      or not (p_package ?& array['holes','runs','claims','fpoly','collars','terrain','config','meta']) then
     raise exception 'TOUR_INVALID' using errcode='P0001';
   end if;
-  if octet_length(p_package::text)>8388608 then raise exception 'TOUR_TOO_LARGE' using errcode='P0001'; end if;
+  if octet_length(p_package::text)>3145728 then raise exception 'TOUR_TOO_LARGE' using errcode='P0001'; end if;
   select * into t from public.three_d_tours where project_id=p_project and revoked_at is null for update;
   if found then
     if p_expected_revision is distinct from t.revision then raise exception 'TOUR_STALE' using errcode='P0001'; end if;

@@ -51,7 +51,7 @@ it('does not publish for viewers or accept malformed payloads',async()=>{
   const p=await project(true);await expect(publish(E,p)).rejects.toThrow('TOUR_NOT_FOUND');
   await expect(publish(A,p,{v:1,html:'<script>bad()</script>'})).rejects.toThrow('TOUR_INVALID');
   await expect(publish(A,p,{...pkg,v:2})).rejects.toThrow('TOUR_INVALID');
-  await expect(val(A,"select public.publish_3d_tour($1,jsonb_set($2::jsonb,'{config,title}',to_jsonb(repeat('x',8388609))),null)",[p,JSON.stringify(pkg)])).rejects.toThrow('TOUR_TOO_LARGE');
+  await expect(val(A,"select public.publish_3d_tour($1,jsonb_set($2::jsonb,'{config,title}',to_jsonb(repeat('x',3145729))),null)",[p,JSON.stringify(pkg)])).rejects.toThrow('TOUR_TOO_LARGE');
 });
 it('withdraws data on soft deletion, ownership change and permanent deletion',async()=>{
   const p=await project(),id=await publish(A,p);

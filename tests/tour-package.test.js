@@ -16,6 +16,12 @@ const fixture=()=>buildTourPackage({
 describe('hosted tour package boundary',()=>{
   it('accepts actual builder output without altering positions, labels or metadata',()=>{
     const p=fixture();expect(parseTourPackage(JSON.stringify(p))).toEqual(p);
+    p.claims=[];expect(parseTourPackage(JSON.stringify(p)).claims).toEqual([]);
+  });
+  it('bounds rendered bytes after script-safe JSON escaping',()=>{
+    const p=fixture();p.meta.warnings=Array(1200).fill('<'.repeat(600));
+    const json=JSON.stringify(p);expect(Buffer.byteLength(json)).toBeLessThan(MAX_TOUR_BYTES);
+    expect(()=>renderHostedTour(json)).toThrow('HTML is too large');
   });
   it('bounds bytes before JSON parsing, including multibyte input',()=>{
     expect(()=>parseTourPackage(' '.repeat(MAX_TOUR_BYTES+1))).toThrow('size');

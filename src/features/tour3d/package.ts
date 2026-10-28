@@ -2,7 +2,8 @@ import type { TourPackage } from './types';
 
 // Boundary for future hosted publishing: accept data, never uploaded HTML.
 // Keep this independent of the renderer and DB so both upload and read can check it.
-export const MAX_TOUR_BYTES = 8 * 1024 * 1024;
+// Leave room for the trusted viewer under the Function's 4.5 MB response cap.
+export const MAX_TOUR_BYTES = 3 * 1024 * 1024;
 export function parseTourPackage(json: string): TourPackage {
   const fail = (field: string): never => { throw new Error('Invalid tour package: '+field); };
   if (typeof json !== 'string' || json.length > MAX_TOUR_BYTES || new TextEncoder().encode(json).length > MAX_TOUR_BYTES) fail('size');
@@ -60,7 +61,7 @@ export function parseTourPackage(json: string): TourPackage {
   array(d.runs,0,200000,'runs').forEach(r=>{
     array(r,3,3,'run');integer(r[0],0,holes.length-1,'run hole');coordinates(r[1],3,2,'run path');integer(r[2],0,bins.length-1,'run bin');
   });
-  for (const k of ['claims','fpoly']) array(d[k],k==='claims'?1:0,10000,k).forEach(r=>coordinates(r,2,3,k));
+  for (const k of ['claims','fpoly']) array(d[k],0,10000,k).forEach(r=>coordinates(r,2,3,k));
   array(d.collars,holes.length,holes.length,'collars').forEach(c=>{
     array(c,4,4,'collar');c.slice(0,3).forEach((p:any)=>number(p,-1000000,1000000,'collar position'));integer(c[3],0,1,'collar target');
   });

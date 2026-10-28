@@ -21,8 +21,12 @@ const policy=[
 
 export function renderHostedTour(json: string) {
   const pkg=parseTourPackage(json);
+  const html=exportTourHtml(pkg,template,three);
+  // JSON escaping can expand text substantially. Bound the actual response,
+  // not only its input; local HTML download remains available for larger tours.
+  if (Buffer.byteLength(html,'utf8')>4000000) throw new Error('Tour HTML is too large for hosted sharing. Download the HTML instead.');
   return {
-    html:exportTourHtml(pkg,template,three),
+    html,
     headers:{
       'Content-Type':'text/html; charset=utf-8',
       'Content-Security-Policy':policy,

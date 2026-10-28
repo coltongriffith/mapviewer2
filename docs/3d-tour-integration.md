@@ -74,7 +74,7 @@ project extent. Existing claim overlays are retained when supplied.
 ## Hosted package boundary (preparation)
 
 The future hosted API must receive JSON packages, not executable HTML. `package.ts`
-provides the first independent boundary: an 8 MiB UTF-8 limit before JSON parsing,
+provides the first independent boundary: an 3 MiB UTF-8 limit before JSON parsing,
 version/shape checks, finite bounded geometry, valid hole/bin references, bounded
 terrain mesh and tile work, and an imagery source allowlist. It preserves the
 positions and text supplied by the builder; escaping still belongs to the trusted
