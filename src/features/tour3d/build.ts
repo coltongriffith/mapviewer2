@@ -80,10 +80,10 @@ export function buildTourPackage(inp: TourInput): TourPackage {
   const wToLL = (x: number, y: number) => proj4(W, 'EPSG:4326', [x, y]) as [number, number];
 
   // claims -> working CRS rings
-  const rings: Ring[] = [];
+  const rings: Ring[] = [],claimColors:string[]=[];
   for (const f of inp.claims.features) {
     const polys = f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates;
-    for (const p of polys) for (const ring of p) rings.push(ring.map(([lo, la]) => llToW(lo, la) as [number, number]));
+    for (const p of polys) for (const ring of p) { rings.push(ring.map(([lo, la]) => llToW(lo, la) as [number, number]));claimColors.push(f.style?.color||'#b35a2c'); }
   }
   const collarsW = valid.map(c => { const [x, y] = toW(c.x, c.y); return { ...c, x, y }; });
   const ids = new Set<string>(); collarsW.forEach(c => { if (ids.has(c.holeId)) warnings.push(`${c.holeId}: duplicate hole ID`); ids.add(c.holeId); });
@@ -95,6 +95,11 @@ export function buildTourPackage(inp: TourInput): TourPackage {
   const zs = collarsW.map(c => c.z).sort((a, b) => a - b);
   const OX = Math.round((bb[0] + bb[2]) / 200) * 100, OY = Math.round((bb[1] + bb[3]) / 200) * 100, OZ = Math.round(zs[zs.length >> 1] / 100) * 100;
   const L = (x: number, y: number, z: number): V3 => [r1(x - OX), r1(z - OZ), r1(-(y - OY))];
+  const envelopes=(inp.includeEnvelopes?inp.envelopes||[]:[]).map(e=>{
+    const vertices:number[]=[];
+    for(let i=0;i<e.vertices.length;i+=3){const xy=toW(e.vertices[i],e.vertices[i+1]),p=[xy[0]-OX,e.vertices[i+2]-OZ,-(xy[1]-OY)];if(p.some(v=>!Number.isFinite(v)||Math.abs(v)>200000))throw new Error('The model envelope is outside the tour coordinate extent.');vertices.push(...p);}
+    return {...e,vertices};
+  });
 
   // main target
   const counts = new Map<string, number>(); collarsW.forEach(c => c.target && counts.set(c.target, (counts.get(c.target) || 0) + 1));
@@ -126,7 +131,8 @@ export function buildTourPackage(inp: TourInput): TourPackage {
 
   // grade bins + intervals
   const bins = inp.grade.bins!, colors = inp.grade.colors || DEFAULT_COLORS;
-  const binOf = (v: number | null | undefined) => { if (v == null || !Number.isFinite(v)) return -1; let k = -1; bins.forEach((t, i) => { if (v >= t) k = i; }); return k; };
+  const below=!!inp.grade.includeBelow;
+  const binOf = (v: number | null | undefined) => { if (v == null || !Number.isFinite(v) || (Number.isFinite(inp.grade.displayCutoff) && v < inp.grade.displayCutoff!)) return -1; let k = below?0:-1; bins.forEach((t, i) => { if (v >= t) k = i+(below?1:0); }); return k; };
   const thr = inp.footprintThreshold ?? bins[1];
   const runs: TourPackage['runs'] = []; const intercepts: [number, number][][] = [];
   const sorted = [...inp.assays].sort((a, b) => a.holeId < b.holeId ? -1 : a.holeId > b.holeId ? 1 : a.from - b.from);
@@ -174,7 +180,7 @@ export function buildTourPackage(inp: TourInput): TourPackage {
 
   const fmt = (n: number) => n >= 10 ? String(n) : n.toFixed(2);
   return {
-    v: 1, holes, runs,
+    v: 1, holes, runs,envelopes,
     claims: rings.map(r => r.flatMap(([x, y]) => [Math.round(x - OX), Math.round(-(y - OY))])),
     fpoly,
     collars: collarsW.map(c => [...L(c.x, c.y, c.z), inMain(c) ? 1 : 0] as [number, number, number, number]),
@@ -187,8 +193,8 @@ export function buildTourPackage(inp: TourInput): TourPackage {
       title: inp.title, tag: main!,
       tabs: inp.tabs || [['The district', 'Claims & terrain'], [main!, 'Drill collars'], ['Below the surface', 'Drilling']],
       legend: { claims: inp.claimsLegend || 'Claims', holes: 'Drill traces', grade: `${inp.grade.field} ${inp.grade.unit}` },
-      bins: bins.map((b, i) => [i < bins.length - 1 ? `${fmt(b)}–${fmt(bins[i + 1])}` : `≥${fmt(b)}`, colors[i] || DEFAULT_COLORS[Math.min(i,3)]] as [string, string]),
-      labels, imagery: inp.imageryUrl,
+      bins: [...(below?[[`<${fmt(bins[0])}`,colors[0]] as [string,string]]:[]),...bins.map((b, i) => [i < bins.length - 1 ? `${fmt(b)}–${fmt(bins[i + 1])}` : `≥${fmt(b)}`, colors[i+(below?1:0)] || DEFAULT_COLORS[Math.min(i,3)]] as [string, string])],
+      labels, imagery: inp.imageryUrl,claimColors,traceColor:inp.appearance?.traceColor,primary:inp.appearance?.primary,accent:inp.appearance?.accent,
     },
     meta: { origin: [OX, OY, OZ], crs: W, holes: holes.length, built: new Date().toISOString(), warnings },
   };
@@ -208,6 +214,11 @@ function validateInput(inp: TourInput) {
     if (!path && (![c.azimuth,c.dip].every(Number.isFinite) || Math.abs(c.dip) > 90 || c.azimuth < 0 || c.azimuth > 360)) throw new Error(c.holeId + ': check azimuth and dip or supply a complete figure path.');
   }
   if (inp.collars.reduce((n,c)=>n+Math.ceil(c.depth/2),0) > 1000000) throw new Error('This tour has too much drilling for a single browser export.');
+  let vertices=0,triangles=0;
+  for(const e of inp.includeEnvelopes?inp.envelopes||[]:[]){
+    vertices+=e.vertices.length/3;triangles+=e.indices.length/3;
+    if(e.vertices.length<9 || e.vertices.length%3 || vertices>200000 || e.indices.length<3 || e.indices.length%3 || triangles>500000 || e.vertices.some(v=>!Number.isFinite(v)) || e.indices.some(i=>!Number.isInteger(i)||i<0||i>=e.vertices.length/3) || !/^#[0-9a-f]{6}$/i.test(e.color) || !Number.isFinite(e.opacity) || e.opacity<0 || e.opacity>1) throw new Error('The model envelope has invalid geometry or exceeds the tour geometry limit.');
+  }
   const bins = inp.grade?.bins;
   if (!bins?.length || bins.length > 8 || bins.some((b,i)=>!Number.isFinite(b) || (i > 0 && b <= bins[i-1]))) throw new Error('Enter increasing numeric grade bins for the selected field and unit.');
   if (inp.footprintEnabled && inp.footprintThreshold != null && !Number.isFinite(inp.footprintThreshold)) throw new Error('Enter a numeric footprint threshold.');

@@ -1851,13 +1851,14 @@ function exportPNG(opts = {}) {
 const extPending = new Set(), settled = () => Promise.race([Promise.resolve().then(() => Promise.allSettled([...extPending])).then(extReady),
   new Promise((ok, no) => setTimeout(() => no(new Error('A layer of this figure is still loading after 20 seconds, so nothing was exported. Check the connection and export again.')), 20000))]);
 const exportLayers = (o) => settled().then(desk).then((m) => m.exportLayers(o)).then((r) => { if (o?.download) exported('layers'); return r; });
-const tourSnapshot = () => {
+const tourSnapshot = (m) => {
   const provisional = project?.holes.filter(isProvisional).map(h=>h.id) || [];
-  return { files, project, provisional,
-    signature: filesDigest()+'|'+JSON.stringify([files.map(f=>[f.role,f.cols,f.grades]),S.crs,S.overlays,provisional]),
+  const model=m.modelSnapshot({project,state:S,shell:shell.status==='ready'?shell.mesh:null,shells:shellList(),opacities:Object.fromEntries((G?.shellMesh?.children||[]).map(c=>[c.userData.part,c.material.opacity])),binColors:BIN_COLORS,equivalentNote:S.eq&&S.valueCol===eqName()?eqInfo().note:null});
+  return { files, project, provisional,...model,
+    signature: filesDigest()+'|'+JSON.stringify([files.map(f=>[f.role,f.cols,f.grades]),S.crs,S.overlays,provisional,model.modelKey]),
     state: { ...S, overlays: S.overlays.map(o=>({...o,data:o.data || {features:EXT.overlays?.sourceData(o)?.feats || []}})) } };
 };
-const openTour = () => settled().then(()=>import('../features/tour3d/studio.js')).then(m=>m.openTour(tourSnapshot));
+const openTour = () => settled().then(()=>shell.busy?Promise.race([new Promise(ok=>shell.waiters.push(ok)),new Promise((_,no)=>setTimeout(()=>no(new Error('The envelope is still building. Wait for it to finish and try the tour again.')),20000))]):null).then(()=>shell.placing).then(()=>import('../features/tour3d/studio.js')).then(m=>m.openTour(()=>tourSnapshot(m)));
 $('export-tour').addEventListener('click',()=>openTour().catch(e=>status(e.message)));
 // The Export step's Background and Drop shadow; Transparent turns the shadow off (one click to keep it).
 // Its Pixel size (the figure size, 2×, 3× or a width) and the watermark band, for that export only.

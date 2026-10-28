@@ -46,6 +46,8 @@ for (const [name,width,height] of [['desktop',1280,900],['mobile',390,844]]) {
     await expect(page.frameLocator('iframe[title="3D Tour preview"]').getByText('Project claims',{exact:true})).toHaveCount(0);
     await setup.getByRole('button',{name:'Close',exact:true}).click();
     await page.evaluate(async()=>{
+      await window.EM3D.addFiles([{name:'envelope.obj',text:'v -50 -50 900\nv 50 -50 900\nv 0 50 950\nf 1 2 3'}]);
+      await window.EM3D.setStyle({meshes:{'envelope.obj':{color:'#123456',opacity:.35,show:true}},bins:[.1,.2,.5,1],displayCutoff:.2});
       await window.EM3D.addOverlay({name:'Project claims',role:'claims',group:'project',crs:'EPSG:4326',data:{
         type:'FeatureCollection',features:[{type:'Feature',properties:{number:'1'},geometry:{type:'Polygon',coordinates:[
           [[-129.01,55],[-129,55],[-129,55.01],[-129.01,55.01],[-129.01,55]],
@@ -56,6 +58,19 @@ for (const [name,width,height] of [['desktop',1280,900],['mobile',390,844]]) {
     const dialog=page.getByRole('dialog',{name:'3D Tour'});
     await expect(dialog.getByRole('status')).toContainText('2 holes');
     const frame=page.frameLocator('iframe[title="3D Tour preview"]');
+    await expect(dialog.getByLabel('Include model envelopes below the surface')).toBeChecked();
+    const packet=await frame.locator('#d').evaluate(el=>JSON.parse(el.textContent));
+    const colours=await page.evaluate(()=>window.EM3D.getState().grade.binColors);
+    expect(packet.config.bins.map(b=>b[1])).toEqual(colours);
+    expect(packet.envelopes[0]).toMatchObject({name:'envelope.obj',color:'#123456',opacity:.35,kind:'supplied'});
+    await frame.locator('body').evaluate(()=>new Promise(resolve=>{const check=()=>window.S3D?resolve():requestAnimationFrame(check);check();}));
+    await frame.getByRole('button',{name:'Claims on',exact:true}).click();
+    await expect(frame.getByRole('button',{name:'Claims off',exact:true})).toHaveAttribute('aria-pressed','false');
+    expect(await frame.locator('body').evaluate(()=>window.S3D.layers().claims)).toBe(false);
+    await frame.getByRole('button',{name:'Claims off',exact:true}).click();
+    await frame.getByRole('button',{name:'Envelopes on',exact:true}).click();
+    expect(await frame.locator('body').evaluate(()=>window.S3D.layers())).toMatchObject({envelopes:false,envelopeCount:1});
+    await frame.getByRole('button',{name:'Envelopes off',exact:true}).click();
     // Exercise wrapped tab labels in the narrow preview that previously covered playback.
     await dialog.locator('iframe').evaluate(el=>{el.style.width='240px';});
     await expect(frame.getByRole('button',{name:'Pause',exact:true})).toBeVisible();

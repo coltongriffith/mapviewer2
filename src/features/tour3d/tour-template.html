@@ -19,8 +19,9 @@
 .legend .ramp{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:2px}.ramp span{display:block;height:5px}
 .legend .ticks{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:2px;margin-top:4px;font-size:9.5px;color:#5c615b;font-variant-numeric:tabular-nums}
 .tour{position:absolute;right:22px;bottom:calc(var(--tabs-height,88px) + 12px);display:flex;align-items:center;gap:7px;padding:7px 11px;font:inherit;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:#2d332f;cursor:pointer}
-.tour:hover{background:rgba(255,255,255,.92)}
+.tour-options{position:absolute;right:14px;top:56px;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;max-width:70%}.tour-options button{font:inherit;font-size:11px;padding:7px 10px;cursor:pointer}.tour:hover{background:rgba(255,255,255,.92)}
 .tour:focus-visible,.tabs button:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+.data-notes{padding:10px 20px;font-size:12px}.data-notes li{margin:6px 0;overflow-wrap:anywhere}
 .tour svg{width:8px;height:8px;fill:currentColor}
 .tabs{position:absolute;left:0;right:0;bottom:0;display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid var(--line);background:rgba(243,241,234,.86);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
 .tabs button{position:relative;text-align:left;background:none;border:0;border-right:1px solid var(--line);padding:14px 22px 16px;font:inherit;color:var(--ink);cursor:pointer;display:flex;gap:14px;align-items:baseline}
@@ -52,7 +53,7 @@
   <div class="foot">Equal scale · reference terrain, not a site survey · Made with Exploration Maps</div>
   <div class="status" id="status">Loading terrain…</div>
   <div class="attr" id="attr">Elevation: AWS Terrain Tiles · Imagery (when loaded): © Esri, Maxar, Earthstar Geographics</div>
-  <div id="tags"></div>
+  <div id="tags"></div><div class="tour-options" aria-label="Visible layers"><button class="glass" id="claims-toggle" type="button" aria-pressed="true">Claims on</button><button class="glass" id="envelopes-toggle" type="button" aria-pressed="true">Envelopes on</button></div>
   <div class="hint" id="hint">Click the model to zoom with scroll</div>
   <div class="hud glass"><svg id="north" viewBox="0 0 16 20" aria-label="North"><path d="M8 19V3M3.5 8L8 2.5 12.5 8" fill="none" stroke="#2d332f" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg><span>N</span><div class="scale"><div id="sbar"></div><span id="slab"></span></div></div>
   <div class="legend glass" id="legend">
@@ -68,10 +69,14 @@
   </nav>
 </section>
 <script>__THREE__</script>
+<details class="data-notes"><summary>Data notes and assumptions</summary><ul id="data-notes"></ul></details>
 <script id="d" type="application/json">__DATA__</script>
 <script>
 (()=>{
 const D=JSON.parse(document.getElementById('d').textContent),C=D.config||{};
+let claimsVisible=!!D.claims?.length;
+if(C.primary)document.documentElement.style.setProperty('--copper',C.primary);
+if(C.accent)document.documentElement.style.setProperty('--teal',C.accent);
 /* Project-agnostic: everything below is driven by the data package (claims, holes, runs, fp, terrain extent, config).
    ExplorationMaps can emit the same package from a saved 2D/3D map and reuse this renderer unchanged. */
 const root=document.getElementById('s3d'),canvas=document.getElementById('c'),$=id=>document.getElementById(id);
@@ -187,8 +192,8 @@ function overlayTexture(sat){
   }
   drawFootprint(g);
   // claims
-  g.beginPath();for(const r of D.claims){for(let k=0;k<r.length;k+=2){const [a,b]=P(r[k],r[k+1]);k?g.lineTo(a,b):g.moveTo(a,b)}g.closePath()}
-  g.fillStyle=sat?'rgba(255,255,255,.06)':'rgba(179,90,44,.05)';g.fill('evenodd');if(sat){g.strokeStyle='rgba(255,255,255,.42)';g.lineWidth=9;g.stroke()}g.strokeStyle='rgba(204,102,40,1)';g.lineWidth=5;g.stroke();
+  if(claimsVisible){g.beginPath();for(const r of D.claims){for(let k=0;k<r.length;k+=2){const [a,b]=P(r[k],r[k+1]);k?g.lineTo(a,b):g.moveTo(a,b)}g.closePath()}
+  g.fillStyle=sat?'rgba(255,255,255,.06)':'rgba(179,90,44,.05)';g.fill('evenodd');if(sat){g.strokeStyle='rgba(255,255,255,.42)';g.lineWidth=9;g.stroke()}g.lineWidth=5;D.claims.forEach((r,i)=>{g.beginPath();for(let k=0;k<r.length;k+=2){const p=P(r[k],r[k+1]);k?g.lineTo(...p):g.moveTo(...p)}g.closePath();g.strokeStyle=C.claimColors?.[i]||'#cc6628';g.stroke()});}
   const t=new THREE.CanvasTexture(cv);t.anisotropy=8;t.flipY=false;return t;
 }
 const terrainMat=new THREE.ShaderMaterial({transparent:true,extensions:{derivatives:true},
@@ -257,16 +262,19 @@ function merge(geos){geos=geos.filter(Boolean);let nv=0,ni=0;for(const g of geos
   const m=new THREE.BufferGeometry();m.setAttribute('position',new THREE.BufferAttribute(P,3));m.setAttribute('normal',new THREE.BufferAttribute(N,3));m.setIndex(new THREE.BufferAttribute(I,1));return m}
 const drill=new THREE.Group();scene.add(drill);
 const dbox=new THREE.Box3();
-drill.add(new THREE.Mesh(merge(D.holes.filter(h=>!h.pv).map(h=>tubeGeo(h.p,1.8))),new THREE.MeshLambertMaterial({color:0x2f6d78})));
-drill.add(new THREE.Mesh(merge(D.holes.filter(h=>h.pv).map(h=>tubeGeo(h.p,1.8))),new THREE.MeshLambertMaterial({color:0x7fa3aa})));
+drill.add(new THREE.Mesh(merge(D.holes.filter(h=>!h.pv).map(h=>tubeGeo(h.p,1.8))),new THREE.MeshLambertMaterial({color:C.traceColor||'#59646a'})));
+drill.add(new THREE.Mesh(merge(D.holes.filter(h=>h.pv).map(h=>tubeGeo(h.p,1.8))),new THREE.MeshLambertMaterial({color:C.traceColor||'#59646a',transparent:true,opacity:.55})));
 for(const h of D.holes)if(h.sm)for(let k=0;k<h.p.length;k+=3)dbox.expandByPoint(new THREE.Vector3(h.p[k],h.p[k+1],h.p[k+2]));
 const collars=new THREE.InstancedMesh(new THREE.CylinderGeometry(5,5,4,12),new THREE.MeshLambertMaterial({color:0x1d2421}),D.holes.length);
 D.holes.forEach((h,i)=>collars.setMatrixAt(i,new THREE.Matrix4().makeTranslation(h.p[0],h.p[1]+2,h.p[2])));drill.add(collars);
 const BINS=C.bins||[['0.10–0.20','#8fbcd4'],['0.20–0.50','#f2c14e'],['0.50–1.00','#ee8a2a'],['≥1.00','#d33a2f']];
 BINS.forEach(([,col],bi)=>{const g=merge(D.runs.filter(r=>r[2]===bi).map(r=>tubeGeo(r[1],2.4+bi*.7)));if(g.attributes.position.count)drill.add(new THREE.Mesh(g,new THREE.MeshLambertMaterial({color:new THREE.Color(col),emissive:new THREE.Color(col).multiplyScalar(.18)})))});
+const envelopeGroup=new THREE.Group();scene.add(envelopeGroup);
+for(const e of D.envelopes||[]){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(e.vertices,3));g.setIndex(e.indices);g.computeVertexNormals();g.computeBoundingBox();dbox.union(g.boundingBox);const m=new THREE.Mesh(g,new THREE.MeshLambertMaterial({color:e.color,transparent:true,opacity:e.opacity,depthWrite:false,side:THREE.DoubleSide}));m.name=e.name;envelopeGroup.add(m)}
+if(D.envelopes?.some(e=>e.kind==='estimated'))document.querySelector('.foot').textContent+=' · Exploratory envelope, not a mineral resource';
 /* ---------- views ---------- */
 const cbox=new THREE.Box3();for(const r of D.claims)for(let k=0;k<r.length;k+=2)cbox.expandByPoint(new THREE.Vector3(r[k],0,r[k+1]));
-if(cbox.isEmpty()){cbox.expandByPoint(new THREE.Vector3(X0,0,Z0));cbox.expandByPoint(new THREE.Vector3(X1,0,Z1));document.querySelector('[data-k="claims"]').remove()}
+if(cbox.isEmpty()){cbox.expandByPoint(new THREE.Vector3(X0,0,Z0));cbox.expandByPoint(new THREE.Vector3(X1,0,Z1));document.querySelector('[data-k="claims"]').remove();$('claims-toggle').hidden=true}
 const collarBox=new THREE.Box3();for(const c of D.collars)if(c[3])collarBox.expandByPoint(new THREE.Vector3(c[0],c[1],c[2]));
 const V=[ // district / Drilling / below
   {box:null,yaw:-.55,pitch:.88,room:1.04,reveal:0,shell:0},
@@ -323,6 +331,9 @@ tabSize.observe($('tabs'));
 function setPlaying(p){playing=p;$('tour').setAttribute('aria-pressed',p);$('tlabel').textContent=p?'Pause':'Play';
   $('ticon').innerHTML=p?'<rect x="1.5" y="1" width="2" height="8"/><rect x="6.5" y="1" width="2" height="8"/>':'<path d="M2 1l7 4-7 4z"/>';needs=true;kick()}
 $('tour').onclick=()=>setPlaying(!playing);
+$('claims-toggle').onclick=()=>{claimsVisible=!claimsVisible;$('claims-toggle').textContent=claimsVisible?'Claims on':'Claims off';$('claims-toggle').setAttribute('aria-pressed',String(claimsVisible));const legend=document.querySelector('[data-k="claims"]');if(legend)legend.style.display=claimsVisible?'':'none';if(terrain){const old=terrainMat.uniforms.uOver.value;terrainMat.uniforms.uOver.value=overlayTexture(!!IMG);old?.dispose()}needs=true;kick()};
+$('envelopes-toggle').hidden=!D.envelopes?.length;
+$('envelopes-toggle').onclick=()=>{envelopeGroup.visible=!envelopeGroup.visible;const on=envelopeGroup.visible;$('envelopes-toggle').textContent=on?'Envelopes on':'Envelopes off';$('envelopes-toggle').setAttribute('aria-pressed',String(on));needs=true;kick()};
 tabs.forEach((b,i)=>b.onclick=()=>{tourT=[0,9,18][i];offPitch=0;offZoom=0;needs=true;kick()});
 canvas.addEventListener('pointerdown',e=>{if(e.button)return;drag={x:e.clientX,y:e.clientY,id:e.pointerId};canvas.setPointerCapture(e.pointerId);lastInput=performance.now()});
 canvas.addEventListener('pointermove',e=>{if(!drag||drag.id!==e.pointerId)return;const dx=(e.clientX-drag.x)*.005,dy=e.pointerType==='touch'?0:(e.clientY-drag.y)*.003;drag.x=e.clientX;drag.y=e.clientY;
@@ -375,12 +386,13 @@ function applyConfig(){document.title=(C.title||'Project')+' · Interactive 3D';
   (C.tabs||[]).forEach((t,i)=>{const b=tabs[i];if(b){b.querySelector('b').textContent=t[0];b.querySelector('small').textContent=t[1]}});
   const L=C.legend||{};document.querySelectorAll('#legend div').forEach(d=>{const k=d.dataset.k;if(L[k])d.lastChild.textContent=L[k]})}
 applyConfig();
+for(const note of D.meta.warnings||[]){const li=document.createElement('li');li.textContent=note;$('data-notes').append(li)}
 (async()=>{
   try{await loadDEM();$('status').style.opacity=0}catch(e){fallbackDEM();$('status').textContent='Terrain unavailable · simplified surface shown'}
   try{IMG=await loadImagery();$('attr').hidden=false}catch(e){IMG=null}
   buildTerrain();setBoxes();resize();ready=true;
   setPlaying(playing);
-  window.S3D={seek:t=>{tourT=t;cur=null;needs=true;kick()},pose,cam:()=>cur};
+  window.S3D={seek:t=>{tourT=t;cur=null;needs=true;kick()},pose,cam:()=>cur,layers:()=>({claims:claimsVisible,envelopes:envelopeGroup.visible,envelopeCount:envelopeGroup.children.length})};
 })();
 })();
 </script></body></html>

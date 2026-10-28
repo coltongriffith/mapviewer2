@@ -5,7 +5,7 @@
 
 // ---------- INPUT ----------
 export type Ring = [number, number][];
-export interface ClaimsFC { type: 'FeatureCollection'; features: { type: 'Feature'; properties?: Record<string, unknown>; geometry: { type: 'Polygon'; coordinates: Ring[] } | { type: 'MultiPolygon'; coordinates: Ring[][] } }[] }
+export interface ClaimsFC { type: 'FeatureCollection'; features: { type: 'Feature'; properties?: Record<string, unknown>; style?:{color:string}; geometry: { type: 'Polygon'; coordinates: Ring[] } | { type: 'MultiPolygon'; coordinates: Ring[][] } }[] }
 
 export interface Collar {
   holeId: string;
@@ -28,6 +28,7 @@ export interface Assay {
   to: number;
   values: Record<string, number | null>; // e.g. { Cu: 0.55, Au: 0.12 }
 }
+export interface Envelope { name:string; vertices:number[]; indices:number[]; color:string; opacity:number; kind:'supplied'|'estimated'; }
 
 export interface TourInput {
   title: string;                       // "Star Project"
@@ -37,7 +38,10 @@ export interface TourInput {
   surveys?: Survey[];                  // optional; collar az/dip used if missing
   assays: Assay[];
   paths?: Record<string, { depth: number; x: number; y: number; z: number }[]>; // current figure's desurvey, original CRS
-  grade: { field: string; unit: string; bins?: number[]; colors?: string[] }; // field "Cu", unit "%"
+  grade: { field: string; unit: string; bins?: number[]; colors?: string[]; includeBelow?:boolean; displayCutoff?:number|null }; // field "Cu", unit "%"
+  envelopes?:Envelope[];
+  includeEnvelopes?:boolean;
+  appearance?:{traceColor?:string;primary?:string;accent?:string};
   footprintThreshold?: number;         // default = bins[1]
   footprintEnabled?: boolean;          // explicit opt-in; generalized illustration only
   mainTarget?: string;                 // default = target with most holes, else densest cluster
@@ -56,6 +60,7 @@ export interface TourPackage {
   claims: number[][];                      // rings, flat [x,z,...]
   fpoly: number[][];                       // footprint rings, flat [x,z,...]
   collars: [number, number, number, number][]; // [x,y,z, inMainTarget 0|1]
+  envelopes?:Envelope[]; // vertices in the same local metre frame as drilling
   terrain: {
     utm: [number, number, number, number]; // local extent [x0,z0,x1,z1]
     corners: [number, number][];           // lon/lat of SW, SE, NW, NE (bilinear)
@@ -68,6 +73,7 @@ export interface TourPackage {
     bins: [string, string][];              // [label, colour]
     labels: { t: string; x?: number; z?: number; fp?: boolean; views: number[]; below?: boolean }[];
     imagery?: string;
+    traceColor?:string;primary?:string;accent?:string;claimColors?:string[];
   };
   meta: { origin: [number, number, number]; crs: string; holes: number; built: string; warnings: string[] };
 }
