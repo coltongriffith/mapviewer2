@@ -454,6 +454,11 @@ html.em3d-version .share-bar .btn { padding: 6px 11px; }
       </section>
       <details class="layout-group" open>
         <summary>View and terrain</summary>
+        <section>
+          <h3>Output frame</h3>
+          <label class="field"><span>Figure format</span><select id="layout-format"></select></label>
+          <p class="muted" style="margin-top:6px">Choose the frame before arranging the figure. The same size is available in Export.</p>
+        </section>
 <section>
         <h3>Camera</h3>
         <div class="grid2">
@@ -703,8 +708,10 @@ html.em3d-version .share-bar .btn { padding: 6px 11px; }
         <p class="muted" style="margin-top:4px">The pixel size is the export's whatever the screen: the figure is laid out as at the figure size above. The band adds the Exploration Maps logo, "Draft for review · Not for publication", who it was prepared for and the year under the figure, and a faint draft mark across it (the PNGs, and figure.png and section.png in the layers ZIP).</p>
       </section>
       <section class="row">
-        <button class="btn primary" type="button" id="export-3d">Download 3D figure (PNG)</button>
-        <button class="btn primary" type="button" id="export-section">Download section (PNG)</button>
+        <button class="btn primary" type="button" id="export-current">Download current 3D view (PNG)</button>
+        <p class="muted">Uses the selected preview tab and the output settings above.</p>
+        <button class="btn" type="button" id="export-3d">Download 3D figure (PNG)</button>
+        <button class="btn" type="button" id="export-section">Download section (PNG)</button>
       </section>
       <section>
         <button class="btn" type="button" id="export-tour">3D Tour · preview and download</button>

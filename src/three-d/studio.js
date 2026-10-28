@@ -1896,6 +1896,10 @@ const desk = () => import('./desk.js').then((m) => { m.init(host()); return m; }
 const sendToDesignDesk = (o) => settled().then(desk).then((m) => m.sendToDesignDesk(o));
 $('desk').addEventListener('submit', (e) => { e.preventDefault(); settled().then(desk).then((m) => m.submit(), (err) => status(err.message)); });
 ['3d', 'section'].forEach((v) => $(`export-${v}`).addEventListener('click', () => settled().then(() => exportPNG(xui({ view: v }))).catch((e) => status(e.message))));
+$('export-current').addEventListener('click', () => {
+  const view = S.view;
+  settled().then(() => exportPNG(xui({ view }))).catch((e) => status(e.message));
+});
 
 // ============================================================
 // 9. Logo colours
@@ -1941,6 +1945,7 @@ document.querySelectorAll('[data-goto]').forEach((b) => b.addEventListener('clic
 function showView(v) {
   if (v !== '3d' && v !== 'section') throw new Error('View must be "3d" or "section".');
   S.view = v; const sec = v === 'section';
+  $('export-current').textContent = `Download current ${sec ? 'section' : '3D view'} (PNG)`;
   $('view-3d').setAttribute('aria-selected', String(!sec)); $('view-section').setAttribute('aria-selected', String(sec));
   secCanvas.hidden = !sec; glCanvas.hidden = sec; ov.hidden = sec; if (sec) drawSectionView(); schedulePublish();
 }

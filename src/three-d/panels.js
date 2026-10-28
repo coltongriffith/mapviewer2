@@ -122,6 +122,10 @@ export function renderStyle(host) {
 }
 export function renderSizes(host) {
   H = host; const { S, FORMATS, setFigureSize } = H;
+  const early = $('layout-format');
+  early.innerHTML = Object.entries(FORMATS).map(([k, f]) => `<option value="${k}">${f.label} · ${f.w} × ${f.h} px</option>`).join('');
+  early.value = S.format;
+  early.onchange = () => setFigureSize(early.value);
   $('sizes').innerHTML = Object.entries(FORMATS).map(([k, f]) => `<label><input type="radio" name="size" value="${k}" ${k === S.format ? 'checked' : ''}><span><b>${f.label}</b><br><span class="muted">${f.use}</span></span><small>${f.w} × ${f.h}</small></label>`).join('');
   $('sizes').querySelectorAll('input').forEach((r) => r.addEventListener('change', () => setFigureSize(r.value)));
 }
