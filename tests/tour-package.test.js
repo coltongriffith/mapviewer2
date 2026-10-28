@@ -1,6 +1,9 @@
+// @vitest-environment node
 import { describe,it,expect } from 'vitest';
 import { buildTourPackage } from '../src/features/tour3d/build';
 import { parseTourPackage,MAX_TOUR_BYTES } from '../src/features/tour3d/package';
+import { renderHostedTour } from '../api/_lib/tour-render';
+import { createHash } from 'node:crypto';
 
 const fixture=()=>buildTourPackage({
   title:'</script><script>alert(1)</script>',crs:'EPSG:4326',
@@ -19,6 +22,19 @@ describe('hosted tour package boundary',()=>{
     expect(()=>parseTourPackage('é'.repeat(MAX_TOUR_BYTES/2+1))).toThrow('size');
     expect(()=>parseTourPackage('<html>uploaded code</html>')).toThrow('JSON');
   });
+  it('renders only repository-owned executable scripts, escaping package strings',()=>{
+    const {html,headers}=renderHostedTour(JSON.stringify(fixture()));
+    expect(html).not.toContain('<script>alert(1)</script>');
+    expect(html).toContain('\\u003c/script>');
+    expect(headers['Cache-Control']).toBe('no-store');
+    expect(headers['Content-Security-Policy']).toContain('sandbox allow-scripts;');
+    expect(headers['Content-Security-Policy']).not.toContain('allow-same-origin');
+    expect(headers['Content-Security-Policy']).not.toContain("script-src 'unsafe-inline'");
+    const scripts=[...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
+    expect(scripts).toHaveLength(2);
+    for (const [,script] of scripts) expect(headers['Content-Security-Policy']).toContain("'sha256-"+createHash('sha256').update(script).digest('base64')+"'");
+    expect(()=>renderHostedTour('<html>untrusted</html>')).toThrow('JSON');
+  });
   it.each([
     p=>{p.v=2;},p=>{p.html='<script>bad()</script>';},p=>{p.config.script='bad()';},
     p=>{p.holes[0].p[0]=null;},p=>{p.holes[0].p.pop();},p=>{p.runs[0][0]=1;},p=>{p.runs[0][2]=8;},
@@ -28,6 +44,8 @@ describe('hosted tour package boundary',()=>{
     p=>{p.terrain.corners[0][1]=90;},p=>{p.terrain.imgZoom=30;},p=>{p.meta.holes=100;},
     p=>{p.terrain.corners=[[-170,-70],[170,-70],[-170,70],[170,70]];},
     p=>{p.terrain.corners=p.terrain.corners.map(c=>[c[0],84]);p.terrain.detailR=2500;p.terrain.detailZoom=16;},
+    p=>{p.collars[0][3]=0;},p=>{p.terrain.step=10000;},
+    p=>{p.terrain.utm=[0,0,1,10000];},p=>{p.collars[0][0]=999999;},
   ])('rejects malformed, executable or excessive inputs (%#)', mutate=>{
     const p=fixture();mutate(p);expect(()=>parseTourPackage(JSON.stringify(p))).toThrow('Invalid tour package');
   });

@@ -74,7 +74,19 @@ renderer. Hosted colours currently accept hexadecimal values only. These extra
 hosted limits do not change existing local preview or HTML download behaviour.
 
 This validator is not yet wired to a public route or publish UI. The next step
-is server rendering from a repository-owned template and package revalidation,
-then owner/current-editor publishing with atomic republish/revocation/deletion and
+is owner/current-editor publishing with atomic republish/revocation/deletion and
 optional-schema fallback. Auth and database tests must cover removed editors,
 revoked links and missing schema. No production activation is included here.
+
+The server-only `api/_lib/tour-render.ts` now reads the repository template and
+installed Three source itself, revalidates JSON, and returns HTML with hashes of
+only those two executable scripts. A sandbox without same-origin access, fixed
+image origins, disabled connections/forms and no-store responses are supplied
+for a future endpoint. That endpoint must authorize before rendering and include
+the template/Three assets in its deployment bundle. No route is exposed yet.
+
+Resource checks match the viewer's bilinear detail-region projection, reject
+degenerate transforms and off-extent collars, and bound fallback DEM work and
+imagery canvas dimensions. These checks prevent compact hostile packages from
+expanding into unbounded tile/image/mesh work. Browser verification of the final
+endpoint and its deployed header rules is still required before publication.

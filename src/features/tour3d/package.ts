@@ -64,26 +64,44 @@ export function parseTourPackage(json: string): TourPackage {
   array(d.collars,holes.length,holes.length,'collars').forEach(c=>{
     array(c,4,4,'collar');c.slice(0,3).forEach((p:any)=>number(p,-1000000,1000000,'collar position'));integer(c[3],0,1,'collar target');
   });
+  const targets=d.collars.filter((c:any)=>c[3]===1);
+  if (!targets.length || !holes.some((h:any)=>h.sm)) fail('target bounds');
   const t = object(d.terrain,['utm','corners','step','demZoom','imgZoom','detailZoom','detailR'],'terrain');
   array(t.utm,4,4,'extent').forEach(p=>number(p,-1000000,1000000,'extent'));
   const width=t.utm[2]-t.utm[0],height=t.utm[3]-t.utm[1];
   if (width <= 0 || height <= 0 || width > 200000 || height > 200000) fail('extent');
+  if (d.collars.some((c:any)=>c[0]<t.utm[0]-1 || c[0]>t.utm[2]+1 || c[2]<t.utm[1]-1 || c[2]>t.utm[3]+1)) fail('collar extent');
   number(t.step,1,10000,'terrain step');
-  if ((Math.ceil(width/t.step)+1)*(Math.ceil(height/t.step)+1) > 1000000) fail('terrain budget');
+  const nx=Math.round(width/t.step)+1,nz=Math.round(height/t.step)+1;
+  if (nx<2 || nz<2 || nx*nz > 250000 || nx*nz*holes.length > 50000000) fail('terrain budget');
+  if (Math.round(4096*height/width)<1 || Math.round(4096*height/width)>8192) fail('imagery canvas budget');
   array(t.corners,4,4,'corners').forEach(c=>{array(c,2,2,'corner');number(c[0],-180,180,'longitude');number(c[1],-85,85,'latitude');});
   integer(t.demZoom,9,14,'DEM zoom');integer(t.imgZoom,9,16,'imagery zoom');integer(t.detailZoom,9,16,'detail zoom');number(t.detailR,1,2500,'detail radius');
   // Bounding coordinates alone do not bound tile work: an extreme zoom or
   // contradictory geographic corners could otherwise schedule millions of images.
   const lon=t.corners.map((c:any)=>c[0]),lat=t.corners.map((c:any)=>c[1]);
   const mercatorY=(a:number)=>{const r=a*Math.PI/180;return (1-Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2;};
+  const [sw,,nw,ne]=t.corners;
+  const determinant=(ne[0]-nw[0])*(mercatorY(sw[1])-mercatorY(nw[1]))-(sw[0]-nw[0])*(mercatorY(ne[1])-mercatorY(nw[1]));
+  if (Math.abs(determinant)<1e-12) fail('degenerate imagery projection');
   for (const z of [t.demZoom,t.imgZoom]) {
     const n=2**z;
     const nx=Math.floor((Math.max(...lon)+180)/360*n)-Math.floor((Math.min(...lon)+180)/360*n)+1;
     const ny=Math.floor(mercatorY(Math.min(...lat))*n)-Math.floor(mercatorY(Math.max(...lat))*n)+1;
     if (nx*ny > 512) fail('tile budget');
   }
-  const metresPerTile=256*156543.03392*Math.cos(Math.max(...lat.map(Math.abs))*Math.PI/180)/2**t.detailZoom;
-  if ((Math.ceil(2*t.detailR/metresPerTile)+2)**2 > 1024) fail('detail tile budget');
+  // Match the viewer's actual bilinear extrapolation around the target collar
+  // box. Metres-per-pixel estimates miss malicious or inconsistent corners.
+  const cx=(Math.min(...targets.map((c:any)=>c[0]))+Math.max(...targets.map((c:any)=>c[0])))/2;
+  const cz=(Math.min(...targets.map((c:any)=>c[2]))+Math.max(...targets.map((c:any)=>c[2])))/2;
+  const detail=[];
+  for (const x of [cx-t.detailR,cx+t.detailR]) for (const z of [cz-t.detailR,cz+t.detailR]) {
+    const u=(x-t.utm[0])/width,v=1-(z-t.utm[1])/height;
+    const p=[0,1].map(k=>(1-u)*(1-v)*t.corners[0][k]+u*(1-v)*t.corners[1][k]+(1-u)*v*t.corners[2][k]+u*v*t.corners[3][k]);
+    number(p[0],-180,180,'detail longitude');number(p[1],-85,85,'detail latitude');detail.push(p);
+  }
+  const dn=2**t.detailZoom,dx=detail.map(p=>(p[0]+180)/360*dn),dy=detail.map(p=>mercatorY(p[1])*dn);
+  if ((Math.floor(Math.max(...dx))-Math.floor(Math.min(...dx))+1)*(Math.floor(Math.max(...dy))-Math.floor(Math.min(...dy))+1)>1024) fail('detail tile budget');
   const m=object(d.meta,['origin','crs','holes','built','warnings'],'metadata');
   array(m.origin,3,3,'origin').forEach(p=>number(p,-100000000,100000000,'origin'));text(m.crs,2048,'CRS');
   if (m.holes !== holes.length) fail('hole count');
