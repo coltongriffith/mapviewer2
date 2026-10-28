@@ -1851,6 +1851,14 @@ function exportPNG(opts = {}) {
 const extPending = new Set(), settled = () => Promise.race([Promise.resolve().then(() => Promise.allSettled([...extPending])).then(extReady),
   new Promise((ok, no) => setTimeout(() => no(new Error('A layer of this figure is still loading after 20 seconds, so nothing was exported. Check the connection and export again.')), 20000))]);
 const exportLayers = (o) => settled().then(desk).then((m) => m.exportLayers(o)).then((r) => { if (o?.download) exported('layers'); return r; });
+const tourSnapshot = () => {
+  const provisional = project?.holes.filter(isProvisional).map(h=>h.id) || [];
+  return { files, project, provisional,
+    signature: filesDigest()+'|'+JSON.stringify([files.map(f=>[f.role,f.cols,f.grades]),S.crs,S.overlays,provisional]),
+    state: { ...S, overlays: S.overlays.map(o=>({...o,data:o.data || {features:EXT.overlays?.sourceData(o)?.feats || []}})) } };
+};
+const openTour = () => settled().then(()=>import('../features/tour3d/studio.js')).then(m=>m.openTour(tourSnapshot));
+$('export-tour').addEventListener('click',()=>openTour().catch(e=>status(e.message)));
 // The Export step's Background and Drop shadow; Transparent turns the shadow off (one click to keep it).
 // Its Pixel size (the figure size, 2×, 3× or a width) and the watermark band, for that export only.
 const xsize = () => { const v = $('export-scale').value; return v === 'w' ? { width: +$('export-width').value } : +v > 1 ? { scale: +v } : {}; };
@@ -2574,7 +2582,7 @@ const call = (fn) => (...args) => { const r = fn(...args); return r === undefine
 window.EM3D = Object.freeze({
   version: 3, help: () => HELP, getState, loadSample, clearFiles, addFiles: addUserFiles, addZip, setBrand, setLogo, setStyle: (o) => setStyle(o, true), setCallout,
   setCamera: call((o = {}) => { if (!G) throw new Error('Load data first.'); showView('3d'); if (o.view) { if (!VIEWS[o.view]) throw new Error('view must be a, b, low or plan.'); applyView(o.view, true); } else setCamera(o, true); syncCamUI(); }),
-  setFigureSize, showStep: call(showStep), showView: call(showView), exportPNG,
+  setFigureSize, showStep: call(showStep), showView: call(showView), exportPNG, openTour,
   setCRS, terrainReady: async () => { await (realT.promise || Promise.resolve()); return getState(); },
   addLabel, updateLabel, removeLabel, exportLayers, sendToDesignDesk, addWallLabel, updateWallLabel, removeWallLabel,
   setShell, cancelShell, setEquivalent, setProvisional: call(setProvisional), getChecks, setScene, setView,

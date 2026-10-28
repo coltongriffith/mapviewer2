@@ -128,6 +128,8 @@ function source(o) {
   let r; try { r = { ...(f.header?.length ? fromCSV(f) : parseOverlay(f.text, f.name)), rev }; } catch (e) { r = { feats: [], err: e.message, rev }; }
   PARSED.set(f, r); return r;
 }
+// Read-only original coordinates for derived exports; never draped or clipped.
+export const sourceData = (o) => source(o);
 // The overlay's features in the figure's metres (cached), or null while it cannot be placed.
 function placed(o) {
   const fn = TF.get(tfKey(o)), src = source(o); if (!fn || fn instanceof Error || !src) return null;

@@ -67,6 +67,9 @@ export default defineConfig({
           if (id.includes('node_modules/leaflet')) return 'vendor-leaflet';
           // The renderer choice and Canvas fix every Leaflet map uses travel with Leaflet, not as a chunk of their own.
           if (/[\\/]src[\\/]utils[\\/]leafletRenderers\.js$/.test(id)) return 'vendor-leaflet';
+          // The standalone HTML tour needs Three's global source as text.
+          // Keep that lazy export payload out of the maker's live renderer.
+          if (id.includes('node_modules/three/build/three.min.js?raw')) return 'tour-three-source';
           if (id.includes('node_modules/three')) return 'vendor-three';
           // Drafts need compression immediately; PDF/ZIP engines are only
           // needed on export/import. Grouping them loaded ~157 KiB of export

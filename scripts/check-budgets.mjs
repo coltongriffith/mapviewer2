@@ -484,7 +484,8 @@ const BUDGETS = {
   // the block's side title in place of the title block, and its heading label hidden under it (~0.9 kB in all).
   // 174.6 -> 174.9: the anonymous unsaved-figure indicator and unload guard must run before
   // account features load. Configured build measures 174.7 kB; Supabase remains lazy.
-  threeDJsGzipKb: 174.9,
+  // Tour launch button and snapshot hook: measured 175.0; viewer remains lazy.
+  threeDJsGzipKb: 175.3,
   // /3d's own modules fetched on first use (the geology, geophysics and tag layers, the account
   // client). They never load with the page or the app, so they sit outside the page and app totals.
   // 32 → 34 (Oct 2026, round 4): per-hole tags, grouped pending tags, callouts beside or bracketed on their
@@ -627,6 +628,9 @@ const BUDGETS = {
   // Optional sign-off lookup recovery and explicit unknown-status notice: 164.0 configured.
   // These controls stay in the lazy versions dialog; 3D startup is unchanged.
   threeDLazyJsGzipKb: 164.2,
+  // Self-contained 3D Tour export: separate lazy Three global source plus
+  // template/builder/dialog: measured 173.4. Not part of the maker's initial load.
+  threeDTourJsGzipKb: 173.8,
   // 161.2 → 162.7 (P2-8, measured 162.2 plain / 162.4 configured): explicit
   // recipe selection, snapshot ownership, collision/edited-wording guards and
   // recipe-only update notices in property-data. No eager 3D page growth.
@@ -774,20 +778,24 @@ for (const [name, entry, limit] of STANDALONE) {
   // Followed through those modules' own lazy imports (account-core.js fetches library.js) and the chunks
   // they share among themselves (leaders.js, imported by tags.js and look.js).
   if (name === '3d') {
-    const lazy = new Set(), seen = new Set();
-    const walkLazy = (from, statics = false) => {
+    const lazy = new Set(), tour = new Set(), seen = new Set();
+    const walkLazy = (from, statics = false, inTour = false) => {
       for (const key of [...(manifest[from].dynamicImports || []), ...(statics ? manifest[from].imports || [] : [])]) {
-        const ours = key.startsWith('src/three-d/') || (key.startsWith('_') && existsSync(fileURLToPath(new URL(`../src/three-d/${manifest[key].name}.js`, import.meta.url))));
+        const isTour = inTour || key.startsWith('src/features/tour3d/') || manifest[key].name === 'tour-three-source';
+        const ours = key.startsWith('src/three-d/') || key.startsWith('src/features/tour3d/') || manifest[key].name === 'tour-three-source' || (key.startsWith('_') && existsSync(fileURLToPath(new URL(`../src/three-d/${manifest[key].name}.js`, import.meta.url))));
         if (!ours || seen.has(key)) continue;
         seen.add(key);
-        if (!appReach.has(manifest[key].file) && !files.has(manifest[key].file)) lazy.add(manifest[key].file);
-        walkLazy(key, true);
+        if (!appReach.has(manifest[key].file) && !files.has(manifest[key].file)) (isTour ? tour : lazy).add(manifest[key].file);
+        walkLazy(key, true, isTour);
       }
     };
     walkLazy(entry);
     let lz = 0; for (const file of lazy) { lz += await gzipKb(join(DIST, file)); standaloneOnly.add(join(DIST, file)); }
     report.push(`${name} lazy JS: ${lz.toFixed(1)} kB gzip across ${lazy.size} chunks (loaded on first use)`);
     if (lz > BUDGETS.threeDLazyJsGzipKb) failures.push(`${name} lazy JS ${lz.toFixed(1)} kB exceeds ${BUDGETS.threeDLazyJsGzipKb} kB`);
+    let tz = 0; for (const file of tour) { tz += await gzipKb(join(DIST,file)); standaloneOnly.add(join(DIST,file)); }
+    report.push(`3d tour export JS: ${tz.toFixed(1)} kB gzip across ${tour.size} chunks (loaded on export)`);
+    if (tz > BUDGETS.threeDTourJsGzipKb) failures.push(`3d tour export JS ${tz.toFixed(1)} kB exceeds ${BUDGETS.threeDTourJsGzipKb} kB`);
   }
 }
 
