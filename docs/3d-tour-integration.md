@@ -115,8 +115,14 @@ withdraw all links, restoration does not revive them, and permanent deletion
 cascades. No extra storage bucket or account assignments are needed.
 
 The migration is source-only and requires explicit approval before production.
-It depends on the workspace schema. Pending API/UI work must report missing RPCs
-as unavailable and retain ordinary preview/download. Rollback first disables that
+It depends on the workspace schema. The source-only `api/tour.ts` boundary uses
+the anonymous key for public package reads and a server-verified current-user
+JWT for management; it never uses a service-role client. Publishing validates
+both package JSON and final escaped HTML before writing. Public rendering
+revalidates stored packages, and every response disables caching. Missing RPCs
+report sharing unavailable while ordinary preview/download remains usable.
+Client UI, public routing, deployment asset bundling and browser header checks
+remain pending; this endpoint has not been published or activated. Rollback first disables that
 UI/endpoint, then drops the project trigger, five tour functions and private
 `three_d_tours` table; exported local HTML files are unaffected.
 
