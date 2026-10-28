@@ -62,3 +62,19 @@ storage, environment, billing or plan changes.
 
 Review follow-up: tours reuse the maker's CRS definitions (including NAD27, MGA and custom proj4). Complete supplied survey paths do not require redundant collar orientation; incomplete paths still fail validation. Playback stays above the measured navigation height when labels wrap in narrow previews.
 
+
+## Hosted package boundary (preparation)
+
+The future hosted API must receive JSON packages, not executable HTML. `package.ts`
+provides the first independent boundary: an 8 MiB UTF-8 limit before JSON parsing,
+version/shape checks, finite bounded geometry, valid hole/bin references, bounded
+terrain mesh and tile work, and an imagery source allowlist. It preserves the
+positions and text supplied by the builder; escaping still belongs to the trusted
+renderer. Hosted colours currently accept hexadecimal values only. These extra
+hosted limits do not change existing local preview or HTML download behaviour.
+
+This validator is not yet wired to a public route or publish UI. The next step
+is server rendering from a repository-owned template and package revalidation,
+then owner/current-editor publishing with atomic republish/revocation/deletion and
+optional-schema fallback. Auth and database tests must cover removed editors,
+revoked links and missing schema. No production activation is included here.
