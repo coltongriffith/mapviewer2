@@ -7,6 +7,7 @@ import { tourScriptHashes } from '../scripts/tour-csp.mjs';
 import proj4 from 'proj4';
 import { parseCRS } from '../src/three-d/terrain';
 import { modelSnapshot } from '../src/features/tour3d/modelSnapshot';
+import { packageFromModel } from '../src/features/tour3d/packageFromModel';
 
 const claims = {type:'FeatureCollection',features:[{type:'Feature',properties:{},geometry:{type:'Polygon',coordinates:[
   [[-129.01,55],[-129,55],[-129,55.01],[-129.01,55.01],[-129.01,55]],
@@ -47,6 +48,24 @@ describe('3D Tour project adapter',()=>{
   });
 });
 describe('3D Tour builder',()=>{
+  it('invalidates equivalent previews after recipe changes even while a raw grade is selected',()=>{
+    const state={valueCol:'Cu_pct',eq:{basePrice:4,baseRecovery:90,baseUnit:'%'},shell:{enabled:false}},equivalentInfo={name:'CuEq_calc',note:'CuEq formula and assumptions'};
+    const old=modelSnapshot({project:{},state,equivalentInfo});
+    expect(old.appearance.equivalent).toEqual({field:'CuEq_calc',unit:'%',note:equivalentInfo.note});
+    state.eq.basePrice=4.001;
+    expect(modelSnapshot({project:{},state,equivalentInfo}).modelKey).not.toBe(old.modelKey);
+    const second=modelSnapshot({project:{},state,equivalentInfo});state.eq.baseRecovery=89.999;
+    expect(modelSnapshot({project:{},state,equivalentInfo}).modelKey).not.toBe(second.modelKey);
+  });
+  it('keeps equivalent units and assumptions when selected inside a raw-grade tour',()=>{
+    const s=snapshot(),note='CuEq = Cu + 0.2 Au. Prices Cu $4; Au $2000. Recoveries 90%.';
+    s.project.cols=['CuEq_calc'];s.project.holes=[{id:'H1',ints:[{from:0,to:10,vals:{CuEq_calc:.77}}]}];
+    s.appearance={equivalent:{field:'CuEq_calc',unit:'%',note}};
+    expect(tourSetup(s).units.CuEq_calc).toBe('%');
+    const result=packageFromModel(s,{grade:{field:'CuEq_calc',unit:'%',bins:[.1,.2,.5,1]}});
+    expect(result.meta.warnings).toContain(note);
+    expect(packageFromModel(s).meta.warnings).not.toContain(note);
+  });
   it('matches all five maker grade colours and its display cutoff without changing measured values',()=>{
     const x=input();x.grade.colors=['#a3abaf','#e2dc4f','#ff9a1f','#ef3b2c','#e93ad1'];x.grade.includeBelow=true;
     x.assays[0].values.Cu_pct=.05;x.assays[1].values.Cu_pct=.5;

@@ -1,15 +1,13 @@
 import template from './tour-template.html?raw';
 import three from '../../../node_modules/three/build/three.min.js?raw';
-import { buildTourPackage } from './build';
+import {packageFromModel} from './packageFromModel';
 import { exportTourHtml, downloadTour } from './export';
-import { studioInput, tourSetup, unitOf } from './studioInput';
+import { tourSetup, unitOf } from './studioInput';
 import './studio.css';
 export {modelSnapshot} from './modelSnapshot';
 
 export function makeTour(snapshot, options = {}) {
-  const input = studioInput({...snapshot,envelopeSources:options.includeEnvelopes?snapshot.envelopeSources:[]});
-  const pkg = buildTourPackage({ ...input, ...options,grade:{...input.grade,...options.grade,displayCutoff:(!options.grade?.field||options.grade.field===input.grade.field)?input.grade.displayCutoff:null} });
-  pkg.meta.warnings.unshift(...input.warnings);
+  const pkg = packageFromModel(snapshot,options);
   return { html: exportTourHtml(pkg, template, three), package: pkg };
 }
 
@@ -66,7 +64,7 @@ export function openTour(getSnapshot) {
   };
   form.addEventListener('submit', e=>{e.preventDefault();update();});
   form.addEventListener('input', ()=>{result=null;download.disabled=true;status.textContent='Settings changed. Update the preview before downloading.';});
-  el('field').addEventListener('change',()=>{const g=tourSetup(getSnapshot()).grade,same=el('field').value===g.field;el('unit').value=same?g.unit:unitOf(el('field').value);el('bins').value=same?g.bins.join(', '):'';});
+  el('field').addEventListener('change',()=>{const setup=tourSetup(getSnapshot()),g=setup.grade,same=el('field').value===g.field;el('unit').value=setup.units[el('field').value]??(same?g.unit:unitOf(el('field').value));el('bins').value=same?g.bins.join(', '):'';});
   download.addEventListener('click',()=>{
     if (getSnapshot().signature !== sourceSignature) { changed(); return; }
     if(result) downloadTour(result.html,(el('title').value.replace(/[^a-z0-9]+/gi,'-').replace(/^-|-$/g,'').toLowerCase()||'project')+'-3d-tour.html');

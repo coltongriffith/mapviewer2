@@ -1853,7 +1853,7 @@ const extPending = new Set(), settled = () => Promise.race([Promise.resolve().th
 const exportLayers = (o) => settled().then(desk).then((m) => m.exportLayers(o)).then((r) => { if (o?.download) exported('layers'); return r; });
 const tourSnapshot = (m) => {
   const provisional = project?.holes.filter(isProvisional).map(h=>h.id) || [];
-  const model=m.modelSnapshot({project,state:S,shell:shell.status==='ready'?shell.mesh:null,shells:shellList(),opacities:Object.fromEntries((G?.shellMesh?.children||[]).map(c=>[c.userData.part,c.material.opacity])),binColors:BIN_COLORS,equivalentNote:S.eq&&S.valueCol===eqName()?eqInfo().note:null});
+  const model=m.modelSnapshot({project,state:S,shell:shell.status==='ready'?shell.mesh:null,shells:shellList(),opacities:Object.fromEntries((G?.shellMesh?.children||[]).map(c=>[c.userData.part,c.material.opacity])),binColors:BIN_COLORS,equivalentInfo:S.eq?eqInfo():null});
   return { files, project, provisional,...model,
     signature: filesDigest()+'|'+JSON.stringify([files.map(f=>[f.role,f.cols,f.grades]),S.crs,S.overlays,provisional,model.modelKey]),
     state: { ...S, overlays: S.overlays.map(o=>({...o,data:o.data || {features:EXT.overlays?.sourceData(o)?.feats || []}})) } };

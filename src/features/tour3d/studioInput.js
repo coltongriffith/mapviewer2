@@ -13,14 +13,15 @@ export const unitOf = field => /(?:pct|percent|%)$/i.test(field) ? '%' : /(?:gpt
 
 // Form choices must remain available even when geographic setup is incomplete.
 // Reading these labels does not transform or infer any coordinates or grades.
-export function tourSetup({files=[],state={},project}) {
+export function tourSetup({files=[],state={},project,appearance={}}) {
   const fields=[...new Set([...files.filter(f=>f.role==='assay').flatMap(f=>(f.grades||[]).map(g=>g.name)),...(project?.cols||[])])];
   const targets=new Set();
   for (const f of files.filter(f=>f.role==='collar')) {
     const col=f.header.findIndex(h=>/^(target|zone|prospect|area)$/i.test(h.trim()));
     if (col>=0) for (const row of f.rows) if (String(row[col]??'').trim()) targets.add(String(row[col]).trim());
   }
-  return {title:state.title||'Project',fields,targets:[...targets],grade:{field:state.valueCol,unit:unitOf(state.valueLabel||'')||unitOf(state.valueCol||''),bins:[...(state.bins||[])]}};
+  const units=appearance.equivalent?{[appearance.equivalent.field]:appearance.equivalent.unit}:{};
+  return {title:state.title||'Project',fields,targets:[...targets],units,grade:{field:state.valueCol,unit:units[state.valueCol]??(unitOf(state.valueLabel||'')||unitOf(state.valueCol||'')),bins:[...(state.bins||[])]}};
 }
 
 export function studioInput({ files, state, project, provisional = [], appearance = {}, envelopeSources = [] }) {
@@ -28,7 +29,6 @@ export function studioInput({ files, state, project, provisional = [], appearanc
   ensureDef(state.crs);
   const collars = [], surveys = [], assays = [], fields = new Set(), warnings = [];
   let censored = 0;
-  if(appearance.equivalentNote)warnings.push(appearance.equivalentNote);
   for (const f of files) for (const row of f.rows || []) {
     const holeId = String(raw(f, row, 'hole') ?? '').trim();
     if (!holeId) continue;

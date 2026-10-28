@@ -5,6 +5,32 @@ import { join } from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 
+test('equivalent tour selection retains assumptions and recipe edits invalidate downloads',async({page})=>{
+  test.setTimeout(120000);
+  await page.route('https://s3.amazonaws.com/**',r=>r.abort());await page.route('https://server.arcgisonline.com/**',r=>r.abort());
+  await page.goto('/3d');await page.waitForFunction(()=>!!window.EM3D?.openTour);
+  await page.evaluate(async()=>{
+    window.EM3D.clearFiles();await window.EM3D.addFiles([
+      {name:'collars.csv',text:'HoleID,Longitude,Latitude,Elevation,Azimuth,Dip,Depth\nH1,-129.005,55.005,1000,0,-60,100'},
+      {name:'assays.csv',text:'HoleID,From,To,Cu_pct,Au_gpt\nH1,0,10,0.5,1'},
+    ]);await window.EM3D.setCRS('EPSG:4326');
+    window.EM3D.setEquivalent({base:'Cu',basePrice:4,baseRecovery:90,metals:{Au:{price:2000,recovery:90}},use:false});
+    await window.EM3D.openTour();
+  });
+  const dialog=page.getByRole('dialog',{name:'3D Tour'}),frame=page.frameLocator('iframe[title="3D Tour preview"]');
+  await expect(dialog.getByLabel('Grade field')).toHaveValue('Cu_pct');
+  await dialog.getByLabel('Grade field').selectOption('CuEq_calc');await expect(dialog.getByLabel('Grade unit')).toHaveValue('%');
+  await dialog.getByLabel('Grade bins (comma separated)').fill('.1,.5,.6,.7');
+  await dialog.getByRole('button',{name:'Update preview',exact:true}).click();
+  await expect(dialog.getByRole('button',{name:'Download tour (HTML)'})).toBeEnabled();
+  expect(await frame.locator('#d').evaluate(el=>JSON.parse(el.textContent).meta.warnings.some(w=>w.includes('Prices')&&w.includes('US$4')))).toBe(true);
+  await page.evaluate(()=>window.EM3D.setEquivalent({base:'Cu',basePrice:5,baseRecovery:90,metals:{Au:{price:2000,recovery:90}},use:false}));
+  await expect(dialog.getByRole('button',{name:'Download tour (HTML)'})).toBeDisabled();
+  await expect(dialog.getByRole('status')).toContainText('Project data changed');
+  await dialog.getByRole('button',{name:'Update preview',exact:true}).click();
+  expect(await frame.locator('#d').evaluate(el=>JSON.parse(el.textContent).meta.warnings.some(w=>w.includes('Prices')&&w.includes('US$5')))).toBe(true);
+});
+
 for (const [name,width,height] of [['desktop',1280,900],['mobile',390,844]]) {
   test('3D Tour preview and standalone download: '+name, async ({page})=>{
     test.setTimeout(120000);
