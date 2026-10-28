@@ -1,7 +1,7 @@
 # 3D Tour integration
 
 The first integration from the supplied ExplorationMaps 3D Tour kit adds
-**Export → 3D Tour** to the existing 3D maker. Open an existing saved figure,
+**Export â†’ 3D Tour** to the existing 3D maker. Open an existing saved figure,
 or use its existing property-data and claims loaders, then preview and download
 an interactive HTML tour. No example project or claimed Star drilling positions
 are installed in the app.
@@ -61,6 +61,14 @@ and embed routes remain available. This PR makes no production database,
 storage, environment, billing or plan changes.
 
 Review follow-up: tours reuse the maker's CRS definitions (including NAD27, MGA and custom proj4). Complete supplied survey paths do not require redundant collar orientation; incomplete paths still fail validation. Playback stays above the measured navigation height when labels wrap in narrow previews.
+
+Setup choices now populate independently of strict geographic validation. Missing
+CRS produces a prominent explanation and a route back to Data instead of blank
+dropdowns and a blank iframe. The user must supply the source coordinate system;
+no location is guessed. Claims are optional: drilling/terrain-only tours show a
+notice and omit the claim outline and legend, with the camera fitted to the
+project extent. Existing claim overlays are retained when supplied.
+
 
 
 ## Hosted package boundary (preparation)

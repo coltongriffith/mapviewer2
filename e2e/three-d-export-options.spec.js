@@ -20,7 +20,32 @@ for (const [name,width,height] of [['desktop',1280,900],['mobile',390,844]]) {
         {name:'collars.csv',text:'HoleID,Longitude,Latitude,Elevation,Azimuth,Dip,Depth\nH1,-129.005,55.005,1000,0,-60,100\nH2,-129.003,55.005,1010,45,-60,80'},
         {name:'assays.csv',text:'HoleID,From,To,Cu_pct\nH1,0,10,0.5\nH2,0,10,0.8'},
       ]);
+      await window.EM3D.setCRS(null);
+    });
+    await page.getByRole('tab',{name:'4 Export',exact:true}).click();
+    await page.getByRole('button',{name:'3D Tour · preview and download',exact:true}).click();
+    let setup=page.getByRole('dialog',{name:'3D Tour'});
+    await expect(setup.getByRole('alert')).toContainText('coordinate system');
+    await page.evaluate(()=>window.dispatchEvent(new Event('em3d:change')));
+    await expect(setup.getByRole('status')).toHaveText('Preview not created yet.');
+    await expect(setup.getByLabel('Title',{exact:true})).not.toHaveValue('');
+    await expect(setup.getByLabel('Grade field').locator('option')).toHaveCount(1);
+    await expect(setup.getByLabel('Target').locator('option')).toHaveCount(1);
+    await expect(setup.locator('iframe')).toBeHidden();
+    await expect(setup.getByRole('button',{name:'Download tour (HTML)'})).toBeDisabled();
+    await setup.getByRole('button',{name:'Go to Data to finish setup'}).click();
+    await expect(page.getByRole('tab',{name:'1 Data',exact:true})).toHaveAttribute('aria-selected','true');
+    await page.evaluate(async()=>{
       await window.EM3D.setCRS('EPSG:4326');
+      await window.EM3D.openTour();
+    });
+    setup=page.getByRole('dialog',{name:'3D Tour'});
+    await expect(setup.getByRole('status')).toContainText('2 holes');
+    await expect(setup.getByText('No project claim boundaries loaded. This tour shows drilling and terrain only.')).toBeVisible();
+    await expect(page.frameLocator('iframe[title="3D Tour preview"]').getByRole('button',{name:'Pause',exact:true})).toBeVisible();
+    await expect(page.frameLocator('iframe[title="3D Tour preview"]').getByText('Project claims',{exact:true})).toHaveCount(0);
+    await setup.getByRole('button',{name:'Close',exact:true}).click();
+    await page.evaluate(async()=>{
       await window.EM3D.addOverlay({name:'Project claims',role:'claims',group:'project',crs:'EPSG:4326',data:{
         type:'FeatureCollection',features:[{type:'Feature',properties:{number:'1'},geometry:{type:'Polygon',coordinates:[
           [[-129.01,55],[-129,55],[-129,55.01],[-129.01,55.01],[-129.01,55]],

@@ -196,7 +196,7 @@ export function buildTourPackage(inp: TourInput): TourPackage {
 const r1 = (v: number) => Math.round(v * 10) / 10;
 
 function validateInput(inp: TourInput) {
-  if (!inp?.crs || !inp.claims?.features?.length) throw new Error('Set the collar CRS and add project claims before making a tour.');
+  if (!inp?.crs || !Array.isArray(inp.claims?.features)) throw new Error('Set the collar CRS before making a tour.');
   if (!inp.collars?.length || inp.collars.length > 5000 || inp.assays?.length > 200000) throw new Error('Tours support 1–5,000 collars and up to 200,000 assay rows.');
   const ids = new Set<string>();
   for (const c of inp.collars) {

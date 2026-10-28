@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { buildTourPackage } from '../src/features/tour3d/build';
-import { studioInput } from '../src/features/tour3d/studioInput';
+import { studioInput, tourSetup } from '../src/features/tour3d/studioInput';
 import { exportTourHtml } from '../src/features/tour3d/export';
 import { tourScriptHashes } from '../scripts/tour-csp.mjs';
 import proj4 from 'proj4';
@@ -31,9 +31,9 @@ describe('3D Tour project adapter',()=>{
     expect(result.warnings[0]).toContain('censored');
     expect(JSON.stringify(source)).toBe(before);
   });
-  it('blocks missing CRS or claims, and preserves missing positions instead of inventing coordinates',()=>{
+  it('blocks missing CRS and preserves missing positions instead of inventing coordinates',()=>{
     const s=snapshot();s.state.crs=null;expect(()=>studioInput(s)).toThrow('coordinate system');
-    s.state.crs='EPSG:4326';s.state.overlays=[];expect(()=>studioInput(s)).toThrow('claim boundaries');
+    s.state.crs='EPSG:4326';s.state.overlays=[];expect(studioInput(s).claims.features).toEqual([]);
     s.state.overlays=snapshot().state.overlays;s.files[0].rows[0][1]='';
     expect(Number.isNaN(studioInput(s).collars[0].x)).toBe(true);
   });
@@ -46,6 +46,16 @@ describe('3D Tour project adapter',()=>{
   });
 });
 describe('3D Tour builder',()=>{
+  it('keeps form choices available before CRS setup and builds without inventing claim boundaries',()=>{
+    const s=snapshot();s.state.crs=null;s.state.overlays=[];
+    expect(tourSetup(s).fields).toEqual(['Cu_pct','Cu_ppm']);
+    expect(tourSetup(s).title).toBe('Saved project');
+    expect(()=>studioInput(s)).toThrow('coordinate system');
+    const x=input();x.claims.features=[];
+    const p=buildTourPackage(x);
+    expect(p.claims).toEqual([]);expect(p.holes).toHaveLength(1);
+    expect(p.terrain.utm.every(Number.isFinite)).toBe(true);
+  });
   it.each(['EPSG:26709','EPSG:28355','+proj=utm +zone=9 +datum=WGS84 +units=m +no_defs'])('uses the maker definition for %s', crs=>{
     const x=input();x.crs=crs;
     const def=parseCRS(crs,{}).def;
