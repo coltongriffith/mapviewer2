@@ -127,8 +127,12 @@ changes clear sharing controls. `/tour/:id` rewrites to this endpoint; only that
 route and `/api/tour` bypass the site's global framing denial. Valid viewers use
 the renderer's exact script hashes and sandbox; management/errors use an inert
 CSP. Trusted template and pinned Three assets are explicitly included in the
-Function and tested from an isolated relocated server bundle. Real browser
-header checks and final release validation remain pending; this endpoint has
+Function and tested from an isolated relocated server bundle. Desktop/mobile
+browser tests exercise the real HTTP handler and renderer with stubbed database
+transport: explicit publication/republishing, HTTPS iframe CSP and opaque
+sandbox isolation, harmless script-like data, actual envelope visibility,
+revocation returning uncached 404 and missing-schema fallback. These are local
+checks, not production schema or Vercel activation. Final release validation remains pending; this endpoint has
 not been published or activated. Rollback first disables that
 UI/endpoint, then drops the project trigger, five tour functions and private
 `three_d_tours` table; exported local HTML files are unaffected.
