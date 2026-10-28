@@ -69,3 +69,23 @@ no location is guessed. Claims are optional: drilling/terrain-only tours show a
 notice and omit the claim outline and legend, with the camera fitted to the
 project extent. Existing claim overlays are retained when supplied.
 
+## Model appearance and envelopes
+
+Tour export now reuses the maker's five scientific grade colours, selected field,
+bins and display cutoff, including its already-calculated equivalent values.
+Equivalent assumptions and existing display-placement adjustments are disclosed
+in data notes. Controls use the model's brand colours and claim outlines retain
+their source colours. Geometry remains in physical metres without copying visual
+vertical exaggeration.
+
+Visible supplied OBJ shapes and ready exploratory grade-envelope surfaces can be
+included using the model's existing vertices, indices, colours and opacity. The
+tour never estimates a new envelope. If none exists, return to Layout to enable
+one or load a source shape. Oversized or invalid geometry fails explicitly.
+Exploratory surfaces retain the caution that they are not mineral resources.
+
+The exported viewer has Claims and Envelopes toggles. Claims are redrawn on the
+terrain without refetching tiles; the envelope toggle controls the actual mesh
+group. These controls are available in preview and downloaded HTML. Showing or
+hiding either layer does not edit the source project or its scientific settings.
+
