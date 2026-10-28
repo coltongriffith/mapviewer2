@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
-import { parseTourPackage } from '../../src/features/tour3d/package';
-import { exportTourHtml } from '../../src/features/tour3d/export';
+import { parseTourPackage } from '../../src/features/tour3d/package.js';
+import { exportTourHtml } from '../../src/features/tour3d/export.js';
 
 // Server-only: callers supply JSON, never a template, script or uploaded HTML.
 // Explicit includeFiles in vercel.json preserves these paths when this module

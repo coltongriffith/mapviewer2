@@ -42,10 +42,16 @@ describe('hosted tour deployment routes and trusted assets',()=>{
     try{
       for(const file of files){const dest=join(dir,file);mkdirSync(join(dest,'..'),{recursive:true});copyFileSync(file,dest);}
       await build({entryPoints:['api/_lib/tour-render.ts'],outfile:join(dir,'relocated-renderer.mjs'),bundle:true,platform:'node',format:'esm',logLevel:'silent'});
+      // Vercel also emits separate ESM files. A bundled-only check hides
+      // extensionless imports that fail in Node after TypeScript emission.
+      await build({entryPoints:['api/_lib/tour-render.ts','src/features/tour3d/package.ts','src/features/tour3d/export.ts'],outbase:'.',outdir:dir,bundle:false,platform:'node',format:'esm',logLevel:'silent'});
+      writeFileSync(join(dir,'package.json'),JSON.stringify({type:'module'}));
       const pkg=buildTourPackage({title:'Bundled tour',crs:'EPSG:4326',claims:{features:[]},collars:[{holeId:'H1',x:-129,y:55,z:1000,azimuth:0,dip:-60,depth:100}],assays:[{holeId:'H1',from:0,to:10,values:{Cu:.5}}],grade:{field:'Cu',bins:[.1,.2,.5,1]}});
       writeFileSync(join(dir,'fixture.json'),JSON.stringify(pkg));
       const output=execFileSync(process.execPath,['--input-type=module','-e',`import {readFileSync} from 'node:fs';import {renderHostedTour} from './relocated-renderer.mjs';const r=renderHostedTour(readFileSync('fixture.json','utf8'));console.log(JSON.stringify({valid:r.html.includes('Bundled tour'),csp:r.headers['Content-Security-Policy'],bytes:Buffer.byteLength(r.html)}));`],{cwd:dir,encoding:'utf8'});
       const result=JSON.parse(output);expect(result.valid).toBe(true);expect(result.bytes).toBeLessThan(4000000);expect(result.csp).toContain("script-src 'sha256-");expect(result.csp).toContain('sandbox allow-scripts');
+      const unbundled=execFileSync(process.execPath,['--input-type=module','-e',`import {readFileSync} from 'node:fs';import {renderHostedTour} from './api/_lib/tour-render.js';console.log(JSON.stringify(renderHostedTour(readFileSync('fixture.json','utf8')).headers));`],{cwd:dir,encoding:'utf8'});
+      expect(JSON.parse(unbundled)['Content-Security-Policy']).toBe(result.csp);
     }finally{removeBundle(dir);}
   });
 });

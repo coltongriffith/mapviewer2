@@ -1,7 +1,7 @@
 import {createClient} from '@supabase/supabase-js';
 import {handleMethods} from './guard.js';
-import {renderHostedTour} from './tour-render';
-import {MAX_TOUR_BYTES} from '../../src/features/tour3d/package';
+import {renderHostedTour} from './tour-render.js';
+import {MAX_TOUR_BYTES} from '../../src/features/tour3d/package.js';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ID=/^[0-9a-f]{32}$/;
