@@ -6,6 +6,8 @@ import { exportTourHtml } from '../src/features/tour3d/export';
 import { tourScriptHashes } from '../scripts/tour-csp.mjs';
 import proj4 from 'proj4';
 import { parseCRS } from '../src/three-d/terrain';
+import { modelSnapshot } from '../src/features/tour3d/modelSnapshot';
+import { packageFromModel } from '../src/features/tour3d/packageFromModel';
 
 const claims = {type:'FeatureCollection',features:[{type:'Feature',properties:{},geometry:{type:'Polygon',coordinates:[
   [[-129.01,55],[-129,55],[-129,55.01],[-129.01,55.01],[-129.01,55]],
@@ -46,6 +48,48 @@ describe('3D Tour project adapter',()=>{
   });
 });
 describe('3D Tour builder',()=>{
+  it('invalidates equivalent previews after recipe changes even while a raw grade is selected',()=>{
+    const state={valueCol:'Cu_pct',eq:{basePrice:4,baseRecovery:90,baseUnit:'%'},shell:{enabled:false}},equivalentInfo={name:'CuEq_calc',note:'CuEq formula and assumptions'};
+    const old=modelSnapshot({project:{},state,equivalentInfo});
+    expect(old.appearance.equivalent).toEqual({field:'CuEq_calc',unit:'%',note:equivalentInfo.note});
+    state.eq.basePrice=4.001;
+    expect(modelSnapshot({project:{},state,equivalentInfo}).modelKey).not.toBe(old.modelKey);
+    const second=modelSnapshot({project:{},state,equivalentInfo});state.eq.baseRecovery=89.999;
+    expect(modelSnapshot({project:{},state,equivalentInfo}).modelKey).not.toBe(second.modelKey);
+  });
+  it('keeps equivalent units and assumptions when selected inside a raw-grade tour',()=>{
+    const s=snapshot(),note='CuEq = Cu + 0.2 Au. Prices Cu $4; Au $2000. Recoveries 90%.';
+    s.project.cols=['CuEq_calc'];s.project.holes=[{id:'H1',ints:[{from:0,to:10,vals:{CuEq_calc:.77}}]}];
+    s.appearance={equivalent:{field:'CuEq_calc',unit:'%',note}};
+    expect(tourSetup(s).units.CuEq_calc).toBe('%');
+    const result=packageFromModel(s,{grade:{field:'CuEq_calc',unit:'%',bins:[.1,.2,.5,1]}});
+    expect(result.meta.warnings).toContain(note);
+    expect(packageFromModel(s).meta.warnings).not.toContain(note);
+  });
+  it('matches all five maker grade colours and its display cutoff without changing measured values',()=>{
+    const x=input();x.grade.colors=['#a3abaf','#e2dc4f','#ff9a1f','#ef3b2c','#e93ad1'];x.grade.includeBelow=true;
+    x.assays[0].values.Cu_pct=.05;x.assays[1].values.Cu_pct=.5;
+    const p=buildTourPackage(x);expect(p.config.bins.map(b=>b[1])).toEqual(x.grade.colors);
+    expect(p.runs.map(r=>r[2])).toEqual([0,3]);
+    x.grade.displayCutoff=.1;expect(buildTourPackage(x).runs.map(r=>r[2])).toEqual([3]);
+    expect(x.assays[0].values.Cu_pct).toBe(.05);
+  });
+  it('uses existing model envelopes with their colours/opacity and no new interpolation',()=>{
+    const source={project:{meshF:[{name:'Existing OBJ',mesh:{v:[[500000,6094791,950],[500010,6094791,950],[500000,6094801,900]],f:[0,1,2]}}]},state:{meshes:{'Existing OBJ':{show:true,color:'#123456',opacity:.35}},shell:{enabled:false}},binColors:[]};
+    const snap=modelSnapshot(source),x=input();x.crs='EPSG:26909';x.collars=[{...x.collars[0],x:500000,y:6094791}];
+    const s=snapshot();s.project={...source.project};s.state={...s.state,crs:x.crs};s.files[0].cols={...s.files[0].cols,east:1,north:2};s.files[0].rows[0][1]='500000';s.files[0].rows[0][2]='6094791';
+    const adapted=studioInput({...s,...snap});x.envelopes=adapted.envelopes;x.includeEnvelopes=true;
+    const p=buildTourPackage(x),e=p.envelopes[0];expect(e.color).toBe('#123456');expect(e.opacity).toBe(.35);expect(e.indices).toEqual([0,1,2]);
+    expect(e.vertices[3]-e.vertices[0]).toBe(10);expect(e.vertices[8]-e.vertices[2]).toBe(-10);
+    x.includeEnvelopes=false;expect(buildTourPackage(x).envelopes).toEqual([]);
+    x.includeEnvelopes=true;x.envelopes[0].indices=[99,1,2];expect(()=>buildTourPackage(x)).toThrow('invalid geometry');
+  });
+  it('reuses computed grade values and ready nested envelope surfaces from the model',()=>{
+    const s=snapshot();s.project.cols=['CuEq'];s.project.holes=[{id:'H1',ints:[{from:0,to:10,vals:{CuEq:.77}}]}];s.state.valueCol='CuEq';s.state.valueLabel='CuEq %';
+    expect(studioInput(s).assays.find(a=>a.from===0).values.CuEq).toBe(.77);expect(studioInput(s).grade.unit).toBe('%');
+    const m=modelSnapshot({project:{},state:{valueCol:'CuEq',shell:{enabled:true,opacity:.6}},shell:{origin:[1,2,3],parts:[{positions:[0,0,0,1,0,0,0,1,0],indices:[0,1,2]}]},shells:[{cutoff:.5,color:'#abcdef'}],opacities:[.42]});
+    expect(m.envelopeSources[0]).toMatchObject({origin:[1,2,3],opacity:.42,color:'#abcdef',kind:'estimated'});
+  });
   it('keeps form choices available before CRS setup and builds without inventing claim boundaries',()=>{
     const s=snapshot();s.state.crs=null;s.state.overlays=[];
     expect(tourSetup(s).fields).toEqual(['Cu_pct','Cu_ppm']);

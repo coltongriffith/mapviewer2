@@ -630,7 +630,8 @@ const BUDGETS = {
   threeDLazyJsGzipKb: 164.2,
   // Self-contained 3D Tour export: separate lazy Three global source plus
   // template/builder/dialog: measured 173.4. Not part of the maker's initial load.
-  threeDTourJsGzipKb: 173.8,
+  // Model palette/derived-field handoff, existing envelope geometry and layer toggles: ~176.2 KiB.
+  threeDTourJsGzipKb: 176.6,
   // 161.2 → 162.7 (P2-8, measured 162.2 plain / 162.4 configured): explicit
   // recipe selection, snapshot ownership, collision/edited-wording guards and
   // recipe-only update notices in property-data. No eager 3D page growth.
