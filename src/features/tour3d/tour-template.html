@@ -266,6 +266,7 @@ const BINS=C.bins||[['0.10–0.20','#8fbcd4'],['0.20–0.50','#f2c14e'],['0.50�
 BINS.forEach(([,col],bi)=>{const g=merge(D.runs.filter(r=>r[2]===bi).map(r=>tubeGeo(r[1],2.4+bi*.7)));if(g.attributes.position.count)drill.add(new THREE.Mesh(g,new THREE.MeshLambertMaterial({color:new THREE.Color(col),emissive:new THREE.Color(col).multiplyScalar(.18)})))});
 /* ---------- views ---------- */
 const cbox=new THREE.Box3();for(const r of D.claims)for(let k=0;k<r.length;k+=2)cbox.expandByPoint(new THREE.Vector3(r[k],0,r[k+1]));
+if(cbox.isEmpty()){cbox.expandByPoint(new THREE.Vector3(X0,0,Z0));cbox.expandByPoint(new THREE.Vector3(X1,0,Z1));document.querySelector('[data-k="claims"]').remove()}
 const collarBox=new THREE.Box3();for(const c of D.collars)if(c[3])collarBox.expandByPoint(new THREE.Vector3(c[0],c[1],c[2]));
 const V=[ // district / Drilling / below
   {box:null,yaw:-.55,pitch:.88,room:1.04,reveal:0,shell:0},

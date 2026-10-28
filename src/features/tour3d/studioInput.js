@@ -11,6 +11,18 @@ const raw = (file, row, key) => file.cols?.[key] == null ? undefined : row[file.
 const dip = (v, positiveDown) => positiveDown ? -Math.abs(v) : v;
 export const unitOf = field => /(?:pct|percent|%)$/i.test(field) ? '%' : /(?:gpt|g_t|g\/t)$/i.test(field) ? 'g/t' : /ppm$/i.test(field) ? 'ppm' : /ppb$/i.test(field) ? 'ppb' : '';
 
+// Form choices must remain available even when geographic setup is incomplete.
+// Reading these labels does not transform or infer any coordinates or grades.
+export function tourSetup({files=[],state={}}) {
+  const fields=[...new Set(files.filter(f=>f.role==='assay').flatMap(f=>(f.grades||[]).map(g=>g.name)))];
+  const targets=new Set();
+  for (const f of files.filter(f=>f.role==='collar')) {
+    const col=f.header.findIndex(h=>/^(target|zone|prospect|area)$/i.test(h.trim()));
+    if (col>=0) for (const row of f.rows) if (String(row[col]??'').trim()) targets.add(String(row[col]).trim());
+  }
+  return {title:state.title||'Project',fields,targets:[...targets],grade:{field:state.valueCol,bins:[...(state.bins||[])]}};
+}
+
 export function studioInput({ files, state, project, provisional = [] }) {
   if (!state.crs) throw new Error('Set the collar coordinate system in step 1 before making a tour.');
   ensureDef(state.crs);
@@ -64,7 +76,7 @@ export function studioInput({ files, state, project, provisional = [] }) {
       claims.features.push({ type: 'Feature', properties: { ...f.p }, geometry: { type: 'Polygon', coordinates } });
     }
   }
-  if (!claims.features.length) throw new Error('Add project claim boundaries in step 3 before making a tour.');
+  if (!claims.features.length) warnings.push('No project claim boundaries loaded. This tour shows drilling and terrain only.');
   // Reuse the figure's actual desurvey, including property minimum-curvature
   // paths. Remove any display-only surface shift, not the measured elevation.
   const paths = {};
