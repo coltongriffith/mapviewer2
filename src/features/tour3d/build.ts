@@ -5,6 +5,7 @@
 import proj4 from 'proj4';
 import type { TourInput, TourPackage, Collar, Survey, Ring } from './types';
 import { footprintRings } from './footprint';
+import { parseCRS } from '../../three-d/terrain.js';
 
 const DEFAULT_COLORS = ['#8fbcd4', '#f2c14e', '#ee8a2a', '#d33a2f'];
 export const GRADE_PRESETS: Record<string, number[]> = {
@@ -19,15 +20,12 @@ export const GRADE_PRESETS: Record<string, number[]> = {
 /* ---------- projections ---------- */
 export function ensureDef(code: string) {
   if (proj4.defs(code)) return;
-  const m = /^EPSG:(\d+)$/.exec(code);
-  if (!m) throw new Error(`Unknown CRS ${code}: register it with proj4.defs() first`);
-  const n = +m[1];
-  if (n >= 26901 && n <= 26923) proj4.defs(code, `+proj=utm +zone=${n - 26900} +datum=NAD83 +units=m +no_defs`);
-  else if (n >= 32601 && n <= 32660) proj4.defs(code, `+proj=utm +zone=${n - 32600} +datum=WGS84 +units=m +no_defs`);
-  else if (n >= 32701 && n <= 32760) proj4.defs(code, `+proj=utm +zone=${n - 32700} +south +datum=WGS84 +units=m +no_defs`);
-  else throw new Error(`Register ${code} with proj4.defs() first`);
+  // The maker resolves these definitions directly, without registering EPSG aliases.
+  // Reuse its datum definitions, including NAD27/MGA and custom proj4 strings.
+  const parsed = parseCRS(code, {def:'+proj=longlat +datum=WGS84 +no_defs'});
+  proj4.defs(code, parsed.def);
 }
-function isUTM(code: string) { const n = +(/^EPSG:(\d+)$/.exec(code)?.[1] ?? 0); return (n >= 26901 && n <= 26923) || (n >= 32601 && n <= 32660) || (n >= 32701 && n <= 32760); }
+function isUTM(code: string) { return proj4.defs(code)?.projName === 'utm'; }
 
 /* ---------- desurvey: balanced-tangential integration of linearly interpolated az/dip (≈ minimum curvature) ---------- */
 type V3 = [number, number, number];
@@ -204,9 +202,10 @@ function validateInput(inp: TourInput) {
   for (const c of inp.collars) {
     if (!c.holeId || ids.has(c.holeId)) throw new Error('Collars need unique hole IDs.');
     ids.add(c.holeId);
-    if (![c.depth,c.azimuth,c.dip].every(Number.isFinite) || c.depth <= 0 || c.depth > 20000 || Math.abs(c.dip) > 90 || c.azimuth < 0 || c.azimuth > 360) throw new Error(c.holeId + ': check depth, azimuth and dip.');
+    if (!Number.isFinite(c.depth) || c.depth <= 0 || c.depth > 20000) throw new Error(c.holeId + ': check depth.');
     const path = inp.paths?.[c.holeId];
     if (path && (path.length < 2 || path[0].depth !== 0 || path.at(-1)!.depth < c.depth || path.some((p,i)=>![p.depth,p.x,p.y,p.z].every(Number.isFinite) || (i>0 && p.depth<=path[i-1].depth)))) throw new Error(c.holeId+': the current figure path is incomplete or invalid.');
+    if (!path && (![c.azimuth,c.dip].every(Number.isFinite) || Math.abs(c.dip) > 90 || c.azimuth < 0 || c.azimuth > 360)) throw new Error(c.holeId + ': check azimuth and dip or supply a complete figure path.');
   }
   if (inp.collars.reduce((n,c)=>n+Math.ceil(c.depth/2),0) > 1000000) throw new Error('This tour has too much drilling for a single browser export.');
   const bins = inp.grade?.bins;

@@ -4,6 +4,8 @@ import { buildTourPackage } from '../src/features/tour3d/build';
 import { studioInput } from '../src/features/tour3d/studioInput';
 import { exportTourHtml } from '../src/features/tour3d/export';
 import { tourScriptHashes } from '../scripts/tour-csp.mjs';
+import proj4 from 'proj4';
+import { parseCRS } from '../src/three-d/terrain';
 
 const claims = {type:'FeatureCollection',features:[{type:'Feature',properties:{},geometry:{type:'Polygon',coordinates:[
   [[-129.01,55],[-129,55],[-129,55.01],[-129.01,55.01],[-129.01,55]],
@@ -44,6 +46,26 @@ describe('3D Tour project adapter',()=>{
   });
 });
 describe('3D Tour builder',()=>{
+  it.each(['EPSG:26709','EPSG:28355','+proj=utm +zone=9 +datum=WGS84 +units=m +no_defs'])('uses the maker definition for %s', crs=>{
+    const x=input();x.crs=crs;
+    const def=parseCRS(crs,{}).def;
+    const ll=proj4(def,'EPSG:4326',[500000,6094791]);
+    x.collars=[{...x.collars[0],x:500000,y:6094791}];
+    x.claims.features[0].geometry.coordinates=[[[ll[0]-.001,ll[1]-.001],[ll[0]+.001,ll[1]-.001],[ll[0]+.001,ll[1]+.001],[ll[0]-.001,ll[1]-.001]]];
+    const pkg=buildTourPackage(x);
+    expect(pkg.meta.crs).toBe(crs);
+    expect(pkg.holes).toHaveLength(1);
+    expect(pkg.holes[0].p.every(Number.isFinite)).toBe(true);
+    expect(proj4(crs,'EPSG:4326',[500000,6094791])).toEqual(ll);
+  });
+  it('accepts missing collar orientation only with a complete validated figure path',()=>{
+    const x=input();x.collars[0].azimuth=NaN;x.collars[0].dip=NaN;
+    expect(()=>buildTourPackage(x)).toThrow('azimuth and dip');
+    x.paths={H1:[{depth:0,x:-129.005,y:55.005,z:1000},{depth:100,x:-129.004,y:55.005,z:920}]};
+    expect(buildTourPackage(x).holes).toHaveLength(1);
+    x.paths.H1[1].depth=99;expect(()=>buildTourPackage(x)).toThrow('path');
+    x.paths.H1[1].depth=100;x.paths.H1[1].z=NaN;expect(()=>buildTourPackage(x)).toThrow('path');
+  });
   it('handles geographic collars in the correct UTM zone, equal scale and explicit straight-hole warnings',()=>{
     const pkg=buildTourPackage(input());
     expect(pkg.meta.crs).toBe('EPSG:32609');

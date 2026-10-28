@@ -18,7 +18,7 @@
 .legend .bins small{display:block;font-size:10px;letter-spacing:.06em;color:#7b7f78;margin-bottom:6px}
 .legend .ramp{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:2px}.ramp span{display:block;height:5px}
 .legend .ticks{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:2px;margin-top:4px;font-size:9.5px;color:#5c615b;font-variant-numeric:tabular-nums}
-.tour{position:absolute;right:22px;bottom:100px;display:flex;align-items:center;gap:7px;padding:7px 11px;font:inherit;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:#2d332f;cursor:pointer}
+.tour{position:absolute;right:22px;bottom:calc(var(--tabs-height,88px) + 12px);display:flex;align-items:center;gap:7px;padding:7px 11px;font:inherit;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:#2d332f;cursor:pointer}
 .tour:hover{background:rgba(255,255,255,.92)}
 .tour:focus-visible,.tabs button:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
 .tour svg{width:8px;height:8px;fill:currentColor}
@@ -44,7 +44,7 @@
 .scale{display:flex;align-items:center;gap:7px;font-variant-numeric:tabular-nums}
 #sbar{height:5px;border:1px solid #2d332f;border-top:0;min-width:10px}
 .foot{position:absolute;left:14px;top:72px;right:14px;font-size:10px;color:#5c615b;pointer-events:none}
-@media(max-width:700px){.s3d{height:78vh}.tabs button{padding:10px 12px 12px;gap:8px}.tabs button small{display:none}.legend{bottom:66px;left:14px;font-size:11px}.tour{bottom:62px;right:10px}.kicker{right:14px;top:14px;font-size:10px}.foot{position:absolute;left:14px;top:72px;right:14px;font-size:10px;color:#5c615b;pointer-events:none}.status{left:14px;top:34px}}
+@media(max-width:700px){.s3d{height:78vh}.tabs button{padding:10px 12px 12px;gap:8px}.tabs button small{display:none}.legend{bottom:66px;left:14px;font-size:11px}.tour{right:10px}.kicker{right:14px;top:14px;font-size:10px}.foot{position:absolute;left:14px;top:72px;right:14px;font-size:10px;color:#5c615b;pointer-events:none}.status{left:14px;top:34px}}
 </style></head><body>
 <section class="s3d" id="s3d" aria-label="Interactive project 3D tour">
   <canvas id="c" tabindex="0" role="img" aria-label="3D project claims, reference terrain and drilling. Drag to rotate, scroll to zoom, arrow keys to orbit."></canvas>
@@ -316,6 +316,9 @@ function fit(box,yaw,pitch,room){ // max over a full orbit -> constant distance,
 /* ---------- state & interaction ---------- */
 let playing=!reduce,tourT=0,yaw=-.55,offPitch=0,offZoom=0,lastInput=-1e9,drag=null,visible=true,last=performance.now(),ready=false,needs=true,cur=null;
 const tabs=[...document.querySelectorAll('#tabs button')];
+// Tab labels may wrap in a narrow preview. Keep playback above their actual height.
+const tabSize=new ResizeObserver(()=>root.style.setProperty('--tabs-height',$('tabs').offsetHeight+'px'));
+tabSize.observe($('tabs'));
 function setPlaying(p){playing=p;$('tour').setAttribute('aria-pressed',p);$('tlabel').textContent=p?'Pause':'Play';
   $('ticon').innerHTML=p?'<rect x="1.5" y="1" width="2" height="8"/><rect x="6.5" y="1" width="2" height="8"/>':'<path d="M2 1l7 4-7 4z"/>';needs=true;kick()}
 $('tour').onclick=()=>setPlaying(!playing);

@@ -59,3 +59,6 @@ republish and revocation, safe optional-schema fallback, and local SQL/API tests
 before a separately authorized production migration. The existing 3D maker, share
 and embed routes remain available. This PR makes no production database,
 storage, environment, billing or plan changes.
+
+Review follow-up: tours reuse the maker's CRS definitions (including NAD27, MGA and custom proj4). Complete supplied survey paths do not require redundant collar orientation; incomplete paths still fail validation. Playback stays above the measured navigation height when labels wrap in narrow previews.
+

@@ -31,7 +31,13 @@ for (const [name,width,height] of [['desktop',1280,900],['mobile',390,844]]) {
     const dialog=page.getByRole('dialog',{name:'3D Tour'});
     await expect(dialog.getByRole('status')).toContainText('2 holes');
     const frame=page.frameLocator('iframe[title="3D Tour preview"]');
+    // Exercise wrapped tab labels in the narrow preview that previously covered playback.
+    await dialog.locator('iframe').evaluate(el=>{el.style.width='240px';});
     await expect(frame.getByRole('button',{name:'Pause',exact:true})).toBeVisible();
+    await expect.poll(async()=>{
+      const play=await frame.locator('#tour').boundingBox(),tabs=await frame.locator('#tabs').boundingBox();
+      return !!play && !!tabs && play.y+play.height < tabs.y;
+    }).toBe(true);
     await frame.getByRole('button',{name:'Pause',exact:true}).click();
     await expect(frame.getByRole('button',{name:'Play',exact:true})).toBeVisible();
     await dialog.getByLabel('Title',{exact:true}).fill('My project');
