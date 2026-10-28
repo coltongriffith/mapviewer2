@@ -18,6 +18,11 @@ const unavailable='Hosted sharing is not enabled or temporarily unavailable. HTM
 export function createTourHandler(deps={clientForToken,render:renderHostedTour}){
   return async(req:any,res:any)=>{
     res.setHeader('Cache-Control','no-store');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');
+    // This route is excluded from the site's HTML policy so a valid public
+    // viewer can supply exact script hashes. Errors/management remain inert.
+    res.setHeader('Content-Security-Policy',"default-src 'none'; frame-ancestors 'none'; sandbox");
+    res.setHeader('Strict-Transport-Security','max-age=31536000; includeSubDomains');
+    res.setHeader('Permissions-Policy','camera=(), microphone=(), geolocation=(), interest-cohort=()');
     if(handleMethods(req,res,['GET','POST']))return;
     const error=(status:number,message:string)=>res.status(status).json({error:message});
     const rpcError=(e:any)=>{
