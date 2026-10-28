@@ -69,7 +69,7 @@ export function openTour(getSnapshot) {
   });
   dialog.querySelector('.tour3d-close').onclick = ()=>dialog.close();
   const changed = ()=>{
-    if (getSnapshot().signature === sourceSignature) return;
+    if (!result || getSnapshot().signature === sourceSignature) return;
     result=null;download.disabled=true;status.textContent='Project data changed. Update the preview before downloading.';
   };
   window.addEventListener('em3d:change',changed);

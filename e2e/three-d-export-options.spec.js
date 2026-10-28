@@ -20,11 +20,14 @@ for (const [name,width,height] of [['desktop',1280,900],['mobile',390,844]]) {
         {name:'collars.csv',text:'HoleID,Longitude,Latitude,Elevation,Azimuth,Dip,Depth\nH1,-129.005,55.005,1000,0,-60,100\nH2,-129.003,55.005,1010,45,-60,80'},
         {name:'assays.csv',text:'HoleID,From,To,Cu_pct\nH1,0,10,0.5\nH2,0,10,0.8'},
       ]);
+      await window.EM3D.setCRS(null);
     });
     await page.getByRole('tab',{name:'4 Export',exact:true}).click();
     await page.getByRole('button',{name:'3D Tour · preview and download',exact:true}).click();
     let setup=page.getByRole('dialog',{name:'3D Tour'});
     await expect(setup.getByRole('alert')).toContainText('coordinate system');
+    await page.evaluate(()=>window.dispatchEvent(new Event('em3d:change')));
+    await expect(setup.getByRole('status')).toHaveText('Preview not created yet.');
     await expect(setup.getByLabel('Title',{exact:true})).not.toHaveValue('');
     await expect(setup.getByLabel('Grade field').locator('option')).toHaveCount(1);
     await expect(setup.getByLabel('Target').locator('option')).toHaveCount(1);
