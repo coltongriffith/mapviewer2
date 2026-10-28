@@ -14,8 +14,9 @@ for(const [name,width,height] of [['desktop',1280,900],['mobile',390,844]]){
     await view.locator(':scope > summary').focus();await page.keyboard.press('Enter');
     await expect(view).not.toHaveAttribute('open','');await expect(page.locator('#cam-az')).toBeHidden();
     await page.keyboard.press('Enter');await expect(page.locator('#cam-az')).toBeVisible();
+    await view.locator(':scope > summary').press('Enter');
     await page.getByRole('tab',{name:'4 Export',exact:true}).click();await page.getByRole('tab',{name:'3 Layout',exact:true}).click();
-    await expect(view).toHaveAttribute('open','');
+    await expect(view).not.toHaveAttribute('open','');await view.locator(':scope > summary').press('Enter');
     const callouts=pane.getByText('Edit individual callouts',{exact:true});
     await expect(page.locator('#callout-editor')).toBeHidden();await callouts.click();await expect(page.locator('#callout-editor')).toBeVisible();await callouts.click();
     const same=await page.evaluate(before=>({png:window.EM3D.exportPNG({view:'3d'})===before.png,settings:JSON.stringify(window.EM3D.getProject().settings)===JSON.stringify(before.settings)}),original);

@@ -1976,7 +1976,10 @@ function renderCalloutEditor() {
   if (CE) {
     CE.render($('callout-editor'), { S, esc, PR, read: prRead, callouts, calc: calcCallouts, shown: shownCallouts(), icText, gaps: gapCallouts().map(gapText), setCallout, setStyle, status, redraw: () => { drawSectionView(); schedulePublish(); } });
     // Scientific/source warnings must never disappear behind the new disclosure.
-    if ($('callout-editor').querySelector('.warn')) $('callout-editor').parentElement.open = true;
+    if ($('callout-editor').querySelector('.warn')) {
+      $('callout-editor').parentElement.open = true;
+      $('callout-editor').closest('.layout-group').open = true;
+    }
   }
   else if (currentStep === 'layout') import('./callout-editor.js').then((m) => { CE = m; renderCalloutEditor(); });
 }

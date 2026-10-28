@@ -401,6 +401,9 @@ test('a figure saved before design versions keeps its look; its gap callout is f
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await open3d(page);
+  // A warning in a newly opened figure must reveal itself even when the
+  // user previously collapsed the whole labels group.
+  await page.locator('#callout-editor').evaluate(el=>{el.closest('.layout-group').open=false;});
   expect((await state(page)).design).toEqual({ version: DESIGN_VERSION, current: DESIGN_VERSION, optIn: [] }); // a new figure: today's design
   const { opened, settings } = await page.evaluate(async (p) => {
     const opened = await window.EM3D.loadProject(p);
