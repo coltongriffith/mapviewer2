@@ -114,9 +114,11 @@ textarea { font-family: var(--mono); font-size: 12px; resize: vertical; }
 .bins i { display: block; height: 6px; border-radius: 3px; margin-bottom: 3px; }
 details { border: 1px solid var(--slate-200); border-radius: 8px; padding: 8px 10px; }
 summary { cursor: pointer; font-weight: 600; font-size: 14px; }
-.layout-group { margin: 12px 0; padding: 0; overflow: hidden; }
+.layout-group { margin: 0; padding: 0; overflow: hidden; flex: 0 0 auto; }
 .layout-group > summary { padding: 12px; background: var(--slate-050); min-height: 24px; }
 .layout-group > section { margin: 0; padding: 12px; border-top: 1px solid var(--slate-200); }
+.layout-group .field { min-width: 0; }
+.layout-group input, .layout-group select, .layout-group textarea { box-sizing: border-box; }
 pre { font-family: var(--mono); font-size: 11.5px; background: var(--slate-050); padding: 8px; border-radius: 6px; overflow-x: auto; margin: 8px 0 0; white-space: pre; }
 .check { display: flex; gap: 8px; align-items: center; font-size: 14px; }
 .check input, input[type="range"] { accent-color: var(--slate-950); }

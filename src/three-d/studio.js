@@ -1973,7 +1973,11 @@ function renderSummary() {
 // The callout editor (callout-editor.js), loaded when the Layout step first shows.
 let CE = null;
 function renderCalloutEditor() {
-  if (CE) CE.render($('callout-editor'), { S, esc, PR, read: prRead, callouts, calc: calcCallouts, shown: shownCallouts(), icText, gaps: gapCallouts().map(gapText), setCallout, setStyle, status, redraw: () => { drawSectionView(); schedulePublish(); } });
+  if (CE) {
+    CE.render($('callout-editor'), { S, esc, PR, read: prRead, callouts, calc: calcCallouts, shown: shownCallouts(), icText, gaps: gapCallouts().map(gapText), setCallout, setStyle, status, redraw: () => { drawSectionView(); schedulePublish(); } });
+    // Scientific/source warnings must never disappear behind the new disclosure.
+    if ($('callout-editor').querySelector('.warn')) $('callout-editor').parentElement.open = true;
+  }
   else if (currentStep === 'layout') import('./callout-editor.js').then((m) => { CE = m; renderCalloutEditor(); });
 }
 function syncBrandUI() {
