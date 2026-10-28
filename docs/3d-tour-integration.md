@@ -90,3 +90,24 @@ degenerate transforms and off-extent collars, and bound fallback DEM work and
 imagery canvas dimensions. These checks prevent compact hostile packages from
 expanding into unbounded tile/image/mesh work. Browser verification of the final
 endpoint and its deployed header rules is still required before publication.
+
+## Optional persistence migration (not activated)
+
+`20261104120000_hosted_3d_tours.sql` stores data packages in a private RLS table
+with no anonymous/authenticated table grants. Only current personal owners or
+company editors may publish, inspect link metadata or revoke. Public reads expose
+only an explicitly published package through its random identifier. The renderer
+must validate every read: the SQL shape check is intentionally not a replacement
+for the complete package boundary.
+
+Publish/revoke lock the saved figure row, updates require the expected revision,
+and rapid republishes are throttled. Revocation clears the package; republishing
+after revocation creates a new link. Soft deletion or ownership-scope changes
+withdraw all links, restoration does not revive them, and permanent deletion
+cascades. No extra storage bucket or account assignments are needed.
+
+The migration is source-only and requires explicit approval before production.
+It depends on the workspace schema. Pending API/UI work must report missing RPCs
+as unavailable and retain ordinary preview/download. Rollback first disables that
+UI/endpoint, then drops the project trigger, five tour functions and private
+`three_d_tours` table; exported local HTML files are unaffected.
