@@ -1,6 +1,6 @@
 // @vitest-environment node
 import {describe,it,expect,vi} from 'vitest';
-import {createTourHandler} from '../api/tour';
+import {createTourHandler} from '../api/_lib/tour';
 import {renderHostedTour} from '../api/_lib/tour-render';
 import {buildTourPackage} from '../src/features/tour3d/build';
 import {MAX_TOUR_BYTES} from '../src/features/tour3d/package';

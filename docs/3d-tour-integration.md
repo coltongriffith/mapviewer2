@@ -115,7 +115,7 @@ withdraw all links, restoration does not revive them, and permanent deletion
 cascades. No extra storage bucket or account assignments are needed.
 
 The migration is source-only and requires explicit approval before production.
-It depends on the workspace schema. The source-only `api/tour.ts` boundary uses
+It depends on the workspace schema. The source-only `api/_lib/tour.ts` boundary uses
 the anonymous key for public package reads and a server-verified current-user
 JWT for management; it never uses a service-role client. Publishing validates
 both package JSON and final escaped HTML before writing. Public rendering
@@ -124,7 +124,10 @@ report sharing unavailable while ordinary preview/download remains usable.
 The source UI requires an explicit availability check and public-data consent,
 then publishes the current valid preview or revokes its existing link. Context
 changes clear sharing controls. `/tour/:id` rewrites to this endpoint; only that
-route and `/api/tour` bypass the site's global framing denial. Valid viewers use
+route, `/api/tour` and its internal dispatcher bypass the site's global framing denial. The existing
+`api/agent.js?action=tour` function slot hosts this separately authorized handler
+so the deployment retains twelve functions on the current plan; existing Agent
+actions retain their handlers and use an inert JSON CSP. Valid viewers use
 the renderer's exact script hashes and sandbox; management/errors use an inert
 CSP. Trusted template and pinned Three assets are explicitly included in the
 Function and tested from an isolated relocated server bundle. Desktop/mobile

@@ -1,7 +1,7 @@
 import {test,expect} from '@playwright/test';
 import {createServer} from 'node:http';
 import {build} from 'esbuild';
-import {createTourHandler} from '../api/tour';
+import {createTourHandler} from '../api/_lib/tour';
 import {buildTourPackage} from '../src/features/tour3d/build';
 
 const project='11111111-1111-4111-8111-111111111111',id='a'.repeat(32);
