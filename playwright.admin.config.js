@@ -9,4 +9,3 @@ export default defineConfig({
   ],
   webServer: { ...base.webServer, command: 'node scripts/serve-like-vercel.mjs', env: { E2E_DIST: 'dist-auth-check' } },
 });
-

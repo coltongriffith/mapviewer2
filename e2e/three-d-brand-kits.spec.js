@@ -74,5 +74,3 @@ test('missing optional templates schema and a sign-out during load fail safely',
   await expect(page.locator('#brand-kits-choices')).toBeHidden();await expect(page.locator('#brand-kits-select option')).toHaveCount(0);
   expect(await page.evaluate(()=>window.EM3D.getProject())).toEqual(before);expect(state.writes).toEqual([]);
 });
-
-
