@@ -161,6 +161,7 @@ import {
   loadSharedMap,
 } from './utils/cloudStorage';
 import { applyBrandKitStyle, applyBrandKitTemplate } from './brandKit';
+import { applyPropertyNeighbours, propertySubject } from './utils/propertyNeighbours.js';
 import { useAuth } from './hooks/useAuth';
 import { useStorageUsage } from './hooks/useStorageUsage';
 import { supabase } from './lib/supabase';
@@ -1809,9 +1810,11 @@ export default function App({ initialAction = null }) {
       }
     }, 60);
     return () => clearTimeout(timer);
-  // Logical size only: rescaling to fit the window leaves the map unchanged.
+  // A fixed-size stage keeps its logical dimensions. The free-size stage also
+  // changes when Preview hides the inspector: refresh Leaflet's tile coverage
+  // then, or the wider preview and PNG have an unpainted strip at the right.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stageLogical]);
+  }, [stageLogical, mapSize.width, mapSize.height]);
 
   useEffect(() => {
     if (screen !== 'editor') {
@@ -3931,7 +3934,9 @@ export default function App({ initialAction = null }) {
         ...prev,
         layout: { ...prev.layout, templateId: t.templateId, themeId: t.themeId, ...extra },
       };
-      return applyModeToProject(withTemplate, getTemplate(t.templateId), t.mode);
+      const next = applyModeToProject(withTemplate, getTemplate(t.templateId), t.mode);
+      if (typeId === 'claims') return applyPropertyNeighbours(next);
+      return { ...next, layout: { ...next.layout, propertyNeighboursVersion: undefined } };
     });
   };
 
@@ -3942,12 +3947,13 @@ export default function App({ initialAction = null }) {
   const pickMapStyle = (typeId) => {
     if (!MAP_TYPES[typeId]) return;
     const changed = mapTypeOf(project.layout) !== typeId;
+    if (typeId === 'claims' && !propertySubject(project)) setUploadStatus({ type: 'info', message: 'Property template applied. To emphasise your property, select its claims layer in Customize → Layers and choose “Use for Framing”. Other claim layers will remain neutral until then.' });
     applyMapType(typeId);
     updateLayout({
       onboardingLayoutSelected: true,
       ...(typeId === 'investor' && project.layout.subtitle === 'Technical Results' ? { subtitle: 'Investor Map' } : {}),
     });
-    if (changed) setInvestorFrameRequest((value) => value + 1);
+    if (changed || typeId === 'claims') setInvestorFrameRequest((value) => value + 1);
     trackEvent('onboarding_step', { step: 'style', via: 'card', type: typeId });
   };
 

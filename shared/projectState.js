@@ -50,8 +50,8 @@ export const MAP_TYPES = {
     templateId: 'technical_results_v2', mode: 'project_overview', themeId: 'investor_clean',
   },
   claims: {
-    label: 'Claims and tenure map',
-    note: 'Claim blocks and ownership over regional context.',
+    label: 'Property & Neighbours',
+    note: 'A ready-to-refine property map using supplied labels and company branding.',
     templateId: 'technical_results_v2', mode: 'regional_claims', themeId: 'investor_clean',
   },
   drill: {
