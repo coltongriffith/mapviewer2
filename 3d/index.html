@@ -475,7 +475,6 @@ html.em3d-version .share-bar .btn { padding: 6px 11px; }
 <section>
         <h3>Display</h3>
         <div class="row" style="gap:14px">
-          <label class="check"><input type="checkbox" id="opt-walls" data-ext="style.walls" checked>Glass block sides</label>
           <label class="check"><input type="checkbox" id="opt-ids" data-ext="style.ids" checked>Hole IDs</label>
           <label class="check"><input type="checkbox" id="opt-inset" data-ext="style.inset" checked>Plan inset</label>
           <label class="check"><input type="checkbox" id="opt-ribbons" data-ext="style.ribbons" checked>Intercept bars beside holes</label>
@@ -492,7 +491,10 @@ html.em3d-version .share-bar .btn { padding: 6px 11px; }
             <option value="satellite">Satellite</option><option value="muted">Satellite, muted</option></select></label>
           <label class="field"><span>Surface from</span><select id="terrain-src" data-ext="style.terrainSource">
             <option value="auto">Best available</option><option value="topo">Your topography</option><option value="dem">Real elevation (DEM)</option><option value="collars">Collar elevations</option></select></label>
-          <label class="field"><span>Block sides</span><select id="block-style" data-ext="style.blockStyle"><option value="glass">Glass</option><option value="solid">Solid block</option></select></label>
+          <div class="field"><span>Block sides</span>
+            <label class="check"><input type="checkbox" id="opt-walls" data-ext="style.walls" checked>Show block sides</label>
+            <label class="field" id="block-material-controls"><span>Side material</span><select id="block-style" data-ext="style.blockStyle"><option value="glass">Glass</option><option value="solid">Solid block</option></select></label>
+          </div>
           <label class="field"><span>Real elevation vs collars</span><select id="collar-fit" data-ext="style.collarFit"><option value="collars">Move terrain to collars</option><option value="terrain">Hang holes from terrain</option></select></label>
           <label class="field"><span>Presentation</span><select data-ext="scene.theme"><option value="light">Light</option><option value="dark">Dark</option></select></label>
         </div>
