@@ -7,7 +7,17 @@ for (const [name, width, height] of [['desktop',1280,900],['mobile',390,844]]) {
     await page.setViewportSize({width,height});
     await page.emulateMedia({reducedMotion:'reduce'});
     await page.goto('/3d'); await page.waitForFunction(()=>window.EM3D?.getState().ready);
-    await page.evaluate(async()=>{const E=window.EM3D;await E.layersReady();await E.setCrew({on:true,scale:'true',life:false,chatter:false});await E.zoomToCrew();});
+    await page.evaluate(async()=>{
+      const E=window.EM3D;await E.layersReady();
+      // Synthetic invisible enclosure: its triangles intersect every pointer ray,
+      // but must never steal a pick from visible drilling or blank space.
+      const p=E.getProject(),vertices=[[-1,-1,-1],[1,-1,-1],[1,1,-1],[-1,1,-1],[-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1]];
+      const text=vertices.map(([x,y,z])=>`v ${412300+x*50000} ${6421800+y*50000} ${1000+z*50000}`).concat(['f 1 2 3 4','f 5 6 7 8','f 1 2 6 5','f 2 3 7 6','f 3 4 8 7','f 4 1 5 8']).join('\n');
+      p.files.push({name:'QA-invisible.obj',role:'mesh',text});
+      p.settings.meshes['QA-invisible.obj']={color:'#123456',opacity:0,show:true};
+      await E.loadProject(p);await E.layersReady();
+      await E.setCrew({on:true,scale:'true',life:false,chatter:false});await E.zoomToCrew();
+    });
     await page.waitForTimeout(1100);
     const close=await page.evaluate(()=>window.EM3D.getState().camera);
     expect(close.pan).toBeTruthy();expect(close.zoom).toBeGreaterThan(250);

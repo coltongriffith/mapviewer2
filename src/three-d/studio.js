@@ -2375,7 +2375,10 @@ frameEl.addEventListener('pointerdown', (e) => {
     if (!G || S.lockView) { pickFocusMode(false); return; }
     camera.updateMatrixWorld(); rayAt(e);
     const shown = (o) => { if (!o) return false; for (let n = o; n; n = n.parent) if (!n.visible) return false; return true; };
-    const point = raycaster.intersectObjects([G.top, ...G.walls, G.tubes, G.tubesP, ...(G.shellMesh?.children || []), ...G.meshes.map((x) => x.m)].filter(shown), false)[0]?.point;
+    const point = raycaster.intersectObjects([G.top, ...G.walls, G.tubes, G.tubesP, ...(G.shellMesh?.children || []), ...G.meshes.map((x) => x.m)].filter(shown), false).find((hit) => {
+      const material = Array.isArray(hit.object.material) ? hit.object.material[hit.face?.materialIndex || 0] : hit.object.material;
+      return material?.visible !== false && (material?.opacity ?? 1) > 0;
+    })?.point;
     if (!point) { status('Click the terrain, a drill hole or a model surface. Escape cancels.'); return; }
     const c = getCam(), centre = camTarget().sub(aim);
     pickFocusMode(false);
