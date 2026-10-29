@@ -37,6 +37,7 @@
 // inclFrom: false (no "from N m" on the incl. lines), scale "flat" (a flat bar under the figure) and scaleNote.
 import * as THREE from 'three';
 import { fitLine } from './section-geometry.js';
+import { tubesVisible } from './plan.js';
 import { ORANGE, RELEASE, clusters } from './tags.js';
 
 let H, S;
@@ -217,7 +218,7 @@ export function sync() {
   // A heading drawn as a plain title before this module loaded is drawn again as a heading.
   if (G.wallLabelMeshes?.some((m) => m.userData.L.size === 'heading' && !m.userData.hd)) H.buildWallLabels();
   const over = S.block?.traces === 'overlay';
-  G.tubes.visible = G.tubesP.visible = !over;
+  G.tubes.visible = G.tubesP.visible = tubesVisible(S, H.getCam().plunge);
   // The block's outline is the first line set added to the scene; the traces follow it.
   H.root.children.filter((o) => o.isLineSegments).slice(1).forEach((o) => { o.visible = !over; });
   vivid(); curtain();
