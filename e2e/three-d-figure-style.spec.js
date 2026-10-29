@@ -63,4 +63,30 @@ test('a figure style applies to /3d and stays with its figure only', async ({ pa
   const reopened = await page.evaluate(() => window.EM3D.getProject().settings);
   expect(reopened.brandStyle).toBeNull();
   expect(reopened.primary).toBe(plain.settings.primary);
+  // Real image decoding exercises the prepared-logo host boundary, then the
+  // legacy upload/remove API must still operate on the same figure.
+  await page.evaluate(async()=>{
+    const c=document.createElement('canvas');c.width=c.height=8;const ctx=c.getContext('2d');ctx.fillStyle='#123456';ctx.fillRect(0,0,8,8);
+    const src=c.toDataURL('image/png'),E=window.EM3D;await E.setFigureStyle({logo:{assetRef:src}},{brandKitId:'logo-kit'});
+  });
+  expect(await page.evaluate(()=>window.EM3D.getProject().settings.logo.$image)).toMatch(/^data:image\/png/);
+  await page.evaluate(()=>window.EM3D.setLogo(null));expect(await page.evaluate(()=>window.EM3D.getProject().settings.logo)).toBeNull();
+  await page.evaluate(async()=>{const c=document.createElement('canvas');c.width=c.height=8;await window.EM3D.setLogo(c.toDataURL('image/png'),{autoColor:false});});
+  expect(await page.evaluate(()=>window.EM3D.exportPNG({view:'3d'}))).toMatch(/^data:image\/png/);
+});
+
+test('a style requested before its lazy module loads cannot brand a replacement figure', async ({page}) => {
+  test.setTimeout(120000);
+  await page.route('**/api/track',r=>r.fulfill({status:204}));
+  let release,notify;const requested=new Promise(resolve=>{notify=resolve;});
+  await page.route('**/assets/typography-*.js',async route=>{await new Promise(r=>{release=r;notify();});await route.continue();});
+  await page.goto('/3d/');await page.waitForFunction(()=>window.EM3D?.getState().ready);
+  const original=await page.evaluate(()=>window.EM3D.getProject());
+  await page.evaluate(()=>{window.__pendingStyle=window.EM3D.setFigureStyle({colours:{primary:'#123456'}},{brandKitId:'stale-kit'});});
+  await requested;
+  await page.evaluate(async p=>{p.settings.title='Replacement figure';await window.EM3D.loadProject(p);},original);
+  release();await page.evaluate(()=>window.__pendingStyle);
+  const after=await page.evaluate(()=>window.EM3D.getProject());
+  expect(after.settings.title).toBe('Replacement figure');expect(after.settings.brandStyle).toBeNull();
+  expect(after.settings.primary).toBe(original.settings.primary);expect(after.files).toEqual(original.files);
 });

@@ -496,7 +496,9 @@ const BUDGETS = {
   // Measured175.6KiB; bound this scheduling logic to another0.2KiB.
   // Explicit Fit model / Pick focus controls and bounded geometry ray picking.
   // Current measured entry176.1KiB; keep a narrow0.2KiB stamp allowance.
-  threeDJsGzipKb: 176.3,
+  // Lazy brand-kit action and async style context guards: measured176.4KiB.
+  // Kit/account reads remain lazy; bound the entry to another0.3KiB.
+  threeDJsGzipKb: 176.6,
   // /3d's own modules fetched on first use (the geology, geophysics and tag layers, the account
   // client). They never load with the page or the app, so they sit outside the page and app totals.
   // 32 → 34 (Oct 2026, round 4): per-hole tags, grouped pending tags, callouts beside or bracketed on their
@@ -642,7 +644,9 @@ const BUDGETS = {
   // reachability walker now attributes ~23 KiB of existing account code to
   // Tour instead of this bucket. Tighten here to keep that transfer bounded.
   // Measured 141.0 plain/configured; initial maker load remains 175.3 KiB.
-  threeDLazyJsGzipKb: 141.5,
+  // Owned read/apply picker + verified-user boundary: measured143.2KiB.
+  // Reuses the existing account client and style adapters, no new dependency.
+  threeDLazyJsGzipKb: 143.5,
   // Self-contained 3D Tour export: separate lazy Three global source plus
   // template/builder/dialog: measured 173.4. Not part of the maker's initial load.
   // Model palette/derived-field handoff, existing envelope geometry and layer toggles: ~176.2 KiB.

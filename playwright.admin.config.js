@@ -2,7 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 import base from './playwright.config.js';
 export default defineConfig({
   ...base,
-  testMatch: ['admin-dashboard.spec.js', 'account-save.spec.js', 'shared-map-download.spec.js', 'mobile-handoff.spec.js', 'fullres-offer.spec.js', 'three-d-account.spec.js', 'three-d-drill-source.spec.js', 'workspace.spec.js', 'three-d-share.spec.js', 'three-d-versions.spec.js', 'brand-style.spec.js', 'project-naming.spec.js', 'studio-style.spec.js', 'account-3d-workspace.spec.js', 'three-d-crew-life.spec.js', 'geo-labels.spec.js', 'package-export.spec.js', 'emap-api.spec.js', 'svg-branding-fonts.spec.js', 'drill-plan-property.spec.js', 'embed-map.spec.js'],
+  testMatch: ['admin-dashboard.spec.js', 'account-save.spec.js', 'shared-map-download.spec.js', 'mobile-handoff.spec.js', 'fullres-offer.spec.js', 'three-d-account.spec.js', 'three-d-brand-kits.spec.js', 'three-d-drill-source.spec.js', 'workspace.spec.js', 'three-d-share.spec.js', 'three-d-versions.spec.js', 'brand-style.spec.js', 'project-naming.spec.js', 'studio-style.spec.js', 'account-3d-workspace.spec.js', 'three-d-crew-life.spec.js', 'geo-labels.spec.js', 'package-export.spec.js', 'emap-api.spec.js', 'svg-branding-fonts.spec.js', 'drill-plan-property.spec.js', 'embed-map.spec.js'],
   projects: [
     { ...base.projects[0], name: 'admin-desktop' },
     { ...base.projects[0], name: 'admin-mobile', use: { ...base.projects[0].use, ...devices['iPhone 13'], defaultBrowserType: 'chromium' } },

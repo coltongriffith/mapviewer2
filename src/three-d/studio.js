@@ -141,7 +141,7 @@ function sampleFiles() {
 // 3. Project state built from the files
 // ============================================================
 let files = [];          // { name, text, role, header, rows, cols, grades, mesh }
-let project = null;      // derived geometry
+let project = null, projectLoad = 0; // derived geometry; invalidates staged styles before a load awaits assets
 let usingSample = true;
 const S = {              // style
   title: 'EXAMPLE RIDGE · MAIN ZONE', subtitle: '3D drilling model, looking northeast',
@@ -1932,15 +1932,20 @@ const toHex = (rgb) => `#${rgb.map((v) => Math.round(Math.max(0, Math.min(255, v
 // opts.removeBackground: a white or flat background made transparent first (logo-bg.js, loaded then, as with the first
 // logo added in the Brand step, which offers it).
 let LB = null; const lbLoad = () => import('./logo-bg.js').then((m) => (LB = m));
+function commitLogo(img, src, opts = {}) {
+  if (LB && !opts.keep) LB.state.src = src;
+  S.logo = img;
+  if (LB) { LB.state.removed = false; LB.render(); }
+  $('logo-prev').textContent = img ? '' : 'No logo';
+  if (img) { const pv = new Image(); pv.src = src; pv.alt = 'Your logo'; $('logo-prev').appendChild(pv); }
+}
 function setLogo(src, opts = {}) {
   if (src && opts.removeBackground) return lbLoad().then((m) => m.set(setLogo, status, src, opts)).then(getState);
-  if (LB && !opts.keep) LB.state.src = src;
-  const shown = () => { if (LB) { LB.state.removed = false; LB.render(); } }; // once the logo drawn is this one (logo-bg.js marks a removal after)
   return new Promise((resolve, reject) => {
-    if (!src) { S.logo = null; shown(); $('logo-prev').textContent = 'No logo'; drawSectionView(); schedulePublish(); status('Logo removed.'); resolve(getState()); return; }
+    if (!src) { commitLogo(null, src, opts); drawSectionView(); schedulePublish(); status('Logo removed.'); resolve(getState()); return; }
     const img = new Image();
     img.onload = async () => {
-      S.logo = img; shown(); $('logo-prev').innerHTML = ''; const pv = new Image(); pv.src = src; pv.alt = 'Your logo'; $('logo-prev').appendChild(pv);
+      commitLogo(img, src, opts);
       let picked = null; // the colour picker (logo-colours.js) loads with the first logo
       if (opts.autoColor !== false) try { picked = (await import('./logo-colours.js')).brandFromLogo(img); } catch { /* keep the colours */ }
       if (picked) { setBrand({ primary: picked.primary, accent: picked.accent }); $('col-note').textContent = picked.note; }
@@ -2482,7 +2487,7 @@ const host = () => (extHost ||= {
   prominent: (h) => !!EXT.tags && (EXT.tags.weight(h) > 1 || !!EXT.tags.highlightOf(h) || EXT.tags.statusOf(h) === 'new'),
   camera, renderer, proj, sectionEnds, faceGeom, textOn, roundRect, fitText, esc, BIN_COLORS, binIndex, traceR, calloutLines, shownCallouts, coOv, isPending, setSpacing, drawCallout, brandTone, figureCanvas, xopts, getState,
   watermark: async (w) => { const o = wmOpts(w); WM ||= await import('../export/watermarkBand.js'); return (c) => WM.withWatermarkBand(c, o); }, // the band, for desk.js
-  format: () => FORMATS[S.format], fileSlug, downloadURL,
+  format: () => FORMATS[S.format], fileSlug, downloadURL, loadImg, commitLogo,
   terrain: rtLoad, IMAGERY_CREDIT, status, redraw: () => { extScene(); drawSectionView(); schedulePublish(); },
   ROLE_LABEL, ROLE_FIELDS, FIELD_LABEL, gradeCols, refresh, refreshTraces, get PR() { return PR; }, setStyle, pad3, labelFor, dcutChoices, meshName, restyle, schedulePublish,
   renderShellUI, renderEq, renderExtUI, renderLegendUI, FORMATS, setFigureSize, updateLabel, removeLabel, updateWallLabel, removeWallLabel,
@@ -2589,7 +2594,11 @@ const EXT_API = {
   async setCrew(o = {}) { (await extLoad('crew')).set(o); await extReady(); return getState(); },
   async zoomToCrew() { const m = await extLoad('crew'); await extReady(); showView('3d'); m.zoomTo(); return getState(); },
   layersReady: async () => { await extReady(); return getState(); },
-  async setFigureStyle(style, meta) { await (await extLoad('type')).setFigureStyle(style, meta); return getState(); },
+  async setFigureStyle(style, meta = {}) {
+    const target = project, generation = projectLoad, check = meta.isCurrent;
+    await (await extLoad('type')).setFigureStyle(style, { ...meta, isCurrent: () => project === target && projectLoad === generation && (typeof check !== 'function' || check()) });
+    return getState();
+  },
 };
 // The block section (block.js): applyPreset("blockSection"), setHolesShown, setBlock; [data-block] buttons in the Layout step.
 ['applyPreset', 'setHolesShown', 'setBlock'].forEach((a) => { EXT_API[a] = async (...x) => { await (await extLoad('block'))[a](...x); await extReady(); return getState(); }; });
@@ -2709,6 +2718,7 @@ const filesDigest = () => files.map((f) => `${f.name}|${fileDigest(f)}`).join(',
 async function loadProject(p) {
   if (!p || p.v !== 1 || !p.settings || typeof p.settings !== 'object' || !Array.isArray(p.files)) throw new Error('loadProject expects a project from EM3D.getProject() ({ v: 1, settings, files }).');
   if (p.files.some((f) => !f || typeof f.name !== 'string' || typeof f.text !== 'string')) throw new Error('Each project file needs a name and its text.');
+  projectLoad++; window.dispatchEvent(new Event('em3d:figure-loading'));
   const saved = withDefaults(p.settings, S_DEFAULTS), { logo, ...rest } = saved, imgs = {}; // an earlier figure keeps its look
   await Promise.all(Object.entries(rest).filter(([, v]) => isImg(v)).map(async ([k, v]) => { imgs[k] = await loadImg(v.$image); }));
   if (isImg(logo)) await setLogo(logo.$image, { autoColor: false }); else await setLogo(null);

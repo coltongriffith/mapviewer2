@@ -9,8 +9,8 @@
 import { STYLE_FONTS, validateFigureStyle } from '../../shared/figureStyle.js';
 import { to3DSettings, brandStyleRecord } from '../../shared/brandKit.js';
 
-let H = null; // host (studio.js), set by init
-export function init(host) { H = host; }
+let H = null, seq = 0, applySeq = 0; // host (studio.js), set by init
+export function init(host) { H = host; seq++; applySeq++; }
 
 export const LEGACY = { sans: '"Source Sans 3", "Segoe UI", sans-serif', mono: '"IBM Plex Mono", monospace' };
 const PAGE_FONTS = ['Source Sans 3', 'IBM Plex Mono']; // linked by 3d/index.html already
@@ -37,15 +37,14 @@ export async function loadFamily(family, { doc = globalThis.document, ms = 5000 
 
 // The figure's fonts from S.brandStyle, once loaded. Called when a figure settles (opened, undo/redo)
 // and after a style is applied. The latest call wins.
-let seq = 0;
 export async function sync() {
-  const t = ++seq, family = H.S.brandStyle?.fonts?.sans || null;
+  const t = ++seq, host = H, target = H.project, record = H.S.brandStyle, family = record?.fonts?.sans || null;
   let sans = LEGACY.sans;
   if (family && family !== 'Source Sans 3') {
     if (await loadFamily(family)) sans = stackOf(family);
-    else H.status(`The ${family} font could not be loaded, so this figure stays in Source Sans 3.`);
+    else if (t === seq && H === host && H.project === target && H.S.brandStyle === record) H.status(`The ${family} font could not be loaded, so this figure stays in Source Sans 3.`);
   }
-  if (t !== seq || H.fonts() === sans) return;
+  if (t !== seq || H !== host || H.project !== target || H.S.brandStyle !== record || H.fonts() === sans) return;
   H.fonts(sans); H.buildWallLabels(); H.redraw();
 }
 
@@ -54,13 +53,24 @@ export async function sync() {
 // record and returns the text to the default fonts (colours and logo stay as they are). Grade, geology
 // and geophysics colours are data styling and never change here.
 export async function setFigureStyle(style, meta = {}) {
+  const token = ++applySeq, host = H, target = H.project;
+  const current = () => token === applySeq && H === host && H.project === target && (typeof meta.isCurrent !== 'function' || meta.isCurrent());
+  if (!current()) return;
   if (style === null) { H.S.brandStyle = null; await sync(); return; }
   const { errors } = validateFigureStyle(style);
   if (errors.length) throw new Error(`setFigureStyle: ${errors.join(' ')}`);
-  const s = to3DSettings(style), EM = globalThis.EM3D;
+  const s = to3DSettings(style), EM = globalThis.EM3D, family = s.fonts?.sans;
+  // Stage assets before changing the figure. A failed logo leaves its current
+  // colours/logo/metadata intact; a replaced figure or newer apply wins.
+  const img = s.logo?.startsWith('data:') ? await H.loadImg(s.logo) : null;
+  const loaded = !family || family === 'Source Sans 3' || await loadFamily(family);
+  if (!current()) return;
+  ++seq; // an older font sync cannot repaint this committed style
   if (s.primary || s.accent) EM.setBrand({ ...(s.primary && { primary: s.primary }), ...(s.accent && { accent: s.accent }) });
-  if (s.logo?.startsWith('data:')) await EM.setLogo(s.logo, { autoColor: false }); // an https logo would taint the export canvas
+  if (img) H.commitLogo(img, s.logo);
   H.S.brandStyle = { ...brandStyleRecord({ id: meta.brandKitId, updated_at: meta.brandRevision }, 'style', style), fonts: s.fonts || null };
-  await sync();
+  const sans = loaded && family ? stackOf(family) : LEGACY.sans;
+  if (H.fonts() !== sans) { H.fonts(sans); H.buildWallLabels(); }
+  if (!loaded) H.status(`The ${family} font could not be loaded, so this figure stays in Source Sans 3.`);
   H.redraw();
 }

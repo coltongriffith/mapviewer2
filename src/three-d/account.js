@@ -67,6 +67,7 @@ if (window.EM3D && $('acct-save')) {
   $('share-open')?.addEventListener('click', () => share.open().catch(failed));
 }
 if (window.EM3D && $('acct-save') && !viewing) {
+  $('brand-kits-load')?.addEventListener('click', () => import('./brand-kits.js').then((m) => m.open()).catch(failed));
   $('acct-save').addEventListener('click', () => run((m) => m.save()));
   $('acct-maps').addEventListener('click', () => run((m) => m.toggleMenu()));
   document.addEventListener('keydown', (e) => {
