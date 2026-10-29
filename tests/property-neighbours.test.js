@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { applyPropertyNeighbours, propertySubject } from '../src/utils/propertyNeighbours.js';
 import { createInitialProjectState } from '../shared/projectState.js';
-import { buildLegendItems, technicalResultsTemplate } from '../src/templates/technicalResultsTemplate.js';
+import { buildLegendItems, technicalResultsTemplate, resolveTemplateZones } from '../src/templates/technicalResultsTemplate.js';
+import { getCornerLayout } from '../src/utils/cornerLayout.js';
 import { fitProjectToTemplate } from '../src/utils/frameMapForTemplate.js';
 
 const layer = (id, extra = {}) => ({ id, role: 'claims', type: 'geojson', visible: true, displayName: id,
@@ -71,6 +72,25 @@ describe('Property & Neighbours explicit template application', () => {
     expect(next.layout.insetMode).toBe('custom_image');
     expect(next.layout.insetImage).toBe(p.layout.insetImage);
     expect(next.layout.logo).toBeNull();
+  });
+  it('keeps a valid no-logo layout without a blank row or lost legend order', () => {
+    const next = applyPropertyNeighbours(project());
+    expect(getCornerLayout(next.layout)).toEqual(next.layout.cornerLayout);
+    const zones = resolveTemplateZones(technicalResultsTemplate, next.layout, { width: 1600, height: 900 }, []);
+    expect(zones.logo).toMatchObject({ width: 0, height: 0 });
+    expect(zones.title.top).toBe(next.layout.safeMargins.top);
+    expect(zones.title.left).toBe(next.layout.safeMargins.left);
+    expect(getCornerLayout(next.layout).bl).toEqual([['scaleBar'], ['legend']]);
+  });
+  it('collapses a removed recipe logo but leaves legacy no-logo sizing unchanged', () => {
+    const next = applyPropertyNeighbours(project());
+    next.layout.logo = 'data:image/png;base64,example';
+    const resolve = () => resolveTemplateZones(technicalResultsTemplate, next.layout, { width: 1600, height: 900 }, []);
+    expect(resolve().logo.width).toBe(120);
+    next.layout.logo = null;
+    expect(resolve().logo.width).toBe(0);
+    delete next.layout.propertyNeighboursVersion;
+    expect(resolve().logo.width).toBe(120);
   });
   it('starts in a standardized landscape frame but honours a supplied format', () => {
     const p = project();

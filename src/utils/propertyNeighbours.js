@@ -97,7 +97,9 @@ export function applyPropertyNeighbours(project) {
       compositionPreset: 'balanced', zoomPadFrac: 0.1,
       showTitle: true, showLegend: true,
       titleCorner: 'tl', logoCorner: 'tl', insetCorner: 'tr', legendCorner: 'bl', scaleBarCorner: 'bl', northArrowCorner: 'br',
-      cornerLayout: { tl: original.logo ? [['logo', 'title']] : [['title']], tr: [['inset']], bl: [['scaleBar'], ['legend']], br: [['northArrow']] },
+      // Keep every ID present for getCornerLayout's validator. The resolver
+      // gives an absent recipe logo zero size, also after Remove/Replace.
+      cornerLayout: { tl: [['logo', 'title']], tr: [['inset']], bl: [['scaleBar'], ['legend']], br: [['northArrow']] },
       titleWidthPx: null, titleHeightPx: title.length > 55 ? 108 : 82,
       logoWidthPx: 120, logoHeightPx: 74,
       insetWidthPx: 176, insetHeightPx: 145,

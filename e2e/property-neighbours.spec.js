@@ -34,6 +34,8 @@ test('property template prepopulates supplied content and survives restore', asy
   await expect(page.locator('.legend-card')).toContainText('Example property claims');
   await expect(page.locator('.legend-card')).toContainText('Neighbour claims');
   await expect(page.locator('.legend-card')).not.toContainText('Project Claims');
+  const placement = await page.locator('.template-zone').filter({ has: page.getByRole('heading', { name: 'Example Property', exact: true }) }).evaluate((el) => ({ top: parseFloat(el.style.top), left: parseFloat(el.style.left) }));
+  expect(placement).toEqual({ top: 18, left: 18 });
   await expect.poll(() => page.evaluate(() => {
     const el = document.querySelector('.legend-card');
     return el && el.scrollHeight <= el.clientHeight + 1;

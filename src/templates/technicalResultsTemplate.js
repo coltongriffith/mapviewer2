@@ -182,7 +182,7 @@ export function resolveTemplateZones(template, layout, mapSize, legendItems) {
     if (studio?.[id]) return studio[id];
     switch (id) {
       case 'title':      return [titleWidth, titleHeight];
-      case 'logo':       return [logoW, logoH];
+      case 'logo':       return layout?.propertyNeighboursVersion === 1 && !layout.logo ? [0, 0] : [logoW, logoH];
       case 'inset':      return layout?.insetEnabled === false ? [0, 0] : [insetWidth, insetHeight];
       case 'northArrow': return [naW, naH];
       case 'scaleBar':   return [BASE_ZONES.scaleBar.width, BASE_ZONES.scaleBar.height + (layout?.showProjectionLabel ? 16 : 0)];
