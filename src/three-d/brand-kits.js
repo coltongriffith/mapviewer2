@@ -52,7 +52,9 @@ export function createBrandKitPicker({ getClient = client, api = window.EM3D, do
       if (!kit) throw new Error('Kit no longer available');
       let allowed = true;
       await api.setFigureStyle(styleFromKitConfig(kit.config), { brandKitId: kit.id, brandRevision: kit.updated_at, isCurrent: () => (allowed = current()) });
-      if (token === epoch) say(allowed ? `Applied “${kit.name}”.` : 'The figure changed while applying. Choose Apply again when ready.');
+      const record = api.getProject().settings?.brandStyle;
+      const applied = allowed && record?.brandKitId === kit.id && record?.brandRevision === kit.updated_at;
+      if (token === epoch) say(applied ? `Applied “${kit.name}”.` : 'The figure changed while applying. Choose Apply again when ready.');
     } catch (error) { if (token === epoch) clear(errorText(error)); }
     finally { if (token === epoch) { apply.disabled = !rows.length; load.disabled = false; select.disabled = false; } }
   }

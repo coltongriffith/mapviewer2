@@ -86,4 +86,9 @@ describe('explicit brand picker', () => {
     const b=backend(),u=ui(b);b.sb.auth.getUser.mockRejectedValue({code:'NOT_CONFIGURED'});
     await u.picker.refresh();expect(u.note()).toContain('not available');expect(u.api.setFigureStyle).not.toHaveBeenCalled();
   });
+  it('does not report success when the style API declines a replaced figure', async () => {
+    const u=ui(backend());await u.picker.refresh();document.getElementById('brand-kits-apply').click();
+    await vi.waitFor(()=>expect(u.note()).toContain('figure changed while applying'));
+    expect(u.note()).not.toContain('Applied');
+  });
 });
