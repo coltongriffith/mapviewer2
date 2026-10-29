@@ -29,5 +29,13 @@ for(const [name,width,height] of [['desktop',1280,900],['mobile',390,844]]){
       expect(actual.equals(Buffer.from(expected.split(',')[1],'base64'))).toBe(true);
     }
     await expect(page.locator('#export-3d')).toBeVisible();await expect(page.locator('#export-section')).toBeVisible();
+    const beforeDisclosure=await page.evaluate(()=>({project:window.EM3D.getProject(),png:window.EM3D.exportPNG({view:'3d'})}));
+    const service=page.getByText('Optional design service',{exact:true});
+    await expect(page.locator('#desk-email')).toBeHidden();await service.focus();await page.keyboard.press('Enter');
+    await expect(page.locator('#desk-email')).toBeVisible();await expect(page.locator('#desk-company')).toBeVisible();
+    // Invalid input is handled locally, without contacting the design desk.
+    await page.locator('#desk-send').click();await expect(page.locator('#desk-email')).toHaveAttribute('aria-invalid','true');
+    await service.focus();await page.keyboard.press('Enter');await expect(page.locator('#desk-email')).toBeHidden();
+    expect(await page.evaluate(()=>({project:window.EM3D.getProject(),png:window.EM3D.exportPNG({view:'3d'})}))).toEqual(beforeDisclosure);
   });
 }
