@@ -64,10 +64,10 @@ function holeIds(ids) {
   if (bad.length) throw new Error(`No hole ${bad.map((b) => `"${b}"`).join(', ')}.`);
   return [...new Set(ids.map(String))];
 }
-const redraw = () => { H.rebuild(true); H.setStyle({}); H.renderExtUI(); };
+const redraw = (rebuild = true) => { if (rebuild) H.rebuild(true); H.setStyle({}); };
 export function setHolesShown(ids) {
   if (!H.G) throw new Error('Load data first.');
-  S.holesShown = holeIds(ids); redraw();
+  S.holesShown = holeIds(ids); H.refreshTraces(); redraw(false);
   H.status(S.holesShown ? `${S.holesShown.length} hole${S.holesShown.length === 1 ? '' : 's'} shown; the others are hidden (they still shape the geology).` : 'Every hole shown.');
 }
 
@@ -115,6 +115,7 @@ function patch(b, o) {
 }
 export function setBlock(o) {
   if (!H.G) throw new Error('Load data first.');
+  const previous = S.block;
   if (o === null) S.block = null;
   else {
     if (!o || typeof o !== 'object') throw new Error('setBlock takes { furniture, traces, brackets, page, info, hist, holes, units, surface, fadeBottom, colors, ticks, ends, pad, legend, inclFrom, scale, scaleNote }, or null to turn the block look off.');
@@ -124,7 +125,10 @@ export function setBlock(o) {
     // To or from the side title, the block is framed again for the room the title takes.
     if ((was === 'side') !== (b.page === 'side')) { const c = H.getCam(); frame({ azimuth: c.azimuth, plunge: c.plunge, zoom: c.zoom }); }
   }
-  redraw();
+  if (previous && S.block && (previous.units !== S.block.units || (previous.page === 'side') !== (S.block.page === 'side'))) H.buildWallLabels();
+  const rebuild = !previous || !S.block;
+  if (!rebuild && o?.holes !== undefined) H.refreshTraces();
+  redraw(rebuild);
 }
 
 // ---------- the preset ----------
@@ -213,7 +217,7 @@ export function sync() {
   // A heading drawn as a plain title before this module loaded is drawn again as a heading.
   if (G.wallLabelMeshes?.some((m) => m.userData.L.size === 'heading' && !m.userData.hd)) H.buildWallLabels();
   const over = S.block?.traces === 'overlay';
-  if (over) G.tubes.visible = G.tubesP.visible = false;
+  G.tubes.visible = G.tubesP.visible = !over;
   // The block's outline is the first line set added to the scene; the traces follow it.
   H.root.children.filter((o) => o.isLineSegments).slice(1).forEach((o) => { o.visible = !over; });
   vivid(); curtain();

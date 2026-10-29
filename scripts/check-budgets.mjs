@@ -491,7 +491,10 @@ const BUDGETS = {
   // Terrain palette chooser: existing terrain styles with synchronized button
   // state. Final stamped page measures175.4KiB; allow <0.2KiB for this UI,
   // retaining the lazy renderer/exports and existing dependency versions.
-  threeDJsGzipKb: 175.6,
+  // Loaded-project editing: revision/camera-driven preview and a trace-only
+  // visibility refresh replace continuous idle painting/full scene rebuilds.
+  // Measured175.6KiB; bound this scheduling logic to another0.2KiB.
+  threeDJsGzipKb: 175.8,
   // /3d's own modules fetched on first use (the geology, geophysics and tag layers, the account
   // client). They never load with the page or the app, so they sit outside the page and app totals.
   // 32 → 34 (Oct 2026, round 4): per-hole tags, grouped pending tags, callouts beside or bracketed on their
