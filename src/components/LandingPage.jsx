@@ -96,6 +96,7 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
   const [lookup, setLookup] = useState('');
   const clickThrottleRef = useRef(0);
   const rootRef = useRef(null);
+  const menuRef = useRef(null);
 
   // Gentle fade-in on scroll for sections tagged with .lm-reveal
   useEffect(() => {
@@ -141,6 +142,20 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
     onSearchBCClaims?.(lookup);
   };
 
+  const closeMenu = () => { if (menuRef.current) menuRef.current.open = false; };
+  const menuAction = (action) => () => { closeMenu(); action?.(); };
+  const navigationLinks = <>
+    <button type="button" onClick={menuAction(() => scrollTo('examples'))} data-track="Nav: Examples">Examples</button>
+    <a href="/3d" onClick={closeMenu} data-track="Nav: 3D">3D</a>
+    <button type="button" onClick={menuAction(() => scrollTo('features'))} data-track="Nav: Features">Features</button>
+    <button type="button" onClick={menuAction(() => scrollTo('pricing'))} data-track="Nav: Pricing">Pricing</button>
+    <a href="/teams/" onClick={closeMenu} data-track="Nav: Teams">Teams</a>
+    {onOpenTenureMonitor && <button type="button" onClick={menuAction(onOpenTenureMonitor)} data-track="Nav: Tenure Monitor">Tenure Monitor</button>}
+    {user
+      ? <button type="button" onClick={menuAction(onOpenAccount)} data-track="Nav: Dashboard">Dashboard</button>
+      : <button type="button" onClick={menuAction(() => setShowAuth(true))} data-track="Nav: Sign up free">Sign in / Sign up free</button>}
+  </>;
+
   return (
     <div className="lm-shell" ref={rootRef} onClick={handleLandingClick}>
       {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
@@ -153,22 +168,12 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
             <span className="em-wordmark">Exploration&nbsp;<b>Maps</b></span>
           </div>
           <nav className="lm-nav-links" aria-label="Main">
-            <button type="button" onClick={() => scrollTo('features')} data-track="Nav: Features">Features</button>
-            <button type="button" onClick={() => scrollTo('use-cases')} data-track="Nav: Use Cases">Use Cases</button>
-            <button type="button" onClick={() => scrollTo('examples')} data-track="Nav: Examples">Examples</button>
-            <button type="button" onClick={() => scrollTo('pricing')} data-track="Nav: Pricing">Pricing</button>
-            <a href="/teams/" data-track="Nav: For teams">For teams</a>
-            {onOpenTenureMonitor && (
-              <button type="button" onClick={onOpenTenureMonitor} data-track="Nav: Tenure Monitor">
-                Tenure Monitor
-              </button>
-            )}
-            {user ? (
-              <button type="button" onClick={onOpenAccount} data-track="Nav: Dashboard">Dashboard</button>
-            ) : (
-              <button type="button" onClick={() => setShowAuth(true)} data-track="Nav: Sign up free">Sign in / Sign up free</button>
-            )}
+            {navigationLinks}
           </nav>
+          <details className="lm-nav-menu" ref={menuRef}>
+            <summary>Menu</summary>
+            <nav aria-label="Mobile main">{navigationLinks}</nav>
+          </details>
           <button className="lm-btn lm-btn-primary lm-nav-cta" type="button" onClick={onOpenEditor} data-track="Nav: Start Mapping">
             Start a map
           </button>
