@@ -494,7 +494,9 @@ const BUDGETS = {
   // Loaded-project editing: revision/camera-driven preview and a trace-only
   // visibility refresh replace continuous idle painting/full scene rebuilds.
   // Measured175.6KiB; bound this scheduling logic to another0.2KiB.
-  threeDJsGzipKb: 175.8,
+  // Explicit Fit model / Pick focus controls and bounded geometry ray picking.
+  // Current measured entry176.1KiB; keep a narrow0.2KiB stamp allowance.
+  threeDJsGzipKb: 176.3,
   // /3d's own modules fetched on first use (the geology, geophysics and tag layers, the account
   // client). They never load with the page or the app, so they sit outside the page and app totals.
   // 32 → 34 (Oct 2026, round 4): per-hole tags, grouped pending tags, callouts beside or bracketed on their

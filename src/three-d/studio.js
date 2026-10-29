@@ -1076,7 +1076,11 @@ const FORMATS = {
   a4: { w: 3508, h: 2480, label: 'Print A4 landscape', use: '300 dpi print' },
 };
 const frameEl = $('frame');
-let W = 1, H = 1, previewRevision = 0;
+let W = 1, H = 1, previewRevision = 0, pickingFocus = false;
+function pickFocusMode(on) {
+  pickingFocus = on; $('camera-focus').setAttribute('aria-pressed', String(on));
+  glCanvas.style.cursor = on ? 'crosshair' : '';
+}
 const pad3 = (v) => String(Math.round(v)).padStart(3, '0');
 function layoutFrame() {
   previewRevision++;
@@ -1964,10 +1968,12 @@ STEPS.forEach((s) => $(`step-${s}`).addEventListener('click', () => showStep(s))
 document.querySelectorAll('[data-goto]').forEach((b) => b.addEventListener('click', () => showStep(b.dataset.goto)));
 function showView(v) {
   if (v !== '3d' && v !== 'section') throw new Error('View must be "3d" or "section".');
+  pickFocusMode(false);
   S.view = v; const sec = v === 'section';
   $('export-current').textContent = `Download current ${sec ? 'section' : '3D view'} (PNG)`;
   $('view-3d').setAttribute('aria-selected', String(!sec)); $('view-section').setAttribute('aria-selected', String(sec));
   secCanvas.hidden = !sec; glCanvas.hidden = sec; ov.hidden = sec; if (sec) drawSectionView(); schedulePublish();
+  $('camera-fit').hidden = sec; $('camera-focus').hidden = sec;
 }
 $('view-3d').addEventListener('click', () => showView('3d'));
 $('view-section').addEventListener('click', () => showView('section'));
@@ -2364,6 +2370,18 @@ function labelAt(e) {
 }
 frameEl.addEventListener('pointerdown', (e) => {
   if (S.view !== '3d' || e.button > 0) return; previewRevision++; const hit = labelAt(e);
+  if (pickingFocus) {
+    e.preventDefault(); e.stopImmediatePropagation();
+    if (!G || S.lockView) { pickFocusMode(false); return; }
+    camera.updateMatrixWorld(); rayAt(e);
+    const shown = (o) => { if (!o) return false; for (let n = o; n; n = n.parent) if (!n.visible) return false; return true; };
+    const point = raycaster.intersectObjects([G.top, ...G.walls, G.tubes, G.tubesP, ...(G.shellMesh?.children || []), ...G.meshes.map((x) => x.m)].filter(shown), false)[0]?.point;
+    if (!point) { status('Click the terrain, a drill hole or a model surface. Escape cancels.'); return; }
+    const c = getCam(), centre = camTarget().sub(aim);
+    pickFocusMode(false);
+    setCamera({ pan: point.clone().sub(centre).toArray(), zoom: Math.min(250, Math.max(100, c.zoom * 1.5)) }, true);
+    syncCamUI(); schedulePublish(); status('Focus moved. Zoom and orbit around this point; Fit model returns to the drilling.'); return;
+  }
   if (!hit) {
     // A label on a block face: dragged along that face's plane.
     const wh = wallLabelAt(e); if (!wh) return;
@@ -2387,7 +2405,7 @@ frameEl.addEventListener('pointerdown', (e) => {
   try { frameEl.setPointerCapture(e.pointerId); } catch { /* synthetic events */ }
 }, true);
 frameEl.addEventListener('pointermove', (e) => {
-  if (!labelDrag) { glCanvas.style.cursor = S.view === '3d' && (labelAt(e) || wallLabelAt(e)) ? 'move' : S.lockView ? 'default' : ''; return; }
+  if (!labelDrag) { glCanvas.style.cursor = pickingFocus ? 'crosshair' : S.view === '3d' && (labelAt(e) || wallLabelAt(e)) ? 'move' : S.lockView ? 'default' : ''; return; }
   previewRevision++;
   if (labelDrag.wall) {
     const P = rayAt(e).intersectPlane(labelDrag.plane, new THREE.Vector3()); if (!P) return;
@@ -2410,7 +2428,17 @@ frameEl.addEventListener('pointermove', (e) => {
 }, true);
 addEventListener('wheel', (e) => { if (e.target !== glCanvas) wheelOut = performance.now(); }, { capture: true, passive: true });
 frameEl.addEventListener('wheel', (e) => { const t = performance.now(); if (t - wheelOut < 400) wheelOut = t; if (S.lockView || wheelOut === t) e.stopPropagation(); }, { capture: true, passive: true }); // a stream that began elsewhere stays ignored until it pauses
-$('lock-view').addEventListener('click', () => setStyle({ lockView: !S.lockView }, false));
+$('lock-view').addEventListener('click', () => { pickFocusMode(false); setStyle({ lockView: !S.lockView }, false); });
+$('camera-fit').addEventListener('click', () => {
+  if (!G) return; pickFocusMode(false); tween = null;
+  const c = getCam(); stopOrbit(); frameView({ azimuth: c.azimuth, plunge: c.plunge, zoom: 100 }, true);
+  syncCamUI(); schedulePublish(); status('Whole drilling model framed.');
+});
+$('camera-focus').addEventListener('click', () => {
+  if (S.lockView) { status('Unlock view before choosing a focus point.'); return; }
+  pickFocusMode(!pickingFocus); status(pickingFocus ? 'Click a point on the model to focus there. Escape cancels; Fit model returns to the drilling.' : 'Focus selection cancelled.');
+});
+addEventListener('keydown', (e) => { if (e.key === 'Escape' && pickingFocus) { pickFocusMode(false); status('Focus selection cancelled.'); } });
 // Locking also stops any orbit still easing out (damping), so the view stays exactly where it is.
 function stopOrbit() { const p = camera.position.clone(), t = controls.target.clone(); controls.enableDamping = false; controls.update(); controls.enableDamping = true; camera.position.copy(p); controls.target.copy(t); controls.update(); }
 
