@@ -74,4 +74,8 @@ describe('explicit brand picker', () => {
   it('shows missing-schema fallback without touching the figure', async () => {
     const u=ui(backend({error:{code:'PGRST205'}}));await u.picker.refresh();expect(u.note()).toContain('not available');expect(u.api.setFigureStyle).not.toHaveBeenCalled();
   });
+  it('keeps the local figure usable when account configuration is absent', async () => {
+    const b=backend(),u=ui(b);b.sb.auth.getUser.mockRejectedValue({code:'NOT_CONFIGURED'});
+    await u.picker.refresh();expect(u.note()).toContain('not available');expect(u.api.setFigureStyle).not.toHaveBeenCalled();
+  });
 });

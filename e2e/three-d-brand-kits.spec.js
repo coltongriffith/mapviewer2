@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+test.skip(!process.env.E2E_ADMIN, 'Requires the configured client build with isolated auth fixtures');
 test.use({launchOptions:{args:['--no-sandbox','--disable-dev-shm-usage','--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist']}});
 test.beforeEach(({page})=>page.on('dialog',d=>d.type()==='beforeunload'?d.accept():d.dismiss()));
 const uid='00000000-0000-4000-8000-0000000003d1';
