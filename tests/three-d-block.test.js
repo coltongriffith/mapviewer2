@@ -27,23 +27,27 @@ describe('block section furniture', () => {
 });
 
 describe('block section settings', () => {
-  const host = () => { const S = { holesShown: null, block: null }, calls = []; init({ S, G: {}, project: { holes: [{ id: 'A' }, { id: 'B' }] }, rebuild: () => calls.push('rebuild'), setStyle: () => calls.push('style'), renderExtUI: () => {}, status: () => {} }); return { S, calls }; };
+  const host = () => { const S = { holesShown: null, block: null }, calls = []; init({ S, G: {}, project: { holes: [{ id: 'A' }, { id: 'B' }] }, rebuild: () => calls.push('rebuild'), refreshTraces: () => calls.push('traces'), buildWallLabels: () => calls.push('labels'), setStyle: () => calls.push('style'), renderExtUI: () => {}, status: () => {} }); return { S, calls }; };
   it('shows only the holes given, and every hole again with null', () => {
     const { S, calls } = host();
-    setHolesShown(['B', 'B']); expect(S.holesShown).toEqual(['B']); expect(calls).toEqual(['rebuild', 'style']);
+    setHolesShown(['B', 'B']); expect(S.holesShown).toEqual(['B']); expect(calls).toEqual(['traces', 'style']);
     expect(() => setHolesShown(['C'])).toThrow(/No hole "C"/);
     expect(() => setHolesShown([])).toThrow(/list of hole IDs/);
     setHolesShown(null); expect(S.holesShown).toBe(null);
   });
   it('patches the look, checks each value, and turns it off with null', () => {
-    const { S } = host();
+    const { S, calls } = host();
     setBlock({ brackets: 'card', hist: { scale: 'log', length: 9 } });
+    expect(calls.splice(0)).toEqual(['rebuild', 'style']);
     expect(S.block).toEqual({ ...BLOCK, brackets: 'card', hist: { ...BLOCK.hist, scale: 'log', length: 3 } });
     expect(() => setBlock({ traces: 'thick' })).toThrow(/traces must be/);
     expect(() => setBlock({ hist: { side: 'up' } })).toThrow(/hist.side/);
     expect(S.block.brackets).toBe('card'); // a refused patch changes nothing
     setBlock({ holes: ['A'] }); expect(S.holesShown).toEqual(['A']);
-    setBlock(null); expect(S.block).toBe(null);
+    expect(calls.splice(0)).toEqual(['traces', 'style']);
+    setBlock({ info: 'New heading' }); expect(calls.splice(0)).toEqual(['style']);
+    setBlock({ units: 'fixed' }); expect(calls.splice(0)).toEqual(['labels', 'style']);
+    setBlock(null); expect(S.block).toBe(null); expect(calls).toEqual(['rebuild', 'style']);
   });
   it('leaves a figure saved before round 5E without holes hidden or a block look', () => {
     const out = withDefaults({ designVersion: 5, title: 'Old' }, { holesShown: null, block: null, title: '' });
