@@ -83,6 +83,12 @@ ol.how { margin: 0; padding-left: 20px; display: grid; gap: 3px; font-size: 14px
 .btn.primary { background: var(--slate-950); border-color: var(--slate-950); color: #fff; }
 .btn.primary:hover { background: var(--slate-800); }
 .btn.next { align-self: flex-end; }
+.terrain-choices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 8px; }
+.terrain-choices .btn { flex-direction: column; padding: 9px 5px; font-size: 13px; }
+.terrain-choices .btn::before { content: ''; width: 100%; height: 28px; border-radius: 3px; background: linear-gradient(145deg, #c6c9b0, #68765a); }
+.terrain-choices [data-terrain-choice="light"]::before { background: linear-gradient(145deg, #f2f0e8, #b8b5aa); }
+.terrain-choices [data-terrain-choice="dark"]::before { background: linear-gradient(145deg, #627078, #263238); }
+.terrain-choices [aria-pressed="true"] { border-color: var(--copper); box-shadow: inset 0 0 0 1px var(--copper); }
 :where(button, a, input, select, textarea, summary, label.btn):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .need { display: grid; gap: 7px; }
 .need-item { display: grid; grid-template-columns: 22px 1fr; gap: 0 8px; font-size: 14px; }
@@ -445,6 +451,15 @@ html.em3d-version .share-bar .btn { padding: 6px 11px; }
     <div class="pane" id="pane-layout" role="tabpanel" aria-labelledby="step-layout" hidden>
       <div class="pane-head"><div class="kicker">Step 3 of 4</div><h2>Set up the figure</h2>
         <p>Choose what colours the holes, which intercepts to call out, and the camera.</p></div>
+      <section aria-labelledby="terrain-choices-title">
+        <h3 id="terrain-choices-title">Terrain palette</h3>
+        <div class="terrain-choices" role="group" aria-label="Quick terrain palettes">
+          <button class="btn" type="button" data-terrain-choice="natural" aria-pressed="false">Natural</button>
+          <button class="btn" type="button" data-terrain-choice="light" aria-pressed="false">Light relief</button>
+          <button class="btn" type="button" data-terrain-choice="dark" aria-pressed="false">Dark slate</button>
+        </div>
+        <p class="muted" style="margin-top:8px">Changes terrain colours only. More terrain styles and detailed controls are below.</p>
+      </section>
       <!-- Looks: one click sets up a figure from settings below, each changeable after (block.js, loaded on first use). -->
       <section id="ext-block">
         <h3>Look</h3>

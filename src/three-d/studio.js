@@ -2129,6 +2129,7 @@ function setStyle(o = {}, render = true) {
     S.blockExtent = e && Object.keys(e).length ? e : null; rebuild = true;
   }
   if (o.terrain !== undefined) { if (!TERRAINS[o.terrain]) throw new Error(`terrain must be one of: ${Object.keys(TERRAINS).join(', ')}.`); S.terrain = o.terrain; }
+  renderTerrainChoices();
   if (o.terrainSource !== undefined) { if (!['auto', 'topo', 'dem', 'collars'].includes(o.terrainSource)) throw new Error('terrainSource must be auto, topo, dem or collars.'); rebuild = rebuild || S.terrainSource !== o.terrainSource; S.terrainSource = o.terrainSource; }
   const ve = o.verticalExaggeration ?? o.vex;
   if (ve !== undefined) { const v = +ve; if (!Number.isFinite(v)) throw new Error('verticalExaggeration must be a number from 1 to 5.'); const nv = Math.max(1, Math.min(5, v)); rebuild = rebuild || nv !== S.vex; S.vex = nv; }
@@ -2491,7 +2492,12 @@ function extState() {
   const imgs = (g) => ({ ...structuredClone({ ...g, images: undefined }), images: Object.fromEntries(Object.keys(g.images || {}).map((k) => [k, true])) });
   return { geology: EXT.geology ? EXT.geology.state() : imgs(S.geology), geophys: EXT.geophys ? EXT.geophys.state() : structuredClone(S.geophys), tags: EXT.tags ? EXT.tags.state() : { ...structuredClone(S.tags), histograms: S.histograms, insetStyle: S.insetStyle }, crew: EXT.crew ? EXT.crew.state() : structuredClone(S.crew) };
 }
+function renderTerrainChoices() {
+  document.querySelectorAll('[data-terrain-choice]').forEach((el) => el.setAttribute('aria-pressed', String(el.dataset.terrainChoice === S.terrain)));
+}
+document.querySelectorAll('[data-terrain-choice]').forEach((el) => el.addEventListener('click', () => tryStyle({ terrain: el.dataset.terrainChoice })));
 function renderExtUI() {
+  renderTerrainChoices();
   document.querySelectorAll('[data-ext]').forEach((el) => { const [g, k] = el.dataset.ext.split('.'), v = g === 'style' || g === 'view' ? S[k] : S[g][k]; if (el.type === 'checkbox') el.checked = !!v; else el.value = v; });
   [['geology', 'geo-ui'], ['geophys', 'gp-ui'], ['tags', 'tag-ui'], ['section', 'sec-holes'], ['overlays', 'ov-ui'], ['shapes', 'shape-ui'], ['sections', 'sec-tabs'], ['mapuse', 'mapinfo-ui'], ['block', 'block-ui'], ['crew', 'crew-ui']].forEach(([k, id]) => { if (EXT[k]) EXT[k].renderUI($(id)); });
   document.querySelectorAll('[data-secmode]').forEach((b) => b.setAttribute('aria-pressed', String((b.dataset.secmode === 'chosen') === !!S.section?.holes)));
