@@ -133,6 +133,8 @@ input[type="range"] { width: 100%; }
 .mesh { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; font-size: 13.5px; }
 input[type="color"] { width: 34px; height: 26px; border: 1px solid var(--slate-200); border-radius: 4px; padding: 1px; background: #fff; }
 .logo-box { display: grid; grid-template-columns: 96px 1fr; gap: 12px; align-items: center; border: 1px solid var(--slate-200); border-radius: 8px; padding: 10px; }
+.logo-box .field { min-width: 0; }
+.logo-box input[type="file"], #brand-kits-select { min-width: 0; max-width: 100%; }
 .logo-prev { width: 96px; height: 56px; border: 1px dashed var(--slate-300); border-radius: 6px; display: grid; place-items: center; background: #fff; overflow: hidden; color: var(--slate-500); font-size: 12px; }
 .logo-prev img, .logo-prev canvas { max-width: 90px; max-height: 50px; }
 .logo-checker { background: repeating-conic-gradient(#e3e8e9 0 25%, #fff 0 50%) 0 0 / 12px 12px; }
@@ -410,6 +412,16 @@ html.em3d-version .share-bar .btn { padding: 6px 11px; }
     <div class="pane" id="pane-brand" role="tabpanel" aria-labelledby="step-brand" hidden>
       <div class="pane-head"><div class="kicker">Step 2 of 4</div><h2>Brand it as your company</h2>
         <p>Add your logo and the figure takes its colours. Adjust anything below.</p></div>
+      <section aria-label="Saved brand kits">
+        <h3>Reuse a brand kit</h3>
+        <p class="muted">Use your saved 2D kit’s colours, supported font and inline logo. Grade cutoffs, camera and scientific settings stay as they are.</p>
+        <button class="btn" type="button" id="brand-kits-load">Load my brand kits</button>
+        <div id="brand-kits-choices" hidden>
+          <label class="field"><span>My brand kits</span><select id="brand-kits-select"></select></label>
+          <button class="btn" type="button" id="brand-kits-apply" disabled>Apply brand kit</button>
+        </div>
+        <p class="muted" id="brand-kits-note" role="status" aria-live="polite"></p>
+      </section>
       <div class="logo-box">
         <div class="logo-prev" id="logo-prev">No logo</div>
         <div class="field"><span>Company logo (PNG, JPG or SVG)</span><input type="file" id="logo-input" accept="image/*"><button class="btn" type="button" id="logo-clear" style="justify-self:start;padding:3px 9px">Remove logo</button></div>
@@ -738,6 +750,8 @@ html.em3d-version .share-bar .btn { padding: 6px 11px; }
         <label class="check" style="margin-top:6px"><input type="checkbox" id="export-svg">Include editable annotations (SVG)</label>
         <p class="muted" style="margin-top:4px">Adds annotations.svg: the annotations with live text, lines and boxes, to stack over the 3D render in Illustrator or Figma. The 3D render stays a PNG.</p>
       </section>
+      <details>
+        <summary>Optional design service</summary>
       <form class="upgrade" id="desk" novalidate>
         <strong>Want it hand-finished?</strong>
         <p class="muted">Send this figure and its layers to the Exploration Maps design desk. We refine geology, labels and layout to your brand and return print-ready files within 48 hours.</p>
@@ -748,6 +762,7 @@ html.em3d-version .share-bar .btn { padding: 6px 11px; }
         <p class="desk-msg" id="desk-msg" role="status" aria-live="polite" hidden></p>
         <a class="muted" id="request-design" href="/teams/?ref=3d">or see Exploration Maps for Teams</a>
       </form>
+      </details>
       <details>
         <summary>For AI assistants and browser agents</summary>
         <pre id="ai-help"></pre>
@@ -761,6 +776,8 @@ html.em3d-version .share-bar .btn { padding: 6px 11px; }
         <button class="tab" role="tab" id="view-3d" aria-selected="true">3D figure</button>
         <button class="tab" role="tab" id="view-section" aria-selected="false">Section A–A′</button>
       </div>
+      <button class="btn" type="button" id="camera-fit" title="Return to the whole drilling model">Fit model</button>
+      <button class="btn" type="button" id="camera-focus" aria-pressed="false" title="Choose a point on the model to orbit and zoom around">Pick focus</button>
       <button class="btn" type="button" id="lock-view" aria-pressed="false" title="Stop the mouse and trackpad from turning, zooming or panning the view">Lock view</button>
       <div class="acct">
         <button class="btn" type="button" id="hist-btn" aria-haspopup="true" aria-expanded="false" aria-controls="hist" title="Recent changes (Ctrl/Cmd+Z to undo, Shift+Ctrl/Cmd+Z to redo)">History</button>
