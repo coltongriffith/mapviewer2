@@ -488,7 +488,10 @@ const BUDGETS = {
   // Layout disclosures: shell enablement sync and warning-driven expansion of
   // its callout/parent groups. Configured measured175.319KiB (+~50B of logic);
   // native HTML/CSS handles the groups, preserving a narrowly bounded startup.
-  threeDJsGzipKb: 175.4,
+  // Terrain palette chooser: existing terrain styles with synchronized button
+  // state. Final stamped page measures175.4KiB; allow <0.2KiB for this UI,
+  // retaining the lazy renderer/exports and existing dependency versions.
+  threeDJsGzipKb: 175.6,
   // /3d's own modules fetched on first use (the geology, geophysics and tag layers, the account
   // client). They never load with the page or the app, so they sit outside the page and app totals.
   // 32 → 34 (Oct 2026, round 4): per-hole tags, grouped pending tags, callouts beside or bracketed on their
