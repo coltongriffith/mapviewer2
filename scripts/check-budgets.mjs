@@ -485,7 +485,10 @@ const BUDGETS = {
   // 174.6 -> 174.9: the anonymous unsaved-figure indicator and unload guard must run before
   // account features load. Configured build measures 174.7 kB; Supabase remains lazy.
   // Tour launch button and snapshot hook: measured 175.0; viewer remains lazy.
-  threeDJsGzipKb: 175.3,
+  // Layout disclosures: shell enablement sync and warning-driven expansion of
+  // its callout/parent groups. Configured measured175.319KiB (+~50B of logic);
+  // native HTML/CSS handles the groups, preserving a narrowly bounded startup.
+  threeDJsGzipKb: 175.4,
   // /3d's own modules fetched on first use (the geology, geophysics and tag layers, the account
   // client). They never load with the page or the app, so they sit outside the page and app totals.
   // 32 → 34 (Oct 2026, round 4): per-hole tags, grouped pending tags, callouts beside or bracketed on their

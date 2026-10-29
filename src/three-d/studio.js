@@ -922,6 +922,7 @@ function setShell(o = {}) {
 }
 function renderShellUI() {
   const sh = S.shell, busy = shell.busy, st = shell.mesh?.stats;
+  $('shell-controls').hidden = !sh.enabled;
   $('shell-on').checked = sh.enabled; $('shell-color').value = shellColor(); $('shell-ghost').checked = !!sh.throughTerrain;
   if (document.activeElement?.id !== 'shell-cut') $('shell-cut').value = +shellCut().toPrecision(4); $('shell-cut').disabled = !!sh.shells?.length;
   $('shell-unit').textContent = S.valueLabel; $('shell-op').value = Math.round(sh.opacity * 100); $('shell-op-out').textContent = `${Math.round(sh.opacity * 100)}%`;
@@ -1972,7 +1973,14 @@ function renderSummary() {
 // The callout editor (callout-editor.js), loaded when the Layout step first shows.
 let CE = null;
 function renderCalloutEditor() {
-  if (CE) CE.render($('callout-editor'), { S, esc, PR, read: prRead, callouts, calc: calcCallouts, shown: shownCallouts(), icText, gaps: gapCallouts().map(gapText), setCallout, setStyle, status, redraw: () => { drawSectionView(); schedulePublish(); } });
+  if (CE) {
+    CE.render($('callout-editor'), { S, esc, PR, read: prRead, callouts, calc: calcCallouts, shown: shownCallouts(), icText, gaps: gapCallouts().map(gapText), setCallout, setStyle, status, redraw: () => { drawSectionView(); schedulePublish(); } });
+    // Scientific/source warnings must never disappear behind the new disclosure.
+    if ($('callout-editor').querySelector('.warn')) {
+      $('callout-editor').parentElement.open = true;
+      $('callout-editor').closest('.layout-group').open = true;
+    }
+  }
   else if (currentStep === 'layout') import('./callout-editor.js').then((m) => { CE = m; renderCalloutEditor(); });
 }
 function syncBrandUI() {
