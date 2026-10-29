@@ -83,6 +83,12 @@ ol.how { margin: 0; padding-left: 20px; display: grid; gap: 3px; font-size: 14px
 .btn.primary { background: var(--slate-950); border-color: var(--slate-950); color: #fff; }
 .btn.primary:hover { background: var(--slate-800); }
 .btn.next { align-self: flex-end; }
+.terrain-choices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 8px; }
+.terrain-choices .btn { flex-direction: column; padding: 9px 5px; font-size: 13px; }
+.terrain-choices .btn::before { content: ''; width: 100%; height: 28px; border-radius: 3px; background: linear-gradient(145deg, #c6c9b0, #68765a); }
+.terrain-choices [data-terrain-choice="light"]::before { background: linear-gradient(145deg, #f2f0e8, #b8b5aa); }
+.terrain-choices [data-terrain-choice="dark"]::before { background: linear-gradient(145deg, #627078, #263238); }
+.terrain-choices [aria-pressed="true"] { border-color: var(--copper); box-shadow: inset 0 0 0 1px var(--copper); }
 :where(button, a, input, select, textarea, summary, label.btn):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .need { display: grid; gap: 7px; }
 .need-item { display: grid; grid-template-columns: 22px 1fr; gap: 0 8px; font-size: 14px; }
@@ -445,6 +451,15 @@ html.em3d-version .share-bar .btn { padding: 6px 11px; }
     <div class="pane" id="pane-layout" role="tabpanel" aria-labelledby="step-layout" hidden>
       <div class="pane-head"><div class="kicker">Step 3 of 4</div><h2>Set up the figure</h2>
         <p>Choose what colours the holes, which intercepts to call out, and the camera.</p></div>
+      <section aria-labelledby="terrain-choices-title">
+        <h3 id="terrain-choices-title">Terrain palette</h3>
+        <div class="terrain-choices" role="group" aria-label="Quick terrain palettes">
+          <button class="btn" type="button" data-terrain-choice="natural" aria-pressed="false">Natural</button>
+          <button class="btn" type="button" data-terrain-choice="light" aria-pressed="false">Light relief</button>
+          <button class="btn" type="button" data-terrain-choice="dark" aria-pressed="false">Dark slate</button>
+        </div>
+        <p class="muted" style="margin-top:8px">Changes terrain colours only. More terrain styles and detailed controls are below.</p>
+      </section>
       <!-- Looks: one click sets up a figure from settings below, each changeable after (block.js, loaded on first use). -->
       <section id="ext-block">
         <h3>Look</h3>
@@ -475,7 +490,6 @@ html.em3d-version .share-bar .btn { padding: 6px 11px; }
 <section>
         <h3>Display</h3>
         <div class="row" style="gap:14px">
-          <label class="check"><input type="checkbox" id="opt-walls" data-ext="style.walls" checked>Glass block sides</label>
           <label class="check"><input type="checkbox" id="opt-ids" data-ext="style.ids" checked>Hole IDs</label>
           <label class="check"><input type="checkbox" id="opt-inset" data-ext="style.inset" checked>Plan inset</label>
           <label class="check"><input type="checkbox" id="opt-ribbons" data-ext="style.ribbons" checked>Intercept bars beside holes</label>
@@ -492,7 +506,10 @@ html.em3d-version .share-bar .btn { padding: 6px 11px; }
             <option value="satellite">Satellite</option><option value="muted">Satellite, muted</option></select></label>
           <label class="field"><span>Surface from</span><select id="terrain-src" data-ext="style.terrainSource">
             <option value="auto">Best available</option><option value="topo">Your topography</option><option value="dem">Real elevation (DEM)</option><option value="collars">Collar elevations</option></select></label>
-          <label class="field"><span>Block sides</span><select id="block-style" data-ext="style.blockStyle"><option value="glass">Glass</option><option value="solid">Solid block</option></select></label>
+          <div class="field"><span>Block sides</span>
+            <label class="check"><input type="checkbox" id="opt-walls" data-ext="style.walls" checked>Show block sides</label>
+            <label class="field" id="block-material-controls"><span>Side material</span><select id="block-style" data-ext="style.blockStyle"><option value="glass">Glass</option><option value="solid">Solid block</option></select></label>
+          </div>
           <label class="field"><span>Real elevation vs collars</span><select id="collar-fit" data-ext="style.collarFit"><option value="collars">Move terrain to collars</option><option value="terrain">Hang holes from terrain</option></select></label>
           <label class="field"><span>Presentation</span><select data-ext="scene.theme"><option value="light">Light</option><option value="dark">Dark</option></select></label>
         </div>

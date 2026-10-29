@@ -21,6 +21,18 @@ for(const [name,width,height] of [['desktop',1280,900],['mobile',390,844]]){
     await expect(page.locator('#callout-editor')).toBeHidden();await callouts.click();await expect(page.locator('#callout-editor')).toBeVisible();await callouts.click();
     const same=await page.evaluate(before=>({png:window.EM3D.exportPNG({view:'3d'})===before.png,settings:JSON.stringify(window.EM3D.getProject().settings)===JSON.stringify(before.settings)}),original);
     expect(same).toEqual({png:true,settings:true});
+    const saved=await page.evaluate(()=>window.EM3D.getProject());
+    await page.getByRole('combobox',{name:'Side material',exact:true}).selectOption('solid');
+    await page.getByRole('checkbox',{name:'Show block sides',exact:true}).uncheck();
+    await expect(page.locator('#block-material-controls')).toBeHidden();
+    // Turning sides off must retain the chosen material; API and restored
+    // projects must reveal/hide the controls just like the checkbox does.
+    await page.evaluate(()=>window.EM3D.setStyle({walls:true}));
+    await expect(page.locator('#block-style')).toBeVisible();await expect(page.locator('#block-style')).toHaveValue('solid');
+    await page.evaluate(async()=>{const E=window.EM3D;E.setStyle({walls:false});const p=E.getProject();E.setStyle({walls:true});await E.loadProject(p);await E.layersReady();});
+    await expect(page.locator('#opt-walls')).not.toBeChecked();await expect(page.locator('#block-material-controls')).toBeHidden();
+    await page.evaluate(async p=>{await window.EM3D.loadProject(p);await window.EM3D.layersReady();},saved);
+    expect(await page.evaluate(before=>({settings:JSON.stringify(window.EM3D.getProject().settings)===JSON.stringify(before.settings),png:window.EM3D.exportPNG({view:'3d'})===before.png}),original)).toEqual({settings:true,png:true});
     await expect(page.locator('#shell-controls')).toBeHidden();
     // Programmatic settings and restored projects must reveal controls too,
     // without needing the checkbox's DOM change event.
