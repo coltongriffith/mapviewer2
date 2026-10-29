@@ -151,7 +151,8 @@ export function resolveTemplateZones(template, layout, mapSize, legendItems) {
   // need: it used to cap at 500 and let the rest scroll, so the export clipped
   // the last rows of a long legend.
   // Without one: fitted to the entries (layout.legendFit), else the older estimate (legendPanelHeight).
-  const legendHeight = legendPanelHeight(resolvedLegendItems, layout, legendHeightFor(layout, legendRowCount(resolvedLegendItems, layout)));
+  const legendHeight = legendPanelHeight(resolvedLegendItems, layout, legendHeightFor(layout, legendRowCount(resolvedLegendItems, layout)))
+    + (layout?.propertyNeighboursVersion === 1 && resolvedLegendItems.length ? 20 : 0);
   const legendWidth = legendWidthFor(layout, resolvedLegendItems);
   const logoScale = Math.max(0.7, Math.min(1.2, Number(layout?.logoScale || 1)));
   const insetScale = Math.max(0.8, Math.min(1.2, Number(layout?.insetScale || 1)));
@@ -181,7 +182,7 @@ export function resolveTemplateZones(template, layout, mapSize, legendItems) {
     if (studio?.[id]) return studio[id];
     switch (id) {
       case 'title':      return [titleWidth, titleHeight];
-      case 'logo':       return [logoW, logoH];
+      case 'logo':       return layout?.propertyNeighboursVersion === 1 && !layout.logo ? [0, 0] : [logoW, logoH];
       case 'inset':      return layout?.insetEnabled === false ? [0, 0] : [insetWidth, insetHeight];
       case 'northArrow': return [naW, naH];
       case 'scaleBar':   return [BASE_ZONES.scaleBar.width, BASE_ZONES.scaleBar.height + (layout?.showProjectionLabel ? 16 : 0)];
