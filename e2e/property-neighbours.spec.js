@@ -1,5 +1,13 @@
 import { test, expect } from '@playwright/test';
+import { inflateRawSync } from 'node:zlib';
 import { createInitialProjectState } from '../shared/projectState.js';
+
+// Draft autosave uses gz1: raw-deflate storage; the initial fixture is plain
+// JSON. Inspect both representations without changing the app's storage path.
+async function readDraft(page) {
+  const raw = await page.evaluate(() => localStorage.getItem('mapviewer.draft.v1'));
+  return JSON.parse(raw?.startsWith('gz1:') ? inflateRawSync(Buffer.from(raw.slice(4), 'base64')).toString('utf8') : raw);
+}
 
 // Synthetic geometry only. Hosted coverage of the actual card → recipe →
 // stage/export path; the real reference-data result is reviewed separately.
@@ -40,8 +48,8 @@ test('property template prepopulates supplied content and survives restore', asy
     const el = document.querySelector('.legend-card');
     return el && el.scrollHeight <= el.clientHeight + 1;
   })).toBe(true);
-  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('mapviewer.draft.v1')).payload.layout.exportRatio)).toBe('landscape');
-  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('mapviewer.draft.v1')).payload);
+  await expect.poll(async () => (await readDraft(page))?.payload?.layout?.exportRatio).toBe('landscape');
+  const saved = (await readDraft(page)).payload;
   expect(saved.layers[0].geojson).toEqual(p.layers[0].geojson);
   expect(saved.layers[0].style.fill).toBe('#c8a538');
   expect(saved.layers[0].fx.label.field).toBe('CLAIM_NAME');
