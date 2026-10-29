@@ -2101,6 +2101,7 @@ function setStyle(o = {}, render = true) {
   }
   if (S.valueCol2 === S.valueCol) S.valueCol2 = null;
   ['walls', 'ids', 'inset', 'ribbons', 'pendingLabels', 'pendingNoAssays', 'elevTicks', 'lockView', 'grid', 'dropShadow'].forEach((k) => { if (o[k] !== undefined) S[k] = !!o[k]; });
+  $('block-material-controls').hidden = !S.walls;
   extStyle(o); // EXT hook: histograms, insetStyle
   if (o.calloutMode !== undefined) { if (!['calculated', 'published', 'manual'].includes(o.calloutMode)) throw new Error('calloutMode must be "calculated", "published" or "manual".'); S.calloutMode = o.calloutMode; }
   if (o.coPlacement !== undefined) { if (!['column', 'beside', 'bracket'].includes(o.coPlacement)) throw new Error('coPlacement must be "column" (left column), "beside" (a box beside each hole) or "bracket" (a bracket on the hole with the grade beside it).'); S.coPlacement = o.coPlacement; extScene(); }
@@ -2499,6 +2500,7 @@ document.querySelectorAll('[data-terrain-choice]').forEach((el) => el.addEventLi
 function renderExtUI() {
   renderTerrainChoices();
   document.querySelectorAll('[data-ext]').forEach((el) => { const [g, k] = el.dataset.ext.split('.'), v = g === 'style' || g === 'view' ? S[k] : S[g][k]; if (el.type === 'checkbox') el.checked = !!v; else el.value = v; });
+  $('block-material-controls').hidden = !S.walls;
   [['geology', 'geo-ui'], ['geophys', 'gp-ui'], ['tags', 'tag-ui'], ['section', 'sec-holes'], ['overlays', 'ov-ui'], ['shapes', 'shape-ui'], ['sections', 'sec-tabs'], ['mapuse', 'mapinfo-ui'], ['block', 'block-ui'], ['crew', 'crew-ui']].forEach(([k, id]) => { if (EXT[k]) EXT[k].renderUI($(id)); });
   document.querySelectorAll('[data-secmode]').forEach((b) => b.setAttribute('aria-pressed', String((b.dataset.secmode === 'chosen') === !!S.section?.holes)));
 }
