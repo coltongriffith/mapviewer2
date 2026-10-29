@@ -1,12 +1,21 @@
 import { describe, it, expect, vi } from 'vitest';
 import { gradeRank, joinIds, padMerge, crowded } from '../src/three-d/section-fit.js';
 import { secFrame } from '../src/three-d/section-geometry.js';
-import { gridTicks, barSpan, barOf, holeBars, isPlanView } from '../src/three-d/plan.js';
+import { gridTicks, barSpan, barOf, holeBars, isPlanView, tubesVisible } from '../src/three-d/plan.js';
 import { due, stampOf, watchVersion } from '../src/three-d/version-check.js';
 import { DESIGN_VERSION, LEGACY_V4, FEATURES, uses, withDefaults } from '../src/three-d/design-version.js';
 import { pubLines, staleNotes, tie, textOf } from '../src/three-d/published-results.js';
 
 // A straight hole down from (x, y, 1000) at the given dip, with 10 m intervals of the given grades.
+it('keeps plan bars and block overlays from re-enabling assay tubes in either sync order', () => {
+  for (const traces of [undefined, 'tubes', 'overlay']) {
+    const s = { designVersion: 5, block: traces ? { traces } : null };
+    expect(tubesVisible(s, 80)).toBe(false); expect(tubesVisible(s, 89)).toBe(false);
+    expect(tubesVisible(s, 79)).toBe(traces !== 'overlay');
+    expect(tubesVisible({ ...s, designVersion: 4 }, 89)).toBe(traces !== 'overlay');
+  }
+});
+
 function hole(id, x, y, grades, dip = -90) {
   const len = grades.length * 10, r = dip * Math.PI / 180, at = (d) => ({ x, y: y + Math.cos(r) * d * 0, z: 1000 + Math.sin(r) * d });
   const path = Array.from({ length: len / 2 + 1 }, (_, i) => ({ d: i * 2, ...at(i * 2) }));
