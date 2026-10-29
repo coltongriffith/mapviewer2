@@ -324,6 +324,7 @@ describe('3D typography adapter', () => {
     const H = { S: { brandStyle }, sans: type.LEGACY.sans, statuses: [], rebuilt: 0, redrawn: 0 };
     Object.assign(H, {
       fonts(s) { if (s) H.sans = s; return H.sans; }, buildWallLabels: () => { H.rebuilt++; }, redraw: () => { H.redrawn++; }, status: (m) => H.statuses.push(m),
+      project: {}, loadImg: vi.fn(async () => ({ staged: true })), commitLogo: vi.fn(),
     });
     return H;
   }
@@ -395,14 +396,55 @@ describe('3D typography adapter', () => {
     try {
       await type.setFigureStyle({ colours: { primary: '#0a4268', accent: '#ae4b0a' }, logo: { assetRef: LOGO } }, { brandKitId: 'kit-1', brandRevision: 'r1' });
       expect(setBrand).toHaveBeenCalledWith({ primary: '#0a4268', accent: '#ae4b0a' });
-      expect(setLogo).toHaveBeenCalledWith(LOGO, { autoColor: false });
+      expect(H.commitLogo).toHaveBeenCalledWith({ staged: true }, LOGO);
+      expect(setLogo).not.toHaveBeenCalled(); // staged logo commits without another async decode
       expect(H.S.brandStyle).toMatchObject({ brandKitId: 'kit-1', brandRevision: 'r1', mode: 'style', fonts: null });
       expect(H.S.brandStyle.style.logo.assetRef).toBe('figure:logo');
       await expect(type.setFigureStyle({ colours: { primary: 'navy' } })).rejects.toThrow(/colours\.primary/);
       await type.setFigureStyle({ logo: { assetRef: 'https://cdn.example.com/l.png' } });
-      expect(setLogo).toHaveBeenCalledTimes(1); // an https logo would taint the export canvas
+      expect(H.commitLogo).toHaveBeenCalledTimes(1); // an https logo would taint the export canvas
       await type.setFigureStyle(null);
       expect(H.S.brandStyle).toBeNull();
     } finally { delete globalThis.EM3D; }
+  });
+  it('leaves colours, logo and metadata intact when staging a logo fails', async () => {
+    const saved = { brandKitId: 'original' }, H = host(saved); type.init(H);
+    H.loadImg.mockRejectedValue(new Error('bad logo'));
+    const setBrand = vi.fn(); globalThis.EM3D = { setBrand };
+    try {
+      await expect(type.setFigureStyle({ colours: { accent: '#123456' }, logo: { assetRef: LOGO } })).rejects.toThrow('bad logo');
+      expect(setBrand).not.toHaveBeenCalled(); expect(H.commitLogo).not.toHaveBeenCalled(); expect(H.S.brandStyle).toBe(saved);
+    } finally { delete globalThis.EM3D; }
+  });
+  it.each(['figure', 'account'])('discards a staged logo after the %s context changes', async (kind) => {
+    const H = host(); type.init(H); let finish, active = true;
+    H.loadImg.mockImplementation(() => new Promise((r) => { finish = r; }));
+    const setBrand = vi.fn(); globalThis.EM3D = { setBrand };
+    try {
+      const pending = type.setFigureStyle({ colours: { accent: '#123456' }, logo: { assetRef: LOGO } }, { isCurrent: () => active });
+      if (kind === 'figure') H.project = {}; else active = false;
+      finish({ staged: true }); await pending;
+      expect(setBrand).not.toHaveBeenCalled(); expect(H.commitLogo).not.toHaveBeenCalled(); expect(H.S.brandStyle).toBeNull(); expect(H.redrawn).toBe(0);
+    } finally { delete globalThis.EM3D; }
+  });
+  it('keeps the newer style when an earlier logo finishes later', async () => {
+    const H = host(); type.init(H); let finish;
+    H.loadImg.mockImplementation(() => new Promise((r) => { finish = r; }));
+    const setBrand = vi.fn(); globalThis.EM3D = { setBrand };
+    try {
+      const pending = type.setFigureStyle({ colours: { accent: '#123456' }, logo: { assetRef: LOGO } }, { brandKitId: 'old' });
+      await type.setFigureStyle({ colours: { accent: '#abcdef' } }, { brandKitId: 'new' });
+      finish({ staged: true }); await pending;
+      expect(setBrand).toHaveBeenCalledTimes(1); expect(setBrand).toHaveBeenCalledWith({ accent: '#abcdef' });
+      expect(H.commitLogo).not.toHaveBeenCalled(); expect(H.S.brandStyle.brandKitId).toBe('new');
+    } finally { delete globalThis.EM3D; }
+  });
+  it('does not repaint a replacement figure when an earlier font sync finishes', async () => {
+    const realFonts = document.fonts, finish = [], H = host({ fonts: { sans: 'IBM Plex Mono' } }); type.init(H);
+    Object.defineProperty(document, 'fonts', { configurable: true, value: { load: () => new Promise((r) => finish.push(r)) } });
+    try {
+      const pending = type.sync(); H.project = {}; finish.forEach((r) => r([{}])); await pending;
+      expect(H.sans).toBe(type.LEGACY.sans); expect(H.rebuilt).toBe(0); expect(H.redrawn).toBe(0);
+    } finally { Object.defineProperty(document, 'fonts', { configurable: true, value: realFonts }); }
   });
 });
