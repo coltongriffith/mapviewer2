@@ -57,6 +57,7 @@ export function createBrandKitPicker({ getClient = client, api = window.EM3D, do
     finally { if (token === epoch) { apply.disabled = !rows.length; load.disabled = false; select.disabled = false; } }
   }
   apply.addEventListener('click', applySelected);
+  doc.defaultView?.addEventListener('em3d:figure-loading', () => clear('The figure changed. Load your brand kits again.'));
   return { refresh, clear };
 }
 

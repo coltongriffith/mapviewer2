@@ -71,6 +71,14 @@ describe('explicit brand picker', () => {
     expect(document.getElementById('brand-kits-select').disabled).toBe(false);finish();
     await vi.waitFor(()=>expect(document.getElementById('brand-kits-select').disabled).toBe(false));
   });
+  it('cancels a pending apply even when an identical figure is opened', async () => {
+    const b=backend(),u=ui(b);await u.picker.refresh();let finish;
+    b.sb.auth.getUser.mockImplementationOnce(()=>new Promise(r=>{finish=r;}));
+    document.getElementById('brand-kits-apply').click();await vi.waitFor(()=>expect(finish).toBeTypeOf('function'));
+    window.dispatchEvent(new Event('em3d:figure-loading'));finish({data:{user:{id:'owner-a'}}});
+    await vi.waitFor(()=>expect(u.note()).toContain('figure changed'));expect(u.api.setFigureStyle).not.toHaveBeenCalled();
+    expect(document.getElementById('brand-kits-choices').hidden).toBe(true);
+  });
   it('shows missing-schema fallback without touching the figure', async () => {
     const u=ui(backend({error:{code:'PGRST205'}}));await u.picker.refresh();expect(u.note()).toContain('not available');expect(u.api.setFigureStyle).not.toHaveBeenCalled();
   });

@@ -141,7 +141,7 @@ function sampleFiles() {
 // 3. Project state built from the files
 // ============================================================
 let files = [];          // { name, text, role, header, rows, cols, grades, mesh }
-let project = null;      // derived geometry
+let project = null, projectLoad = 0; // derived geometry; invalidates staged styles before a load awaits assets
 let usingSample = true;
 const S = {              // style
   title: 'EXAMPLE RIDGE · MAIN ZONE', subtitle: '3D drilling model, looking northeast',
@@ -2595,8 +2595,8 @@ const EXT_API = {
   async zoomToCrew() { const m = await extLoad('crew'); await extReady(); showView('3d'); m.zoomTo(); return getState(); },
   layersReady: async () => { await extReady(); return getState(); },
   async setFigureStyle(style, meta = {}) {
-    const target = project, check = meta.isCurrent;
-    await (await extLoad('type')).setFigureStyle(style, { ...meta, isCurrent: () => project === target && (typeof check !== 'function' || check()) });
+    const target = project, generation = projectLoad, check = meta.isCurrent;
+    await (await extLoad('type')).setFigureStyle(style, { ...meta, isCurrent: () => project === target && projectLoad === generation && (typeof check !== 'function' || check()) });
     return getState();
   },
 };
@@ -2718,6 +2718,7 @@ const filesDigest = () => files.map((f) => `${f.name}|${fileDigest(f)}`).join(',
 async function loadProject(p) {
   if (!p || p.v !== 1 || !p.settings || typeof p.settings !== 'object' || !Array.isArray(p.files)) throw new Error('loadProject expects a project from EM3D.getProject() ({ v: 1, settings, files }).');
   if (p.files.some((f) => !f || typeof f.name !== 'string' || typeof f.text !== 'string')) throw new Error('Each project file needs a name and its text.');
+  projectLoad++; window.dispatchEvent(new Event('em3d:figure-loading'));
   const saved = withDefaults(p.settings, S_DEFAULTS), { logo, ...rest } = saved, imgs = {}; // an earlier figure keeps its look
   await Promise.all(Object.entries(rest).filter(([, v]) => isImg(v)).map(async ([k, v]) => { imgs[k] = await loadImg(v.$image); }));
   if (isImg(logo)) await setLogo(logo.$image, { autoColor: false }); else await setLogo(null);
