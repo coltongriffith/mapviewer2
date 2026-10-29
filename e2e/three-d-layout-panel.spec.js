@@ -2,7 +2,9 @@ import {test,expect} from '@playwright/test';
 
 for(const [name,width,height] of [['desktop',1280,900],['mobile',390,844]]){
   test('Layout groups disclose controls without changing the figure: '+name,async({page})=>{
-    test.setTimeout(120000);await page.setViewportSize({width,height});
+    // Two project restores, full-size PNG comparisons and a shell worker can
+    // approach120s on CI software rendering; allow the final screenshot too.
+    test.setTimeout(180000);await page.setViewportSize({width,height});
     await page.route('**/api/track',r=>r.fulfill({status:204}));
     await page.goto('/3d');await page.waitForFunction(()=>window.EM3D?.getState().ready);await page.evaluate(()=>window.EM3D.layersReady());
     await page.getByRole('tab',{name:'3 Layout',exact:true}).click();

@@ -390,6 +390,26 @@ controls.enableDamping = true; controls.dampingFactor = 0.08; controls.maxPolarA
 let root = new THREE.Group(); scene.add(root);
 let G = null; // geometry context: origin, block, surface, holes w/ paths, meshes
 
+// Visibility edits replace only the four lightweight trace sets. Terrain,
+// interpreted surfaces and assay instance buffers stay in the existing scene.
+function refreshTraces() {
+  if (!G) return;
+  (G.traceNodes || []).forEach((node) => { root.remove(node); node.geometry.dispose(); node.material.dispose(); });
+  G.traceNodes = [];
+  const holes = project.holes, V = G.V, diag = G.diagH, traceSeg = [[], [], [], []];
+  holes.forEach((h) => { h.planned = isPlanned(h); });
+  computeCallouts();
+  holes.forEach((h) => {
+    h.prov = isProvisional(h); if (!holeOn(h)) return;
+    const segs = traceSeg[h.planned ? 2 : h.prov ? 1 : extFade(h) ? 3 : 0];
+    for (let i = 0; i + 1 < h.path.length; i++) segs.push(V(h.path[i].x, h.path[i].y, h.path[i].z), V(h.path[i + 1].x, h.path[i + 1].y, h.path[i + 1].z));
+  });
+  const add = (node) => { G.traceNodes.push(node); root.add(node); };
+  add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(traceSeg[0]), new THREE.LineBasicMaterial({ color: '#59646a' })));
+  if (traceSeg[1].length) { const dl = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(traceSeg[1]), new THREE.LineDashedMaterial({ color: '#59646a', dashSize: diag / 120, gapSize: diag / 180, transparent: true, opacity: 0.75 })); dl.computeLineDistances(); add(dl); }
+  if (traceSeg[2].length) { const dl = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(traceSeg[2]), new THREE.LineDashedMaterial({ color: S.primary, dashSize: diag / 90, gapSize: diag / 150 })); dl.computeLineDistances(); add(dl); }
+  if (traceSeg[3].length) add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(traceSeg[3]), new THREE.LineBasicMaterial({ color: '#b7c0c3' })));
+}
 function rebuildScene(keepCam) {
   const cam0 = keepCam && G ? getCam() : null, fit0 = G?.fit || 1;
   scene.remove(root); root.traverse((o) => { o.geometry?.dispose?.(); o.material?.map?.dispose?.(); o.material?.dispose?.(); }); root = new THREE.Group(); scene.add(root);
@@ -517,19 +537,7 @@ function rebuildScene(keepCam) {
   }
 
   // Holes: grey trace, then coloured assay intervals. Provisional positions: dashed and fainter.
-  const traceSeg = [[], [], [], []]; // EXT hook: [2] planned, [3] faded previously released
-  holes.forEach((h) => { h.planned = isPlanned(h); }); // EXT hook: before extFade reads the statuses
-  computeCallouts(); // the key holes (EXT hook: emphasis) include the callout holes
-  holes.forEach((h) => {
-    h.prov = isProvisional(h); if (!holeOn(h)) return;
-    // Status/emphasis applies to the whole hole, not each two-metre segment.
-    const segs = traceSeg[h.planned ? 2 : h.prov ? 1 : extFade(h) ? 3 : 0];
-    for (let i = 0; i + 1 < h.path.length; i++) segs.push(V(h.path[i].x, h.path[i].y, h.path[i].z), V(h.path[i + 1].x, h.path[i + 1].y, h.path[i + 1].z));
-  });
-  root.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(traceSeg[0]), new THREE.LineBasicMaterial({ color: '#59646a' })));
-  if (traceSeg[1].length) { const dl = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(traceSeg[1]), new THREE.LineDashedMaterial({ color: '#59646a', dashSize: diag / 120, gapSize: diag / 180, transparent: true, opacity: 0.75 })); dl.computeLineDistances(); root.add(dl); }
-  if (traceSeg[2].length) { const dl = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(traceSeg[2]), new THREE.LineDashedMaterial({ color: S.primary, dashSize: diag / 90, gapSize: diag / 150 })); dl.computeLineDistances(); root.add(dl); } // EXT hook
-  if (traceSeg[3].length) root.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(traceSeg[3]), new THREE.LineBasicMaterial({ color: '#b7c0c3' }))); // EXT hook
+  refreshTraces();
   const nInt = holes.reduce((s, h) => s + h.ints.length, 0);
   // three 0.147 culls an InstancedMesh by its unit base geometry at the origin, not its instances.
   const tube = (mat) => { const t = new THREE.InstancedMesh(new THREE.CylinderGeometry(1, 1, 1, 8), mat, Math.max(1, nInt)); t.frustumCulled = false; root.add(t); return t; };
@@ -1068,9 +1076,14 @@ const FORMATS = {
   a4: { w: 3508, h: 2480, label: 'Print A4 landscape', use: '300 dpi print' },
 };
 const frameEl = $('frame');
-let W = 1, H = 1;
+let W = 1, H = 1, previewRevision = 0, pickingFocus = false;
+function pickFocusMode(on) {
+  pickingFocus = on; $('camera-focus').setAttribute('aria-pressed', String(on));
+  glCanvas.style.cursor = on ? 'crosshair' : '';
+}
 const pad3 = (v) => String(Math.round(v)).padStart(3, '0');
 function layoutFrame() {
+  previewRevision++;
   const f = FORMATS[S.format], a = f.w / f.h, sw = stage.clientWidth, sh = stage.clientHeight;
   const top = 56, side = 20, bottom = 44, aw = Math.max(60, sw - side * 2), ah = Math.max(60, sh - top - bottom);
   const fw = Math.floor(Math.min(aw, ah * a)), fh = Math.floor(fw / a);
@@ -1779,12 +1792,23 @@ function drawSectionView() {
 // ============================================================
 // 8. Loop and export
 // ============================================================
+let paintedRevision = -1, paintedAt = -Infinity;
+const paintedPosition = new THREE.Vector3(Infinity, Infinity, Infinity), paintedRotation = new THREE.Quaternion();
 function loop(now) {
   if (tween) { const k = Math.min(1, (now - tween.t0) / 900), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
     camera.position.lerpVectors(tween.from, tween.to, e); controls.target.lerpVectors(tween.fromT, tween.toT, e); if (k >= 1) tween = null; }
   controls.update(); if (ortho()) camera.updateProjectionMatrix(); hazeNow();
-  if (G && S.view === '3d') { camera.updateMatrixWorld(); if (!G.ribbonView || camera.getWorldDirection(tmpV).dot(G.ribbonView) < 0.99998) { placeRibbons(); faceWalls(); } }
-  if (S.view === '3d') { foot(S.dropShadow); EXT.crew?.tick(now); renderer.render(scene, camera); drawOverlay(ov.getContext('2d'), DPR, false); syncCamUI(); }
+  const moved = paintedPosition.distanceToSquared(camera.position) > 1e-18 || 1 - Math.abs(paintedRotation.dot(camera.quaternion)) > 1e-12;
+  // Keep controls responsive without repainting a large static model at 60 fps.
+  // Changes and motion draw immediately; crew animation keeps its full loop.
+  // A periodic refresh also covers asynchronously arriving image textures.
+  if (S.view === '3d' && (previewRevision !== paintedRevision || moved || tween || S.crew.on || now - paintedAt >= 1000)) {
+    paintedRevision = previewRevision; paintedAt = now;
+    camera.updateMatrixWorld();
+    if (G && (!G.ribbonView || camera.getWorldDirection(tmpV).dot(G.ribbonView) < 0.99998)) { placeRibbons(); faceWalls(); }
+    foot(S.dropShadow); EXT.crew?.tick(now); renderer.render(scene, camera); drawOverlay(ov.getContext('2d'), DPR, false); syncCamUI();
+    paintedPosition.copy(camera.position); paintedRotation.copy(camera.quaternion);
+  }
   requestAnimationFrame(loop);
 }
 // One export canvas at the chosen size. layer "scene" is the WebGL render alone on transparent;
@@ -1949,10 +1973,12 @@ STEPS.forEach((s) => $(`step-${s}`).addEventListener('click', () => showStep(s))
 document.querySelectorAll('[data-goto]').forEach((b) => b.addEventListener('click', () => showStep(b.dataset.goto)));
 function showView(v) {
   if (v !== '3d' && v !== 'section') throw new Error('View must be "3d" or "section".');
+  pickFocusMode(false);
   S.view = v; const sec = v === 'section';
   $('export-current').textContent = `Download current ${sec ? 'section' : '3D view'} (PNG)`;
   $('view-3d').setAttribute('aria-selected', String(!sec)); $('view-section').setAttribute('aria-selected', String(sec));
   secCanvas.hidden = !sec; glCanvas.hidden = sec; ov.hidden = sec; if (sec) drawSectionView(); schedulePublish();
+  $('camera-fit').hidden = sec; $('camera-focus').hidden = sec;
 }
 $('view-3d').addEventListener('click', () => showView('3d'));
 $('view-section').addEventListener('click', () => showView('section'));
@@ -2348,7 +2374,22 @@ function labelAt(e) {
   return null;
 }
 frameEl.addEventListener('pointerdown', (e) => {
-  if (S.view !== '3d' || e.button > 0) return; const hit = labelAt(e);
+  if (S.view !== '3d' || e.button > 0) return; previewRevision++; const hit = labelAt(e);
+  if (pickingFocus) {
+    e.preventDefault(); e.stopImmediatePropagation();
+    if (!G || S.lockView) { pickFocusMode(false); return; }
+    camera.updateMatrixWorld(); rayAt(e);
+    const shown = (o) => { if (!o) return false; for (let n = o; n; n = n.parent) if (!n.visible) return false; return true; };
+    const point = raycaster.intersectObjects([G.top, ...G.walls, G.tubes, G.tubesP, ...(G.shellMesh?.children || []), ...G.meshes.map((x) => x.m)].filter(shown), false).find((hit) => {
+      const material = Array.isArray(hit.object.material) ? hit.object.material[hit.face?.materialIndex || 0] : hit.object.material;
+      return material?.visible !== false && (material?.opacity ?? 1) > 0;
+    })?.point;
+    if (!point) { status('Click the terrain, a drill hole or a model surface. Escape cancels.'); return; }
+    const c = getCam(), centre = camTarget().sub(aim);
+    pickFocusMode(false);
+    setCamera({ pan: point.clone().sub(centre).toArray(), zoom: Math.min(250, Math.max(100, c.zoom * 1.5)) }, true);
+    syncCamUI(); schedulePublish(); status('Focus moved. Zoom and orbit around this point; Fit model returns to the drilling.'); return;
+  }
   if (!hit) {
     // A label on a block face: dragged along that face's plane.
     const wh = wallLabelAt(e); if (!wh) return;
@@ -2372,7 +2413,8 @@ frameEl.addEventListener('pointerdown', (e) => {
   try { frameEl.setPointerCapture(e.pointerId); } catch { /* synthetic events */ }
 }, true);
 frameEl.addEventListener('pointermove', (e) => {
-  if (!labelDrag) { glCanvas.style.cursor = S.view === '3d' && (labelAt(e) || wallLabelAt(e)) ? 'move' : S.lockView ? 'default' : ''; return; }
+  if (!labelDrag) { glCanvas.style.cursor = pickingFocus ? 'crosshair' : S.view === '3d' && (labelAt(e) || wallLabelAt(e)) ? 'move' : S.lockView ? 'default' : ''; return; }
+  previewRevision++;
   if (labelDrag.wall) {
     const P = rayAt(e).intersectPlane(labelDrag.plane, new THREE.Vector3()); if (!P) return;
     const L = labelDrag.wall.userData.L, [u, v] = faceUV(L.face, P); L.u = clamp01(u - labelDrag.du, L.u); L.v = clamp01(v - labelDrag.dv, L.v); placeWallLabel(labelDrag.wall); return;
@@ -2394,7 +2436,17 @@ frameEl.addEventListener('pointermove', (e) => {
 }, true);
 addEventListener('wheel', (e) => { if (e.target !== glCanvas) wheelOut = performance.now(); }, { capture: true, passive: true });
 frameEl.addEventListener('wheel', (e) => { const t = performance.now(); if (t - wheelOut < 400) wheelOut = t; if (S.lockView || wheelOut === t) e.stopPropagation(); }, { capture: true, passive: true }); // a stream that began elsewhere stays ignored until it pauses
-$('lock-view').addEventListener('click', () => setStyle({ lockView: !S.lockView }, false));
+$('lock-view').addEventListener('click', () => { pickFocusMode(false); setStyle({ lockView: !S.lockView }, false); });
+$('camera-fit').addEventListener('click', () => {
+  if (!G) return; pickFocusMode(false); tween = null;
+  const c = getCam(); stopOrbit(); frameView({ azimuth: c.azimuth, plunge: c.plunge, zoom: 100 }, true);
+  syncCamUI(); schedulePublish(); status('Whole drilling model framed.');
+});
+$('camera-focus').addEventListener('click', () => {
+  if (S.lockView) { status('Unlock view before choosing a focus point.'); return; }
+  pickFocusMode(!pickingFocus); status(pickingFocus ? 'Click a point on the model to focus there. Escape cancels; Fit model returns to the drilling.' : 'Focus selection cancelled.');
+});
+addEventListener('keydown', (e) => { if (e.key === 'Escape' && pickingFocus) { pickFocusMode(false); status('Focus selection cancelled.'); } });
 // Locking also stops any orbit still easing out (damping), so the view stays exactly where it is.
 function stopOrbit() { const p = camera.position.clone(), t = controls.target.clone(); controls.enableDamping = false; controls.update(); controls.enableDamping = true; camera.position.copy(p); controls.target.copy(t); controls.update(); }
 
@@ -2437,7 +2489,7 @@ const host = () => (extHost ||= {
   watermark: async (w) => { const o = wmOpts(w); WM ||= await import('../export/watermarkBand.js'); return (c) => WM.withWatermarkBand(c, o); }, // the band, for desk.js
   format: () => FORMATS[S.format], fileSlug, downloadURL, loadImg, commitLogo,
   terrain: rtLoad, IMAGERY_CREDIT, status, redraw: () => { extScene(); drawSectionView(); schedulePublish(); },
-  ROLE_LABEL, ROLE_FIELDS, FIELD_LABEL, gradeCols, refresh, get PR() { return PR; }, setStyle, pad3, labelFor, dcutChoices, meshName, restyle, schedulePublish,
+  ROLE_LABEL, ROLE_FIELDS, FIELD_LABEL, gradeCols, refresh, refreshTraces, get PR() { return PR; }, setStyle, pad3, labelFor, dcutChoices, meshName, restyle, schedulePublish,
   renderShellUI, renderEq, renderExtUI, renderLegendUI, FORMATS, setFigureSize, updateLabel, removeLabel, updateWallLabel, removeWallLabel,
   metalCols, unitOf, setEquivalent, getChecks, setProvisional,
   step: () => currentStep, renderFiles, sectionChanged: () => { refresh.secSet = true; restyle(); renderStyle(); schedulePublish(); },
@@ -2603,6 +2655,7 @@ function getState() {
 }
 let pubT = 0;
 function schedulePublish() {
+  previewRevision++;
   if (pubT) return;
   pubT = setTimeout(() => { pubT = 0; const st = getState(); $('em3d-state').textContent = JSON.stringify(st); window.dispatchEvent(new CustomEvent('em3d:change', { detail: st })); histTick(); }, 60);
 }
@@ -2747,4 +2800,4 @@ layoutFrame();
 loadSample();
 new ResizeObserver(() => { const c = G ? getCam() : null; layoutFrame(); if (c) setCamera(c, true); }).observe(stage);
 requestAnimationFrame(loop);
-if (document.fonts?.ready) document.fonts.ready.then(drawSectionView);
+if (document.fonts?.ready) document.fonts.ready.then(() => { previewRevision++; drawSectionView(); });
