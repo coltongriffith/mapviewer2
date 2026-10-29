@@ -13,6 +13,7 @@ export function init(host) { H = host; S = host.S; }
 
 export const PLAN_PLUNGE = 80;
 export const isPlanView = (plunge) => plunge >= PLAN_PLUNGE;
+export const tubesVisible = (settings, plunge) => !(uses(settings, 'planView') && isPlanView(plunge)) && settings.block?.traces !== 'overlay';
 // Grid values between lo and hi every step: a round step (1, 2 or 5 × 10ⁿ m) giving about n lines.
 export function gridTicks(lo, hi, n = 5) {
   if (!(hi > lo) || !(n > 0)) return { step: 0, values: [] };
@@ -50,7 +51,7 @@ const feat = () => uses(S, 'planView');
 // The tubes hide in a plan view; the bars stand in for them (studio.js placeRibbons, extScene).
 // The tubes: hidden in a plan view, and while a block section draws its traces over the faces (block.js), whichever
 // sync runs last (this one runs with the ribbons, on every turn of the camera and before every export).
-export function sync() { const G = H.G; if (!G?.tubes) return; G.tubes.visible = G.tubesP.visible = !(feat() && on()) && S.block?.traces !== 'overlay'; }
+export function sync() { const G = H.G; if (!G?.tubes) return; G.tubes.visible = G.tubesP.visible = tubesVisible(S, H.getCam().plunge); }
 
 let barBoxes = [];
 const holeOn = (h) => !S.holesShown || S.holesShown.includes(h.id); // the holes shown (block.js)
