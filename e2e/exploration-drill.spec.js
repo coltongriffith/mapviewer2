@@ -67,7 +67,7 @@ test('portrait drill rail retains provided science, source text and pinned resul
     legend: { enabled: true, label: 'Provided soil samples', group: 'Geochemistry' },
     classification: { field: 'Cu_ppm', mode: 'graduated', classes: [{ max: 50, color: '#f2d435', label: '≤ 50' }, { max: null, color: '#983ab9', label: '> 50' }] },
     geojson: { type: 'FeatureCollection', features: [{ type: 'Feature', properties: { Cu_ppm: 30 }, geometry: { type: 'Point', coordinates: [-119.99,50.01] } }] } });
-  p.callouts = [{ id: 'provided-result', layerId: 'collars', featureId: '[-120,50]', type: 'boxed',
+  p.callouts = [{ id: 'provided-result', layerId: 'collars', featureId: 'collars:50.000000:-120.000000', type: 'boxed',
     text: 'Provided result — illustrative QA', subtext: 'Supplied text, not calculated',
     anchor: { lat: 50, lng: -120 }, offset: { x: 30, y: -20 }, isManualPosition: true }];
   await open(page, p);
@@ -77,6 +77,7 @@ test('portrait drill rail retains provided science, source text and pinned resul
   expect(saved.layers.map((l) => l.geojson)).toEqual(p.layers.map((l) => l.geojson));
   expect(saved.layers[1].classification).toEqual(p.layers[1].classification);
   expect(saved.callouts.find((c) => c.id === 'provided-result')).toEqual(p.callouts[0]);
+  expect(saved.callouts.filter((c) => c.text === 'QA-01')).toHaveLength(0);
   expect(saved.layout.titleBgColor).toBe(p.layout.titleBgColor);
   expect(saved.layout.exportRatio).toBe('portrait');
   await page.getByRole('button', { name: 'Preview', exact: true }).click();

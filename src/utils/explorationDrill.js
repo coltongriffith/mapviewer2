@@ -22,9 +22,16 @@ function suppliedCollarLabels(project) {
     if (!['string', 'number'].includes(typeof raw)) return [];
     const text = String(raw).trim(), key = String(featureKey(f)), [lng, lat] = f.geometry.coordinates || [];
     if (!text || text.length > 24 || !Number.isFinite(lng) || !Number.isFinite(lat) || counts.get(identity({ layer, f })) !== 1) return [];
-    if (existing.some((c) => String(c.featureId) === key && (!c.layerId || c.layerId === layer.id))) return [];
+    // Saved feature-override keys and annotation identities are separate
+    // contracts. Accept both legacy forms, including the feature editor's and
+    // published-results path's rounded collar-coordinate fallback.
+    const coordinateId = `${layer.id}:${lat.toFixed(6)}:${lng.toFixed(6)}`;
+    const annotationId = String(f.id ?? f.properties?.id ?? coordinateId);
+    const editorId = String(f.id || f.properties?.id || coordinateId);
+    const aliases = new Set([key, coordinateId, annotationId, editorId]);
+    if (existing.some((c) => c.featureId != null && aliases.has(String(c.featureId)) && (!c.layerId || c.layerId === layer.id))) return [];
     return [{ id: `drill-id:${encodeURIComponent(layer.id)}:${encodeURIComponent(key)}`, text, subtext: '', type: 'plain',
-      layerId: layer.id, featureId: key, anchor: { lng, lat }, offset: { x: 14, y: -16 }, priority: 2,
+      layerId: layer.id, featureId: annotationId, anchor: { lng, lat }, offset: { x: 14, y: -16 }, priority: 2,
       fit: true, style: { textColor: '#192635', background: '#ffffff', fontSize: 12, paddingX: 4, paddingY: 3 } }];
   });
   return additions.length ? [...existing, ...additions] : existing;

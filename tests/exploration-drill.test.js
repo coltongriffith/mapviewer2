@@ -5,6 +5,9 @@ import { DEFAULT_SIDE_PANEL_GRID, sidePanelTemplate, resolveSidePanelZones } fro
 import { panelObstacles } from '../src/utils/calloutLayout.js';
 import { buildLegendItems } from '../src/templates/technicalResultsTemplate.js';
 import { applyLegendCustomization } from '../src/utils/legendCustomization.js';
+import { collarCallouts } from '../src/utils/publishedCallouts.js';
+import { readFileSync } from 'node:fs';
+import Papa from 'papaparse';
 
 function fixture() {
   const p = createInitialProjectState();
@@ -42,12 +45,45 @@ describe('Exploration & Drill presentation recipe', () => {
   it('adds supplied short collar IDs through existing callouts without duplicating labels or results', () => {
     const p = fixture(), before = structuredClone(p), next = applyExplorationDrill(p);
     expect(next.callouts).toHaveLength(1);
-    expect(next.callouts[0]).toMatchObject({ text: 'QA-1', featureId: 'QA-1', layerId: 'collars',
+    expect(next.callouts[0]).toMatchObject({ text: 'QA-1', featureId: 'collars:50.010000:-119.990000', layerId: 'collars',
       anchor: { lat: 50.01, lng: -119.99 }, type: 'plain', subtext: '' });
     expect(applyExplorationDrill(next).callouts).toEqual(next.callouts);
     const removed = { ...next, callouts: [] };
     expect(applyExplorationDrill(removed).callouts).toEqual([]);
     expect(p).toEqual(before);
+  });
+  it('recognises feature-editor coordinate, feature-id, property-id and legacy annotation identities', () => {
+    for (const mode of ['coordinate', 'feature-id', 'property-id', 'legacy']) {
+      const p = fixture(), f = p.layers[1].geojson.features[0];
+      if (mode === 'feature-id') f.id = 'source-feature';
+      if (mode === 'property-id') f.properties.id = 'source-property';
+      const featureId = { coordinate: 'collars:50.010000:-119.990000', 'feature-id': 'source-feature',
+        'property-id': 'source-property', legacy: 'QA-1' }[mode];
+      p.callouts = [{ id: 'existing', layerId: 'collars', featureId, text: 'Existing supplied annotation', isManualPosition: true }];
+      const next = applyExplorationDrill(p);
+      expect(next.callouts).toBe(p.callouts);
+      expect(next.layers[1]).toBe(p.layers[1]);
+      const otherLayer = { ...p, callouts: [{ ...p.callouts[0], layerId: 'different-layer' }] };
+      expect(applyExplorationDrill(otherLayer).callouts).toHaveLength(2);
+    }
+  });
+  it('does not add an ID beside an actual published-results adapter annotation', () => {
+    const p = fixture(), f = p.layers[1].geojson.features[0];
+    f.properties = { _holeid: 'EX-021', label: 'EX-021' };
+    const data = Papa.parse(readFileSync('tests/fixtures/three-d/published-results.csv', 'utf8').trim(), { skipEmptyLines: true }).data;
+    const supplied = collarCallouts(data[0], data.slice(1), p.layers).callouts;
+    expect(supplied).toHaveLength(1);
+    expect(supplied[0].featureId).toBe('collars:50.010000:-119.990000');
+    p.callouts = supplied.map((c) => ({ ...c, id: `supplied-${c.resultId}` }));
+    expect(applyExplorationDrill(p).callouts).toBe(p.callouts);
+  });
+  it('does not match an unused property-id alias when a source feature-id takes precedence', () => {
+    const p = fixture(), f = p.layers[1].geojson.features[0];
+    f.id = 'source-feature'; f.properties.id = 'unrelated-property-id';
+    p.callouts = [{ id: 'other-note', layerId: 'collars', featureId: 'unrelated-property-id', text: 'Different feature note' }];
+    const next = applyExplorationDrill(p);
+    expect(next.callouts).toHaveLength(2);
+    expect(next.callouts[1].featureId).toBe('source-feature');
   });
   it('does not guess IDs, label dense/hidden/manual layers, or choose ambiguous shared feature keys', () => {
     const p = fixture(), collars = p.layers[1], f = collars.geojson.features[0];
