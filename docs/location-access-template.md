@@ -10,6 +10,16 @@ broader regional view, a contextual legend at the right and a combined scale/nor
 row. A single project label replaces only claim labels generated during this
 application; existing label decisions, including off, remain untouched.
 
+Fresh-workspace placeholder subtitles are replaced by Location & Access, while
+supplied descriptions stay. Existing reference-overlay choices are read before
+the legacy mode preset adds its defaults, so selecting this recipe does not
+enable unsolicited rail/label overlays. The default standalone map carries the
+supplied source note in its fitted legend; an explicit presentation choice stays.
+Its small compass retains its actual width beside the scale. Property labels use
+supplied property identity (or source caption), not a potentially different figure
+heading. Source headers ROAD_NAME_FULL/HIGHWAY_ROUTE_NUMBER are recognised only
+when complete and unambiguous; missing names are not replaced with invented text.
+
 Supplied complete road/route-name columns can label uploaded line layers. Manual
 and classified layers, source attributes and existing line symbology remain
 unchanged. No access right, seasonality, proposed/existing status, route distance,

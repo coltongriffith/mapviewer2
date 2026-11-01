@@ -1,4 +1,4 @@
-import { applyPropertyNeighbours, propertySubject } from './propertyNeighbours.js';
+import { applyPropertyNeighbours, propertySubject, propertyTitle } from './propertyNeighbours.js';
 import { visibleGeojson, layerGeometryKind } from './featureIdentity.js';
 import { isClassified } from './classification.js';
 
@@ -29,8 +29,9 @@ export function applyLocationAccess(project, referenceOverlays = project.layout?
       // No automatically generated tenure-ID carpet at regional scale. Keep
       // every user-supplied label decision, including an explicit off setting.
       const fx = original.fx;
-      const label = layer.id === subject?.id && fx?.label === undefined && (visibleGeojson(layer)?.features?.length || 0) <= 80 && base.layout.title !== 'Project Map'
-        ? { on: true, text: base.layout.title, per: 'layer', size: 18, minSize: 12, caps: false,
+      const projectLabel = propertyTitle(layer, 'Project Map');
+      const label = layer.id === subject?.id && fx?.label === undefined && (visibleGeojson(layer)?.features?.length || 0) <= 80 && projectLabel !== 'Project Map'
+        ? { on: true, text: projectLabel, per: 'layer', size: 18, minSize: 12, caps: false,
           weight: 700, ls: 0, fit: 'hide', color: '#233b43' } : null;
       return { ...layer, fx: label ? { ...fx, label } : fx };
     }
@@ -46,6 +47,7 @@ export function applyLocationAccess(project, referenceOverlays = project.layout?
       ...base.layout,
       propertyNeighboursVersion: undefined,
       locationAccessVersion: 1,
+      mapUse: project.layout?.mapUse || 'standalone',
       subtitle: genericSubtitle(project.layout?.subtitle) ? 'Location & Access' : project.layout.subtitle,
       zoomPadFrac: 0.8,
       compositionPreset: 'access',

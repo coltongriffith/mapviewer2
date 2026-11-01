@@ -210,7 +210,12 @@ export function resolveTemplateZones(template, layout, mapSize, legendItems) {
       for (const id of row) {
         let [w, h] = sizeOf(id);
         if (w === 0 && h === 0) { zones[id] = { top: 0, left: 0, width: 0, height: 0 }; continue; }
-        if (hCursor > 0) w = Math.max(120, Math.min(w, cornerBudget - hCursor));
+        if (hCursor > 0) {
+          // A small access-map compass beside the scale is an icon, not a
+          // text panel. Expanding it to120px can hide the supplied footer.
+          const minWidth = layout?.locationAccessVersion === 1 && id === 'northArrow' ? Math.min(120, w) : 120;
+          w = Math.max(minWidth, Math.min(w, cornerBudget - hCursor));
+        }
         let anchor;
         if (corner === 'tl') anchor = { top: safe.top + vOffset.tl, left: safe.left + hCursor };
         else if (corner === 'tr') anchor = { top: safe.top + vOffset.tr, right: safe.right + hCursor };

@@ -4,7 +4,8 @@ import { applyPropertyNeighbours } from '../src/utils/propertyNeighbours.js';
 import { createInitialProjectState } from '../shared/projectState.js';
 import { getCornerLayout } from '../src/utils/cornerLayout.js';
 import { fitProjectToTemplate } from '../src/utils/frameMapForTemplate.js';
-import { technicalResultsTemplate, resolveTemplateZones } from '../src/templates/technicalResultsTemplate.js';
+import { technicalResultsTemplate, resolveTemplateZones, buildLegendItems } from '../src/templates/technicalResultsTemplate.js';
+import { noteInLegend } from '../src/utils/legendCustomization.js';
 
 function project() {
   const p = createInitialProjectState();
@@ -32,6 +33,24 @@ describe('Location & Access first-result recipe', () => {
     const next = applyLocationAccess(project());
     expect(next.layers[0].fx.label).toMatchObject({ text: 'Example Ridge', per: 'layer' });
     expect(next.layers[0].fx.label.field).toBeUndefined();
+  });
+  it('uses the supplied property identity, not a different figure heading, on the property', () => {
+    const p = project(); p.layout.title = 'Regional Access Overview';
+    const next = applyLocationAccess(p);
+    expect(next.layout.title).toBe('Regional Access Overview');
+    expect(next.layers[0].fx.label.text).toBe('Example Ridge');
+  });
+  it('fits the source note into the standalone legend and keeps its compass compact', () => {
+    const next = applyLocationAccess(project());
+    const items = buildLegendItems(technicalResultsTemplate, next.layers, next.layout);
+    expect(noteInLegend(next.layout, items)).toBe(true);
+    expect(next.layout.footerText).toBe('Supplied source and date');
+    const zones = resolveTemplateZones(technicalResultsTemplate, next.layout, { width: 1600, height: 900 }, items);
+    expect(zones.northArrow.width).toBe(52);
+    next.layout.mapUse = 'presentation';
+    const presentation = resolveTemplateZones(technicalResultsTemplate, next.layout, { width: 1600, height: 900 }, items);
+    expect(presentation.footer.width).toBeGreaterThan(0);
+    expect(applyLocationAccess(next).layout.mapUse).toBe('presentation');
   });
   it('labels supplied road names without changing route status or line symbology', () => {
     const p = project(), next = applyLocationAccess(p);
