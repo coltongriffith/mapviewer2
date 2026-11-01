@@ -60,8 +60,8 @@ export const MAP_TYPES = {
     templateId: 'side_panel', mode: 'drill_plan', themeId: 'technical_sharp',
   },
   infrastructure: {
-    label: 'Infrastructure and access map',
-    note: 'Roads, rail, power and the route to the property.',
+    label: 'Location & Access',
+    note: 'Regional project context and supplied access routes, coordinated with your brand.',
     templateId: 'technical_results_v2', mode: 'access_location', themeId: 'investor_clean',
   },
   ni_43101: {

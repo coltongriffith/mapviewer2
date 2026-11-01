@@ -162,6 +162,7 @@ import {
 } from './utils/cloudStorage';
 import { applyBrandKitStyle, applyBrandKitTemplate } from './brandKit';
 import { applyPropertyNeighbours, propertySubject } from './utils/propertyNeighbours.js';
+import { applyLocationAccess } from './utils/locationAccess.js';
 import { useAuth } from './hooks/useAuth';
 import { useStorageUsage } from './hooks/useStorageUsage';
 import { supabase } from './lib/supabase';
@@ -3932,10 +3933,11 @@ export default function App({ initialAction = null }) {
       } : {};
       const withTemplate = {
         ...prev,
-        layout: { ...prev.layout, templateId: t.templateId, themeId: t.themeId, ...extra },
+        layout: { ...prev.layout, templateId: t.templateId, themeId: t.themeId, propertyNeighboursVersion: undefined, locationAccessVersion: undefined, ...extra },
       };
       const next = applyModeToProject(withTemplate, getTemplate(t.templateId), t.mode);
       if (typeId === 'claims') return applyPropertyNeighbours(next);
+      if (typeId === 'infrastructure') return applyLocationAccess(next);
       return { ...next, layout: { ...next.layout, propertyNeighboursVersion: undefined } };
     });
   };
@@ -3953,7 +3955,7 @@ export default function App({ initialAction = null }) {
       onboardingLayoutSelected: true,
       ...(typeId === 'investor' && project.layout.subtitle === 'Technical Results' ? { subtitle: 'Investor Map' } : {}),
     });
-    if (changed || typeId === 'claims') setInvestorFrameRequest((value) => value + 1);
+    if (changed || typeId === 'claims' || typeId === 'infrastructure') setInvestorFrameRequest((value) => value + 1);
     trackEvent('onboarding_step', { step: 'style', via: 'card', type: typeId });
   };
 

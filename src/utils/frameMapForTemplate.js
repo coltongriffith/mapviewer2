@@ -32,7 +32,11 @@ export function fitProjectToTemplate(project, map, template, mode = 'balanced', 
   if (!visibleLayers.length) return;
 
   let targetLayers;
-  if (project?.layout?.propertyNeighboursVersion === 1 && project.layout.primaryLayerId) {
+  if (project?.layout?.locationAccessVersion === 1 && project.layout.primaryLayerId) {
+    // Only deliberately designated route layers may widen the regional view;
+    // an entire uploaded roads database must not dwarf the project.
+    targetLayers = visibleLayers.filter((l) => l.id === project.layout.primaryLayerId || (l.role === 'roads_access' && l.focus === true));
+  } else if (project?.layout?.propertyNeighboursVersion === 1 && project.layout.primaryLayerId) {
     targetLayers = visibleLayers.filter((l) => l.id === project.layout.primaryLayerId);
   } else if (opts.focusRoles) {
     // Always prefer focus-role layers (claims, drillholes, targets) when they exist
