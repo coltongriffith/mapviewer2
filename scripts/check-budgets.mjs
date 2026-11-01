@@ -736,7 +736,9 @@ const BUDGETS = {
   claimsJsGzipKb: 295.9,
   // Live investor web map (/embed/map/<id>): map, legend, layer list, drill-result callouts and the drill plan
   // (its overlay loaded only when published with one), no editor; measured 243.9 configured, 177.5 plain with main.
-  embedAuthJsGzipKb: 244.2,
+  // Location & Access reuses the shared property-title helper; measured 244.2
+  // configured after native footer/label corrections, with narrow stamp margin.
+  embedAuthJsGzipKb: 244.5,
   embedJsGzipKb: 177.8,
   // Stylesheet, gzipped. Today ~29 kB.
   maxCssGzipKb: 40,
