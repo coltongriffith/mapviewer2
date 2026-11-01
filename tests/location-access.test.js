@@ -114,4 +114,20 @@ describe('Location & Access first-result recipe', () => {
     p.layers[1].focus = false;
     expect(fit().getEast()).toBeLessThan(-119.8);
   });
+  it('frames eligible claims when a first-uploaded road remains primary and the property is ambiguous', () => {
+    const p = project();
+    const other = structuredClone(p.layers[0]); other.id = 'other-property';
+    other.geojson.features[0].geometry.coordinates[0] = [[-120.05,50],[-120.03,50],[-120.03,50.02],[-120.05,50.02],[-120.05,50]];
+    p.layers = [p.layers[1], p.layers[0], other];
+    p.layout.primaryLayerId = 'roads';
+    const next = applyLocationAccess(p);
+    expect(next.layout.primaryLayerId).toBe('roads'); // No invented property choice.
+    for (const opts of [{ focusRoles: true }, {}]) {
+      const map = { getSize: () => ({ x: 1600, y: 900 }), fitBounds: vi.fn() };
+      fitProjectToTemplate(next, map, technicalResultsTemplate, 'access', opts);
+      const bounds = map.fitBounds.mock.calls[0][0];
+      expect(bounds.getWest()).toBeLessThan(-120.05);
+      expect(bounds.getEast()).toBeLessThan(-119.8); // Distant road endpoint excluded.
+    }
+  });
 });

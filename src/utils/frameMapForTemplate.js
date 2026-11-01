@@ -1,5 +1,5 @@
 import L from 'leaflet';
-import { visibleGeojson, hasVisibleFeatures } from './featureIdentity.js';
+import { visibleGeojson, hasVisibleFeatures, layerGeometryKind } from './featureIdentity.js';
 
 const FOCUS_ROLES = new Set(['claims', 'drillholes', 'target_areas', 'anomalies']);
 
@@ -31,14 +31,17 @@ export function fitProjectToTemplate(project, map, template, mode = 'balanced', 
   const visibleLayers = getVisibleLayers(project);
   if (!visibleLayers.length) return;
 
+  const accessMap = project?.layout?.locationAccessVersion === 1;
+  const accessProperty = accessMap && visibleLayers.find((l) => l.id === project.layout.primaryLayerId
+    && l.role === 'claims' && l.focus !== false && layerGeometryKind(l) === 'polygon');
   let targetLayers;
-  if (project?.layout?.locationAccessVersion === 1 && project.layout.primaryLayerId) {
+  if (accessProperty) {
     // Only deliberately designated route layers may widen the regional view;
     // an entire uploaded roads database must not dwarf the project.
     targetLayers = visibleLayers.filter((l) => l.id === project.layout.primaryLayerId || (l.role === 'roads_access' && l.focus === true));
   } else if (project?.layout?.propertyNeighboursVersion === 1 && project.layout.primaryLayerId) {
     targetLayers = visibleLayers.filter((l) => l.id === project.layout.primaryLayerId);
-  } else if (opts.focusRoles) {
+  } else if (opts.focusRoles || accessMap) {
     // Always prefer focus-role layers (claims, drillholes, targets) when they exist
     // focus:false marks context drawn in a focus role — the agent builder's
     // neighbouring claims — which must not widen the frame past the project.
