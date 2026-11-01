@@ -41,7 +41,14 @@ inferred, no class ID/value/style changes, and explicit user group overrides sti
 win. Narrow rails reserve additional title/source-note wrapping space without
 altering their text; existing saved layouts outside this recipe are unchanged.
 
-Before review: actual available-input native desktop/mobile/no-logo/restore/PNG
-checks, supplied-result preservation, source review, focused browser regressions,
-final measured plain/configured builds/budgets and a focused PR. No merge or
-production activation is authorized by this implementation.
+Native sample and collar-only upload checks cover desktop/mobile portrait,
+logo/no-logo, scientific field context, preserved sample result text, history,
+reselection, local restore and actual watermarked PNG downloads. Evidence and
+limitations are recorded in the workspace review folder; synthetic QA inputs
+are not real drill data or independently approved results.
+
+Two browser regressions cover real-card/history/restore/ID paths and narrow-rail
+source/science/pinned-annotation preservation. Discovery is not execution;
+fresh hosted browser checks remain required. Final stamped builds/budgets and a
+focused PR follow source review. No merge or production activation is authorized
+by this implementation.
