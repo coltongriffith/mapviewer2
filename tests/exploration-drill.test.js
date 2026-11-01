@@ -68,6 +68,7 @@ describe('Exploration & Drill presentation recipe', () => {
     expect(buildLegendItems(sidePanelTemplate, [layer], next.layout)[0].label).toBe('Drill collars');
     expect(buildLegendItems(sidePanelTemplate, [{ ...layer, userStyled: true }], next.layout)[0].label).toBe('Planned Drillholes');
     expect(buildLegendItems(sidePanelTemplate, [{ ...layer, sourceName: 'planned-holes.csv' }], next.layout)[0].label).toBe('Planned Drillholes');
+    expect(buildLegendItems(sidePanelTemplate, [{ ...layer, sourceName: 'unplanned-holes.csv' }], next.layout)[0].label).toBe('Drill collars');
   });
   it('does not pick ownership or property title by order when claims are ambiguous', () => {
     const p = fixture(); p.layers.push({ ...p.layers[0], id: 'neighbour' }); p.layout.primaryLayerId = 'collars';
