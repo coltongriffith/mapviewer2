@@ -39,6 +39,36 @@ describe('Exploration & Drill presentation recipe', () => {
       expect(next.layers).toBe(p.layers);
     }
   });
+  it('adds supplied short collar IDs through existing callouts without duplicating labels or results', () => {
+    const p = fixture(), before = structuredClone(p), next = applyExplorationDrill(p);
+    expect(next.callouts).toHaveLength(1);
+    expect(next.callouts[0]).toMatchObject({ text: 'QA-1', featureId: 'QA-1', layerId: 'collars',
+      anchor: { lat: 50.01, lng: -119.99 }, type: 'plain', subtext: '' });
+    expect(applyExplorationDrill(next).callouts).toEqual(next.callouts);
+    const removed = { ...next, callouts: [] };
+    expect(applyExplorationDrill(removed).callouts).toEqual([]);
+    expect(p).toEqual(before);
+  });
+  it('does not guess IDs, label dense/hidden/manual layers, or choose ambiguous shared feature keys', () => {
+    const p = fixture(), collars = p.layers[1], f = collars.geojson.features[0];
+    for (const patch of [{ visible: false }, { userStyled: true }, { fx: { label: { on: false } } }]) {
+      expect(applyExplorationDrill({ ...p, layers: [{ ...collars, ...patch }] }).callouts || []).toEqual([]);
+    }
+    const noID = { ...f, properties: { arbitrary_assay: 42 } };
+    expect(applyExplorationDrill({ ...p, layers: [{ ...collars, geojson: { ...collars.geojson, features: [noID] } }] }).callouts || []).toEqual([]);
+    const dense = Array.from({ length: 81 }, (_, i) => ({ ...f, properties: { ...f.properties, hole_id: `QA-${i}` } }));
+    expect(applyExplorationDrill({ ...p, layers: [{ ...collars, geojson: { ...collars.geojson, features: dense } }] }).callouts || []).toEqual([]);
+    const duplicate = { ...f, properties: { label: 'QA-duplicate' } };
+    const samePosition = { ...duplicate, properties: { label: 'QA-another' } };
+    expect(applyExplorationDrill({ ...p, layers: [{ ...collars, geojson: { ...collars.geojson, features: [duplicate, samePosition] } }] }).callouts || []).toEqual([]);
+  });
+  it('keeps collar captions neutral unless a planned name was actually supplied or manually chosen', () => {
+    const p = fixture(), layer = { ...p.layers[1], displayName: 'Planned Drillholes', sourceName: 'collars.csv' };
+    const next = applyExplorationDrill({ ...p, layers: [layer] });
+    expect(buildLegendItems(sidePanelTemplate, [layer], next.layout)[0].label).toBe('Drill collars');
+    expect(buildLegendItems(sidePanelTemplate, [{ ...layer, userStyled: true }], next.layout)[0].label).toBe('Planned Drillholes');
+    expect(buildLegendItems(sidePanelTemplate, [{ ...layer, sourceName: 'planned-holes.csv' }], next.layout)[0].label).toBe('Planned Drillholes');
+  });
   it('does not pick ownership or property title by order when claims are ambiguous', () => {
     const p = fixture(); p.layers.push({ ...p.layers[0], id: 'neighbour' }); p.layout.primaryLayerId = 'collars';
     expect(applyExplorationDrill(p).layout.title).toBe('Exploration & Drill');

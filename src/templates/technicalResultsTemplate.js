@@ -323,7 +323,12 @@ export function buildLegendItems(template, layers, layout = {}) {
         ...(template.roleStyles?.[layer.role] || template.roleStyles?.other || {}),
         ...(layer.style || {}),
       };
-      const baseLabel = layer.displayName || layer.legend?.label || layer.name || ROLE_LABELS[layer.role] || 'Layer';
+      const providedLabel = layer.displayName || layer.legend?.label || layer.name || ROLE_LABELS[layer.role] || 'Layer';
+      // The legacy importer calls every collar upload "Planned Drillholes".
+      // A neutral recipe caption avoids inventing a status; explicit edits or
+      // a supplied planned-file name remain untouched.
+      const baseLabel = layout.explorationDrillVersion === 1 && layer.role === 'drillholes' && !layer.userStyled
+        && providedLabel === 'Planned Drillholes' && !/planned/i.test(layer.sourceName || layer.name || '') ? 'Drill collars' : providedLabel;
       const isPoint = POINT_ROLES.has(layer.role) || layer.type === 'points';
       // A layer may name its own heading; the template's role heading is the default.
       const group = layer.legend?.group || template.roleGroups?.[layer.role] || 'Map Data';

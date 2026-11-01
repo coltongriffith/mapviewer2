@@ -3933,7 +3933,7 @@ export default function App({ initialAction = null }) {
       } : {};
       const withTemplate = {
         ...prev,
-        layout: { ...prev.layout, templateId: t.templateId, themeId: t.themeId, explorationDrillVersion: undefined, ...extra },
+        layout: { ...prev.layout, templateId: t.templateId, themeId: t.themeId, explorationDrillVersion: typeId === 'drill' ? prev.layout.explorationDrillVersion : undefined, ...extra },
       };
       const next = applyModeToProject(withTemplate, getTemplate(t.templateId), t.mode);
       if (typeId === 'claims') return applyPropertyNeighbours(next);

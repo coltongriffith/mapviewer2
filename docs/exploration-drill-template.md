@@ -12,8 +12,16 @@ style does not establish that results or approvals exist.
 All existing layer objects, IDs, geometries, coordinates, source attributes,
 classes, cutoffs, result callouts, manual styling, labels, survey/trace values and
 scientific settings remain intact. This recipe does not guess new header aliases,
-calculate intercepts, classify results, generate assays or add label text. Existing
+calculate intercepts, classify results or generate assays. Existing
 import/render/API contracts continue to handle supplied content.
+
+On first selection, up to80 visible unstyled collars can receive existing plain
+callouts from the importer's supplied `_holeid`/`label` values. Only short,
+unambiguous IDs are used; missing IDs, shared feature keys and dense tables stay
+unlabelled automatically. Existing feature-linked annotations are not duplicated.
+Reselection preserves removed labels. No collar/result coordinates or values are
+invented. The legacy automatic “Planned Drillholes” caption becomes neutral only
+when no planned filename or explicit user edit supplied that status.
 
 Saved custom output dimensions and ratio, meaningful subtitles, logos/fonts and
 custom inset images persist. Reference overlays are taken from the prior editor
