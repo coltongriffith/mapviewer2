@@ -3,6 +3,8 @@ import { createInitialProjectState } from '../shared/projectState.js';
 import { applyExplorationDrill } from '../src/utils/explorationDrill.js';
 import { DEFAULT_SIDE_PANEL_GRID, sidePanelTemplate, resolveSidePanelZones } from '../src/templates/sidePanelTemplate.js';
 import { panelObstacles } from '../src/utils/calloutLayout.js';
+import { buildLegendItems } from '../src/templates/technicalResultsTemplate.js';
+import { applyLegendCustomization } from '../src/utils/legendCustomization.js';
 
 function fixture() {
   const p = createInitialProjectState();
@@ -13,7 +15,9 @@ function fixture() {
       properties: { PROJECT_NAME: 'Supplied Ridge', CLAIM_NAME: 'Provided tenure' },
       geometry: { type: 'Polygon', coordinates: [[[-120,50],[-119.98,50],[-119.98,50.02],[-120,50.02],[-120,50]]] } }] } },
   { id: 'collars', role: 'drillholes', type: 'points', visible: true,
-    points: [{ id: 'QA-1', lat: 50.01, lng: -119.99, label: 'QA-1', azimuth: 45, dip: -60, depth: 300 }],
+    geojson: { type: 'FeatureCollection', features: [{ type: 'Feature',
+      properties: { hole_id: 'QA-1', label: 'QA-1', azimuth: 45, dip: -60, depth: 300 },
+      geometry: { type: 'Point', coordinates: [-119.99, 50.01] } }] },
     style: { markerColor: '#192635', markerFill: '#ffffff' } }];
   return p;
 }
@@ -88,5 +92,35 @@ describe('Exploration & Drill presentation recipe', () => {
     const zones = resolveSidePanelZones(sidePanelTemplate, next.layout, { width: 1600, height: 900 }, []);
     expect(panelObstacles(zones, next.layout)).toContainEqual({ ...zones.sidebar, key: 'technical rail' });
     expect(panelObstacles(zones, { ...next.layout, explorationDrillVersion: undefined }).some((o) => o.key === 'technical rail')).toBe(false);
+  });
+  it('identifies classified ranges by the exact source field without changing IDs or inventing units', () => {
+    const p = fixture();
+    const samples = { id: 'samples', role: 'soil_samples', type: 'points', visible: true,
+      geojson: { type: 'FeatureCollection', features: [{ type: 'Feature', properties: { id: 'QA-S1', Cu_ppm: 20 },
+        geometry: { type: 'Point', coordinates: [-119.99, 50.01] } }] },
+      legend: { group: 'Geochemistry', label: 'Supplied samples' },
+      classification: { field: 'Cu_ppm', mode: 'graduated', classes: [{ max: 50, color: '#e0cf45' }, { max: null, color: '#a74735' }] } };
+    const next = applyExplorationDrill(p);
+    const rows = buildLegendItems(sidePanelTemplate, [samples], next.layout);
+    const legacy = buildLegendItems(sidePanelTemplate, [samples], { ...next.layout, explorationDrillVersion: undefined });
+    expect(rows.length).toBe(2);
+    expect(rows.map((r) => r.group)).toEqual(['Geochemistry · Cu_ppm', 'Geochemistry · Cu_ppm']);
+    expect(rows.map(({ group: _group, ...r }) => r)).toEqual(legacy.map(({ group: _group, ...r }) => r));
+    const customised = applyLegendCustomization(rows, { legendOverrides: { [rows[0].id]: { group: 'User supplied heading' } } });
+    expect(customised[0].group).toBe('User supplied heading');
+    const unspecified = { ...samples, classification: { ...samples.classification, field: 'Measurement A' } };
+    expect(buildLegendItems(sidePanelTemplate, [unspecified], next.layout)[0].group).toBe('Geochemistry · Measurement A');
+  });
+  it('reserves more title/source space in a narrow rail without changing its text or legacy geometry', () => {
+    const p = fixture(); Object.assign(p.layout, { title: 'Cedar Ridge Project',
+      subtitle: 'Target Generation — Soil Geochemistry & Drilling',
+      footerText: 'Aurora Ridge Minerals Corp. | Cedar Ridge Project, BC' });
+    const next = applyExplorationDrill(p), size = { width: 800, height: 1067 };
+    const zones = resolveSidePanelZones(sidePanelTemplate, next.layout, size, []);
+    const legacy = resolveSidePanelZones(sidePanelTemplate, { ...next.layout, explorationDrillVersion: undefined }, size, []);
+    expect(zones.title.height).toBeGreaterThan(legacy.title.height);
+    expect(zones.footer.height).toBeGreaterThan(legacy.footer.height);
+    expect(next.layout.title).toBe(p.layout.title); expect(next.layout.footerText).toBe(p.layout.footerText);
+    expect(zones.footer.top + zones.footer.height).toBeLessThanOrEqual(size.height);
   });
 });

@@ -93,12 +93,23 @@ export function resolveSidePanelZones(template, layout, mapSize, legendItems) {
     ? legendPanelHeight(resolvedItems, { ...layout, legendWidthPx: innerW }, estimatedLegendHeight) + (resolvedItems.length ? 36 : 0)
     : estimatedLegendHeight;
 
-  const titleHeight = Math.max(72, Math.min(180, layout?.titleHeightPx ?? 108));
+  const requestedTitleHeight = Math.max(72, Math.min(180, layout?.titleHeightPx ?? 108));
+  // Only the explicit recipe adds wrap allowance for narrow/portrait rails.
+  // Text stays unchanged; this is conservative space, not a truncation rule.
+  const lines = (text, font, width) => String(text || '').split('\n')
+    .reduce((n, line) => n + Math.max(1, Math.ceil(line.length * font * 0.56 / Math.max(40, width))), 0);
+  const titleScale = layout?.titleFontScale ?? 1;
+  const titleHeight = layout?.explorationDrillVersion === 1
+    ? Math.max(requestedTitleHeight, Math.min(240, 40 + lines(layout.title, 22 * titleScale, innerW - 40) * 27 * titleScale
+      + (layout.subtitle ? lines(layout.subtitle, 12 * titleScale, innerW - 40) * 18 * titleScale : 0)))
+    : requestedTitleHeight;
   const logoScale = Math.max(0.7, Math.min(1.2, Number(layout?.logoScale || 1)));
   const logoH = layout?.logo ? (layout?.logoHeightPx ? Math.max(20, Math.min(160, layout.logoHeightPx)) : Math.round(52 * logoScale)) : 0;
   const naH = layout?.northArrowHeightPx ?? 72;
   const naW = Math.round(naH * 0.9);
-  const footerH = layout?.footerHeightPx ? Math.max(22, Math.min(200, layout.footerHeightPx)) : 28;
+  const requestedFooterH = layout?.footerHeightPx ? Math.max(22, Math.min(200, layout.footerHeightPx)) : 28;
+  const footerH = layout?.explorationDrillVersion === 1 && layout.footerText
+    ? Math.max(requestedFooterH, Math.min(200, lines(layout.footerText, 12, innerW - 28) * 16 + 4)) : requestedFooterH;
   const scaleBarW = layout?.scaleBarWidthPx || 160;
   const scaleBarActualH = scaleBarHeight(layout);
 

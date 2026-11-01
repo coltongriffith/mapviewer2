@@ -27,6 +27,12 @@ the existing shared callout obstacle path. Existing scored placement is used;
 stored callout data and explicitly pinned positions stay intact. Legacy layouts
 retain their previous sizing and obstacle behavior.
 
+Classified legend ranges carry their literal source field in their group heading
+for this recipe (for example `Geochemistry · Cu_ppm`). No unit or element is
+inferred, no class ID/value/style changes, and explicit user group overrides still
+win. Narrow rails reserve additional title/source-note wrapping space without
+altering their text; existing saved layouts outside this recipe are unchanged.
+
 Before review: actual available-input native desktop/mobile/no-logo/restore/PNG
 checks, supplied-result preservation, source review, focused browser regressions,
 final measured plain/configured builds/budgets and a focused PR. No merge or
