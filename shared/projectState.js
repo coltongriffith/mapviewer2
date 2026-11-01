@@ -22,7 +22,7 @@ export const POINT_ROLES = new Set([
 export const TEMPLATE_MODES = {
   project_overview: 'Regional Location Map',
   regional_claims: 'Claims Map',
-  drill_plan: 'Drill Results Map',
+  drill_plan: 'Exploration & Drill Map',
   target_anomaly: 'Target Generation Map',
   access_location: 'Infrastructure Map',
 };
@@ -55,8 +55,8 @@ export const MAP_TYPES = {
     templateId: 'technical_results_v2', mode: 'regional_claims', themeId: 'investor_clean',
   },
   drill: {
-    label: 'Drill results map',
-    note: 'Collars and intercepts with a technical data rail.',
+    label: 'Exploration & Drill',
+    note: 'Supplied drilling, samples and targets with a branded technical rail.',
     templateId: 'side_panel', mode: 'drill_plan', themeId: 'technical_sharp',
   },
   infrastructure: {
