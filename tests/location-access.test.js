@@ -40,6 +40,23 @@ describe('Location & Access first-result recipe', () => {
     expect(next.layers.map((l) => l.geojson)).toEqual(p.layers.map((l) => l.geojson));
     expect(p.layers[1].fx).toBeUndefined();
   });
+  it('recognises actual source road-name headers without inventing missing names', () => {
+    const p = project(); p.layers[1].geojson.features[0].properties = { ROAD_NAME_FULL: 'Supplied highway name' };
+    expect(applyLocationAccess(p).layers[1].fx.label.field).toBe('ROAD_NAME_FULL');
+    p.layers[1].geojson.features[0].properties.ROAD_NAME_FULL = null;
+    expect(applyLocationAccess(p).layers[1].fx).toBeUndefined();
+  });
+  it('replaces the actual fresh-workspace subtitle without changing supplied context', () => {
+    const p = project(); p.layout.subtitle = 'Claims, drillholes, and targets';
+    expect(applyLocationAccess(p).layout.subtitle).toBe('Location & Access');
+    p.layout.subtitle = 'User supplied regional description';
+    expect(applyLocationAccess(p).layout.subtitle).toBe(p.layout.subtitle);
+  });
+  it('does not add mode-generated rail and label overlays the user never enabled', () => {
+    const p = project(); p.layout.referenceOverlays = { rail: true, labels: true };
+    expect(applyLocationAccess(p, { rail: false, labels: false }).layout.referenceOverlays).toEqual({ rail: false, labels: false });
+    expect(applyLocationAccess(p, { rail: true, labels: false }).layout.referenceOverlays.rail).toBe(true);
+  });
   it('does not infer seasonality, ownership or road names from arbitrary columns', () => {
     const p = project(); p.layers[1].geojson.features[0].properties = { capacity: 30, owner: 'Example', status: 'unknown' };
     expect(applyLocationAccess(p).layers[1].fx).toBeUndefined();

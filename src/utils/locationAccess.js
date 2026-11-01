@@ -3,13 +3,13 @@ import { visibleGeojson, layerGeometryKind } from './featureIdentity.js';
 import { isClassified } from './classification.js';
 
 const keyOf = (s) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
-const genericSubtitle = (s) => !s || ['Technical Results', 'Claims Map', 'Investor Map', 'Property & Neighbours', 'Infrastructure Map'].includes(s);
+const genericSubtitle = (s) => !s || ['Technical Results', 'Claims, drillholes, and targets', 'Claims Map', 'Investor Map', 'Property & Neighbours', 'Infrastructure Map'].includes(s);
 
 function roadLabelField(layer) {
   const features = visibleGeojson(layer)?.features || [];
   if (!features.length || features.length > 80) return null;
   const keys = Object.keys(features[0].properties || {});
-  for (const alias of ['displaylabel', 'routename', 'roadname', 'name', 'routenumber']) {
+  for (const alias of ['displaylabel', 'routename', 'roadname', 'roadnamefull', 'name', 'routenumber', 'highwayroutenumber']) {
     const matches = keys.filter((k) => keyOf(k) === alias);
     if (matches.length === 1 && features.every((f) => ['string', 'number'].includes(typeof f.properties?.[matches[0]]) && String(f.properties[matches[0]]).trim())) return matches[0];
   }
@@ -19,7 +19,7 @@ function roadLabelField(layer) {
 // Explicit template selection, not a new import workflow. Reuse the released
 // title/brand/caption setup, then compose an access map rather than a tenure plan.
 // A mapped road never implies access rights, seasonality or available capacity.
-export function applyLocationAccess(project) {
+export function applyLocationAccess(project, referenceOverlays = project.layout?.referenceOverlays || {}) {
   const base = applyPropertyNeighbours(project);
   const subject = propertySubject(project);
   const layers = base.layers.map((layer, i) => {
@@ -49,7 +49,7 @@ export function applyLocationAccess(project) {
       subtitle: genericSubtitle(project.layout?.subtitle) ? 'Location & Access' : project.layout.subtitle,
       zoomPadFrac: 0.8,
       compositionPreset: 'access',
-      referenceOverlays: { ...project.layout?.referenceOverlays },
+      referenceOverlays: { ...referenceOverlays },
       wash: { color: '#ffffff', amount: 0.32, vignette: 0 },
       legendCorner: 'br', scaleBarCorner: 'bl', northArrowCorner: 'bl',
       cornerLayout: { tl: [['logo', 'title']], tr: [['inset']], bl: [['scaleBar', 'northArrow']], br: [['legend']] },

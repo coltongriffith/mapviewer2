@@ -3937,7 +3937,7 @@ export default function App({ initialAction = null }) {
       };
       const next = applyModeToProject(withTemplate, getTemplate(t.templateId), t.mode);
       if (typeId === 'claims') return applyPropertyNeighbours(next);
-      if (typeId === 'infrastructure') return applyLocationAccess(next);
+      if (typeId === 'infrastructure') return applyLocationAccess(next, prev.layout.referenceOverlays || {});
       return { ...next, layout: { ...next.layout, propertyNeighboursVersion: undefined } };
     });
   };
