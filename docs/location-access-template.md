@@ -36,7 +36,15 @@ styles are preserved. Native labels stay on the existing shared render/export
 path. Automatic label setup remains bounded to80features per layer. The no-logo
 zero-space behavior is limited to opted-in recipes, retaining legacy sizing.
 
-Next: built-app checks with actual supplied property/road data, long names and
-missing labels/logos; portrait/mobile/undo/reopen/export; measured builds and
-budgets; focused reviewable PR. No production schema/settings or merge authority
-is introduced by this source milestone.
+Native verification used historical supplied property/road/brand inputs through
+the existing upload/card/Preview/PNG flow. Desktop landscape, 390px portrait,
+no-logo/reselection, history and local-draft reopen were checked. Actual source
+road names were absent and remained absent. A separately marked synthetic-name
+QA fixture confirmed short names render and overlong names can be omitted by the
+existing line fitter; it makes no real road-name or access claim. Evidence and
+limitations are recorded in the workspace's Location & Access review folder.
+
+Browser regressions cover card selection, supplied attributes/branding/source
+note, manual-route preservation, draft restore and no-logo portrait furniture.
+Hosted execution is still required; discovery alone is not a browser pass.
+No production schema/settings or merge authority is introduced by this work.
