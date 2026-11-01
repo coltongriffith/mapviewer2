@@ -1,5 +1,5 @@
 import { hasVisibleFeatures, layerGeometryKind } from '../utils/featureIdentity.js';
-import { legendRowCount } from '../utils/legendCustomization.js';
+import { legendRowCount, legendPanelHeight } from '../utils/legendCustomization.js';
 import { TICK_MARGIN, scaleBarHeight } from '../utils/coordinateFrame.js';
 
 const SIDEBAR_FRAC = 0.28;
@@ -86,9 +86,12 @@ export function resolveSidePanelZones(template, layout, mapSize, legendItems) {
 
   // --- Element heights ---
   const resolvedItems = legendItems || layout?.legendItems || [];
-  const legendHeight = layout?.legendHeightPx != null
+  const estimatedLegendHeight = layout?.legendHeightPx != null
     ? Math.max(60, Math.min(H - 320, layout.legendHeightPx))
     : legendHeightFor(layout, legendRowCount(resolvedItems, layout));
+  const legendHeight = layout?.explorationDrillVersion === 1
+    ? legendPanelHeight(resolvedItems, { ...layout, legendWidthPx: innerW }, estimatedLegendHeight) + (resolvedItems.length ? 36 : 0)
+    : estimatedLegendHeight;
 
   const titleHeight = Math.max(72, Math.min(180, layout?.titleHeightPx ?? 108));
   const logoScale = Math.max(0.7, Math.min(1.2, Number(layout?.logoScale || 1)));
@@ -179,6 +182,14 @@ export function resolveSidePanelZones(template, layout, mapSize, legendItems) {
 
   let fittedLegendH = legendHeight;
   let fittedInsetH = insetEnabled ? insetH : 0;
+  // The explicit drill recipe keeps supplied classes readable before spending
+  // spare rail height on a large locator. Existing saved rail layouts keep the
+  // previous fitting order. No legend rows or scientific classes are removed.
+  if (layout?.explorationDrillVersion === 1 && overflow > 0 && fittedInsetH > 0) {
+    const give = Math.min(overflow, Math.max(0, fittedInsetH - 70));
+    fittedInsetH -= give;
+    overflow -= give;
+  }
   if (overflow > 0 && grid.some((i) => (Array.isArray(i) ? i : [i]).includes('legend'))) {
     const give = Math.min(overflow, Math.max(0, fittedLegendH - 60));
     fittedLegendH -= give;

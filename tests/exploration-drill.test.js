@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createInitialProjectState } from '../shared/projectState.js';
 import { applyExplorationDrill } from '../src/utils/explorationDrill.js';
 import { DEFAULT_SIDE_PANEL_GRID, sidePanelTemplate, resolveSidePanelZones } from '../src/templates/sidePanelTemplate.js';
+import { panelObstacles } from '../src/utils/calloutLayout.js';
 
 function fixture() {
   const p = createInitialProjectState();
@@ -42,10 +43,11 @@ describe('Exploration & Drill presentation recipe', () => {
     const p = fixture();
     Object.assign(p.layers[1], { userStyled: true, classification: { field: 'Cu_ppm', cutoff: 100 },
       fx: { label: { on: false } }, sourceAttributes: { unit: 'ppm' } });
-    p.callouts = [{ id: 'supplied', text: 'Provided result — unverified QA', featureId: 'QA-1' }];
+    p.callouts = [{ id: 'supplied', text: 'Provided result — unverified QA', featureId: 'QA-1', isManualPosition: true, offset: { x: 40, y: -20 } }];
     p.drillPlan = { section: { azimuth: 40 }, approved: false };
     const before = structuredClone(p), next = applyExplorationDrill(p);
     expect(next.layers).toBe(p.layers);
+    expect(next.layout.layoutAlgorithm).toBe(3);
     expect(next.callouts).toEqual(before.callouts); expect(next.drillPlan).toEqual(before.drillPlan);
     expect(p).toEqual(before);
   });
@@ -70,5 +72,21 @@ describe('Exploration & Drill presentation recipe', () => {
     expect(z.title.height).toBe(100);
     expect(z.footer.top + z.footer.height).toBeLessThanOrEqual(900);
     expect(z.footer.height).toBeGreaterThan(0);
+  });
+  it('gives supplied legend classes space before a large locator, without changing legacy rails', () => {
+    const p = fixture(); p.layout.logo = 'provided-logo'; p.layout.templateId = 'side_panel';
+    const next = applyExplorationDrill(p);
+    const items = Array.from({ length: 20 }, (_, i) => ({ id: `class-${i}`, label: `Supplied class ${i}`, group: i < 10 ? 'Samples' : 'Drilling', type: 'line' }));
+    const current = resolveSidePanelZones(sidePanelTemplate, next.layout, { width: 1600, height: 900 }, items);
+    const legacy = resolveSidePanelZones(sidePanelTemplate, { ...next.layout, explorationDrillVersion: undefined }, { width: 1600, height: 900 }, items);
+    expect(current.legend.height).toBeGreaterThan(legacy.legend.height);
+    expect(current.inset.height).toBeLessThan(legacy.inset.height);
+    expect(current.footer.top + current.footer.height).toBeLessThanOrEqual(900);
+  });
+  it('reserves the technical rail for automatic cards even with a derived empty stored legend', () => {
+    const next = applyExplorationDrill(fixture());
+    const zones = resolveSidePanelZones(sidePanelTemplate, next.layout, { width: 1600, height: 900 }, []);
+    expect(panelObstacles(zones, next.layout)).toContainEqual({ ...zones.sidebar, key: 'technical rail' });
+    expect(panelObstacles(zones, { ...next.layout, explorationDrillVersion: undefined }).some((o) => o.key === 'technical rail')).toBe(false);
   });
 });

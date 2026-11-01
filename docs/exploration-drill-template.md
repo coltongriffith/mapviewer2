@@ -20,6 +20,13 @@ custom inset images persist. Reference overlays are taken from the prior editor
 state rather than the mode's extra defaults. Old maps are not migrated or
 restyled on load. Normal template selection retains its existing rail setup.
 
+Native review found a capped legend clipping supplied class rows and automatic
+cards crossing the rail. This recipe now measures legend content, gives locator
+height back before shrinking the legend, and reserves the full technical rail in
+the existing shared callout obstacle path. Existing scored placement is used;
+stored callout data and explicitly pinned positions stay intact. Legacy layouts
+retain their previous sizing and obstacle behavior.
+
 Before review: actual available-input native desktop/mobile/no-logo/restore/PNG
 checks, supplied-result preservation, source review, focused browser regressions,
 final measured plain/configured builds/budgets and a focused PR. No merge or

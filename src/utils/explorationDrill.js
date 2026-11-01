@@ -25,6 +25,7 @@ export function applyExplorationDrill(project, referenceOverlays = project.layou
       subtitle: genericSubtitle(original.subtitle) ? 'Exploration & Drill' : original.subtitle,
       exportRatio: original.exportRatio || (original.exportSettings?.customWidth > 0 && original.exportSettings?.customHeight > 0 ? null : 'landscape'),
       compositionPreset: 'tight', zoomPadFrac: 0.08,
+      layoutAlgorithm: 3, // Existing scored placement; explicitly pinned cards stay pinned.
       sidePanelGrid: original.sidePanelGrid || original.sidePanelOrder || [...DEFAULT_SIDE_PANEL_GRID],
       titleHeightPx: title.length > 55 ? 130 : 100,
       legendGrouped: original.legendGrouped ?? true,
