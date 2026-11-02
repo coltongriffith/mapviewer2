@@ -1,6 +1,16 @@
 import { fxScene, boxesOverlap } from './geoStyle.js';
 import { claimKeyScene } from './claimKeyScene.js';
 import { resolveClaimKeySnapshot } from './claimKeyCandidates.js';
+import { resolveCalloutBoxes } from './calloutLayout.js';
+import { resolveScoredBoxes } from './calloutScorer.js';
+
+export function claimKeyObstacles(project, map, obstacles = []) {
+  if (!project?.layout?.claimKey || !map) return obstacles;
+  const layout = project.layout;
+  const resolve = layout.layoutAlgorithm >= 2 ? resolveScoredBoxes : resolveCalloutBoxes;
+  const cards = resolve(project.callouts || [], map, { obstacles, algorithm: layout.layoutAlgorithm, font: layout.fonts?.callout });
+  return [...obstacles, ...cards.map(({ left, top, width, height }) => ({ left, top, width, height, key: 'a callout' }))];
+}
 
 /** One composition for editor/read-only/canvas/SVG consumers. Callers provide
  * ALL furniture and annotation obstacles in composition pixels. No key is
