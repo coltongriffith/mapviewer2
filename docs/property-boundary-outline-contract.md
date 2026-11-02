@@ -50,3 +50,27 @@ identity and trim-consumer regressions run alongside these fixtures.
 No new dependency, database, entitlement or account change is proposed. A future
 cohesive implementation PR needs tests, native visual/export evidence, measured
 builds and review; merge requires separate human approval.
+
+## Unbound input foundation
+
+`propertyBoundaryInput` now requires an explicit enabled argument and one exact
+selected Property-recipe claims layer. It does not select another eligible layer
+when the saved selection is stale, duplicated, hidden or marked as context.
+Nothing calls this helper from the app yet, and it adds no saved setting.
+
+Conservative prototype work limits are 256 source features, 128 polygon parts,
+256 rings, 2,048 positions and 200,000 tested segment pairs. Hidden source data
+counts toward those limits and is validated before identity filtering. Larger
+inputs fail closed; these are overlay limits, not new restrictions on imports.
+
+The helper rejects unsupported geometry, open/degenerate/self-crossing/touching
+rings, hole-shell crossings, holes outside the shell, nested holes, nonfinite or
+out-of-range positions, and antimeridian edges. It does not snap, repair or close
+anything. Coordinates are copied to 2D without altering source elevations. Ring
+orientation may vary; overlapping separate polygons remain valid union inputs.
+This is planar WGS84-coordinate validation, not a general geodesic topology or
+legal-boundary validator. Antimeridian support is deliberately deferred.
+
+Next: a bounded union/output resolver with immutable-input caching, followed by
+shared rendering and actual visual/export proof. There is still no usable new
+boundary feature or production deployment.
