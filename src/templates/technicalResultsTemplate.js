@@ -351,10 +351,10 @@ export function buildLegendItems(template, layers, layout = {}) {
       // Coloured by attribute: a row per class, not a row for the layer. Rows of a layer with geology styling
       // carry it, for swatches drawn in that style (utils/geoStyle.js).
       if (isClassified(layer)) {
-        // The explicit drill recipe must identify what numeric ranges refer
-        // to. Copy the actual source field verbatim, never guess an element or
-        // unit from its values. Stable class IDs and user group overrides stay.
-        const classGroup = layout.explorationDrillVersion === 1 && layer.classification.field
+        // Both explicit recipes identify source fields without guessing units.
+        // Preserve the Technical Report rule for explicit legend groups.
+        const classGroup = (layout.technicalReportVersion === 1 && !layer.legend?.group)
+          || (layout.explorationDrillVersion === 1 && layer.classification.field)
           ? `${group} · ${layer.classification.field}` : group;
         return [...classLegendItems(layer, baseStyle, baseLabel, classGroup, isPoint).map((r) => (layer.fx && !isPoint ? { ...r, fx: layer.fx } : r)), ...traceRows];
       }

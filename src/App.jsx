@@ -162,6 +162,9 @@ import {
 } from './utils/cloudStorage';
 import { applyBrandKitStyle, applyBrandKitTemplate } from './brandKit';
 import { applyPropertyNeighbours, propertySubject } from './utils/propertyNeighbours.js';
+import { applyTechnicalReport } from './utils/technicalReport.js';
+import TechnicalReportStrip from './components/TechnicalReportStrip.jsx';
+import { technicalStripHeight } from './utils/technicalStripLayout.js';
 import { applyExplorationDrill } from './utils/explorationDrill.js';
 import { applyLocationAccess } from './utils/locationAccess.js';
 import { useAuth } from './hooks/useAuth';
@@ -3934,13 +3937,16 @@ export default function App({ initialAction = null }) {
       } : {};
       const withTemplate = {
         ...prev,
-        layout: { ...prev.layout, templateId: t.templateId, themeId: t.themeId, propertyNeighboursVersion: undefined, locationAccessVersion: undefined, explorationDrillVersion: typeId === 'drill' ? prev.layout.explorationDrillVersion : undefined, ...extra },
+        layout: { ...prev.layout, templateId: t.templateId, themeId: t.themeId, propertyNeighboursVersion: undefined, locationAccessVersion: undefined, explorationDrillVersion: typeId === 'drill' ? prev.layout.explorationDrillVersion : undefined, technicalReportVersion: typeId === 'ni_43101' ? prev.layout.technicalReportVersion : undefined, ...extra },
       };
       const next = applyModeToProject(withTemplate, getTemplate(t.templateId), t.mode);
       if (typeId === 'claims') return applyPropertyNeighbours(next);
       if (typeId === 'drill') return applyExplorationDrill(next, prev.layout.referenceOverlays || {});
       if (typeId === 'infrastructure') return applyLocationAccess(next, prev.layout.referenceOverlays || {});
-      return { ...next, layout: { ...next.layout, propertyNeighboursVersion: undefined } };
+      if (typeId === 'ni_43101') return applyTechnicalReport({
+        ...next, layers: prev.layers, layout: { ...next.layout, propertyNeighboursVersion: undefined },
+      });
+      return { ...next, layout: { ...next.layout, propertyNeighboursVersion: undefined, technicalReportVersion: undefined } };
     });
   };
 
@@ -6084,7 +6090,7 @@ export default function App({ initialAction = null }) {
                       legendHeightPx: null,
                       titleHeightPx: 108,
                     } : {};
-                    updateLayout({ templateId: tid, themeId: themeMap[tid] || 'investor_clean', stripTitle: '', stripSubtitle: '', ...extra });
+                    updateLayout({ templateId: tid, themeId: themeMap[tid] || 'investor_clean', stripTitle: '', stripSubtitle: '', technicalReportVersion: undefined, ...extra });
                   }}
                 >
                   <option value="technical_results_v2">Standard</option>
@@ -7707,7 +7713,7 @@ export default function App({ initialAction = null }) {
         {(project.layout.themeId === 'studio' || project.layout.labelHalo) && sc('style')}
 
         {project.layout.templateId === 'ni_43101_technical' && (() => {
-          const STRIP_H = 72;
+          const STRIP_H = technicalStripHeight(project.layout, mapSize?.width || 1000);
           const stripPos = project.layout.titleStripPosition || 'bottom';
           const stageH = mapSize?.height || 600;
           const stageW = mapSize?.width || 1000;
@@ -7720,6 +7726,8 @@ export default function App({ initialAction = null }) {
             projectionText: autoProjectionName(leafletMapRef.current),
           });
           const missingStyle = { fontStyle: 'italic' };
+          if (project.layout.technicalReportVersion === 1) return project.layout.showTitle === false ? null
+            : <TechnicalReportStrip layout={project.layout} fields={strip} width={stageW} height={stageH} />;
           return (
             <>
               {/* Title strip */}

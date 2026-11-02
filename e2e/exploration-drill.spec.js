@@ -30,6 +30,12 @@ async function open(page, payload) {
   }, payload);
   await page.goto('/?intent=resume');
   await expect(page.locator('.leaflet-container').first()).toBeVisible();
+  // The restored fixture resolves its region asynchronously. Settle that
+  // initial project state before the card edit: otherwise its late layout
+  // write can become the newest undo step instead of the recipe selection.
+  await expect.poll(async () => (await draft(page))?.layout?.autoInsetRegion?.name).toBe('British Columbia');
+  await expect.poll(async () => (await draft(page))?.callouts?.length).toBe(payload.callouts?.length || 0);
+  await page.waitForTimeout(450); // documented 400ms project-history debounce
   await page.getByRole('tab', { name: 'Style', exact: true }).click();
   await page.getByRole('radio', { name: /Exploration & Drill/ }).click();
 }
