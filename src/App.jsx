@@ -162,6 +162,7 @@ import {
 } from './utils/cloudStorage';
 import { applyBrandKitStyle, applyBrandKitTemplate } from './brandKit';
 import { applyPropertyNeighbours, propertySubject } from './utils/propertyNeighbours.js';
+import { applyImportedLocatorRegion } from './utils/locatorBounds.js';
 import { applyTechnicalReport } from './utils/technicalReport.js';
 import TechnicalReportStrip from './components/TechnicalReportStrip.jsx';
 import { technicalStripHeight } from './utils/technicalStripLayout.js';
@@ -2890,10 +2891,7 @@ export default function App({ initialAction = null }) {
     const newLayerBounds = geojsonBounds(geojson);
     detectRegion(newLayerBounds).then(region => {
       if (region) {
-        setProject(prev => ({
-          ...prev,
-          layout: { ...prev.layout, autoInsetRegion: region },
-        }));
+        setProject(prev => applyImportedLocatorRegion(prev, id, region));
       }
     }).catch(() => {});
 
@@ -7874,7 +7872,7 @@ export default function App({ initialAction = null }) {
         {project.layout.insetEnabled !== false && resolvedZones.inset?.width ? (
           <div className="template-zone" style={{ ...zoneStyle(resolvedZones.inset), opacity: dragging?.id === 'inset' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('inset', project.layout.insetWidthPx ?? 244, project.layout.insetHeightPx ?? 190)}>
             <button className="panel-delete-btn" aria-label="Hide inset map" title="Hide inset map" onClick={() => updateLayout({ insetEnabled: false })}>×</button>
-            {studio ? sc('inset') : <LocatorInset layers={project.layers} insetMode={project.layout.insetMode} insetBasemap={project.layout.insetBasemap} insetImage={project.layout.insetImage} autoInsetRegion={project.layout.autoInsetRegion} insetTitle={project.layout.insetTitle} insetLabel={project.layout.insetLabel} mode={project.layout.mode} zone={{ width: '100%', height: '100%' }} regionFill={project.layout.insetRegionFill} regionStroke={project.layout.insetRegionStroke} bgFill={project.layout.insetBgFill} markerColor={project.layout.insetMarkerColor} />}
+            {studio ? sc('inset') : <LocatorInset layers={project.layers} layout={project.layout} insetMode={project.layout.insetMode} insetBasemap={project.layout.insetBasemap} insetImage={project.layout.insetImage} autoInsetRegion={project.layout.autoInsetRegion} insetTitle={project.layout.insetTitle} insetLabel={project.layout.insetLabel} mode={project.layout.mode} zone={{ width: '100%', height: '100%' }} regionFill={project.layout.insetRegionFill} regionStroke={project.layout.insetRegionStroke} bgFill={project.layout.insetBgFill} markerColor={project.layout.insetMarkerColor} />}
             {makeResizeHandles(project.layout.insetCorner || 'tr', {
               elemId: 'inset', startW: project.layout.insetWidthPx ?? 244, startH: project.layout.insetHeightPx ?? 190,
               minW: 100, maxW: 600, minH: 80, maxH: 500,

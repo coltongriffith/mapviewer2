@@ -5,8 +5,7 @@ import {
   studioMetresPerPx, labelHalo, loadStudioFonts, STUDIO_SHADOW,
 } from '../utils/studioCards.js';
 import { projectionLabel } from '../utils/coordinateFrame.js';
-import { geojsonBounds, unionBounds } from '../utils/geometry';
-import { visibleGeojson } from '../utils/featureIdentity.js';
+import { locatorBounds } from '../utils/locatorBounds.js';
 import { detectRegion } from '../utils/detectRegion';
 const SatelliteInset = lazyGuarded(() => import('./SatelliteInset'));
 
@@ -113,7 +112,7 @@ function SatelliteSlot({ slot, layout, layers, onMarker }) {
   return (
     <div style={{ position: 'absolute', left: slot.x, top: slot.y, width: slot.w, height: slot.h, borderRadius: slot.r, overflow: 'hidden', background: '#0b161b' }}>
       <React.Suspense fallback={null}>
-        <SatelliteInset layers={layers} region={layout.autoInsetRegion} markerColor={layout.insetMarkerColor} basemap={layout.insetBasemap || 'satellite'} onMarker={onMarker} />
+        <SatelliteInset layers={layers} layout={layout} region={layout.autoInsetRegion} markerColor={layout.insetMarkerColor} basemap={layout.insetBasemap || 'satellite'} onMarker={onMarker} />
       </React.Suspense>
     </div>
   );
@@ -122,7 +121,7 @@ function SatelliteSlot({ slot, layout, layers, onMarker }) {
 // The project's extent, and its province or state: the saved one, else found from the extent as LocatorInset
 // finds it (a shared map made outside the editor can arrive without one).
 function useRegion(layout, layers, on) {
-  const bounds = useMemo(() => unionBounds((layers || []).filter((l) => l.visible !== false && l.geojson).map((l) => geojsonBounds(visibleGeojson(l))).filter(Boolean)), [layers]);
+  const { contextBounds: bounds, markerBounds } = useMemo(() => locatorBounds(layers, layout), [layers, layout]);
   const [found, setFound] = useState(null);
   const need = on && !layout.autoInsetRegion && !!bounds;
   useEffect(() => {
@@ -131,7 +130,7 @@ function useRegion(layout, layers, on) {
     detectRegion(bounds).then((r) => { if (live) setFound(r || null); }).catch(() => {});
     return () => { live = false; };
   }, [need, bounds?.minLng, bounds?.minLat, bounds?.maxLng, bounds?.maxLat]); // eslint-disable-line react-hooks/exhaustive-deps
-  return { bounds, region: layout.autoInsetRegion || (need ? found : null) };
+  return { bounds: markerBounds, region: layout.autoInsetRegion || (need ? found : null) };
 }
 
 export default function StudioCard({ kind, layout, zones, map, layers }) {
