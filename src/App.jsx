@@ -162,6 +162,7 @@ import {
 } from './utils/cloudStorage';
 import { applyBrandKitStyle, applyBrandKitTemplate } from './brandKit';
 import { applyPropertyNeighbours, propertySubject } from './utils/propertyNeighbours.js';
+import { applyExplorationDrill } from './utils/explorationDrill.js';
 import { applyLocationAccess } from './utils/locationAccess.js';
 import { useAuth } from './hooks/useAuth';
 import { useStorageUsage } from './hooks/useStorageUsage';
@@ -3933,10 +3934,11 @@ export default function App({ initialAction = null }) {
       } : {};
       const withTemplate = {
         ...prev,
-        layout: { ...prev.layout, templateId: t.templateId, themeId: t.themeId, propertyNeighboursVersion: undefined, locationAccessVersion: undefined, ...extra },
+        layout: { ...prev.layout, templateId: t.templateId, themeId: t.themeId, propertyNeighboursVersion: undefined, locationAccessVersion: undefined, explorationDrillVersion: typeId === 'drill' ? prev.layout.explorationDrillVersion : undefined, ...extra },
       };
       const next = applyModeToProject(withTemplate, getTemplate(t.templateId), t.mode);
       if (typeId === 'claims') return applyPropertyNeighbours(next);
+      if (typeId === 'drill') return applyExplorationDrill(next, prev.layout.referenceOverlays || {});
       if (typeId === 'infrastructure') return applyLocationAccess(next, prev.layout.referenceOverlays || {});
       return { ...next, layout: { ...next.layout, propertyNeighboursVersion: undefined } };
     });
@@ -3955,7 +3957,7 @@ export default function App({ initialAction = null }) {
       onboardingLayoutSelected: true,
       ...(typeId === 'investor' && project.layout.subtitle === 'Technical Results' ? { subtitle: 'Investor Map' } : {}),
     });
-    if (changed || typeId === 'claims' || typeId === 'infrastructure') setInvestorFrameRequest((value) => value + 1);
+    if (changed || typeId === 'claims' || typeId === 'drill' || typeId === 'infrastructure') setInvestorFrameRequest((value) => value + 1);
     trackEvent('onboarding_step', { step: 'style', via: 'card', type: typeId });
   };
 

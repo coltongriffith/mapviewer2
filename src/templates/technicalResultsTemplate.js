@@ -328,7 +328,12 @@ export function buildLegendItems(template, layers, layout = {}) {
         ...(template.roleStyles?.[layer.role] || template.roleStyles?.other || {}),
         ...(layer.style || {}),
       };
-      const baseLabel = layer.displayName || layer.legend?.label || layer.name || ROLE_LABELS[layer.role] || 'Layer';
+      const providedLabel = layer.displayName || layer.legend?.label || layer.name || ROLE_LABELS[layer.role] || 'Layer';
+      // The legacy importer calls every collar upload "Planned Drillholes".
+      // A neutral recipe caption avoids inventing a status; explicit edits or
+      // a supplied planned-file name remain untouched.
+      const baseLabel = layout.explorationDrillVersion === 1 && layer.role === 'drillholes' && !layer.userStyled
+        && providedLabel === 'Planned Drillholes' && !/(^|[^a-z])planned([^a-z]|$)/i.test(layer.sourceName || layer.name || '') ? 'Drill collars' : providedLabel;
       const isPoint = POINT_ROLES.has(layer.role) || layer.type === 'points';
       // A layer may name its own heading; the template's role heading is the default.
       const group = layer.legend?.group || template.roleGroups?.[layer.role] || 'Map Data';
@@ -345,7 +350,14 @@ export function buildLegendItems(template, layers, layout = {}) {
 
       // Coloured by attribute: a row per class, not a row for the layer. Rows of a layer with geology styling
       // carry it, for swatches drawn in that style (utils/geoStyle.js).
-      if (isClassified(layer)) return [...classLegendItems(layer, baseStyle, baseLabel, group, isPoint).map((r) => (layer.fx && !isPoint ? { ...r, fx: layer.fx } : r)), ...traceRows];
+      if (isClassified(layer)) {
+        // The explicit drill recipe must identify what numeric ranges refer
+        // to. Copy the actual source field verbatim, never guess an element or
+        // unit from its values. Stable class IDs and user group overrides stay.
+        const classGroup = layout.explorationDrillVersion === 1 && layer.classification.field
+          ? `${group} · ${layer.classification.field}` : group;
+        return [...classLegendItems(layer, baseStyle, baseLabel, classGroup, isPoint).map((r) => (layer.fx && !isPoint ? { ...r, fx: layer.fx } : r)), ...traceRows];
+      }
 
       if (isPoint) {
         const shapes = distinctShapesForLayer(layer);
