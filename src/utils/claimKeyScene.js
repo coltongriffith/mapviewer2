@@ -1,6 +1,7 @@
 import { resolveClaimKeySnapshot } from './claimKeyCandidates.js';
 import { featureKey, visibleGeojson, layerFeatures } from './featureIdentity.js';
 import { fxScene } from './geoStyle.js';
+import { claimKeyTable } from './claimKeyTable.js';
 
 /** Unexposed shared placement adapter. A reserved table is an obstacle before
  * labels are placed. Rows come only from actual clear in-frame references.
@@ -28,6 +29,9 @@ export function claimKeyScene(project, snapshot, view, tableBox, styleOf = () =>
     } }], { ...view, obstacles: [...(view.obstacles || []), { ...tableBox, key: 'claim key' }] });
   const printed = scene.placed.filter((item) => item.link).map((item) => ({ ...rows.get(item.link.identity) }));
   printed.sort((a, b) => Number(a.reference.slice(1)) - Number(b.reference.slice(1)));
+  const omitted = resolved.total - printed.length;
+  const table = claimKeyTable(printed, snapshot.field, tableBox, { omitted, hidden: resolved.hidden, family: view.family });
+  if (!table.ok) return { ok: false, reason: table.reason, labels: [], rows: [], placed: [] };
   return { ok: true, reason: null, labels: scene.labels, placed: scene.placed,
-    rows: printed, omitted: resolved.total - printed.length, hidden: resolved.hidden, tableBox: { ...tableBox } };
+    rows: printed, omitted, hidden: resolved.hidden, table: table.primitives, notice: table.notice, tableBox: { ...tableBox } };
 }

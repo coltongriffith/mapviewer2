@@ -34,4 +34,9 @@ describe('shared compact-key placement foundation', () => {
     p.layers[0].geojson.features[0].properties.CLAIM_ID = 'changed';
     expect(claimKeyScene(p, saved, view, table).reason).toBe('rebuild-key');
   });
+  it('suppresses the whole key when its table cannot fit the actual placed rows', () => {
+    const p = project(), saved = createClaimKeySnapshot(p, 'CLAIM_ID').snapshot;
+    const result = claimKeyScene(p, saved, view, { left: 700, top: 400, width: 180, height: 100 });
+    expect(result).toMatchObject({ ok: false, reason: 'key-table-overflow', labels: [], rows: [], placed: [] });
+  });
 });
