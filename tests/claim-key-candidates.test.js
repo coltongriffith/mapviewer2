@@ -25,7 +25,7 @@ describe('explicit compact claim-key candidates', () => {
     p.layers[0].featureOverrides = { [featureKey(p.layers[0].geojson.features[1])]: { hidden: true } };
     expect(resolve(p).entries).toEqual([{ identity: 'one', identifier: 0, label: '0', reference: 'K1' }]);
   });
-  it.each([null, '', ' ', {}, [], true, Infinity, 1.5])('rejects incomplete or nonidentifier values %s', (value) => {
+  it.each([null, '', ' ', 'ID\u0000', {}, [], true, Infinity, 1.5])('rejects incomplete or nonidentifier values %s', (value) => {
     expect(resolve(project([feature('one', value)]))).toMatchObject({ ok: false, reason: 'incomplete-identifiers', entries: [] });
   });
   it('rejects duplicate identifiers and identity collisions rather than creating misleading rows', () => {
@@ -41,6 +41,7 @@ describe('explicit compact claim-key candidates', () => {
   it('requires an eligible explicit property and an explicit literal field', () => {
     const p = project();
     expect(claimKeyCandidates(p, '').reason).toBe('select-identifier-field');
+    expect(claimKeyCandidates(p, 'ID\u0000').reason).toBe('select-identifier-field');
     delete p.layout.primaryLayerId;
     expect(resolve(p).reason).toBe('select-property');
     for (const patch of [{ visible: false }, { focus: false }, { role: 'roads_access' }]) {

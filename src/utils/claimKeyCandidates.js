@@ -2,7 +2,8 @@ import { featureKey, isFeatureHidden, layerFeatures } from './featureIdentity.js
 
 const MAX_FEATURES = 5000;
 const MAX_ROWS = 200;
-const scalar = (value) => typeof value === 'string' ? value.trim().length > 0 && value.length <= 256
+const CONTROL = /\p{Cc}/u;
+const scalar = (value) => typeof value === 'string' ? value.trim().length > 0 && value.length <= 256 && !CONTROL.test(value)
   : typeof value === 'number' && Number.isSafeInteger(value);
 const fail = (reason, total = 0) => ({ ok: false, reason, total, entries: [] });
 
@@ -28,7 +29,7 @@ export function claimKeyCandidates(project, field, { maxRows = 40 } = {}) {
   if (layers.length !== 1) return fail('select-property');
   const layer = layers[0];
   if (layer.role !== 'claims' || layer.visible === false || layer.focus === false) return fail('select-property');
-  if (typeof field !== 'string' || !field || field.length > 256) return fail('select-identifier-field');
+  if (typeof field !== 'string' || !field || field.length > 256 || CONTROL.test(field)) return fail('select-identifier-field');
   if (!Number.isInteger(maxRows) || maxRows < 1 || maxRows > MAX_ROWS) return fail('invalid-row-limit');
   const features = layerFeatures(layer);
   if (features.length > MAX_FEATURES) return fail('feature-limit', features.length);
