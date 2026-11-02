@@ -71,6 +71,25 @@ orientation may vary; overlapping separate polygons remain valid union inputs.
 This is planar WGS84-coordinate validation, not a general geodesic topology or
 legal-boundary validator. Antimeridian support is deliberately deferred.
 
-Next: a bounded union/output resolver with immutable-input caching, followed by
-shared rendering and actual visual/export proof. There is still no usable new
-boundary feature or production deployment.
+## Unbound union/output foundation
+
+`createPropertyBoundaryResolver` now produces a separate, frozen coordinate-only
+FeatureCollection using the existing declared Turf dissolve library. It validates
+all raw geometry before visibility-key generation, filters hidden claims before
+union, and applies the same topology/count/work limits to derived output. Union
+exceptions, invalid output or output expansion beyond limits return no geometry;
+there is no fallback to original internal borders or a manufactured enclosure.
+
+Each resolver uses weak immutable-geometry keys with at most four visibility
+states per geometry. Changing fill, classification or per-feature stroke without
+changing visibility reuses the exact geometry object. Hiding a claim recomputes
+the outline; restoring a retained visibility state reuses its previous result.
+Changing the source geometry object recomputes it. Disabled or invalid selections
+are checked before cache access. This relies on the app's existing immutable
+project-state contract; in-place source mutation is not supported.
+
+The resolver remains unreferenced by application entry points. Next: share one
+presentation geometry between native/read-only/PNG/SVG paths, preserve hit
+testing and styling precedence, and inspect actual visual/export behavior before
+exposing a minimal opt-in control. There is still no usable new boundary feature
+or production deployment.

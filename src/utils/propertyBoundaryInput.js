@@ -72,7 +72,7 @@ function validatePolygon(rings, work) {
  * coordinate-only COPIES are for a future overlay; never replace source paths.
  * No snapping, buffering, repair, hull or fallback to another property.
  */
-export function propertyBoundaryInput(project, { enabled = false } = {}) {
+export function selectPropertyBoundaryLayer(project, { enabled = false } = {}) {
   if (enabled !== true) return fail('disabled');
   const layout = project?.layout || {};
   if (layout.propertyNeighboursVersion !== 1 || !layout.primaryLayerId) return fail('select-property');
@@ -81,6 +81,13 @@ export function propertyBoundaryInput(project, { enabled = false } = {}) {
   if (layers.length !== 1) return fail('select-property');
   const layer = layers[0];
   if (layer.role !== 'claims' || layer.visible === false || layer.focus === false) return fail('select-property');
+  return { ok: true, layer };
+}
+
+export function propertyBoundaryInput(project, options) {
+  const selected = selectPropertyBoundaryLayer(project,options);
+  if (!selected.ok) return selected;
+  const { layer } = selected;
   const features = layerFeatures(layer);
   if (!Array.isArray(features)) return fail('polygon-required');
   if (!features.length) return fail('no-visible-claims');
