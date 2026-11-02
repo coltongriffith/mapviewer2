@@ -6831,7 +6831,7 @@ export default function App({ initialAction = null }) {
                   {selectedLayer.geojson && <NumericColumnInspector layer={selectedLayer} />}
                 </React.Suspense>
                 {selectedLayer.geojson && !isPointStyledLayer(selectedLayer) && (
-                  <React.Suspense fallback={null}><GeoStyleControls layer={selectedLayer} setProject={setProject} map={leafletMapRef.current} /></React.Suspense>
+                  <React.Suspense fallback={null}><GeoStyleControls layer={selectedLayer} project={project} setProject={setProject} map={leafletMapRef.current} /></React.Suspense>
                 )}
               </div>
             ) : <p className="small-note">Select a layer to edit its display label, role, order, and colors.</p>}
