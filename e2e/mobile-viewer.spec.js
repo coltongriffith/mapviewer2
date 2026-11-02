@@ -25,6 +25,9 @@ async function phone(browser) {
 
 test('a company page opens the claims viewer on a phone', async ({ browser }) => {
   const { context, page } = await phone(browser);
+  // Historical company fixture expires in October 2026. Keep this navigation/
+  // hand-off test's existing active-date assertions independent of wall time.
+  await page.clock.setFixedTime(new Date('2026-10-01T12:00:00Z'));
   await page.goto('/companies/got/');
   await page.getByRole('link', { name: /Open this company's claims map/ }).click();
 
