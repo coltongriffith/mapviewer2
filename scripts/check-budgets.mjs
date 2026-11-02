@@ -294,9 +294,10 @@ const BUDGETS = {
   // Saved-map CSV/GeoJSON downloads: lazy dialog/serializer, measured 1177.9 (+3.0 KiB).
   // Property & Neighbours recipe + free-stage preview tile refresh: measured
   // 1179.5 configured / 1110.6 plain; retain ~0.4 KiB stamp/hash headroom.
-  // Location & Access shares the released property recipe; measured initial
-  // 1180.3 configured / 1111.4 plain, with ~0.4KiB stamp/hash allowance.
-  totalAuthJsGzipKb: 1180.7,
+  // Compact claim key: explicit source/snapshot validation, lazy controls and
+  // shared table/label composition. Stamped configured measurement 1185.4 KiB;
+  // allow 0.5 KiB for commit/chunk stamps. No new dependencies.
+  totalAuthJsGzipKb: 1185.9,
   // 1009.4 → 1026.3 (measured 1026.0): lazy XLSX reader (~13.8 KiB), sheet/header preview
   // (~1.1 KiB), import wiring and numeric-format handling. Shared fflate adds ~1.2 KiB
   // for async ZIP workers; it remains one copy with the existing draft compression.
@@ -384,7 +385,8 @@ const BUDGETS = {
   // Same guarded dialog/RPC path: measured 1089.5 plain; retain 0.4 KiB commit/chunk headroom.
   // Live web map merged with main (Point inspector, numeric classification): measured 1106.1.
   // Saved-map data downloads, as above: measured 1109.1; route caps unchanged.
-  totalJsGzipKb: 1111.8,
+  // Same opt-in key graph: stamped plain 1116.5 KiB, +0.5 KiB stamp allowance.
+  totalJsGzipKb: 1117.0,
   // 940.9 → 957.8 (measured 957.5): Excel import, as totalAuthJsGzipKb above.
   // 940.9 → 944.8 (P2-8, measured 944.6): the same lazy property recipe path
   // in the unconfigured build. Its initial route budgets also stay unchanged.
@@ -736,12 +738,12 @@ const BUDGETS = {
   claimsJsGzipKb: 295.9,
   // Live investor web map (/embed/map/<id>): map, legend, layer list, drill-result callouts and the drill plan
   // (its overlay loaded only when published with one), no editor; measured 243.9 configured, 177.5 plain with main.
-  // Location & Access reuses the shared property-title helper; measured 244.2
-  // configured after native footer/label corrections, with narrow stamp margin.
-  embedAuthJsGzipKb: 244.5,
-  // Linux CI measured fractionally over177.8 for the same shared recipe graph;
-  // retain0.3KiB stamp/platform margin, matching the configured allowance.
-  embedJsGzipKb: 178.1,
+  // MapCanvas opt-in key/annotation hand-off: measured 244.2 configured;
+  // rendering/validation remains in lazy fx modules. Other route caps unchanged.
+  embedAuthJsGzipKb: 244.6,
+  // Same opt-in MapCanvas hand-off: hosted plain measured 177.8 at the exact
+  // threshold; retain 0.4 KiB stamp/hash allowance as on the configured route.
+  embedJsGzipKb: 178.2,
   // Stylesheet, gzipped. Today ~29 kB.
   maxCssGzipKb: 40,
   // Any single image shipped from public/, including legacy PNG downloads.

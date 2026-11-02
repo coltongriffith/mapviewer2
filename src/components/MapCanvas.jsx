@@ -578,15 +578,16 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
 
   // Geology and label styling (layer.fx) and the basemap wash (layout.wash), lazy: a map without them loads nothing.
   const layers = project?.layers, layout = project?.layout;
+  const callouts = layout?.claimKey ? project?.callouts : undefined;
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || (!fxRef.current && !layout?.wash && !layers?.some((l) => l.fx))) return undefined;
+    if (!map || (!fxRef.current && !layout?.wash && !layout?.claimKey && !layers?.some((l) => l.fx))) return undefined;
     let live = true;
     import('../utils/fxLayers.js').then(({ syncFx }) => {
-      if (live && mapRef.current === map) fxRef.current = syncFx(map, fxRef.current, { project: { layers, layout }, template, zones, legendItems, geometry: geometryCache.current, trimLayerId, featureStyleLayerId });
+      if (live && mapRef.current === map) fxRef.current = syncFx(map, fxRef.current, { project: { layers, layout, callouts }, template, zones, legendItems, geometry: geometryCache.current, trimLayerId, featureStyleLayerId });
     }).catch(() => reportError('Geology styling could not load', { kind: 'asset_load' }));
     return () => { live = false; };
-  }, [layers, layout, template, zones, legendItems, trimLayerId, featureStyleLayerId]);
+  }, [layers, layout, callouts, template, zones, legendItems, trimLayerId, featureStyleLayerId]);
 
   return <div ref={mapElRef} className="leaflet-map-canvas" />;
 }
