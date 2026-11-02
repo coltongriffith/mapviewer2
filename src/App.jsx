@@ -7711,7 +7711,7 @@ export default function App({ initialAction = null }) {
         {(project.layout.themeId === 'studio' || project.layout.labelHalo) && sc('style')}
 
         {project.layout.templateId === 'ni_43101_technical' && (() => {
-          const STRIP_H = technicalStripHeight(project.layout);
+          const STRIP_H = technicalStripHeight(project.layout, mapSize?.width || 1000);
           const stripPos = project.layout.titleStripPosition || 'bottom';
           const stageH = mapSize?.height || 600;
           const stageW = mapSize?.width || 1000;

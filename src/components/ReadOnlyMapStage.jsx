@@ -225,7 +225,7 @@ export default function ReadOnlyMapStage({ project, onExportReady, nearbyClaims 
   const sc = (kind) => <React.Suspense fallback={null}><StudioCard kind={kind} layout={layout} zones={resolvedZones} map={map} layers={project.layers} /></React.Suspense>;
 
   // NI 43-101 strip values
-  const STRIP_H = technicalStripHeight(layout);
+  const STRIP_H = technicalStripHeight(layout, mapSize?.width || 1000);
   const niStripPos = layout.titleStripPosition || 'bottom';
   const niStageH = mapSize?.height || 600;
   const niStageW = mapSize?.width || 1000;

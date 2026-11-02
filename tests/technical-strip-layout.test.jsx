@@ -16,7 +16,7 @@ const layout = { templateId: 'ni_43101_technical', technicalReportVersion: 1,
 const fields = () => resolveTitleStripFields(layout, { now: new Date('2026-01-02T00:00:00Z'), scaleText: '1:100,000', projectionText: 'NAD83 / UTM Zone 9N' });
 
 describe('shared recipe-only technical title block', () => {
-  it.each([1000, 1250, 1600])('fits supplied long baseline metadata at %ipx without ellipsis', (width) => {
+  it.each([866, 1000, 1250, 1600])('fits supplied long baseline metadata at %ipx without ellipsis', (width) => {
     const plan = technicalStripPlan(layout, fields(), width);
     expect(plan.cells.every((cell) => !cell.truncated)).toBe(true);
     for (const cell of plan.cells) for (const line of cell.lines) {
@@ -52,6 +52,15 @@ describe('shared recipe-only technical title block', () => {
     expect(technicalStripHeight({})).toBe(72);
     expect(technicalStripHeight({ stripFontScale: 1.4 })).toBe(72);
     expect(technicalStripHeight({ ...layout, stripFontScale: 1.4 })).toBeGreaterThan(112);
+  });
+  it('gives portrait text real space in map geometry as well as the shared strip', () => {
+    const size = { width: 866, height: 1155 };
+    const plan = technicalStripPlan(layout, fields(), size.width);
+    const frame = getMapFrame(layout, size);
+    const zones = resolveNI43101Zones(technicalReportTemplate, layout, size, []);
+    expect(plan.height).toBeGreaterThan(112);
+    expect(size.height - frame.bottom).toBe(28 + plan.height);
+    expect(zones.titleStrip.top).toBe(size.height - plan.height);
   });
   it('bounds extreme unbroken input visibly without changing the saved metadata', () => {
     const source = { ...layout, title: 'X'.repeat(10000) };

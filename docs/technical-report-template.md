@@ -20,6 +20,10 @@ The recipe's title strip now shares one bounded line plan between the editing
 stage, read-only stage, canvas and SVG. It wraps supplied long titles/company
 names and uses the supplied title font. Its enlarged strip has the same reserved
 space in map framing and furniture geometry. Missing markers remain italic.
+The reserved height grows for supplied title/company text on narrower portrait
+frames, with a bounded maximum for extreme input. Classified legend rows include
+the literal source field in default headings; explicit layer/row headings and
+stable class IDs, labels and values remain intact.
 Extreme text is marked with an ellipsis; the saved metadata is never shortened.
 Legacy unselected layouts retain their existing 72px strip and renderers.
 

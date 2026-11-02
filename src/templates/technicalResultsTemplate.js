@@ -340,7 +340,11 @@ export function buildLegendItems(template, layers, layout = {}) {
 
       // Coloured by attribute: a row per class, not a row for the layer. Rows of a layer with geology styling
       // carry it, for swatches drawn in that style (utils/geoStyle.js).
-      if (isClassified(layer)) return [...classLegendItems(layer, baseStyle, baseLabel, group, isPoint).map((r) => (layer.fx && !isPoint ? { ...r, fx: layer.fx } : r)), ...traceRows];
+      if (isClassified(layer)) {
+        const classGroup = layout.technicalReportVersion === 1 && !layer.legend?.group
+          ? `${group} · ${layer.classification.field}` : group;
+        return [...classLegendItems(layer, baseStyle, baseLabel, classGroup, isPoint).map((r) => (layer.fx && !isPoint ? { ...r, fx: layer.fx } : r)), ...traceRows];
+      }
 
       if (isPoint) {
         const shapes = distinctShapesForLayer(layer);

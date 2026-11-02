@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { applyTechnicalReport } from '../src/utils/technicalReport.js';
 import { resolveTitleStripFields } from '../src/templates/technicalReportTemplate.js';
+import { buildLegendItemsNI43101, technicalReportTemplate } from '../src/templates/technicalReportTemplate.js';
+import { buildLegendItems } from '../src/templates/technicalResultsTemplate.js';
+import { applyLegendCustomization } from '../src/utils/legendCustomization.js';
 
 const project = (layout = {}, layers = []) => ({ layout: { title: 'Project Map', ...layout }, layers });
 const claims = (id, name, extra = {}) => ({ id, role: 'claims', visible: true, type: 'geojson',
@@ -10,6 +13,22 @@ const claims = (id, name, extra = {}) => ({ id, role: 'claims', visible: true, t
   }] } });
 
 describe('explicit Technical Report recipe', () => {
+  it.each([buildLegendItems, buildLegendItemsNI43101])('prints literal supplied class field context without changing row IDs or overrides', (build) => {
+    const sample = { id: 'sample', role: 'soil_samples', type: 'points', visible: true, style: { markerSize: 6 },
+      geojson: { type: 'FeatureCollection', features: [{ type: 'Feature', properties: { Cu_ppm: 20 }, geometry: { type: 'Point', coordinates: [-120, 50] } }] },
+      classification: { field: 'Cu_ppm', mode: 'numeric', classes: [{ id: 'low', max: 50, color: '#aabbcc' }, { id: 'high', max: null, color: '#112233' }] } };
+    const before = structuredClone(sample);
+    const legacy = build(technicalReportTemplate, [sample], {});
+    const selected = build(technicalReportTemplate, [sample], { technicalReportVersion: 1 });
+    expect(selected.map((row) => row.id)).toEqual(legacy.map((row) => row.id));
+    expect(selected.map((row) => row.label)).toEqual(legacy.map((row) => row.label));
+    expect(selected.every((row) => row.group.endsWith(' · Cu_ppm'))).toBe(true);
+    const changed = applyLegendCustomization(selected, { legendOverrides: { [selected[0].id]: { group: 'My supplied heading' } } });
+    expect(changed[0].group).toBe('My supplied heading');
+    const explicit = build(technicalReportTemplate, [{ ...sample, legend: { group: 'Explicit heading' } }], { technicalReportVersion: 1 });
+    expect(explicit.every((row) => row.group === 'Explicit heading')).toBe(true);
+    expect(sample).toEqual(before);
+  });
   it('uses only a supplied unambiguous project title', () => {
     const source = project({}, [claims('subject', 'Illustrative Ridge')]);
     expect(applyTechnicalReport(source).layout.title).toBe('Illustrative Ridge');

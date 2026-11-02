@@ -1,6 +1,15 @@
 const fontScale = (layout) => Math.max(0.7, Math.min(1.4, Number(layout?.stripFontScale) || 1));
-export const technicalStripHeight = (layout) => layout?.technicalReportVersion === 1
-  ? Math.ceil(112 * fontScale(layout)) : 72;
+export function technicalStripHeight(layout, width = 1250) {
+  if (layout?.technicalReportVersion !== 1) return 72;
+  const fs = fontScale(layout);
+  const cellHeight = (fraction, entries) => 16 + entries.reduce((sum, [text, size]) => {
+    const px = size * fs, capacity = Math.max(1, Math.floor((width * fraction - 16) / px));
+    return sum + wrap(text, capacity).length * (px * 1.2 + 1);
+  }, 0);
+  const titleHeight = cellHeight(.45, [['TITLE', 8], [layout.stripTitle || layout.title, 14], [layout.stripSubtitle || layout.subtitle, 9]]);
+  const authorHeight = cellHeight(.2, [['QUALIFIED PERSON', 7], [layout.qpName || 'NOT SET', 10], [layout.qpCredentials, 8], [layout.companyName, 7]]);
+  return Math.ceil(Math.min(224 * fs, Math.max(112 * fs, titleHeight, authorHeight)));
+}
 
 // A conservative, deterministic wrap shared by DOM/SVG/canvas, including long
 // unbroken supplied identifiers. It needs no browser/font-loading side effects.
@@ -26,7 +35,7 @@ function wrap(value, capacity) {
  * visible line is marked with an ellipsis rather than bleeding into a neighbour.
  */
 export function technicalStripPlan(layout, fields, width) {
-  const fs = fontScale(layout), height = technicalStripHeight(layout);
+  const fs = fontScale(layout), height = technicalStripHeight(layout, width);
   const titleFont = `${layout.fonts?.title || 'Arial'}, sans-serif`;
   const mono = "'Courier New', Courier, monospace";
   const missing = fields.missing || {};

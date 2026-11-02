@@ -35,7 +35,7 @@ export function getMapFrame(layout, stage, opts = {}) {
   const width = stage?.width || 1000;
   const height = stage?.height || 600;
   if (layout?.templateId === NI_TEMPLATE_ID) {
-    const stripHeight = technicalStripHeight(layout);
+    const stripHeight = technicalStripHeight(layout, width);
     const stripPos = layout?.titleStripPosition || 'bottom';
     const top = TICK_MARGIN + (stripPos === 'top' ? stripHeight : 0);
     const bottom = height - TICK_MARGIN - (stripPos === 'bottom' ? stripHeight : 0);

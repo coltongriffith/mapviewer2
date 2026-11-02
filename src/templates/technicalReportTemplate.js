@@ -172,7 +172,7 @@ export function resolveNI43101Zones(template, layout, mapSize, legendItems) {
   const height = mapSize?.height || 1000;
 
   const stripPos = layout?.titleStripPosition || 'bottom';
-  const STRIP_H = technicalStripHeight(layout);
+  const STRIP_H = technicalStripHeight(layout, width);
   const mapFrameTop = TICK_MARGIN + (stripPos === 'top' ? STRIP_H : 0);
   const mapFrameBottom = height - TICK_MARGIN - (stripPos === 'bottom' ? STRIP_H : 0);
   const mapFrameLeft = TICK_MARGIN;
@@ -285,7 +285,7 @@ function distinctShapesForLayer(layer) {
   return [...seen];
 }
 
-export function buildLegendItemsNI43101(template, layers, _layout = {}) {
+export function buildLegendItemsNI43101(template, layers, layout = {}) {
   // A layer whose every shape has been removed contributes nothing to the map,
   // so it must not contribute a legend entry either — an entry for an absent
   // layer tells the reader that data is on the page when it is not, and the
@@ -319,7 +319,11 @@ export function buildLegendItemsNI43101(template, layers, _layout = {}) {
       }] : [];
 
       // Coloured by attribute: a row per class, not a row for the layer.
-      if (isClassified(layer)) return [...classLegendItems(layer, baseStyle, baseLabel, group, isPoint), ...traceRows];
+      if (isClassified(layer)) {
+        const classGroup = layout.technicalReportVersion === 1 && !layer.legend?.group
+          ? `${group} · ${layer.classification.field}` : group;
+        return [...classLegendItems(layer, baseStyle, baseLabel, classGroup, isPoint), ...traceRows];
+      }
 
       if (isPoint) {
         const shapes = distinctShapesForLayer(layer);
