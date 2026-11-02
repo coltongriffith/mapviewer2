@@ -3,6 +3,7 @@ import { locatorBounds } from '../utils/locatorBounds.js';
 import { autoProjectionName, formatScaleDenom, scaleDenomFromMap } from '../utils/geo';
 import { resolveTemplateZones } from '../templates/technicalResultsTemplate';
 import { resolveNI43101Zones, resolveTitleStripFields } from '../templates/technicalReportTemplate';
+import { technicalStripPlan } from '../utils/technicalStripLayout.js';
 import { resolveSidePanelZones } from '../templates/sidePanelTemplate';
 import { getThemeTokens } from '../utils/themeTokens';
 import { northArrowShapes, NORTH_ARROW_FONT } from '../utils/northArrowGeometry';
@@ -1308,15 +1309,19 @@ async function drillPlanFor(scene) {
 async function fxFor(scene) {
   const layout = scene.project.layout || {};
   const layers = (scene.project.layers || []).filter((l) => l.fx && l.visible !== false && l.geojson);
-  if (!layers.length && !layout.wash && !(layout.legendItems || []).some((i) => i.fx)) return null;
+  if (!layers.length && !layout.claimKey && !layout.wash && !(layout.legendItems || []).some((i) => i.fx)) return null;
   const mod = await import('../utils/geoStyle.js');
   const out = { mod, wash: mod.washPrims(layout.wash, scene.width, scene.height), band: [], labels: [], overlaps: [] };
-  if (layers.length && scene.map) {
+  if ((layers.length || layout.claimKey) && scene.map) {
+    const keyMod = layout.claimKey ? await import('../utils/claimKeyComposition.js') : null;
+    const panels = panelObstacles(getOverlayMetrics(scene), layout);
     const view = mod.mapView(scene.map, scene.width, scene.height, {
-      obstacles: panelObstacles(getOverlayMetrics(scene), layout), family: layout.fonts?.label || 'Inter',
+      obstacles: keyMod ? keyMod.claimKeyObstacles(scene.project, scene.map, panels) : panels, family: layout.fonts?.label || 'Inter',
       frame: getMapFrame(layout, { width: scene.width, height: scene.height }, { sidebarFrac: scene.template?.sidebarFrac }),
     });
-    Object.assign(out, mod.fxScene(layers.map((layer) => ({ layer, features: featureCollectionFeatures(getLayerGeojson(layer)), styleOf: (f) => getFeatureStyle(scene.template, layer, f) })), view));
+    const entries = layers.map((layer) => ({ layer, features: featureCollectionFeatures(getLayerGeojson(layer)), styleOf: (f) => getFeatureStyle(scene.template, layer, f) }));
+    Object.assign(out, keyMod ? keyMod.claimKeyComposition(entries, view, scene.project) : mod.fxScene(entries, view));
+    if (out.claimKey && (!out.claimKey.ok || out.claimKey.omitted)) warn(scene, 'claim-key', out.claimKey.ok ? `${out.claimKey.omitted} claims have no located reference in this view` : `Claim key unavailable: ${out.claimKey.reason}`, 'zoom or move map furniture, or rebuild the key after changing its source');
     // Labels over a results card are reported too (the cards are placed as the export places them).
     const cards = placeCallouts({ ...scene, exportContext: null }, 1).map((c) => ({ key: 'a callout', left: c.left, top: c.top, width: c.width, height: c.height }));
     out.placed.forEach((p) => {
@@ -1891,8 +1896,39 @@ function calcMapScaleDenom(scene) {
   return scaleDenomFromMap(scene.map);
 }
 
+function reportStripPlan(scene) {
+  const layout = scene.project.layout || {};
+  return technicalStripPlan(layout, resolveTitleStripFields(layout, {
+    scaleText: formatScaleDenom(calcMapScaleDenom(scene)),
+    projectionText: autoProjectionName(scene.map),
+  }), scene.width);
+}
+
+function drawReportStripCanvas(ctx, scene, scale) {
+  const plan = reportStripPlan(scene);
+  const top = scene.project.layout.titleStripPosition === 'top' ? 0 : scene.height - plan.height;
+  ctx.save(); ctx.scale(scale, scale); ctx.translate(0, top);
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, plan.width, plan.height);
+  ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5; ctx.strokeRect(.75, .75, plan.width - 1.5, plan.height - 1.5);
+  ctx.lineWidth = 1;
+  for (const x of plan.dividers) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, plan.height); ctx.stroke(); }
+  ctx.fillStyle = '#000'; ctx.textBaseline = 'alphabetic';
+  for (const cell of plan.cells) for (const line of cell.lines) {
+    ctx.font = `${line.italic ? 'italic ' : ''}${line.bold ? '700' : '400'} ${line.fontSize}px ${line.family}`;
+    ctx.fillText(line.text, line.x, line.y);
+  }
+  ctx.restore();
+}
+
+function reportStripSvg(scene, scale) {
+  const plan = reportStripPlan(scene);
+  const top = scene.project.layout.titleStripPosition === 'top' ? 0 : scene.height - plan.height;
+  return `<g transform="scale(${scale}) translate(0 ${top})"><rect x=".75" y=".75" width="${plan.width - 1.5}" height="${plan.height - 1.5}" fill="#fff" stroke="#000" stroke-width="1.5" />${plan.dividers.map((x) => `<line x1="${x}" x2="${x}" y1="0" y2="${plan.height}" stroke="#000" />`).join('')}${plan.cells.flatMap((cell) => cell.lines.map((line) => `<text x="${line.x}" y="${line.y}" font-size="${line.fontSize}" font-family="${escapeXml(line.family)}" font-weight="${line.bold ? 700 : 400}" font-style="${line.italic ? 'italic' : 'normal'}" fill="#000">${escapeXml(line.text)}</text>`)).join('')}</g>`;
+}
+
 function drawTitleStripCanvas(ctx, scene, scale) {
   if (scene.project.layout?.showTitle === false) return;
+  if (scene.project.layout?.technicalReportVersion === 1) return drawReportStripCanvas(ctx, scene, scale);
   const layout = scene.project.layout || {};
   const stripPos = layout.titleStripPosition || 'bottom';
   const canvasW = Math.round(scene.width * scale);
@@ -1991,6 +2027,7 @@ function drawTitleStripCanvas(ctx, scene, scale) {
 
 function renderTitleStripSvg(scene, scale) {
   if (scene.project.layout?.showTitle === false) return '';
+  if (scene.project.layout?.technicalReportVersion === 1) return reportStripSvg(scene, scale);
   const layout = scene.project.layout || {};
   const stripPos = layout.titleStripPosition || 'bottom';
   const canvasW = Math.round(scene.width * scale);

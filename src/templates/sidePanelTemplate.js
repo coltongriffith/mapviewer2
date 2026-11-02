@@ -1,5 +1,5 @@
 import { hasVisibleFeatures, layerGeometryKind } from '../utils/featureIdentity.js';
-import { legendRowCount } from '../utils/legendCustomization.js';
+import { legendRowCount, legendPanelHeight } from '../utils/legendCustomization.js';
 import { TICK_MARGIN, scaleBarHeight } from '../utils/coordinateFrame.js';
 
 const SIDEBAR_FRAC = 0.28;
@@ -86,16 +86,30 @@ export function resolveSidePanelZones(template, layout, mapSize, legendItems) {
 
   // --- Element heights ---
   const resolvedItems = legendItems || layout?.legendItems || [];
-  const legendHeight = layout?.legendHeightPx != null
+  const estimatedLegendHeight = layout?.legendHeightPx != null
     ? Math.max(60, Math.min(H - 320, layout.legendHeightPx))
     : legendHeightFor(layout, legendRowCount(resolvedItems, layout));
+  const legendHeight = layout?.explorationDrillVersion === 1
+    ? legendPanelHeight(resolvedItems, { ...layout, legendWidthPx: innerW }, estimatedLegendHeight) + (resolvedItems.length ? 36 : 0)
+    : estimatedLegendHeight;
 
-  const titleHeight = Math.max(72, Math.min(180, layout?.titleHeightPx ?? 108));
+  const requestedTitleHeight = Math.max(72, Math.min(180, layout?.titleHeightPx ?? 108));
+  // Only the explicit recipe adds wrap allowance for narrow/portrait rails.
+  // Text stays unchanged; this is conservative space, not a truncation rule.
+  const lines = (text, font, width) => String(text || '').split('\n')
+    .reduce((n, line) => n + Math.max(1, Math.ceil(line.length * font * 0.56 / Math.max(40, width))), 0);
+  const titleScale = layout?.titleFontScale ?? 1;
+  const titleHeight = layout?.explorationDrillVersion === 1
+    ? Math.max(requestedTitleHeight, Math.min(240, 40 + lines(layout.title, 22 * titleScale, innerW - 40) * 27 * titleScale
+      + (layout.subtitle ? lines(layout.subtitle, 12 * titleScale, innerW - 40) * 18 * titleScale : 0)))
+    : requestedTitleHeight;
   const logoScale = Math.max(0.7, Math.min(1.2, Number(layout?.logoScale || 1)));
   const logoH = layout?.logo ? (layout?.logoHeightPx ? Math.max(20, Math.min(160, layout.logoHeightPx)) : Math.round(52 * logoScale)) : 0;
   const naH = layout?.northArrowHeightPx ?? 72;
   const naW = Math.round(naH * 0.9);
-  const footerH = layout?.footerHeightPx ? Math.max(22, Math.min(200, layout.footerHeightPx)) : 28;
+  const requestedFooterH = layout?.footerHeightPx ? Math.max(22, Math.min(200, layout.footerHeightPx)) : 28;
+  const footerH = layout?.explorationDrillVersion === 1 && layout.footerText
+    ? Math.max(requestedFooterH, Math.min(200, lines(layout.footerText, 12, innerW - 28) * 16 + 4)) : requestedFooterH;
   const scaleBarW = layout?.scaleBarWidthPx || 160;
   const scaleBarActualH = scaleBarHeight(layout);
 
@@ -179,6 +193,14 @@ export function resolveSidePanelZones(template, layout, mapSize, legendItems) {
 
   let fittedLegendH = legendHeight;
   let fittedInsetH = insetEnabled ? insetH : 0;
+  // The explicit drill recipe keeps supplied classes readable before spending
+  // spare rail height on a large locator. Existing saved rail layouts keep the
+  // previous fitting order. No legend rows or scientific classes are removed.
+  if (layout?.explorationDrillVersion === 1 && overflow > 0 && fittedInsetH > 0) {
+    const give = Math.min(overflow, Math.max(0, fittedInsetH - 70));
+    fittedInsetH -= give;
+    overflow -= give;
+  }
   if (overflow > 0 && grid.some((i) => (Array.isArray(i) ? i : [i]).includes('legend'))) {
     const give = Math.min(overflow, Math.max(0, fittedLegendH - 60));
     fittedLegendH -= give;

@@ -4,8 +4,8 @@ import { hasVisibleFeatures, layerGeometryKind } from '../utils/featureIdentity.
 import { isClassified, classLegendItems } from '../utils/classification.js';
 import { hasDrillTraces } from '../utils/drillTraces.js';
 import { getCornerLayout } from '../utils/cornerLayout';
+import { technicalStripHeight } from '../utils/technicalStripLayout.js';
 
-const STRIP_H = 72;
 const TICK_MARGIN = 28;
 
 const ROLE_GROUPS = {
@@ -172,6 +172,7 @@ export function resolveNI43101Zones(template, layout, mapSize, legendItems) {
   const height = mapSize?.height || 1000;
 
   const stripPos = layout?.titleStripPosition || 'bottom';
+  const STRIP_H = technicalStripHeight(layout, width);
   const mapFrameTop = TICK_MARGIN + (stripPos === 'top' ? STRIP_H : 0);
   const mapFrameBottom = height - TICK_MARGIN - (stripPos === 'bottom' ? STRIP_H : 0);
   const mapFrameLeft = TICK_MARGIN;
@@ -185,7 +186,8 @@ export function resolveNI43101Zones(template, layout, mapSize, legendItems) {
   // need: it used to cap at 500 and let the rest scroll, so the export clipped
   // the last rows of a long legend.
   // Without one: fitted to the entries (layout.legendFit), else the older estimate (legendPanelHeight).
-  const legendHeight = legendPanelHeight(resolvedLegendItems, layout, legendHeightFor(layout, legendRowCount(resolvedLegendItems, layout)));
+  const legendHeight = legendPanelHeight(resolvedLegendItems, layout, legendHeightFor(layout, legendRowCount(resolvedLegendItems, layout)))
+    + (layout?.technicalReportVersion === 1 && resolvedLegendItems.length ? 36 : 0);
   const legendWidth = legendWidthFor(layout, resolvedLegendItems);
 
   const insetScale = Math.max(0.8, Math.min(1.2, Number(layout?.insetScale || 1)));
@@ -209,7 +211,7 @@ export function resolveNI43101Zones(template, layout, mapSize, legendItems) {
 
   function sizeOf(id) {
     switch (id) {
-      case 'logo':       return [logoW, logoH];
+      case 'logo':       return layout?.technicalReportVersion === 1 && !layout.logo ? [0, 0] : [logoW, logoH];
       case 'inset':      return layout?.insetEnabled === false ? [0, 0] : [insetWidth, insetHeight];
       case 'northArrow': return [naW, naH];
       case 'scaleBar':   return layout?.showScaleBar === false ? [0, 0] : [180, 60 + (layout?.showProjectionLabel ? 16 : 0)];
@@ -254,6 +256,9 @@ export function resolveNI43101Zones(template, layout, mapSize, legendItems) {
 
   return {
     title: { left: 0, top: 0, width: 0, height: 0 },
+    ...(layout?.technicalReportVersion === 1 ? { titleStrip: {
+      left: 0, top: stripPos === 'top' ? 0 : height - STRIP_H, width, height: STRIP_H,
+    } } : {}),
     logo: zones.logo,
     footer: { left: 0, top: 0, width: 0, height: 0 },
     scaleBar: zones.scaleBar,
@@ -280,7 +285,7 @@ function distinctShapesForLayer(layer) {
   return [...seen];
 }
 
-export function buildLegendItemsNI43101(template, layers, _layout = {}) {
+export function buildLegendItemsNI43101(template, layers, layout = {}) {
   // A layer whose every shape has been removed contributes nothing to the map,
   // so it must not contribute a legend entry either — an entry for an absent
   // layer tells the reader that data is on the page when it is not, and the
@@ -314,7 +319,11 @@ export function buildLegendItemsNI43101(template, layers, _layout = {}) {
       }] : [];
 
       // Coloured by attribute: a row per class, not a row for the layer.
-      if (isClassified(layer)) return [...classLegendItems(layer, baseStyle, baseLabel, group, isPoint), ...traceRows];
+      if (isClassified(layer)) {
+        const classGroup = layout.technicalReportVersion === 1 && !layer.legend?.group
+          ? `${group} · ${layer.classification.field}` : group;
+        return [...classLegendItems(layer, baseStyle, baseLabel, classGroup, isPoint), ...traceRows];
+      }
 
       if (isPoint) {
         const shapes = distinctShapesForLayer(layer);

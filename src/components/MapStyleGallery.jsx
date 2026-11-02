@@ -7,9 +7,9 @@ import { getThemeTokens } from '../utils/themeTokens';
 const CARD_TEXT = {
   investor: { name: 'Investor', sub: 'Property in district context', thumb: '/gallery/regional.webp' },
   claims: { name: 'Property & Neighbours', sub: 'Claims & tenure · your data and brand', thumb: '/gallery/claims.webp' },
-  drill: { name: 'Drill results', sub: 'Collars and intercepts', thumb: '/gallery/drill-results.webp' },
-  infrastructure: { name: 'Infrastructure', sub: 'Roads, power and access', thumb: '/gallery/infrastructure.webp' },
-  ni_43101: { name: 'NI 43-101 figure', sub: 'Coordinate frame, title block', thumb: '/gallery/target.webp' },
+  drill: { name: 'Exploration & Drill', sub: 'Supplied drilling, samples and targets', thumb: '/gallery/drill-results.webp' },
+  infrastructure: { name: 'Location & Access', sub: 'Infrastructure · supplied routes and context', thumb: '/gallery/infrastructure.webp' },
+  ni_43101: { name: 'Technical Report', sub: 'Coordinate frame, supplied metadata', thumb: '/gallery/target.webp' },
 };
 
 /**
