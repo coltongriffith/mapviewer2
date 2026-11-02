@@ -6088,7 +6088,7 @@ export default function App({ initialAction = null }) {
                       legendHeightPx: null,
                       titleHeightPx: 108,
                     } : {};
-                    updateLayout({ templateId: tid, themeId: themeMap[tid] || 'investor_clean', stripTitle: '', stripSubtitle: '', ...extra });
+                    updateLayout({ templateId: tid, themeId: themeMap[tid] || 'investor_clean', stripTitle: '', stripSubtitle: '', technicalReportVersion: undefined, ...extra });
                   }}
                 >
                   <option value="technical_results_v2">Standard</option>

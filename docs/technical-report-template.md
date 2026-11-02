@@ -29,6 +29,10 @@ Legacy unselected layouts retain their existing 72px strip and renderers.
 
 The selected recipe fits the legend to content plus native chrome, moves scale
 and north-arrow furniture to the other corner, and reserves no absent-logo gap.
+It uses the existing standalone legend note to print a supplied source/disclaimer
+that would otherwise be hidden by the technical strip; an explicitly hidden
+footer remains hidden. The legend is below a present logo at the top-left,
+leaving lower geographic annotations intact.
 Native desktop/mobile/restore/PNG verification, browser regression coverage and
 final measured builds remain necessary before publication. Existing saved maps
 are not automatically migrated or restyled.

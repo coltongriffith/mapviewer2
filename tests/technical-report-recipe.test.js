@@ -3,7 +3,7 @@ import { applyTechnicalReport } from '../src/utils/technicalReport.js';
 import { resolveTitleStripFields } from '../src/templates/technicalReportTemplate.js';
 import { buildLegendItemsNI43101, technicalReportTemplate } from '../src/templates/technicalReportTemplate.js';
 import { buildLegendItems } from '../src/templates/technicalResultsTemplate.js';
-import { applyLegendCustomization } from '../src/utils/legendCustomization.js';
+import { applyLegendCustomization, legendNoteLines, noteInLegend } from '../src/utils/legendCustomization.js';
 
 const project = (layout = {}, layers = []) => ({ layout: { title: 'Project Map', ...layout }, layers });
 const claims = (id, name, extra = {}) => ({ id, role: 'claims', visible: true, type: 'geojson',
@@ -13,6 +13,13 @@ const claims = (id, name, extra = {}) => ({ id, role: 'claims', visible: true, t
   }] } });
 
 describe('explicit Technical Report recipe', () => {
+  it('prints a supplied source note through the existing legend-note contract and respects a hidden footer', () => {
+    const next = applyTechnicalReport(project({ footerText: 'Supplied source disclosure', templateId: 'ni_43101_technical' }));
+    const rows = [{ id: 'source', label: 'Sample', type: 'points' }];
+    expect(noteInLegend(next.layout, rows)).toBe(true);
+    expect(legendNoteLines(next.layout, rows).join(' ')).toBe('Supplied source disclosure');
+    expect(noteInLegend({ ...next.layout, footerEnabled: false }, rows)).toBe(false);
+  });
   it.each([buildLegendItems, buildLegendItemsNI43101])('prints literal supplied class field context without changing row IDs or overrides', (build) => {
     const sample = { id: 'sample', role: 'soil_samples', type: 'points', visible: true, style: { markerSize: 6 },
       geojson: { type: 'FeatureCollection', features: [{ type: 'Feature', properties: { Cu_ppm: 20 }, geometry: { type: 'Point', coordinates: [-120, 50] } }] },

@@ -21,6 +21,9 @@ export function applyTechnicalReport(project) {
       title,
       subtitle: ['Technical Results', 'Claims Map', 'Investor Map'].includes(original.subtitle) ? '' : original.subtitle,
       showLegend: true,
+      // The technical strip replaces the normal footer. Reuse the existing
+      // standalone legend note so a supplied disclosure is actually printed.
+      mapUse: 'standalone',
       legendFit: true,
       legendHeightPx: null,
       cornerLayout: { tl: [['logo', 'title'], ['legend']], tr: [['inset']], bl: [], br: [['scaleBar', 'northArrow']] },

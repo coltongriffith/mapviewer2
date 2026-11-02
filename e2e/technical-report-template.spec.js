@@ -50,6 +50,7 @@ test('technical report card prepopulates supplied content without changing scien
   await expect(strip).toContainText('NOT SET');
   await expect(strip).toContainText('NAD83 / UTM Zone 10N');
   await expect(page.locator('.legend-card')).toContainText('Cu_ppm');
+  await expect(page.locator('.legend-card')).toContainText('Illustrative source disclosure');
   const saved = (await readDraft(page)).payload;
   expect(saved.layers).toEqual(source.layers);
   expect(saved.distanceLines).toEqual(source.distanceLines);
