@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { INSET_MODES } from '../src/projectState.js';
 import { insetStylePatch } from '../src/utils/insetStyle.js';
+import { locatorBounds } from '../src/utils/locatorBounds.js';
+import { featureKey } from '../src/utils/featureIdentity.js';
 
 // The component and the exporter are coupled by one string — the container's
 // class name. If either side is renamed, the inset renders perfectly on screen
@@ -121,7 +123,16 @@ describe('the inset shows what is on the map', () => {
   it('measures visible geometry, not trimmed geometry', () => {
     // Same rule as framing and the legend: a removed block must not stretch
     // the locator over ground the user deleted.
-    expect(component).toMatch(/visibleGeojson\(l\)/);
+    const polygon = (id, x) => ({ type: 'Feature', id, properties: {}, geometry: {
+      type: 'Polygon', coordinates: [[[x, 50], [x + .02, 50], [x + .02, 50.02], [x, 50]]],
+    } });
+    const retained = polygon('retained', -120), removed = polygon('removed', -100);
+    const source = { id: 'claims', geojson: { type: 'FeatureCollection', features: [retained, removed] },
+      featureOverrides: { [featureKey(removed)]: { hidden: true } } };
+    const result = locatorBounds([source]);
+    expect(result.contextBounds).toMatchObject({ minLng: -120, maxLng: -119.98 });
+    expect(result.markerBounds).toEqual(result.contextBounds);
+    expect(source.geojson.features).toHaveLength(2);
   });
 
   it('keeps tiles as <img> so the exporter can read them', () => {

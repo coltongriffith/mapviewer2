@@ -415,6 +415,7 @@ export default function ReadOnlyMapStage({ project, onExportReady, nearbyClaims 
         <div className="template-zone" style={zoneStyle(resolvedZones.inset)}>
           {studio ? sc('inset') : <LocatorInset
             layers={project.layers}
+            layout={layout}
             insetMode={layout.insetMode}
             insetBasemap={layout.insetBasemap}
             insetImage={layout.insetImage}

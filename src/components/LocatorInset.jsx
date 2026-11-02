@@ -1,8 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { lazyGuarded } from '../utils/preloadGuard';
-import { geojsonBounds, unionBounds } from '../utils/geometry';
+import { locatorBounds } from '../utils/locatorBounds.js';
 import { detectRegion } from '../utils/detectRegion';
-import { visibleGeojson } from '../utils/featureIdentity.js';
 const SatelliteInset = lazyGuarded(() => import('./SatelliteInset'));
 
 const REFERENCE_PRESETS = {
@@ -105,18 +104,17 @@ function buildAutoSvg(region, visibleBounds) {
   return { paths, markerEl, svgW, svgH };
 }
 
-export default function LocatorInset({ layers, insetMode, insetBasemap, mode, insetImage, autoInsetRegion, insetTitle, insetLabel, zone, regionFill, regionStroke, bgFill, markerColor }) {
-  const { visibleBounds, referenceBounds } = useMemo(() => {
-    const visible = (layers || []).filter((layer) => layer.visible !== false);
+export default function LocatorInset({ layers, layout, insetMode, insetBasemap, mode, insetImage, autoInsetRegion, insetTitle, insetLabel, zone, regionFill, regionStroke, bgFill, markerColor }) {
+  const { visibleBounds, markerBounds, referenceBounds } = useMemo(() => {
     // Removed shapes are not part of the map's extent, so the locator must not
     // draw its "you are here" box around them either.
-    const visibleBounds = unionBounds(visible.map((layer) => geojsonBounds(visibleGeojson(layer))).filter(Boolean));
-    if (!visibleBounds) return { visibleBounds: null, referenceBounds: null };
+    const { contextBounds: visibleBounds, markerBounds } = locatorBounds(layers, layout);
+    if (!visibleBounds) return { visibleBounds: null, markerBounds: null, referenceBounds: null };
     const preset = REFERENCE_PRESETS[insetMode] || REFERENCE_PRESETS.province_state;
-    return { visibleBounds, referenceBounds: { ...expandBounds(visibleBounds, preset.expand), label: preset.label } };
-  }, [layers, insetMode]);
+    return { visibleBounds, markerBounds, referenceBounds: { ...expandBounds(visibleBounds, preset.expand), label: preset.label } };
+  }, [layers, layout, insetMode]);
 
-  const marker = normalize(visibleBounds, referenceBounds);
+  const marker = normalize(markerBounds, referenceBounds);
   const backdrop = buildBackdrop(mode);
   const wantsCustom = insetMode === 'custom_image';
   const showCustom = wantsCustom && insetImage;
@@ -144,8 +142,8 @@ export default function LocatorInset({ layers, insetMode, insetBasemap, mode, in
 
   const autoSvg = useMemo(() => {
     if (!showAuto) return null;
-    return buildAutoSvg(region, visibleBounds);
-  }, [showAuto, region, visibleBounds]);
+    return buildAutoSvg(region, markerBounds);
+  }, [showAuto, region, markerBounds]);
 
   return (
     <div className="template-card inset-card polished" style={zone}>
@@ -159,7 +157,7 @@ export default function LocatorInset({ layers, insetMode, insetBasemap, mode, in
       ) : showSatellite ? (
         <div className="inset-satellite-wrap">
           <React.Suspense fallback={null}>
-            <SatelliteInset layers={layers} region={autoInsetRegion} markerColor={markerColor} basemap={insetBasemap || 'satellite'} />
+            <SatelliteInset layers={layers} layout={layout} region={autoInsetRegion} markerColor={markerColor} basemap={insetBasemap || 'satellite'} />
           </React.Suspense>
         </div>
       ) : showAuto ? (
