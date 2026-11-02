@@ -53,6 +53,15 @@ describe('explicit Technical Report recipe', () => {
       { id: 'sample', visible: true, role: 'soil_samples', classification: { field: 'Cu_ppm' } }];
     expect(applyTechnicalReport(project({}, layers)).layers).toBe(layers);
   });
+  it('changes furniture only and leaves supplied geographic annotation endpoints and manual pins intact', () => {
+    const source = { ...project(), distanceLines: [{ id: 'distance', p1: { lat: 50, lng: -120 }, p2: { lat: 50.02, lng: -120.02 }, label: 'Supplied distance caption' }],
+      callouts: [{ id: 'manual', anchor: { lat: 50, lng: -120 }, offset: { x: 20, y: 15 }, isManualPosition: true }] };
+    const next = applyTechnicalReport(source);
+    expect(next.distanceLines).toBe(source.distanceLines);
+    expect(next.callouts).toBe(source.callouts);
+    expect(next.layout.legendCorner).toBe('tl');
+    expect(next.layout.cornerLayout.tl).toContainEqual(['legend']);
+  });
   it('reuses missing metadata and render-time date fallbacks without saving them', () => {
     const next = applyTechnicalReport(project());
     const fields = resolveTitleStripFields(next.layout, { now: new Date('2026-01-02T00:00:00Z') });
