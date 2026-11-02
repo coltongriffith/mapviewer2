@@ -87,6 +87,9 @@ export function panelObstacles(zones, layout = {}) {
       out.push({ key, left: z.left, top: z.top, width: z.width, height: z.height });
     }
   };
+  // The opted-in drill composition reserves its entire technical rail, even
+  // when legend entries are derived and layout.legendItems is still empty.
+  if (layout.explorationDrillVersion === 1) add(zones.sidebar, 'technical rail');
   if (layout.showTitle !== false) add(zones.title, 'title');
   if (layout.technicalReportVersion === 1 && layout.showTitle !== false) add(zones.titleStrip, 'title strip');
   if (layout.showLegend !== false && ((layout.legendItems || []).length || layout.technicalReportVersion === 1)) add(zones.legend, 'legend');

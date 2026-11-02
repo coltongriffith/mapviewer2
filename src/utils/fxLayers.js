@@ -4,6 +4,7 @@ import { panelObstacles } from './calloutLayout';
 import { getMapFrame } from './coordinateFrame.js';
 import { getFeatureStyle, canDissolve } from './featureStyle.js';
 import { featureKey } from './featureIdentity.js';
+import { claimKeyComposition, claimKeyObstacles } from './claimKeyComposition.js';
 
 // The geology and label styling (utils/geoStyle.js) on the editor's Leaflet map, painted by the same canvas
 // painter as the PNG export, on three canvases in their own panes so they stack as the exporters draw them:
@@ -61,6 +62,7 @@ function paneFor(map, key) {
 function inputOf({ project, template, zones, legendItems, geometry, trimLayerId, featureStyleLayerId }) {
   const layout = project?.layout || {};
   return {
+    project,
     layers: (project?.layers || []).filter((l) => l.fx && l.visible !== false && l.geojson),
     wash: layout.wash,
     obstacles: zones ? panelObstacles(zones, { ...layout, legendItems: legendItems || [] }) : [],
@@ -82,12 +84,17 @@ export function syncFx(map, state, editor) {
   const s = state || { canvases: {}, input: null, scene: null };
   const input = inputOf(editor);
   s.input = input;
-  const want = { wash: !!washPrims(input.wash, 1, 1).length, band: input.layers.length > 0, labels: input.layers.some((l) => l.fx?.label && l.fx.label.on !== false) };
+  const want = { wash: !!washPrims(input.wash, 1, 1).length, band: input.layers.length > 0, labels: !!input.project?.layout?.claimKey || input.layers.some((l) => l.fx?.label && l.fx.label.on !== false) };
+  if (!want.band && !want.labels) {
+    map.emFxReport = { overlaps: [], placed: [] };
+    map.fire('emfxreport', map.emFxReport);
+  }
   const scene = () => {
     if (s.scene) return s.scene;
     const size = map.getSize();
-    s.scene = fxScene(s.input.layers.map(s.input.entry), mapView(map, size.x, size.y, { obstacles: s.input.obstacles, family: s.input.family, frame: s.input.frameOf?.(size) }));
-    map.emFxReport = { overlaps: s.scene.overlaps, placed: s.scene.placed };
+    const view = mapView(map, size.x, size.y, { obstacles: claimKeyObstacles(s.input.project, map, s.input.obstacles), family: s.input.family, frame: s.input.frameOf?.(size) });
+    s.scene = s.input.project?.layout?.claimKey ? claimKeyComposition(s.input.layers.map(s.input.entry), view, s.input.project) : fxScene(s.input.layers.map(s.input.entry), view);
+    map.emFxReport = { overlaps: s.scene.overlaps, placed: s.scene.placed, ...(s.scene.claimKey ? { claimKey: s.scene.claimKey } : {}) };
     map.fire('emfxreport', map.emFxReport);
     return s.scene;
   };

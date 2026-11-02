@@ -211,7 +211,7 @@ export default function HowToUseModal({ onClose }) {
             <ul>
               <li><strong>Investor / presentation map</strong> — property in district context, for decks and news releases.</li>
               <li><strong>Claims and tenure map</strong> — claim blocks and ownership over regional context.</li>
-              <li><strong>Drill results map</strong> — collars and intercepts, laid out with a technical data rail down the right.</li>
+              <li><strong>Exploration &amp; Drill</strong> — supplied drilling, samples and targets with a branded technical rail. Collar-only data does not imply results.</li>
               <li><strong>Infrastructure and access map</strong> — roads, rail, power and the route to the property.</li>
               <li><strong>NI 43-101 figure</strong> — coordinate frame and technical title block for a report.</li>
             </ul>
@@ -244,7 +244,7 @@ export default function HowToUseModal({ onClose }) {
             <ul>
               <li><strong>Regional Location Map</strong> — satellite basemap, all roles visible, province inset</li>
               <li><strong>Claims Map</strong> — light basemap, claims + roads + rivers, country inset</li>
-              <li><strong>Drill Results Map</strong> — light basemap, drillholes + targets, secondary zoom inset</li>
+              <li><strong>Exploration &amp; Drill Map</strong> — light basemap, supplied drillholes and targets, secondary zoom inset</li>
               <li><strong>Target Generation Map</strong> — satellite basemap, targets + anomalies + faults, regional inset</li>
               <li><strong>Infrastructure Map</strong> — terrain basemap, roads + rivers + labels, country inset</li>
             </ul>
@@ -555,7 +555,7 @@ export default function HowToUseModal({ onClose }) {
               <dd>The semantic category assigned to a data layer (e.g., Claims, Drillholes). Drives automatic styling, legend grouping, and template mode behavior.</dd>
 
               <dt>Map Type</dt>
-              <dd>The single choice that configures the template, the mode and the design theme at once — Investor, Claims and tenure, Drill results, Infrastructure, or NI 43-101 figure. Each one sets basemap, reference overlays, visible layer roles, inset type and composition to suit that kind of map.</dd>
+              <dd>The single choice that configures the template, the mode and the design theme at once — Investor, Claims and tenure, Exploration &amp; Drill, Infrastructure, or NI 43-101 figure. Each one sets basemap, reference overlays, visible layer roles, inset type and composition to suit that kind of map.</dd>
 
               <dt>Customize</dt>
               <dd>The third step of the inspector: title and text, colors, fonts, legend, map elements and layer styling, one group open at a time. The template and mode a map style sets live under <strong>Style → Advanced</strong>.</dd>
