@@ -15,6 +15,7 @@
 
 import { autoProjectionName } from './geo.js';
 import { studioOn } from './studioLayout.js';
+import { technicalStripHeight } from './technicalStripLayout.js';
 
 export const TICK_MARGIN = 28;
 export const STRIP_H = 72;
@@ -34,9 +35,10 @@ export function getMapFrame(layout, stage, opts = {}) {
   const width = stage?.width || 1000;
   const height = stage?.height || 600;
   if (layout?.templateId === NI_TEMPLATE_ID) {
+    const stripHeight = technicalStripHeight(layout);
     const stripPos = layout?.titleStripPosition || 'bottom';
-    const top = TICK_MARGIN + (stripPos === 'top' ? STRIP_H : 0);
-    const bottom = height - TICK_MARGIN - (stripPos === 'bottom' ? STRIP_H : 0);
+    const top = TICK_MARGIN + (stripPos === 'top' ? stripHeight : 0);
+    const bottom = height - TICK_MARGIN - (stripPos === 'bottom' ? stripHeight : 0);
     return {
       left: TICK_MARGIN, top, right: width - TICK_MARGIN, bottom,
       area: { left: 0, top: top - TICK_MARGIN, right: width, bottom: bottom + TICK_MARGIN },

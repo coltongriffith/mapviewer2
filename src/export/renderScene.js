@@ -3,6 +3,7 @@ import { geojsonBounds, unionBounds } from '../utils/geometry';
 import { autoProjectionName, formatScaleDenom, scaleDenomFromMap } from '../utils/geo';
 import { resolveTemplateZones } from '../templates/technicalResultsTemplate';
 import { resolveNI43101Zones, resolveTitleStripFields } from '../templates/technicalReportTemplate';
+import { technicalStripPlan } from '../utils/technicalStripLayout.js';
 import { resolveSidePanelZones } from '../templates/sidePanelTemplate';
 import { getThemeTokens } from '../utils/themeTokens';
 import { northArrowShapes, NORTH_ARROW_FONT } from '../utils/northArrowGeometry';
@@ -1893,8 +1894,39 @@ function calcMapScaleDenom(scene) {
   return scaleDenomFromMap(scene.map);
 }
 
+function reportStripPlan(scene) {
+  const layout = scene.project.layout || {};
+  return technicalStripPlan(layout, resolveTitleStripFields(layout, {
+    scaleText: formatScaleDenom(calcMapScaleDenom(scene)),
+    projectionText: autoProjectionName(scene.map),
+  }), scene.width);
+}
+
+function drawReportStripCanvas(ctx, scene, scale) {
+  const plan = reportStripPlan(scene);
+  const top = scene.project.layout.titleStripPosition === 'top' ? 0 : scene.height - plan.height;
+  ctx.save(); ctx.scale(scale, scale); ctx.translate(0, top);
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, plan.width, plan.height);
+  ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5; ctx.strokeRect(.75, .75, plan.width - 1.5, plan.height - 1.5);
+  ctx.lineWidth = 1;
+  for (const x of plan.dividers) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, plan.height); ctx.stroke(); }
+  ctx.fillStyle = '#000'; ctx.textBaseline = 'alphabetic';
+  for (const cell of plan.cells) for (const line of cell.lines) {
+    ctx.font = `${line.italic ? 'italic ' : ''}${line.bold ? '700' : '400'} ${line.fontSize}px ${line.family}`;
+    ctx.fillText(line.text, line.x, line.y);
+  }
+  ctx.restore();
+}
+
+function reportStripSvg(scene, scale) {
+  const plan = reportStripPlan(scene);
+  const top = scene.project.layout.titleStripPosition === 'top' ? 0 : scene.height - plan.height;
+  return `<g transform="scale(${scale}) translate(0 ${top})"><rect x=".75" y=".75" width="${plan.width - 1.5}" height="${plan.height - 1.5}" fill="#fff" stroke="#000" stroke-width="1.5" />${plan.dividers.map((x) => `<line x1="${x}" x2="${x}" y1="0" y2="${plan.height}" stroke="#000" />`).join('')}${plan.cells.flatMap((cell) => cell.lines.map((line) => `<text x="${line.x}" y="${line.y}" font-size="${line.fontSize}" font-family="${escapeXml(line.family)}" font-weight="${line.bold ? 700 : 400}" font-style="${line.italic ? 'italic' : 'normal'}" fill="#000">${escapeXml(line.text)}</text>`)).join('')}</g>`;
+}
+
 function drawTitleStripCanvas(ctx, scene, scale) {
   if (scene.project.layout?.showTitle === false) return;
+  if (scene.project.layout?.technicalReportVersion === 1) return drawReportStripCanvas(ctx, scene, scale);
   const layout = scene.project.layout || {};
   const stripPos = layout.titleStripPosition || 'bottom';
   const canvasW = Math.round(scene.width * scale);
@@ -1993,6 +2025,7 @@ function drawTitleStripCanvas(ctx, scene, scale) {
 
 function renderTitleStripSvg(scene, scale) {
   if (scene.project.layout?.showTitle === false) return '';
+  if (scene.project.layout?.technicalReportVersion === 1) return reportStripSvg(scene, scale);
   const layout = scene.project.layout || {};
   const stripPos = layout.titleStripPosition || 'bottom';
   const canvasW = Math.round(scene.width * scale);

@@ -4,8 +4,8 @@ import { hasVisibleFeatures, layerGeometryKind } from '../utils/featureIdentity.
 import { isClassified, classLegendItems } from '../utils/classification.js';
 import { hasDrillTraces } from '../utils/drillTraces.js';
 import { getCornerLayout } from '../utils/cornerLayout';
+import { technicalStripHeight } from '../utils/technicalStripLayout.js';
 
-const STRIP_H = 72;
 const TICK_MARGIN = 28;
 
 const ROLE_GROUPS = {
@@ -172,6 +172,7 @@ export function resolveNI43101Zones(template, layout, mapSize, legendItems) {
   const height = mapSize?.height || 1000;
 
   const stripPos = layout?.titleStripPosition || 'bottom';
+  const STRIP_H = technicalStripHeight(layout);
   const mapFrameTop = TICK_MARGIN + (stripPos === 'top' ? STRIP_H : 0);
   const mapFrameBottom = height - TICK_MARGIN - (stripPos === 'bottom' ? STRIP_H : 0);
   const mapFrameLeft = TICK_MARGIN;
@@ -185,7 +186,8 @@ export function resolveNI43101Zones(template, layout, mapSize, legendItems) {
   // need: it used to cap at 500 and let the rest scroll, so the export clipped
   // the last rows of a long legend.
   // Without one: fitted to the entries (layout.legendFit), else the older estimate (legendPanelHeight).
-  const legendHeight = legendPanelHeight(resolvedLegendItems, layout, legendHeightFor(layout, legendRowCount(resolvedLegendItems, layout)));
+  const legendHeight = legendPanelHeight(resolvedLegendItems, layout, legendHeightFor(layout, legendRowCount(resolvedLegendItems, layout)))
+    + (layout?.technicalReportVersion === 1 && resolvedLegendItems.length ? 36 : 0);
   const legendWidth = legendWidthFor(layout, resolvedLegendItems);
 
   const insetScale = Math.max(0.8, Math.min(1.2, Number(layout?.insetScale || 1)));
@@ -209,7 +211,7 @@ export function resolveNI43101Zones(template, layout, mapSize, legendItems) {
 
   function sizeOf(id) {
     switch (id) {
-      case 'logo':       return [logoW, logoH];
+      case 'logo':       return layout?.technicalReportVersion === 1 && !layout.logo ? [0, 0] : [logoW, logoH];
       case 'inset':      return layout?.insetEnabled === false ? [0, 0] : [insetWidth, insetHeight];
       case 'northArrow': return [naW, naH];
       case 'scaleBar':   return layout?.showScaleBar === false ? [0, 0] : [180, 60 + (layout?.showProjectionLabel ? 16 : 0)];

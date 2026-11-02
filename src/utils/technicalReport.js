@@ -22,6 +22,8 @@ export function applyTechnicalReport(project) {
       subtitle: ['Technical Results', 'Claims Map', 'Investor Map'].includes(original.subtitle) ? '' : original.subtitle,
       showLegend: true,
       legendFit: true,
+      legendHeightPx: null,
+      cornerLayout: { tl: [['logo', 'title']], tr: [['inset']], bl: [['legend']], br: [['scaleBar', 'northArrow']] },
       legendGrouped: original.legendGrouped !== false,
       compositionPreset: 'balanced',
       insetMode: original.insetMode === 'custom_image' ? original.insetMode : 'province_state',

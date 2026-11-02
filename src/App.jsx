@@ -163,6 +163,8 @@ import {
 import { applyBrandKitStyle, applyBrandKitTemplate } from './brandKit';
 import { applyPropertyNeighbours, propertySubject } from './utils/propertyNeighbours.js';
 import { applyTechnicalReport } from './utils/technicalReport.js';
+import TechnicalReportStrip from './components/TechnicalReportStrip.jsx';
+import { technicalStripHeight } from './utils/technicalStripLayout.js';
 import { useAuth } from './hooks/useAuth';
 import { useStorageUsage } from './hooks/useStorageUsage';
 import { supabase } from './lib/supabase';
@@ -7709,7 +7711,7 @@ export default function App({ initialAction = null }) {
         {(project.layout.themeId === 'studio' || project.layout.labelHalo) && sc('style')}
 
         {project.layout.templateId === 'ni_43101_technical' && (() => {
-          const STRIP_H = 72;
+          const STRIP_H = technicalStripHeight(project.layout);
           const stripPos = project.layout.titleStripPosition || 'bottom';
           const stageH = mapSize?.height || 600;
           const stageW = mapSize?.width || 1000;
@@ -7722,6 +7724,8 @@ export default function App({ initialAction = null }) {
             projectionText: autoProjectionName(leafletMapRef.current),
           });
           const missingStyle = { fontStyle: 'italic' };
+          if (project.layout.technicalReportVersion === 1) return project.layout.showTitle === false ? null
+            : <TechnicalReportStrip layout={project.layout} fields={strip} width={stageW} height={stageH} />;
           return (
             <>
               {/* Title strip */}

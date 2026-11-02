@@ -9,13 +9,16 @@ import ScaleBar from './ScaleBar';
 import NorthArrow from './NorthArrow';
 import { getTemplate } from '../templates';
 import { buildLegendItems, resolveTemplateZones } from '../templates/technicalResultsTemplate';
-import { resolveNI43101Zones } from '../templates/technicalReportTemplate';
+import { resolveNI43101Zones, resolveTitleStripFields } from '../templates/technicalReportTemplate';
+import TechnicalReportStrip from './TechnicalReportStrip.jsx';
+import { technicalStripHeight } from '../utils/technicalStripLayout.js';
 import { resolveSidePanelZones } from '../templates/sidePanelTemplate';
 import { getThemeTokens } from '../utils/themeTokens';
 import { studioOn } from '../utils/studioLayout.js';
 import { applyLegendCustomization, groupLegendItems, noteInLegend } from '../utils/legendCustomization.js';
 import { getMapFrame, scaleBarHeight } from '../utils/coordinateFrame.js';
 import CoordinateFrameOverlay from './CoordinateFrameOverlay.jsx';
+import { autoProjectionName, formatScaleDenom, scaleDenomFromMap } from '../utils/geo.js';
 import { fitProjectToTemplate } from '../utils/frameMapForTemplate';
 import { projectStageSize, savedViewFor, zoomForSize } from '../utils/savedView';
 import { useLazyDrillLegend } from '../utils/useDrillLegend.js';
@@ -222,7 +225,7 @@ export default function ReadOnlyMapStage({ project, onExportReady, nearbyClaims 
   const sc = (kind) => <React.Suspense fallback={null}><StudioCard kind={kind} layout={layout} zones={resolvedZones} map={map} layers={project.layers} /></React.Suspense>;
 
   // NI 43-101 strip values
-  const STRIP_H = 72;
+  const STRIP_H = technicalStripHeight(layout);
   const niStripPos = layout.titleStripPosition || 'bottom';
   const niStageH = mapSize?.height || 600;
   const niStageW = mapSize?.width || 1000;
@@ -305,6 +308,10 @@ export default function ReadOnlyMapStage({ project, onExportReady, nearbyClaims 
 
       {/* NI 43-101 template */}
       {layout.templateId === 'ni_43101_technical' && (() => {
+        if (layout.technicalReportVersion === 1) return layout.showTitle === false ? null
+          : <TechnicalReportStrip layout={layout} fields={resolveTitleStripFields(layout, {
+            scaleText: formatScaleDenom(scaleDenomFromMap(map)), projectionText: autoProjectionName(map),
+          })} width={niStageW} height={niStageH} />;
         const scaleDisplay = layout.manualScaleDenom
           ? '1:' + Number(String(layout.manualScaleDenom).replace(/[^0-9]/g, '')).toLocaleString()
           : 'Auto';
