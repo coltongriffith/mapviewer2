@@ -331,7 +331,9 @@ function areaCandidates(entry, fx, view) {
   const groups = lab.per === 'feature' ? features.map((f) => [f]) : [features];
   return groups.map((group) => {
     const f0 = group[0];
-    const text = textOf(lab, layer, f0, 'text'), sub = textOf(lab, layer, f0, 'sub');
+    const linked = entry.labelForFeature?.(f0);
+    if (entry.labelForFeature && !linked) return null;
+    const text = linked ? linked.text : textOf(lab, layer, f0, 'text'), sub = linked ? '' : textOf(lab, layer, f0, 'sub');
     if (!text || !group.some((f) => partsOf(f.geometry).polys.length)) return null;
     const st = styleOf(f0) || {};
     const color = lab.color || shade(HEX.test(st.fill || '') ? st.fill : '#93c5fd');
@@ -360,7 +362,7 @@ function areaCandidates(entry, fx, view) {
       spots = spots.concat(byKey.get(key));
     }
     spots.sort((p, q) => q.half - p.half);
-    return { kind: 'area', lab, text, sub, c1, a1, c2, a2, w1, w2, H, pad, color, spots, parts, aspect, rots };
+    return { kind: 'area', lab, text, sub, c1, a1, c2, a2, w1, w2, H, pad, color, spots, parts, aspect, rots, link: linked?.link };
   }).filter(Boolean);
 }
 
@@ -521,8 +523,11 @@ export function fxScene(entries, view) {
     // Never drawn cut by the map's edge: a label with nowhere clear inside the map is left off.
     if (!lbl || hits(lbl, obstacles).some((o) => o.key === 'the map edge')) continue;
     const what = [...hits(lbl, obstacles).map((o) => o.key), ...hits(lbl, placed.flatMap((p) => p.boxes)).length ? ['another label'] : []];
+    // A compact-key row promises a readable location. Unlike ordinary expert
+    // labels, linked references cannot fall back to a known overlapping spot.
+    if (c.link && what.length) continue;
     if (what.length) overlaps.push({ label: c.text, layer: c.layerName, with: [...new Set(what)], box: lbl.box });
-    placed.push({ box: lbl.box, boxes: lbl.boxes || [lbl.box], text: c.text });
+    placed.push({ box: lbl.box, boxes: lbl.boxes || [lbl.box], text: c.text, ...(c.link ? { link: c.link } : {}) });
     labels.push(...lbl.prims);
   }
   return { band, labels, overlaps, placed };
