@@ -120,9 +120,12 @@ async function fakeSupabase(context) {
 }
 
 const open3d = async (page, path = '/3d') => { await page.goto(path); await page.waitForFunction(() => window.EM3D?.getState().ready); };
-// Both views as PNG data URLs, once the terrain has settled.
+// Both views as PNG data URLs, once terrain and the document's font faces have
+// settled. The same figure is compared across full page reloads: terrain-ready
+// does not imply font-ready, especially after the browser caches those faces.
 const exports = (page, section = false) => page.evaluate(async (sec) => {
   const E = window.EM3D; await E.terrainReady?.();
+  await document.fonts?.ready;
   return { fig: E.exportPNG({ view: '3d' }), section: sec ? E.exportPNG({ view: 'section' }) : null, title: E.getState().brand.title };
 }, section);
 
