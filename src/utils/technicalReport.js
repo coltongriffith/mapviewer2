@@ -26,6 +26,8 @@ export function applyTechnicalReport(project) {
       cornerLayout: { tl: [['logo', 'title']], tr: [['inset']], bl: [['legend']], br: [['scaleBar', 'northArrow']] },
       legendGrouped: original.legendGrouped !== false,
       compositionPreset: 'balanced',
+      layoutAlgorithm: 3,
+      titleCorner: 'tl', logoCorner: 'tl', insetCorner: 'tr', legendCorner: 'bl', scaleBarCorner: 'br', northArrowCorner: 'br',
       insetMode: original.insetMode === 'custom_image' ? original.insetMode : 'province_state',
       exportRatio: original.exportRatio || (original.exportSettings?.customWidth > 0
         && original.exportSettings?.customHeight > 0 ? null : 'landscape'),

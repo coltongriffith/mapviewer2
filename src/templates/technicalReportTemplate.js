@@ -256,6 +256,9 @@ export function resolveNI43101Zones(template, layout, mapSize, legendItems) {
 
   return {
     title: { left: 0, top: 0, width: 0, height: 0 },
+    ...(layout?.technicalReportVersion === 1 ? { titleStrip: {
+      left: 0, top: stripPos === 'top' ? 0 : height - STRIP_H, width, height: STRIP_H,
+    } } : {}),
     logo: zones.logo,
     footer: { left: 0, top: 0, width: 0, height: 0 },
     scaleBar: zones.scaleBar,

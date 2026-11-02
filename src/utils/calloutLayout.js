@@ -88,7 +88,8 @@ export function panelObstacles(zones, layout = {}) {
     }
   };
   if (layout.showTitle !== false) add(zones.title, 'title');
-  if (layout.showLegend !== false && (layout.legendItems || []).length) add(zones.legend, 'legend');
+  if (layout.technicalReportVersion === 1 && layout.showTitle !== false) add(zones.titleStrip, 'title strip');
+  if (layout.showLegend !== false && ((layout.legendItems || []).length || layout.technicalReportVersion === 1)) add(zones.legend, 'legend');
   if (layout.showNorthArrow !== false) add(zones.northArrow, 'north arrow');
   if (layout.showScaleBar !== false) add(zones.scaleBar, 'scale bar');
   add(zones.inset, 'inset');

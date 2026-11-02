@@ -6,6 +6,8 @@ import { resolveTitleStripFields, resolveNI43101Zones, technicalReportTemplate }
 import { getMapFrame } from '../src/utils/coordinateFrame.js';
 import { applyTechnicalReport } from '../src/utils/technicalReport.js';
 import TechnicalReportStrip from '../src/components/TechnicalReportStrip.jsx';
+import { panelObstacles } from '../src/utils/calloutLayout.js';
+import { getCornerLayout } from '../src/utils/cornerLayout.js';
 
 const layout = { templateId: 'ni_43101_technical', technicalReportVersion: 1,
   title: 'Illustrative Cedar Ridge Project — Regional Geology, Exploration Targets and Drill Collar Locations',
@@ -40,7 +42,8 @@ describe('shared recipe-only technical title block', () => {
     const stripHeight = technicalStripHeight(settings);
     expect(position === 'top' ? frame.top : 800 - frame.bottom).toBe(28 + stripHeight);
     const zones = resolveNI43101Zones(technicalReportTemplate, settings, { width: 1250, height: 800 }, []);
-    for (const zone of Object.values(zones).filter((value) => value.width && value.height)) {
+    for (const [key, zone] of Object.entries(zones).filter(([key, value]) => key !== 'titleStrip' && value.width && value.height)) {
+      expect(key).not.toBe('titleStrip');
       expect(zone.top).toBeGreaterThanOrEqual(frame.top);
       expect(zone.top + zone.height).toBeLessThanOrEqual(frame.bottom);
     }
@@ -62,5 +65,18 @@ describe('shared recipe-only technical title block', () => {
     const zones = resolveNI43101Zones(technicalReportTemplate, selected.layout, { width: 1250, height: 800 }, []);
     expect(zones.logo.width).toBe(0);
     expect(zones.logo.height).toBe(0);
+  });
+  it('places furniture in the intended corners and protects the strip and derived legend from automatic cards', () => {
+    const selected = applyTechnicalReport({ layout: { ...layout, scaleBarCorner: 'tl' }, layers: [] });
+    expect(getCornerLayout(selected.layout)).toEqual(selected.layout.cornerLayout);
+    const zones = resolveNI43101Zones(technicalReportTemplate, selected.layout, { width: 1250, height: 800 }, [
+      { id: 'sample', label: 'Supplied sample', type: 'points' },
+    ]);
+    const obstacles = panelObstacles(zones, selected.layout);
+    expect(obstacles.find((o) => o.key === 'title strip')).toMatchObject({ top: 688, width: 1250, height: 112 });
+    expect(obstacles.some((o) => o.key === 'legend')).toBe(true);
+    expect(zones.scaleBar.left).toBeGreaterThan(600);
+    const legacy = { ...selected.layout, technicalReportVersion: undefined };
+    expect(panelObstacles(zones, legacy).some((o) => o.key === 'title strip')).toBe(false);
   });
 });
