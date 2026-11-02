@@ -739,7 +739,9 @@ const BUDGETS = {
   // MapCanvas opt-in key/annotation hand-off: measured 244.2 configured;
   // rendering/validation remains in lazy fx modules. Other route caps unchanged.
   embedAuthJsGzipKb: 244.6,
-  embedJsGzipKb: 177.8,
+  // Same opt-in MapCanvas hand-off: hosted plain measured 177.8 at the exact
+  // threshold; retain 0.4 KiB stamp/hash allowance as on the configured route.
+  embedJsGzipKb: 178.2,
   // Stylesheet, gzipped. Today ~29 kB.
   maxCssGzipKb: 40,
   // Any single image shipped from public/, including legacy PNG downloads.

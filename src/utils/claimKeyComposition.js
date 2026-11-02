@@ -3,6 +3,7 @@ import { claimKeyScene } from './claimKeyScene.js';
 import { resolveClaimKeySnapshot } from './claimKeyCandidates.js';
 import { resolveCalloutBoxes } from './calloutLayout.js';
 import { resolveScoredBoxes } from './calloutScorer.js';
+import { claimKeyTable } from './claimKeyTable.js';
 
 export function claimKeyObstacles(project, map, obstacles = []) {
   if (!project?.layout?.claimKey || !map) return obstacles;
@@ -24,7 +25,12 @@ export function claimKeyComposition(entries, view, project) {
   if (!source.ok) return fail(source.reason);
   const frame = view.frame || { left: 0, top: 0, right: view.W, bottom: view.H };
   const pad = 12, width = Math.min(280, (frame.right - frame.left) * .36);
-  const height = Math.min(110 + source.total * 18, (frame.bottom - frame.top) * .65);
+  const maxHeight = (frame.bottom - frame.top) * .65;
+  // Measure the same wrapped field/identifier typography the table paints.
+  // A short row count does not imply short identifiers or source headings.
+  const measured = claimKeyTable(source.entries, snapshot.field,
+    { left: 0, top: 0, width, height: maxHeight }, { hidden: source.hidden, family: view.family });
+  const height = Math.min(Math.max(110 + source.total * 18, measured.requiredHeight || 0), maxHeight);
   if (width < 180 || height < 100) return fail('no-key-space');
   const x = [frame.right - pad - width, frame.left + pad];
   const y = [frame.bottom - pad - height, frame.top + pad];

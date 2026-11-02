@@ -32,6 +32,15 @@ describe('shared claim-key composition', () => {
     expect(box.left + box.width).toBeLessThanOrEqual(frame.right);
     expect(box.top + box.height).toBeLessThanOrEqual(frame.bottom);
   });
+  it('fits wrapped supplied identifiers by measuring table height before reserving it', () => {
+    const p = fixture(), identifier = '0000123456789'.repeat(4);
+    p.layers[0].geojson.features[0].properties.ID = identifier;
+    p.layout.claimKey = createClaimKeySnapshot(p, 'ID').snapshot;
+    const result = claimKeyComposition([], view, p);
+    expect(result.claimKey.ok).toBe(true);
+    expect(result.claimKey.rows[0].identifier).toBe(identifier);
+    expect(result.claimKey.tableBox.height).toBeGreaterThan(128);
+  });
   it('finds a side gap when ordinary furniture occupies all four corners', () => {
     const obstacles = [0, 750].flatMap((left) => [0, 620].map((top) => ({ left, top, width: 250, height: 180 })));
     const result = claimKeyComposition([], { ...view, obstacles }, fixture());

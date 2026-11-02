@@ -51,6 +51,7 @@ export function claimKeyTable(rows, field, box, { omitted = 0, hidden = 0, famil
   if (!noticeLines) return empty('key-text-too-wide');
   y += 4;
   for (const line of noticeLines) { text(line, box.left + padding, y); y += lineHeight; }
-  if (y - lineHeight > box.top + box.height - padding) return empty('key-table-overflow');
-  return { ok: true, reason: null, primitives, notice };
+  const requiredHeight = y - lineHeight - box.top + padding;
+  if (requiredHeight > box.height) return { ...empty('key-table-overflow'), requiredHeight };
+  return { ok: true, reason: null, primitives, notice, requiredHeight };
 }

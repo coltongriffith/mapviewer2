@@ -44,7 +44,7 @@ for (const mobile of [false, true]) {
     const saved = await draft(page);
     expect(saved.layers[0].geojson).toEqual(p.layers[0].geojson);
     expect(saved.layout.claimKey.entries.map((entry) => entry.identifier)).toEqual(['QA001', 'QA002', 'QA003']);
-    if (mobile) await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    if (mobile) await page.getByRole('button', { name: 'Close the inspector', exact: true }).click();
     await page.getByRole('button', { name: 'Export', exact: true }).click();
     await page.getByRole('menuitem', { name: 'Image for slides and web PNG', exact: true }).click();
     const downloading = page.waitForEvent('download');

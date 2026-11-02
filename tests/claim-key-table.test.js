@@ -17,7 +17,8 @@ describe('bounded shared claim-key table', () => {
   });
   it('returns no partial table when all rows cannot fit', () => {
     const result = claimKeyTable(Array.from({ length: 40 }, (_, i) => row(`ID${i}`, i + 1)), 'ID', box);
-    expect(result).toEqual({ ok: false, reason: 'key-table-overflow', primitives: [] });
+    expect(result).toMatchObject({ ok: false, reason: 'key-table-overflow', primitives: [] });
+    expect(result.requiredHeight).toBeGreaterThan(box.height);
   });
   it('escapes source text using the existing SVG painter', () => {
     const result = claimKeyTable([row('<script>&"')], 'ID', box);
