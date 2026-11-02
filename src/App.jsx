@@ -162,6 +162,7 @@ import {
 } from './utils/cloudStorage';
 import { applyBrandKitStyle, applyBrandKitTemplate } from './brandKit';
 import { applyPropertyNeighbours, propertySubject } from './utils/propertyNeighbours.js';
+import { applyImportedLocatorRegion } from './utils/locatorBounds.js';
 import { useAuth } from './hooks/useAuth';
 import { useStorageUsage } from './hooks/useStorageUsage';
 import { supabase } from './lib/supabase';
@@ -2885,10 +2886,7 @@ export default function App({ initialAction = null }) {
     const newLayerBounds = geojsonBounds(geojson);
     detectRegion(newLayerBounds).then(region => {
       if (region) {
-        setProject(prev => ({
-          ...prev,
-          layout: { ...prev.layout, autoInsetRegion: region },
-        }));
+        setProject(prev => applyImportedLocatorRegion(prev, id, region));
       }
     }).catch(() => {});
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { locatorBounds } from '../src/utils/locatorBounds.js';
+import { locatorBounds, applyImportedLocatorRegion } from '../src/utils/locatorBounds.js';
 import { featureKey } from '../src/utils/featureIdentity.js';
 import { geojsonBounds } from '../src/utils/geometry.js';
 
@@ -59,5 +59,32 @@ describe('Property locator subject marker with unchanged regional context', () =
     expect(result.contextBounds).toEqual(result.markerBounds);
     expect(locatorBounds([], selected)).toEqual({ contextBounds: null, markerBounds: null });
     expect(locatorBounds(null, selected)).toEqual({ contextBounds: null, markerBounds: null });
+  });
+});
+
+describe('asynchronous imported locator region', () => {
+  const existing = { name: 'Subject jurisdiction' }, detected = { name: 'Context jurisdiction' };
+  const project = () => ({ layers: [subject(), context()], layout: { ...selected, autoInsetRegion: existing } });
+  it('retains the selected property jurisdiction when distant context arrives', () => {
+    const source = project();
+    expect(applyImportedLocatorRegion(source, 'context', detected)).toBe(source);
+  });
+  it('allows detection for the selected subject itself', () => {
+    const source = project(), result = applyImportedLocatorRegion(source, 'subject', detected);
+    expect(result.layout.autoInsetRegion).toBe(detected);
+    expect(result.layers).toBe(source.layers);
+    expect(source.layout.autoInsetRegion).toBe(existing);
+  });
+  it('keeps legacy import detection for other recipes and invalid selections', () => {
+    for (const patch of [{ propertyNeighboursVersion: undefined }, { primaryLayerId: 'missing' }, { insetMode: 'custom_image' }]) {
+      const source = project(); source.layout = { ...source.layout, ...patch };
+      expect(applyImportedLocatorRegion(source, 'context', detected).layout.autoInsetRegion).toBe(detected);
+    }
+  });
+  it('does not let a removed import or another project receive a stale result', () => {
+    const source = project();
+    expect(applyImportedLocatorRegion(source, 'removed', detected)).toBe(source);
+    expect(applyImportedLocatorRegion({ ...source, layers: [] }, 'context', detected).layout.autoInsetRegion).toBe(existing);
+    expect(applyImportedLocatorRegion(source, 'subject', null)).toBe(source);
   });
 });
