@@ -162,6 +162,7 @@ import {
 } from './utils/cloudStorage';
 import { applyBrandKitStyle, applyBrandKitTemplate } from './brandKit';
 import { applyPropertyNeighbours, propertySubject } from './utils/propertyNeighbours.js';
+import { applyTechnicalReport } from './utils/technicalReport.js';
 import { useAuth } from './hooks/useAuth';
 import { useStorageUsage } from './hooks/useStorageUsage';
 import { supabase } from './lib/supabase';
@@ -3935,8 +3936,13 @@ export default function App({ initialAction = null }) {
         layout: { ...prev.layout, templateId: t.templateId, themeId: t.themeId, ...extra },
       };
       const next = applyModeToProject(withTemplate, getTemplate(t.templateId), t.mode);
-      if (typeId === 'claims') return applyPropertyNeighbours(next);
-      return { ...next, layout: { ...next.layout, propertyNeighboursVersion: undefined } };
+      if (typeId === 'claims') return applyPropertyNeighbours({
+        ...next, layout: { ...next.layout, technicalReportVersion: undefined },
+      });
+      if (typeId === 'ni_43101') return applyTechnicalReport({
+        ...next, layers: prev.layers, layout: { ...next.layout, propertyNeighboursVersion: undefined },
+      });
+      return { ...next, layout: { ...next.layout, propertyNeighboursVersion: undefined, technicalReportVersion: undefined } };
     });
   };
 
