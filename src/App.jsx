@@ -163,6 +163,7 @@ import {
 import { applyBrandKitStyle, applyBrandKitTemplate } from './brandKit';
 import { applyPropertyNeighbours, propertySubject } from './utils/propertyNeighbours.js';
 import { applyExplorationDrill } from './utils/explorationDrill.js';
+import { applyLocationAccess } from './utils/locationAccess.js';
 import { useAuth } from './hooks/useAuth';
 import { useStorageUsage } from './hooks/useStorageUsage';
 import { supabase } from './lib/supabase';
@@ -3933,11 +3934,12 @@ export default function App({ initialAction = null }) {
       } : {};
       const withTemplate = {
         ...prev,
-        layout: { ...prev.layout, templateId: t.templateId, themeId: t.themeId, explorationDrillVersion: typeId === 'drill' ? prev.layout.explorationDrillVersion : undefined, ...extra },
+        layout: { ...prev.layout, templateId: t.templateId, themeId: t.themeId, propertyNeighboursVersion: undefined, locationAccessVersion: undefined, explorationDrillVersion: typeId === 'drill' ? prev.layout.explorationDrillVersion : undefined, ...extra },
       };
       const next = applyModeToProject(withTemplate, getTemplate(t.templateId), t.mode);
       if (typeId === 'claims') return applyPropertyNeighbours(next);
       if (typeId === 'drill') return applyExplorationDrill(next, prev.layout.referenceOverlays || {});
+      if (typeId === 'infrastructure') return applyLocationAccess(next, prev.layout.referenceOverlays || {});
       return { ...next, layout: { ...next.layout, propertyNeighboursVersion: undefined } };
     });
   };
@@ -3955,7 +3957,7 @@ export default function App({ initialAction = null }) {
       onboardingLayoutSelected: true,
       ...(typeId === 'investor' && project.layout.subtitle === 'Technical Results' ? { subtitle: 'Investor Map' } : {}),
     });
-    if (changed || typeId === 'claims' || typeId === 'drill') setInvestorFrameRequest((value) => value + 1);
+    if (changed || typeId === 'claims' || typeId === 'drill' || typeId === 'infrastructure') setInvestorFrameRequest((value) => value + 1);
     trackEvent('onboarding_step', { step: 'style', via: 'card', type: typeId });
   };
 
@@ -6833,7 +6835,7 @@ export default function App({ initialAction = null }) {
                   {selectedLayer.geojson && <NumericColumnInspector layer={selectedLayer} />}
                 </React.Suspense>
                 {selectedLayer.geojson && !isPointStyledLayer(selectedLayer) && (
-                  <React.Suspense fallback={null}><GeoStyleControls layer={selectedLayer} setProject={setProject} map={leafletMapRef.current} /></React.Suspense>
+                  <React.Suspense fallback={null}><GeoStyleControls layer={selectedLayer} project={project} setProject={setProject} map={leafletMapRef.current} /></React.Suspense>
                 )}
               </div>
             ) : <p className="small-note">Select a layer to edit its display label, role, order, and colors.</p>}

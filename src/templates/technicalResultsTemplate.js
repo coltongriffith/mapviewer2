@@ -152,7 +152,7 @@ export function resolveTemplateZones(template, layout, mapSize, legendItems) {
   // the last rows of a long legend.
   // Without one: fitted to the entries (layout.legendFit), else the older estimate (legendPanelHeight).
   const legendHeight = legendPanelHeight(resolvedLegendItems, layout, legendHeightFor(layout, legendRowCount(resolvedLegendItems, layout)))
-    + (layout?.propertyNeighboursVersion === 1 && resolvedLegendItems.length ? 20 : 0);
+    + ((layout?.propertyNeighboursVersion === 1 || layout?.locationAccessVersion === 1) && resolvedLegendItems.length ? 20 : 0);
   const legendWidth = legendWidthFor(layout, resolvedLegendItems);
   const logoScale = Math.max(0.7, Math.min(1.2, Number(layout?.logoScale || 1)));
   const insetScale = Math.max(0.8, Math.min(1.2, Number(layout?.insetScale || 1)));
@@ -182,7 +182,7 @@ export function resolveTemplateZones(template, layout, mapSize, legendItems) {
     if (studio?.[id]) return studio[id];
     switch (id) {
       case 'title':      return [titleWidth, titleHeight];
-      case 'logo':       return layout?.propertyNeighboursVersion === 1 && !layout.logo ? [0, 0] : [logoW, logoH];
+      case 'logo':       return (layout?.propertyNeighboursVersion === 1 || layout?.locationAccessVersion === 1) && !layout.logo ? [0, 0] : [logoW, logoH];
       case 'inset':      return layout?.insetEnabled === false ? [0, 0] : [insetWidth, insetHeight];
       case 'northArrow': return [naW, naH];
       case 'scaleBar':   return [BASE_ZONES.scaleBar.width, BASE_ZONES.scaleBar.height + (layout?.showProjectionLabel ? 16 : 0)];
@@ -210,7 +210,12 @@ export function resolveTemplateZones(template, layout, mapSize, legendItems) {
       for (const id of row) {
         let [w, h] = sizeOf(id);
         if (w === 0 && h === 0) { zones[id] = { top: 0, left: 0, width: 0, height: 0 }; continue; }
-        if (hCursor > 0) w = Math.max(120, Math.min(w, cornerBudget - hCursor));
+        if (hCursor > 0) {
+          // A small access-map compass beside the scale is an icon, not a
+          // text panel. Expanding it to120px can hide the supplied footer.
+          const minWidth = layout?.locationAccessVersion === 1 && id === 'northArrow' ? Math.min(120, w) : 120;
+          w = Math.max(minWidth, Math.min(w, cornerBudget - hCursor));
+        }
         let anchor;
         if (corner === 'tl') anchor = { top: safe.top + vOffset.tl, left: safe.left + hCursor };
         else if (corner === 'tr') anchor = { top: safe.top + vOffset.tr, right: safe.right + hCursor };
