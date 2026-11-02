@@ -305,7 +305,10 @@ const BUDGETS = {
   // Technical Report integrated with released templates/keys: measured totals1120.4/1189.3,
   // editor285.7/353.8, claims298.4/366.7, embed179.2/245.6 KiB plain/configured.
   // Preserve 0.5 KiB total and 0.4 KiB route stamp margins; no dependency changes.
-  totalAuthJsGzipKb: 1189.8,
+  // Property locator on released templates/keys: measured total1121.1/1190.0,
+  // editor286.5/354.6, claims299.2/367.5 KiB plain/configured.
+  // Retain 0.5 KiB total and 0.4 KiB route stamp margins; all other caps unchanged.
+  totalAuthJsGzipKb: 1190.5,
   // 1009.4 → 1026.3 (measured 1026.0): lazy XLSX reader (~13.8 KiB), sheet/header preview
   // (~1.1 KiB), import wiring and numeric-format handling. Shared fflate adds ~1.2 KiB
   // for async ZIP workers; it remains one copy with the existing draft compression.
@@ -394,7 +397,7 @@ const BUDGETS = {
   // Live web map merged with main (Point inspector, numeric classification): measured 1106.1.
   // Saved-map data downloads, as above: measured 1109.1; route caps unchanged.
   // Same opt-in key graph: stamped plain 1116.5 KiB, +0.5 KiB stamp allowance.
-  totalJsGzipKb: 1120.9,
+  totalJsGzipKb: 1121.6,
   // 940.9 → 957.8 (measured 957.5): Excel import, as totalAuthJsGzipKb above.
   // 940.9 → 944.8 (P2-8, measured 944.6): the same lazy property recipe path
   // in the unconfigured build. Its initial route budgets also stay unchanged.
@@ -709,7 +712,7 @@ const BUDGETS = {
   // Narrow missing-RPC messages in shared cloud storage: measured 347.9 configured.
   // Live web map merged with main (Point inspector, numeric classification): measured 348.6.
   // Same explicit template recipe: measured 350.3 configured / 282.1 plain.
-  editorAuthJsGzipKb: 354.2,
+  editorAuthJsGzipKb: 355.0,
   // Excel import: shared fflate's async ZIP worker support adds ~1.2 KiB (342.5 measured).
   // The XLSX parser and sheet picker remain lazy; the homepage does not load compression.
   // 270 → 271.0 (Oct 2026, production errors, measured 270.7, 269.6 on main): the same as editorAuthJsGzipKb above.
@@ -727,7 +730,7 @@ const BUDGETS = {
   // Same chunk split for the live web map; measured 279.5 plain.
   // Same shared error helper: measured 279.8 plain, fractionally over the former cap.
   // Live web map merged with main (Point inspector, numeric classification): measured 280.5.
-  editorJsGzipKb: 286.1,
+  editorJsGzipKb: 286.9,
   // 355 to 355.3 (Oct 2026): claims shares the editor API bridge/control names; measured 355.0 in CI.
   // Same shared compression increase as above (274.4 measured).
   // Claims also restores drafts through shared compression (355.3 measured).
@@ -739,9 +742,9 @@ const BUDGETS = {
   // Same measured shared helper graph: 360.7 configured / 292.5 plain.
   // Live web map merged with main (Point inspector, numeric classification): measured 361.4.
   // Claims shares that editor graph: measured 363.1 configured / 294.8 plain.
-  claimsAuthJsGzipKb: 367.1,
+  claimsAuthJsGzipKb: 367.9,
   // Live web map merged with main (Point inspector, numeric classification): measured 293.2.
-  claimsJsGzipKb: 298.8,
+  claimsJsGzipKb: 299.6,
   // Live investor web map (/embed/map/<id>): map, legend, layer list, drill-result callouts and the drill plan
   // (its overlay loaded only when published with one), no editor; measured 243.9 configured, 177.5 plain with main.
   // MapCanvas opt-in key/annotation hand-off: measured 244.2 configured;
