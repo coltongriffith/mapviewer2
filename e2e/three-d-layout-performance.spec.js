@@ -26,11 +26,11 @@ test('block presentation edits keep scene resources and drill output stable',asy
     });
     await E.loadProject(p);await E.layersReady();await document.fonts.ready;
   });
-  const idlePaints=await page.evaluate(async()=>{
+  const idle=await page.evaluate(async()=>{
     for(let i=0;i<8;i++)await new Promise(requestAnimationFrame);
-    const before=window.__layoutWork.previewPaints;
+    const before=window.__layoutWork.previewPaints,start=performance.now();
     for(let i=0;i<8;i++)await new Promise(requestAnimationFrame);
-    return window.__layoutWork.previewPaints-before;
+    return {paints:window.__layoutWork.previewPaints-before,elapsedMs:performance.now()-start};
   });
   await page.getByRole('tab',{name:'3 Layout',exact:true}).click();
   const start=Date.now();await page.getByRole('button',{name:'Choose the holes shown',exact:true}).click();
@@ -43,8 +43,12 @@ test('block presentation edits keep scene resources and drill output stable',asy
     const editMs=performance.now()-t1,after=E.exportPNG({view:'3d',width:600});
     return {presetMs,editMs,before,after,deletedBuffers:window.__layoutWork.deletedBuffers-resources.deletedBuffers,uploadedTextures:window.__layoutWork.uploadedTextures-resources.uploadedTextures};
   });
-  console.log(JSON.stringify({idlePaints,chooserMs,presetMs:result.presetMs,editMs:result.editMs,deletedBuffers:result.deletedBuffers,uploadedTextures:result.uploadedTextures}));
-  expect(idlePaints).toBeLessThanOrEqual(3);expect(result.deletedBuffers).toBe(0);expect(result.after).toBe(result.before);
+  console.log(JSON.stringify({idlePaints:idle.paints,idleElapsedMs:idle.elapsedMs,chooserMs,presetMs:result.presetMs,editMs:result.editMs,deletedBuffers:result.deletedBuffers,uploadedTextures:result.uploadedTextures}));
+  // studio.loop deliberately refreshes once per second for arriving textures.
+  // Eight software-rendered CI frames can span several seconds. Retain the
+  // original two incidental-paint allowance plus the actual elapsed watchdog
+  // intervals, rather than mistaking those scheduled paints for a 60fps loop.
+  expect(idle.paints).toBeLessThanOrEqual(2+Math.ceil(idle.elapsedMs/1000));expect(result.deletedBuffers).toBe(0);expect(result.after).toBe(result.before);
   await page.evaluate(async()=>{
     const E=window.EM3D,ids=E.getProject().settings.holesShown;
     await E.setHolesShown(null);await E.setHolesShown(ids);

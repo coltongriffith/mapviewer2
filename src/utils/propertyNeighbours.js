@@ -37,7 +37,7 @@ function labelField(layer) {
   return null;
 }
 
-function propertyTitle(subject, current) {
+export function propertyTitle(subject, current) {
   if (current && !['Project Map', 'Untitled Map', 'Untitled map'].includes(current.trim())) return current;
   const features = visibleGeojson(subject)?.features || [];
   const keys = Object.keys(features[0]?.properties || {});
