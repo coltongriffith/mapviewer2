@@ -29,6 +29,15 @@ export function claimKeyComposition(entries, view, project) {
   const x = [frame.right - pad - width, frame.left + pad];
   const y = [frame.bottom - pad - height, frame.top + pad];
   const boxes = x.flatMap((left) => y.map((top) => ({ left, top, width, height })));
+  // Standard maps often occupy all four corners. Also try bounded gaps along
+  // the side edges above/below furniture instead of demanding manual moves.
+  for (const obstacle of (view.obstacles || []).slice(0, 64)) {
+    for (const left of x) {
+      for (const top of [obstacle.top - height - pad, obstacle.top + obstacle.height + pad]) {
+        if (boxes.length < 64) boxes.push({ left, top, width, height });
+      }
+    }
+  }
   for (const box of boxes) {
     if (box.left < frame.left || box.top < frame.top || box.left + box.width > frame.right || box.top + box.height > frame.bottom
       || (view.obstacles || []).some((obstacle) => boxesOverlap(box, obstacle))) continue;

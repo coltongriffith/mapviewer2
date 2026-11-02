@@ -32,6 +32,12 @@ describe('shared claim-key composition', () => {
     expect(box.left + box.width).toBeLessThanOrEqual(frame.right);
     expect(box.top + box.height).toBeLessThanOrEqual(frame.bottom);
   });
+  it('finds a side gap when ordinary furniture occupies all four corners', () => {
+    const obstacles = [0, 750].flatMap((left) => [0, 620].map((top) => ({ left, top, width: 250, height: 180 })));
+    const result = claimKeyComposition([], { ...view, obstacles }, fixture());
+    expect(result.claimKey.ok).toBe(true);
+    expect(obstacles.every((box) => !boxesOverlap(box, result.claimKey.tableBox))).toBe(true);
+  });
   it('does not cover an existing expert label kept at its original spot', () => {
     const p = fixture(), layer = { ...p.layers[0], fx: { label: { text: 'Existing label', size: 16, per: 'feature', nudge: false } },
       geojson: { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'Polygon',
