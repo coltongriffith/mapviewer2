@@ -2007,7 +2007,7 @@ export default function App({ initialAction = null }) {
 
   useEffect(() => {
     if (!selectedLayerId) return;
-    if (skipLayerRevealRef.current) return;
+    if (skipLayerRevealRef.current || uploadQueueRef.current?.firstMap) return;
     setCustomizeGroup('layers');
     revealSection('customize', layersSectionRef);
   }, [selectedLayerId, revealSection]);
@@ -3012,7 +3012,7 @@ export default function App({ initialAction = null }) {
     let groups;
     try { groups = groupUploadFiles(files); }
     catch (err) { setUploadStatus({ type: 'error', message: err.message }); return; }
-    const queue = { ticket: saveCoordRef.current.begin(), pending: null, imported: 0, warnings: [] };
+    const queue = { ticket: saveCoordRef.current.begin(), pending: null, imported: 0, warnings: [], firstMap: project.layers.length === 0 };
     uploadQueueRef.current = queue;
     try {
       for (const group of groups) {
@@ -3054,6 +3054,11 @@ export default function App({ initialAction = null }) {
       if (queue.ticket.stillCurrent()) setUploadStatus({ type: 'error', message: `Import failed: ${err.message}. ${queue.imported} earlier ${queue.imported === 1 ? 'import was' : 'imports were'} kept; remaining files were not imported.${queue.warnings.length ? ` ${queue.warnings.join(' ')}` : ''}` });
     } finally {
       queue.pending = null;
+      if (queue.firstMap && queue.imported && queue.ticket.stillCurrent()) {
+        setInspectorTab('style');
+        skipLayerRevealRef.current = true;
+        setTimeout(() => { skipLayerRevealRef.current = false; }, 0);
+      }
       if (uploadQueueRef.current === queue) uploadQueueRef.current = null;
     }
   };

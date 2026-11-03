@@ -5,10 +5,11 @@ async function start(page,mobile){
   await page.setViewportSize(mobile?{width:390,height:844}:{width:1280,height:900});
   await page.route('**/api/track',route=>route.fulfill({status:204}));
   await page.goto('/'); await page.getByRole('button',{name:'Start a map',exact:true}).first().click();
-  await expect(page.getByRole('dialog',{name:'Add Claims'})).toBeVisible(); await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog',{name:'Claims Registry Search'})).toBeVisible(); await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog')).toBeHidden();
   const edit=page.getByRole('button',{name:'Edit',exact:true});if(await edit.isVisible()&&await edit.getAttribute('aria-expanded')!=='true')await edit.click();
   await page.getByRole('tab',{name:'Data',exact:true}).click();
+  await page.waitForFunction(()=>window.EMAP?.getProject);
 }
 async function select(page,files){
   const chooser=page.waitForEvent('filechooser');
