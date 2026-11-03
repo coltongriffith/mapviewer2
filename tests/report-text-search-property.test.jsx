@@ -1,5 +1,6 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach,it,expect,vi } from 'vitest';
 import PropertyPage from '../src/components/workspace/PropertyPage.jsx';
 
@@ -20,6 +21,7 @@ beforeEach(()=>{
   lib.reportText.mockImplementation(async(_id,file)=>({text:'Supplied QA-17 report contents.',source:file}));
 });
 it('offers a contextual content action to existing viewers for text documents only, with no edits or automatic read',async()=>{
+  const user=userEvent.setup();
   render(<PropertyPage slug="qa" orgSlug="qa"/>);
   await screen.findByRole('table',{name:'Data files'});
   expect(screen.getByRole('button',{name:'Find in report text: report.md'})).toBeVisible();
@@ -28,12 +30,14 @@ it('offers a contextual content action to existing viewers for text documents on
   expect(screen.queryByRole('button',{name:'+ Add a file'})).toBeNull();
   expect(screen.queryByRole('button',{name:'Delete report.md'})).toBeNull();
   expect(lib.reportText).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole('button',{name:'Find in report text: report.md'}));
+  await user.click(screen.getByRole('button',{name:'Find in report text: report.md'}));
   await screen.findByRole('form',{name:'Search report contents'});
   expect(lib.reportText).not.toHaveBeenCalled();
-  fireEvent.change(screen.getByRole('searchbox',{name:'Text to find'}),{target:{value:'QA-17'}});
-  fireEvent.click(screen.getByRole('button',{name:'Find in text'}));
-  expect(await screen.findByRole('status')).toHaveTextContent('1 matching line');
+  await user.type(screen.getByRole('searchbox',{name:'Text to find'}),'QA-17');
+  expect(screen.getByRole('searchbox',{name:'Text to find'})).toHaveValue('QA-17');
+  expect(screen.getByRole('button',{name:'Find in text'})).toBeEnabled();
+  await user.click(screen.getByRole('button',{name:'Find in text'}));
+  expect(await screen.findByRole('status',{}, {timeout:5000})).toHaveTextContent('1 matching line');
   expect(lib.reportText.mock.calls[0][0]).toBe('property-qa');
   expect(lib.reportText.mock.calls[0][2].userId).toBe('viewer-qa');
 });
