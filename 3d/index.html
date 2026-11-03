@@ -793,6 +793,10 @@ html.em3d-version .share-bar .btn { padding: 6px 11px; }
           <h3>My 3D maps</h3>
           <div class="acct-menu-body" id="acct-menu-body"></div>
           <div class="acct-menu-foot" id="acct-menu-foot"></div>
+          <div class="acct-menu-foot" aria-label="Local project backups">
+            <button class="btn" type="button" id="backup-download">Download project backup</button>
+            <button class="btn" type="button" id="backup-restore">Restore project backup</button>
+          </div>
         </div>
       </div>
     </div>
@@ -819,6 +823,20 @@ html.em3d-version .share-bar .btn { padding: 6px 11px; }
     <div class="status" id="status" role="status" aria-live="polite">Sample project loaded · illustrative data</div>
   </main>
 </div>
+<input type="file" id="backup-file" accept=".emap-project.json,.json,application/json" hidden>
+<dialog class="acct-dialog" id="backup-dialog" aria-labelledby="backup-title">
+  <form method="dialog">
+    <h2 id="backup-title">Open project backup</h2>
+    <p id="backup-name"></p>
+    <p class="muted">Open this private project in a new tab. Your current figure stays here.</p>
+    <p class="muted" id="backup-dependencies" hidden></p>
+    <p class="bad" id="backup-error" role="alert" hidden></p>
+    <div class="actions">
+      <button class="btn" type="submit">Cancel</button>
+      <button class="btn primary" type="button" id="backup-open">Open as new figure</button>
+    </div>
+  </form>
+</dialog>
 <dialog class="acct-dialog" id="acct-dialog" aria-labelledby="acct-title">
   <form id="acct-form" novalidate>
     <div><h2 id="acct-title">Save to your account</h2><p class="muted" id="acct-intro"></p></div>
@@ -1218,6 +1236,7 @@ The Save button (or Ctrl/Cmd+S) does the same for a person, and asks them to sig
 </script>
 <!-- Current figure state as JSON, for AI assistants and browser agents (see the Export step). -->
 <script type="application/json" id="em3d-state">{}</script>
+<script type="module" src="/src/three-d/local-backup-entry.js"></script>
 <script type="module" src="/src/three-d/studio.js"></script>
 <script type="module" src="/src/three-d/account.js"></script>
 </body>

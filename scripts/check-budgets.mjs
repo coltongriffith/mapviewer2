@@ -538,7 +538,9 @@ const BUDGETS = {
   // after keeping row scans/diagnostic wording lazy. Eager policy/metadata
   // guards preserve legacy restore and safe save/share/version roundtrips.
   // Small stamp margin only; no dependencies or other route/total caps change.
-  threeDJsGzipKb: 177.2,
+  // Local project backup: immutable restore boot + lazy menu entry/account guards.
+  // Both frozen graphs measure177.9KiB; allow0.3KiB for stamps. Codec/UI stay lazy.
+  threeDJsGzipKb: 178.2,
   // /3d's own modules fetched on first use (the geology, geophysics and tag layers, the account
   // client). They never load with the page or the app, so they sit outside the page and app totals.
   // 32 → 34 (Oct 2026, round 4): per-hole tags, grouped pending tags, callouts beside or bracketed on their
@@ -688,7 +690,10 @@ const BUDGETS = {
   // Reuses the existing account client and style adapters, no new dependency.
   // Same versioned geophysics parser/disclosure: measured 143.8 KiB lazy,
   // retaining a small stamp margin. Strict row checks remain on first use.
-  threeDLazyJsGzipKb: 144.1,
+  // Local JSON backup/isolated restore adds bounded grammar, scientific/image
+  // preflight and one-shot transport on demand. Frozen graphs measure156.1KiB.
+  // No new dependency, total/other-route allowance or validation guard removal.
+  threeDLazyJsGzipKb: 156.4,
   // Self-contained 3D Tour export: separate lazy Three global source plus
   // template/builder/dialog: measured 173.4. Not part of the maker's initial load.
   // Model palette/derived-field handoff, existing envelope geometry and layer toggles: ~176.2 KiB.
@@ -696,7 +701,8 @@ const BUDGETS = {
   // the existing account-code transfer above (loaded only on availability
   // check). Measured 201.9 plain / 202.1 configured, not eager startup growth.
   // Combined lazy+Tour caps rise only 3.1 KiB (340.8 -> 343.9).
-  threeDTourJsGzipKb: 202.4,
+  // Shared account restore-context guards:202.2plain/202.6configured;0.3KiB margin.
+  threeDTourJsGzipKb: 202.9,
   // 161.2 → 162.7 (P2-8, measured 162.2 plain / 162.4 configured): explicit
   // recipe selection, snapshot ownership, collision/edited-wording guards and
   // recipe-only update notices in property-data. No eager 3D page growth.
