@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { shouldMerge } from '../src/three-d/layout.js';
 import { placePills } from '../src/three-d/leaders.js';
-import { init, drawPills, legendRows, tagShown, idShown, pendingGroups, weight, fade, highlightOf, set as setTags } from '../src/three-d/tags.js';
+import { init, drawPills, legendRows, tagShown, idShown, pendingGroups, weight, fade, highlightOf, statuses, renderUI, withDisplayPass, state as tagState, set as setTags } from '../src/three-d/tags.js';
 import { readLegendFiles, applyLegendFile } from '../src/three-d/geology.js';
 import { refineRole } from '../src/three-d/roles.js';
 
@@ -42,12 +42,13 @@ describe('grouped pending tags', () => {
 const ctx = new Proxy({}, { get: (t, k) => (k in t ? t[k] : k === 'measureText' ? (s) => ({ width: String(s).length * 7 }) : () => {}), set: (t, k, v) => { t[k] = v; return true; } });
 const K = { u: 1, font: () => {} };
 function host(holes, tags = {}, extra = {}) {
-  const S = { designVersion: extra.designVersion ?? 2, ids: true, pendingLabels: true, accent: '#c65322', primary: '#142126', tags: { at: 'collar', style: 'dark', status: {}, fadePrevious: false, newLabel: '', prevLabel: 'Previously released', plannedLabel: 'Planned', groups: [], groupRadius: 140, idMode: 'auto', showId: {}, showTag: {}, hideRows: [], pending: 'collar', ...tags } };
+  const S = { designVersion: extra.designVersion ?? 2, ids: true, pendingLabels: true, labels: [], accent: '#c65322', primary: '#142126', tags: { at: 'collar', style: 'dark', status: {}, fadePrevious: false, newLabel: '', prevLabel: 'Previously released', plannedLabel: 'Planned', groups: [], groupRadius: 140, idMode: 'auto', showId: {}, showTag: {}, hideRows: [], pending: 'collar', ...tags } };
   const fills = [];
   ctx.fillText = (t) => fills.push(t);
-  init({ S, project: { holes }, G: { V: (x, y, z) => ({ x, y, z }) }, proj: (v) => [v.x, 500 - v.y / 10, 0], shownCallouts: () => extra.callouts || [], isPending: (h) => /pending/.test(h.note),
-    roundRect: () => {}, textOn: () => '#fff', setSpacing: () => {}, INK: '#142126', brandTone: () => S.accent, paper: (a = 1) => `rgba(255,255,255,${a})`, pri: () => S.primary });
-  return { S, fills, draw: () => { fills.length = 0; drawPills(ctx, K, { placed: [], occ: [], W: 2000, H: 1000 }); return fills.slice(); } };
+  const root = { S, esc: (value) => String(value ?? ''), project: { holes }, G: { V: (x, y, z) => ({ x, y, z }) }, proj: (v) => [v.x, 500 - v.y / 10, 0], shownCallouts: () => extra.callouts || [], isPending: (h) => /pending/.test(h.note),
+    roundRect: () => {}, textOn: () => '#fff', setSpacing: () => {}, INK: '#142126', brandTone: () => S.accent, paper: (a = 1) => `rgba(255,255,255,${a})`, pri: () => S.primary };
+  init(root);
+  return { S, root, fills, draw: () => { fills.length = 0; drawPills(ctx, K, { placed: [], occ: [], W: 2000, H: 1000 }); return fills.slice(); } };
 }
 const hole = (id, x, year, note = '') => ({ id, note, c: { x, y: 0, z: 1000, raw: { Year: String(year), Status: note } }, ints: [{}] });
 
@@ -144,5 +145,101 @@ describe('lithology legend file', () => {
     expect(out[0]).toMatchObject({ name: 'Quartz monzodiorite', color: '#e3b8c8' });
     expect(out[1]).toMatchObject({ name: 'My potassic', color: '#e8b7a2' });
     expect(out[2]).toMatchObject({ name: 'X' });
+  });
+});
+
+
+describe('synchronous tag display passes', () => {
+  const many = () => Array.from({ length: 100 }, (_, i) => hole(`PASS-${i}`, i * 50, i < 3 ? 2026 : 2014));
+  const element = () => document.createElement('div');
+  it('builds one status key and one callout lookup for an entire per-hole control pass', () => {
+    const hs = many(), H = host(hs), calls = vi.fn(() => [{ h: hs[40] }]);
+    const statusJSON = vi.fn(() => Object.fromEntries(Object.entries(H.S.tags.status).filter(([key]) => key !== 'toJSON')));
+    H.S.tags.status.toJSON = statusJSON; H.root.shownCallouts = calls;
+    const el = element(); renderUI(el);
+    expect(el.querySelectorAll('[data-ts]')).toHaveLength(100);
+    expect(el.querySelector('[data-tid="PASS-40"]').checked).toBe(true);
+    expect(statusJSON).toHaveBeenCalledTimes(1);
+    expect(calls).toHaveBeenCalledTimes(1);
+  });
+  it('scans shown-hole membership only once for automatic emphasis and ID mode in one pass', () => {
+    const hs = many(), H = host(hs), shown = hs.map((h) => h.id);
+    const includes = vi.spyOn(shown, 'includes'); H.S.holesShown = shown;
+    renderUI(element());
+    // Each hole is checked for its ID and tag, plus one complete visible count.
+    expect(includes).toHaveBeenCalledTimes(hs.length * 3);
+  });
+  it('re-evaluates status, visibility, callouts, emphasis and replacement data on the next pass', () => {
+    const hs = many(), H = host(hs), el = element();
+    renderUI(el); expect(el.querySelector('[data-tid="PASS-40"]').checked).toBe(false);
+    H.root.shownCallouts = () => [{ h: hs[40] }]; renderUI(el);
+    expect(el.querySelector('[data-tid="PASS-40"]').checked).toBe(true);
+    H.root.shownCallouts = () => []; setTags({ status: { 'PASS-40': 'new' } }); renderUI(el);
+    expect(el.querySelector('[data-ts="PASS-40"]').value).toBe('new');
+    expect(el.querySelector('[data-tid="PASS-40"]').checked).toBe(true);
+    H.S.holesShown = ['PASS-70']; renderUI(el);
+    expect(el.querySelector('[data-tid="PASS-70"]').checked).toBe(true);
+    expect(el.querySelector('[data-tid="PASS-40"]').checked).toBe(false);
+    H.S.holesShown = null; setTags({ emphasis: 'none', showId: { 'PASS-70': false } }); renderUI(el);
+    expect(el.querySelector('[data-tid="PASS-70"]').checked).toBe(false);
+    const next = host([hole('REPLACED', 0, 2027)]); renderUI(el);
+    expect(el.querySelectorAll('[data-ts]')).toHaveLength(1);
+    expect(el.querySelector('[data-ts="REPLACED"]')).not.toBeNull();
+    expect(next.root.project.holes[0].c.raw.Year).toBe('2027');
+  });
+  it('does not retain a pass after drawing or a thrown control render', () => {
+    const hs = many(), H = host(hs), statusJSON = vi.fn(() => Object.fromEntries(Object.entries(H.S.tags.status).filter(([key]) => key !== 'toJSON')));
+    H.S.tags.status.toJSON = statusJSON;
+    H.draw(); expect(statusJSON).toHaveBeenCalledTimes(1);
+    const el = { set innerHTML(_) { throw new Error('synthetic UI failure'); } };
+    expect(() => renderUI(el)).toThrow('synthetic UI failure');
+    const afterFailure = statusJSON.mock.calls.length;
+    setTags({ status: { 'PASS-40': 'new' } });
+    expect(statuses().status.get('PASS-40')).toBe('new');
+    expect(statusJSON.mock.calls.length).toBe(afterFailure + 1);
+  });
+});
+
+
+describe('renderer-owned nested display pass', () => {
+  afterEach(() => vi.restoreAllMocks());
+  const many = () => Array.from({ length: 100 }, (_, i) => hole(`NEST-${i}`, i * 50, i < 3 ? 2026 : 2014));
+  it('shares one status key across studio-style helper calls, nested pill drawing and state reads', () => {
+    const hs = many(), H = host(hs), stringify = vi.spyOn(JSON, 'stringify');
+    const keys = () => stringify.mock.calls.filter(([value]) => value === H.S.tags.status).length;
+    withDisplayPass(() => {
+      hs.forEach((h) => { highlightOf(h); idShown(h); tagShown(h); });
+      H.draw();
+      const state = tagState();
+      expect(state.idsShown).toEqual(['NEST-0', 'NEST-1', 'NEST-2']);
+      expect(state.tagged).toEqual(state.idsShown);
+    });
+    expect(keys()).toBe(1);
+    tagState(); expect(keys()).toBe(2); // no state cache survives the pass
+  });
+  it('keeps the outer snapshot after a caught nested throw, then cleans it up on an outer throw', () => {
+    const hs = many(), H = host(hs), stringify = vi.spyOn(JSON, 'stringify');
+    const keys = () => stringify.mock.calls.filter(([value]) => value === H.S.tags.status).length;
+    expect(() => withDisplayPass(() => {
+      expect(tagState().holeStatus['NEST-40']).toBe('previous');
+      expect(() => withDisplayPass(() => { throw new Error('nested QA'); })).toThrow('nested QA');
+      hs.forEach(idShown); expect(keys()).toBe(1);
+      throw new Error('outer QA');
+    })).toThrow('outer QA');
+    setTags({ status: { 'NEST-40': 'new' } });
+    const state = tagState();
+    expect(keys()).toBe(2);
+    expect(state.holeStatus['NEST-40']).toBe('new');
+    expect(state.idsShown).toContain('NEST-40');
+  });
+  it('re-evaluates visibility and callout membership for the next complete overlay pass', () => {
+    const hs = many(), H = host(hs);
+    expect(withDisplayPass(() => tagState().idsShown)).not.toContain('NEST-40');
+    H.root.shownCallouts = () => [{ h: hs[40] }];
+    expect(withDisplayPass(() => tagState().idsShown)).toContain('NEST-40');
+    H.root.shownCallouts = () => []; H.S.holesShown = ['NEST-70'];
+    expect(withDisplayPass(() => tagState().idsShown)).toEqual(['NEST-70']);
+    H.S.holesShown = null; setTags({ emphasis: 'none', idMode: 'all' });
+    expect(withDisplayPass(() => tagState().idsShown)).toHaveLength(hs.length);
   });
 });
