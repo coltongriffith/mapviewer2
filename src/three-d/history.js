@@ -43,6 +43,10 @@ let P = null; // { hist, apply(snap), el }
 export function init({ base, apply, el }) { P = { hist: createHistory(base), apply, el }; render(); return api; }
 const step = (snap) => { if (snap) { P.apply(snap); render(); } return !!snap; };
 const api = {
+  checkpoint: () => {
+    const page = P, states = structuredClone(P.hist.states), at = P.hist.at, mute = P.hist.mute;
+    return () => { P = page; Object.assign(P.hist, { states: structuredClone(states), at, mute }); render(); };
+  },
   note: (snap) => { if (P.hist.note(snap)) render(); },
   undo: () => step(P.hist.undo()), redo: () => step(P.hist.redo()), go: (i) => step(P.hist.go(i)),
   state: () => ({ entries: P.hist.states.map((s) => ({ label: s.label, at: new Date(s.at).toISOString() })), current: P.hist.at }),

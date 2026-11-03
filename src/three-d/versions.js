@@ -24,9 +24,22 @@ const $ = (id) => document.getElementById(id);
 const html = document.documentElement;
 const em = () => window.EM3D;
 const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+let requestEpoch = 0;
 let host = null; // { client, current, dirty, canPublish, say, frozen, setFrozen, reopen, detach, saveAsNew } from account-core.js
 
 export const init = (h) => { host = h; };
+
+const changed = () => Object.assign(plain('The figure or account changed. Try opening the version again on the current figure.'), { code: 'PROJECT_CHANGED' });
+function captureContext() {
+  if (host.captureContext) return host.captureContext();
+  // Compatibility for standalone hosts: the production host additionally
+  // guards real auth/project epochs, without exposing any identity payload.
+  const id = host.current()?.id, frozen = host.frozen?.(), signature = JSON.stringify(em()?.getProject?.());
+  return {
+    isCurrent: ({ source = true } = {}) => id === host.current()?.id && frozen === host.frozen?.() && (!source || signature === JSON.stringify(em()?.getProject?.())),
+    assertCurrent(options) { if (!this.isCurrent(options)) throw changed(); },
+  };
+}
 
 // ── Plain words ─────────────────────────────────────────────────────────────
 const ERRORS = {
@@ -87,22 +100,24 @@ export async function projectOf(snapshot, read) {
 
 // ── API ─────────────────────────────────────────────────────────────────────
 const figureId = () => host.current()?.id || null;
-async function rpc(fn, args, doing) {
+async function rpc(fn, args, doing, context = null) {
   const sb = await host.client();
+  context?.assertCurrent();
   const { data, error } = await sb.rpc(fn, args);
+  context?.assertCurrent();
   if (error) throw explain(error, doing);
   return data;
 }
 
 export async function publish({ label, releaseDate = today() } = {}) {
-  const cur = host.current();
+  const cur = host.current(), context = captureContext();
   if (host.frozen()) throw plain('This is a published version, read-only. Go back to the current figure to publish it.');
   if (!cur) throw plain('Save this figure to your account first: a published version is the figure as saved.');
   if (host.dirty()) throw plain('This figure has unsaved changes. Save it first: a published version is the figure as saved.');
   const bad = checkForm({ label, releaseDate }); if (bad) throw plain(bad);
   const v = toVersion(await rpc('publish_figure_version', {
     p_kind: 'figure', p_figure_id: cur.id, p_label: String(label).trim(), p_release_date: releaseDate || null, p_expected_updated_at: cur.savedAt,
-  }, 'publish this version'));
+  }, 'publish this version', context));
   try { window.gtag?.('event', 'three_d_version_published'); } catch { /* analytics never breaks publishing */ }
   track('three_d_version_published', { version: v.version });
   return { ...v, link: versionLink(cur.id, v.version) };
@@ -110,8 +125,11 @@ export async function publish({ label, releaseDate = today() } = {}) {
 
 export async function list(id = figureId()) {
   if (!id) return [];
-  const rows = await rpc('list_figure_versions', { p_kind: 'figure', p_figure_id: id }, 'load the published versions');
-  return withOptionalSignoffs((rows || []).map(toVersion));
+  const context = captureContext();
+  const rows = await rpc('list_figure_versions', { p_kind: 'figure', p_figure_id: id }, 'load the published versions', context);
+  const versions = await withOptionalSignoffs((rows || []).map(toVersion));
+  context.assertCurrent();
+  return versions;
 }
 // QP sign-offs (src/utils/figureSignoffs.js), loaded with the first list or opened version.
 let SO = null;
@@ -141,31 +159,39 @@ export async function open(n, { force = false, figure = null } = {}) {
   const fid = figure || host.frozen()?.figureId || figureId();
   if (!fid) throw plain('Open a saved figure first.');
   if (host.dirty() && !force) throw Object.assign(plain('This figure has unsaved changes. Save it first, or open the version anyway with { force: true }.'), { code: 'UNSAVED' });
-  const sb = await host.client();
-  let row, project;
+  const epoch = ++requestEpoch, context = captureContext();
+  const check = (options) => { if (epoch !== requestEpoch) throw changed(); context.assertCurrent(options); };
+  const sb = await host.client(); check();
+  let row, project, v, live;
   try {
     let q = sb.from('figure_versions').select('id, figure_id, version, label, release_date, name, snapshot, content_hash, created_at').eq('figure_kind', 'figure');
     q = /^[0-9a-f-]{36}$/.test(String(n)) ? q.eq('id', n) : q.eq('figure_id', fid).eq('version', Number(n));
-    const res = await q.maybeSingle();
+    const res = await q.maybeSingle(); check();
     if (res.error) throw res.error;
     row = res.data;
     if (!row) throw plain(`Version ${n} of this figure was not found, or you cannot see it.`);
     project = await projectOf(row.snapshot, async (path) => {
-      const { data, error } = await sb.storage.from('three-d-files').download(path);
+      const { data, error } = await sb.storage.from('three-d-files').download(path); check();
       if (error) throw error;
       return data;
     });
+    check();
+    v = toVersion(row); live = await liveFigure(sb, row.figure_id); check();
+    await withOptionalSignoffs([v]); check();
   } catch (err) { throw explain(err, 'open that version'); }
-  const backup = shown ? null : em().getProject();
-  readOnly(true);
+  // The transactional loader owns the temporary UI lock. Change version
+  // presentation only after acceptance, so stale failures cannot leave it behind.
   try {
-    await em().loadProject(project);
+    await em().loadProject(project, { isCurrent: () => epoch === requestEpoch && context.isCurrent({ source: false }) });
+    check({ source: false });
   } catch (err) {
-    if (backup) { exitView(); try { await em().loadProject(backup); } catch { /* the editor keeps whatever it has */ } }
-    throw plain(`That version could not be opened (${err.message}).`, err);
+    if (epoch === requestEpoch && context.isCurrent({ source: false })) {
+      if (err?.code !== 'PROJECT_CHANGED' && err?.stateRestored !== true) host.pauseSaving?.();
+    }
+    if (err?.code === 'PROJECT_CHANGED' || epoch !== requestEpoch || !context.isCurrent({ source: false })) throw changed();
+    throw plain(`That version could not be opened (${err.message}). ${err?.stateRestored === true ? 'Your previous figure is unchanged.' : 'The previous figure could not be fully restored. Keep this tab open.'}`, err);
   }
-  const v = toVersion(row), live = await liveFigure(sb, row.figure_id);
-  await withOptionalSignoffs([v]);
+  readOnly(true);
   shown = { version: v, project, figureId: row.figure_id, live };
   host.setFrozen({ ...v, figureId: row.figure_id });
   bar(v, live);
@@ -184,27 +210,48 @@ function exitView() {
   $('ver-bar')?.remove();
   host.setFrozen(null);
 }
+// Called only after account-core has accepted an ordinary live-figure open.
+// Its owner commits frozen/target state; this module clears presentation only.
+export function acceptLive() {
+  requestEpoch++;
+  readOnly(false);
+  $('ver-bar')?.remove();
+  shown = null;
+}
 /** Back to the figure as last saved. */
 export async function close() {
   if (!shown) return null;
   if (!shown.live) throw plain('The figure this version was published from is no longer available to you. Start a new figure from this version to keep working on it.');
-  const fid = shown.figureId;
+  const previous = shown, epoch = ++requestEpoch;
+  // Keep read-only metadata and the published snapshot until reopening is
+  // accepted. A failed load must not leave a version pretending to be editable.
+  const result = await host.reopen(previous.figureId);
+  if (epoch !== requestEpoch || shown !== previous) throw changed();
   exitView(); shown = null;
-  setUrl(fid, null);
-  return host.reopen(fid);
+  setUrl(previous.figureId, null);
+  host.afterLive?.();
+  return result;
 }
 /** The version on screen becomes a new, unsaved figure (Save names it). */
 export async function startCopy() {
   if (!shown) throw plain('Open a published version first.');
-  const { version: v, project } = shown;
+  const previous = shown, { version: v, project } = previous, epoch = ++requestEpoch, context = captureContext();
+  try {
+    await em().loadProject(project, { isCurrent: () => epoch === requestEpoch && shown === previous && context.isCurrent({ source: false }) });
+    if (epoch !== requestEpoch || shown !== previous) throw changed();
+    context.assertCurrent({ source: false });
+  } catch (err) {
+    if (epoch === requestEpoch && context.isCurrent({ source: false }) && err?.code !== 'PROJECT_CHANGED' && err?.stateRestored !== true) host.pauseSaving?.();
+    throw err;
+  }
   exitView(); shown = null;
-  await em().loadProject(project); // exactly as published, whatever was done on screen
   host.detach();
   setUrl(null, null);
   host.say(`This is now a new figure made from version ${v.version} (${v.label}). Save it to keep it.`);
   host.saveAsNew(`${v.name} (from v${v.version})`.slice(0, 200));
   return em().getState();
 }
+
 function setUrl(project, version) {
   try {
     const url = new URL(location.href);

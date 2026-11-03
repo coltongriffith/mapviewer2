@@ -77,6 +77,14 @@ export async function downloadLocalBackup() {
 let reviewToken = 0;
 let contextEpoch = 0;
 for (const type of ['em3d:figure-loading', 'em3d:account-context']) window.addEventListener(type, () => { contextEpoch++; });
+function returnBackupFocus() {
+  const visible = (el) => {
+    if (!el?.isConnected || el.disabled || el.closest('[hidden],[inert]')) return false;
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden';
+  };
+  [document.getElementById('backup-restore'), document.getElementById('acct-maps')].find(visible)?.focus();
+}
 const fingerprint = (E) => {
   const p = E.getProject();
   return JSON.stringify({ settings: p.settings, camera: p.camera, usingSample: p.usingSample, secSet: p.secSet,
@@ -110,9 +118,9 @@ export async function reviewLocalBackup(file) {
       const transfer = openRestoreWindow({ bytes, isCurrent: current });
       if (transfer) dialog.close();
     };
-    dialog.addEventListener('close', () => { button.onclick = null; }, { once: true });
+    dialog.addEventListener('close', () => { button.onclick = null; if (current()) returnBackupFocus(); }, { once: true });
     dialog.showModal();
-  } catch { status('This file is not a supported project backup. Your current figure is unchanged.'); }
+  } catch { status('This file is not a supported project backup. Your current figure is unchanged.'); if (current()) returnBackupFocus(); }
 }
 
 export function receiveLocalRestore(onReady, { win = window, decode = decodeBackup, timeout = WAIT } = {}) {

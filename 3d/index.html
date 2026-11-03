@@ -495,9 +495,9 @@ html.em3d-version .share-bar .btn { padding: 6px 11px; }
           <button class="btn" type="button" data-view="plan">Plan view</button>
         </div>
         <label class="field" style="margin-top:8px"><span>Projection</span><select data-ext="view.projection"><option value="perspective">Perspective</option><option value="orthographic">Orthographic (parallel, framed to the drilling)</option></select></label>
-        <label class="field" style="margin-top:8px"><span>Looking toward (azimuth) <output id="cam-az-out" class="mono"></output></span><input type="range" id="cam-az" min="0" max="359"></label>
-        <label class="field"><span>Plunge (angle down) <output id="cam-pl-out" class="mono"></output></span><input type="range" id="cam-pl" min="3" max="89"></label>
-        <label class="field"><span>Zoom <output id="cam-zoom-out" class="mono"></output></span><input type="range" id="cam-zoom" min="40" max="250"></label>
+        <label class="field" for="cam-az" style="margin-top:8px"><span>Looking toward (azimuth) <output id="cam-az-out" class="mono"></output></span><input type="range" id="cam-az" min="0" max="359"></label>
+        <label class="field" for="cam-pl"><span>Plunge (angle down) <output id="cam-pl-out" class="mono"></output></span><input type="range" id="cam-pl" min="3" max="89"></label>
+        <label class="field" for="cam-zoom"><span>Zoom <output id="cam-zoom-out" class="mono"></output></span><input type="range" id="cam-zoom" min="40" max="250"></label>
       </section>
 <section>
         <h3>Display</h3>
@@ -544,9 +544,9 @@ html.em3d-version .share-bar .btn { padding: 6px 11px; }
             <label class="field"><span>Shaded relief</span><input type="range" data-ext="imagery.relief" min="0" max="1" step="0.05"></label>
           </div>
         </details>
-        <label class="field" style="margin-top:8px"><span>Vertical exaggeration <output id="vex-out" class="mono">1×</output></span><input type="range" id="vex" min="1" max="5" step="0.5" value="1"></label>
-        <label class="field" style="margin-top:8px"><span>Drill trace thickness <output id="trace-out" class="mono">1.4×</output></span><input type="range" id="trace-w" min="50" max="300" step="10" value="140"></label>
-        <label class="field" style="margin-top:8px"><span>Surface opacity <output id="surf-out" class="mono">100%</output></span><input type="range" id="surf" min="15" max="100" value="100"></label>
+        <label class="field" for="vex" style="margin-top:8px"><span>Vertical exaggeration <output id="vex-out" class="mono">1×</output></span><input type="range" id="vex" min="1" max="5" step="0.5" value="1"></label>
+        <label class="field" for="trace-w" style="margin-top:8px"><span>Drill trace thickness <output id="trace-out" class="mono">1.4×</output></span><input type="range" id="trace-w" min="50" max="300" step="10" value="140"></label>
+        <label class="field" for="surf" style="margin-top:8px"><span>Surface opacity <output id="surf-out" class="mono">100%</output></span><input type="range" id="surf" min="15" max="100" value="100"></label>
         <details style="margin-top:8px">
           <summary>Block extent</summary>
           <label class="field" style="margin-top:8px"><span>Margin around the drilling (m)</span><input type="number" id="block-margin" min="0" step="10"></label>
@@ -679,7 +679,7 @@ html.em3d-version .share-bar .btn { padding: 6px 11px; }
 <section>
         <h3>Sections</h3>
         <div id="sec-tabs"></div>
-        <label class="field"><span>Azimuth <output id="sec-az-out" class="mono"></output></span><input type="range" id="sec-az" min="0" max="179"></label>
+        <label class="field" for="sec-az"><span>Azimuth <output id="sec-az-out" class="mono"></output></span><input type="range" id="sec-az" min="0" max="179"></label>
         <label class="field"><span>Projection either side (m)</span><input type="number" id="sec-w" min="5"></label>
         <div class="field"><span>Holes in section</span><div class="chips" role="group" aria-label="Holes in section"><button type="button" class="chip" data-secmode="width" aria-pressed="true">Within width</button><button type="button" class="chip" data-secmode="chosen" aria-pressed="false">Chosen holes</button></div></div>
         <div id="sec-holes"></div>

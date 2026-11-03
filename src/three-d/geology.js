@@ -478,6 +478,12 @@ export const hasLogs = () => H.files().some((f) => f.role === 'litho') && logsNo
 // Face images: a geologist's drawn section stretched over a face from its base to its highest point, or (round 5G)
 // fitted to it by known points (cfg().fits[face]); "section" is the A–A′ plane.
 const images = {};
+// The loader can restore already decoded face images without fetching an old
+// signed URL again. Pending candidate images keep their own detached entries.
+export function checkpointImages() {
+  const saved = { ...images };
+  return () => { Object.keys(images).forEach((key) => { delete images[key]; }); Object.assign(images, saved); };
+}
 const endsOf = (face) => { if (face !== 'section') return faceEnds(face); const [A, Bp] = H.sectionEnds(); return [[A.x, A.y], [Bp.x, Bp.y]]; };
 // Image x to the distance along the plane and image y to elevation, each a scale and an offset: { sx, ox, sz, oz, rms
 // (m, the points' misfit), n }. pts: [{ px: [x, y], d, z }]; least squares with three or more, so a section drawn with
