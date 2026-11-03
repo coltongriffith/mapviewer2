@@ -3,6 +3,7 @@ import { fxOf, LINE_TYPES } from '../utils/geoStyle.js';
 import { layerGeometryKind } from '../utils/featureIdentity.js';
 import { Range, Check, Pick } from './WashControls.jsx';
 import ClaimKeyControls from './ClaimKeyControls.jsx';
+import PropertyBoundaryControls from './PropertyBoundaryControls.jsx';
 
 // The inspector's "Geology & labels" settings for a polygon or line layer (layer.fx, utils/geoStyle.js), loaded
 // when one is selected.
@@ -43,6 +44,7 @@ export default function GeoStyleControls({ layer, project, setProject, map }) {
   return (
     <div className="control-grid geo-style-controls" data-testid="geo-style-controls">
       {project && <ClaimKeyControls project={project} layer={layer} fields={props} setProject={setProject} map={map} />}
+      {project && <PropertyBoundaryControls project={project} layer={layer} setProject={setProject} map={map} />}
       <h3 className="ins-sub-title">Geology &amp; labels</h3>
       <Check label={line ? 'Line style: glow, casing, line types' : 'Geology style: feather, plume'} checked={!!fx} onChange={(on) => setFx(on ? (line ? { lineType: 'zone', glow: 6 } : { feather: 6, outline: false }) : null)} />
       {fx && !line && (
