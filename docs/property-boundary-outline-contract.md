@@ -193,6 +193,21 @@ input/output guards, union cache, shared stroke and control account for the cost
 The total caps now allow those measured values plus the existing 0.5 KiB stamp
 margin. Entry/route/standalone caps and dependencies remain unchanged.
 
-Remaining release gates: frozen-head plain/configured builds and budgets, final
-browser rerun/coverage discovery, then focused PR with hosted CI/review. Merge
-still requires separate human approval after review and exact-head checks.
+## Integration with released parent fixes
+
+PR #409 is human-approved conditional on all final checks and review. Its normal
+integration uses actual released main `9ffe81218a37afad29a19d06d6939c0dd83ce4e0`,
+including strict geophysics numeric policy, lossless BOM recovery downloads and
+private plaintext report search. The original boundary runtime/fixtures remain
+unchanged; parent implementation files are preserved. All 123 focused tests
+across 13 boundary, recovery/storage, geophysics and report-search suites pass;
+affected-file lint and diff checks pass.
+
+Combined measured plain/configured JavaScript totals are 1130.1/1199.1 KiB.
+Only total allowances change to 1130.6/1199.6 KiB, retaining the existing 0.5 KiB
+stamp margin. Current route, 3D, CSS, vendor and dependency caps remain intact.
+The earlier standalone measurements above describe the original reviewed base,
+not the combined release tree. Commit-specific final builds, actual desktop/phone
+boundary and BOM recovery cases, asset stamps and browser coverage discovery are
+recorded in the handoff release evidence. Exact-current-head hosted CI/review and
+production verification remain required before a live claim.
