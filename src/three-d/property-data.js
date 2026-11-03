@@ -215,17 +215,25 @@ export async function pull(sb, prop, onProgress = () => {}, tries = 2, { geology
   return { files: toFiles(rows, before, { geologySource }), ref: snapshotOf({ propertyId: prop.id, propertyName: prop.name, geologySource }, before, rows), rows };
 }
 
+function captureContext() {
+  if (host.captureContext) return host.captureContext();
+  const id = host.current()?.id, signature = JSON.stringify(em().getProject());
+  return { isCurrent: ({ source = true } = {}) => id === host.current()?.id && (!source || signature === JSON.stringify(em().getProject())) };
+}
+const changed = () => Object.assign(new Error('The figure or account changed. Choose the property data again on the current figure.'), { code: 'PROJECT_CHANGED' });
+
 // ── UI ──────────────────────────────────────────────────────────────────────
 const hideNotice = () => { $('drill-notice').hidden = true; };
 /** Another figure opened (or none): its notice and pending update go with it. */
 export function reset() { hideNotice(); pending = null; pickEpoch++; }
 // The pending update still belongs to the figure on screen: the same saved figure and property.
 const stillOurs = (p) => !!p?.figureId && host.current()?.id === p.figureId
-  && JSON.stringify(em().getState().drillSource) === JSON.stringify(p.ref);
+  && JSON.stringify(em().getState().drillSource) === JSON.stringify(p.ref) && (!p.context || p.context.isCurrent({ source: false }));
 const progressText = (n) => `Loading… ${['collars', 'surveys', 'assays', 'lithology', 'alteration'].filter((k) => n[k]).map((k) => `${fmtN(n[k])} ${k}`).join(', ')}`;
 
 export function init(h) {
   host = h;
+  window.addEventListener('em3d:account-context', reset);
   $('drill-pick').addEventListener('click', (e) => { if (e.target.id === 'drill-load') load(); });
   $('drill-pick').addEventListener('change', (e) => {
     if (e.target.id === 'drill-prop') pickRecipes();
@@ -240,11 +248,11 @@ export async function toggle() {
   const box = $('drill-pick'), body = $('drill-body');
   box.hidden = !box.hidden;
   $('drill-add').setAttribute('aria-expanded', String(!box.hidden));
-  const epoch = ++pickEpoch;
+  const epoch = ++pickEpoch, context = captureContext();
   if (box.hidden) return;
   body.innerHTML = '<p class="muted">Loading your properties…</p>';
   props = (await host.listHomes()).properties;
-  if (epoch !== pickEpoch) return;
+  if (epoch !== pickEpoch || !context.isCurrent()) return;
   if (!props.length) { body.innerHTML = '<p class="muted">You are not a member of a company property yet.</p>'; return; }
   const pick = em().getState().drillSource?.propertyId || host.current()?.home?.propertyId;
   const geologySource = em().getState().drillSource?.geologySource || 'lithology';
@@ -259,13 +267,15 @@ export async function toggle() {
 }
 
 async function pickRecipes() {
-  const epoch = ++pickEpoch, id = $('drill-prop').value, select = $('drill-recipe'), btn = $('drill-load'), out = $('drill-progress');
+  const context = captureContext(), epoch = ++pickEpoch, id = $('drill-prop').value, select = $('drill-recipe'), btn = $('drill-load'), out = $('drill-progress');
   btn.disabled = select.disabled = $('drill-geology').disabled = true; out.textContent = 'Loading saved recipes…';
   const raw = '<option value="raw">Raw drill data only</option>';
   try {
     const { listRecipes, selectRecipe } = await resultTools();
-    const recipes = await listRecipes(await host.client(), id);
-    if (epoch !== pickEpoch) return;
+    const sb = await host.client();
+    if (epoch !== pickEpoch || !context.isCurrent()) return;
+    const recipes = await listRecipes(sb, id);
+    if (epoch !== pickEpoch || !context.isCurrent()) return;
     let chosen;
     try { chosen = selectRecipe(recipes); } catch { chosen = undefined; }
     select.innerHTML = '<option value="" disabled>Choose results…</option>' + raw
@@ -273,11 +283,11 @@ async function pickRecipes() {
     select.value = chosen ? `r:${chosen.name}` : chosen === null ? 'raw' : '';
     out.textContent = recipes.length ? '' : 'No saved recipes. Load raw data, or save a recipe on the property page.';
   } catch (err) {
-    if (epoch !== pickEpoch) return;
+    if (epoch !== pickEpoch || !context.isCurrent()) return;
     select.innerHTML = '<option value="" disabled selected>Choose results…</option>' + raw;
     out.textContent = `Could not read saved recipes (${err.message}). You can choose raw drill data only.`;
   } finally {
-    if (epoch === pickEpoch) { select.disabled = $('drill-geology').disabled = false; btn.disabled = !select.value; }
+    if (epoch === pickEpoch && context.isCurrent()) { select.disabled = $('drill-geology').disabled = false; btn.disabled = !select.value; }
   }
 }
 
@@ -285,13 +295,15 @@ async function load() {
   const prop = props.find((p) => p.id === $('drill-prop').value), btn = $('drill-load'), out = $('drill-progress');
   const choice = $('drill-recipe').value, geologySource = $('drill-geology').value;
   if (!prop || !choice) return;
-  const epoch = pickEpoch, figureId = host.current()?.id || null;
-  const current = () => epoch === pickEpoch && (host.current()?.id || null) === figureId;
-  let backup = null;
+  const epoch = pickEpoch, context = captureContext();
+  const current = (source = true) => epoch === pickEpoch && context.isCurrent({ source });
+  let loading = false;
   btn.disabled = true; out.textContent = 'Loading…';
   try {
     const { pullPropertyResults } = await resultTools();
-    const { files, ref } = await pullPropertyResults(await host.client(), prop, { recipeName: choice === 'raw' ? null : choice.slice(2), geologySource, onProgress: (n) => { if (current()) out.textContent = progressText(n); } });
+    if (!current()) return;
+    const sb = await host.client(); if (!current()) return;
+    const { files, ref } = await pullPropertyResults(sb, prop, { recipeName: choice === 'raw' ? null : choice.slice(2), geologySource, onProgress: (n) => { if (current()) out.textContent = progressText(n); } });
     if (!current()) return;
     if (!ref.holes) throw new Error(`${prop.name} has no collars in its drill database yet. Import them on the property page (Drill data).`);
     const E = em(), st = E.getState(), crs = st.terrain.crs;
@@ -301,41 +313,36 @@ async function load() {
     const changedGeology = geologySource !== (st.drillSource?.geologySource || 'lithology');
     const keep = st.usingSample ? [] : prior.files.filter((f) => !(changedGeology && f.role === 'lithlegend') && !DRILL_ROLES.includes(f.role) && !Object.values(FILE_NAMES).includes(f.name) && f.name !== managed);
     if (ref.resultsRecipe && keep.some((f) => f.role === 'published' || f.name === ref.resultsRecipe.fileName)) throw new Error('This figure already has uploaded results. Choose raw drill data only to keep them, or remove that results file before using a property recipe.');
-    backup = prior;
-    if (!st.usingSample) {
-      E.clearFiles();
-      if (keep.length) {
-        // These are existing figure files, not new imports. Restore their
-        // exact interpretation/column mappings (including unset legacy policy)
-        // while retaining clearFiles' normal reset of drill-derived settings.
-        await E.loadProject({ ...E.getProject(), files: keep });
-        if (!current()) return;
-      }
-    }
-    E.addFiles(files, { drillSource: ref, ...(changedGeology ? { geologyTitle: geologySource === 'alteration' ? 'Alteration' : 'Lithology' } : {}) });
-    if (ref.resultsRecipe) E.setStyle({ calloutMode: 'published' });
-    // The property's coordinate system when it has one; the figure's earlier one otherwise.
-    if (ref.crs || crs) await E.setCRS(ref.crs || crs).catch(() => {});
-    if (!current()) return;
+    loading = true;
+    await E.loadProject({ ...prior, files: keep }, {
+      isCurrent: () => current(false),
+      freshDrill: { files, drillSource: ref, ...(changedGeology ? { geologyTitle: geologySource === 'alteration' ? 'Alteration' : 'Lithology' } : {}), crs: ref.crs || crs },
+    });
+    if (!current(false)) return;
     out.textContent = '';
     hideNotice(); pending = null;
     host.say(`Loaded ${prop.name} from its drill database: ${plural(ref.holes, 'hole')}, ${plural(ref.assays, 'assay')}.${ref.resultsRecipe ? ` Results calculated with ${ref.resultsRecipe.name} v${ref.resultsRecipe.version}.` : ''} Save to keep it with the figure.`);
   } catch (err) {
-    if (backup && current()) try { await em().loadProject(backup); } catch { /* existing recovery behavior */ }
-    if (current()) out.textContent = err.message;
-  } finally { if (current()) btn.disabled = !$('drill-recipe').value; }
+    if (current(!loading) && err?.code !== 'PROJECT_CHANGED') {
+      if (loading && err?.stateRestored !== true) host.pauseSaving?.();
+      out.textContent = `${err.message}${loading ? (err?.stateRestored === true ? ' The figure is unchanged.' : ' The previous figure could not be fully restored. Keep this tab open.') : ''}`;
+    }
+  } finally { if (current(false)) btn.disabled = !$('drill-recipe').value; }
 }
 
 /** On opening a figure that took its holes from a property: offer newer data. */
 export async function check() {
   reset();
-  const ref = em().getState().drillSource, p = { ref, figureId: host.current()?.id || null };
+  const ref = em().getState().drillSource, p = { ref, figureId: host.current()?.id || null, context: captureContext() };
   if (!p.figureId || ref?.kind !== 'property' || !ref.propertyId) return;
-  const d = newerSince(ref, await listBatches(await host.client(), ref.propertyId));
+  const sb = await host.client(); if (!stillOurs(p)) return;
+  const d = newerSince(ref, await listBatches(sb, ref.propertyId));
+  if (!stillOurs(p)) return;
   let recipe = null;
   if (ref.resultsRecipe) {
     const { listRecipes, recipeChange } = await resultTools();
-    recipe = recipeChange(ref, await listRecipes(await host.client(), ref.propertyId));
+    if (!stillOurs(p)) return;
+    recipe = recipeChange(ref, await listRecipes(sb, ref.propertyId));
   }
   if ((!d && !recipe) || !stillOurs(p)) return; // nothing newer, or another figure opened meanwhile
   pending = p;
@@ -350,12 +357,14 @@ async function update() {
   if (!stillOurs(was)) { reset(); return; }
   const btn = $('drill-update'), { ref } = was;
   btn.disabled = true; btn.textContent = 'Updating…';
-  let backup = null;
+  const context = captureContext();
+  let loading = false;
   try {
     if (ref.resultsRecipe && Object.values(em().getProject().settings.pubOverrides || {}).some((o) => o.line1 || o.line2)) {
       throw new Error('This figure has edited result wording. Reset that wording in Intercept callouts before updating its property results, or keep the saved figure.');
     }
     const sb = await host.client(), prop = { id: ref.propertyId, name: ref.propertyName };
+    if (!context.isCurrent() || !stillOurs(was)) return;
     const { files, ref: now } = ref.resultsRecipe
       ? await (await resultTools()).pullPropertyResults(sb, prop, { recipeName: ref.resultsRecipe.name, geologySource: ref.geologySource })
       : await pull(sb, prop, undefined, 2, { geologySource: ref.geologySource });
@@ -371,13 +380,17 @@ async function update() {
     }
     p.files = keep.concat(files);
     p.settings.drillSource = now;
-    backup = em().getProject();
-    await em().loadProject(p);
+    if (!context.isCurrent()) throw changed();
+    loading = true;
+    await em().loadProject(p, { isCurrent: () => context.isCurrent({ source: false }) });
+    if (!context.isCurrent({ source: false })) return;
     pending = null; hideNotice();
     host.say(`Updated from ${ref.propertyName || 'the property'}: ${plural(now.holes, 'hole')}, ${plural(now.assays, 'assay')}.${now.resultsRecipe ? ` Results calculated with ${now.resultsRecipe.name} v${now.resultsRecipe.version}.` : ''} Save to keep it.`);
   } catch (err) {
-    if (backup) try { await em().loadProject(backup); } catch { /* the editor keeps whatever it has */ }
-    host.say(`Could not update the drill data (${err.message}). The figure is unchanged.`);
+    if (context.isCurrent({ source: !loading }) && err?.code !== 'PROJECT_CHANGED') {
+      if (loading && err?.stateRestored !== true) host.pauseSaving?.();
+      host.say(`Could not update the drill data (${err.message}). ${!loading || err?.stateRestored === true ? 'The figure is unchanged.' : 'The previous figure could not be fully restored. Keep this tab open.'}`);
+    }
   } finally {
     btn.disabled = false; btn.textContent = 'Update';
   }

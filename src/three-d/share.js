@@ -14,9 +14,10 @@
 // 2D editor already uses, which also rate-limits anonymous shares), and it
 // expires after 30 days. Owners can update a link with the current figure
 // (one link a company refreshes after new assays), list and revoke links.
-import { client, getUser, saveProject } from './account-core.js';
+import { client, getUser, saveProject, captureFigureContext, requireFigureReady } from './account-core.js';
 import { track as usage } from './track.js';
 import { geophysPolicyMetadata } from './geophys-policy.js';
+import { figureSignature } from './save-state.js';
 
 const $ = (id) => document.getElementById(id);
 const html = document.documentElement;
@@ -67,16 +68,19 @@ function creatorKey() {
 function remember(id, projectId) { try { localStorage.setItem(LAST_KEY, JSON.stringify({ id, projectId: projectId || null })); } catch { /* optional */ } }
 function recalled() { try { return JSON.parse(localStorage.getItem(LAST_KEY) || 'null'); } catch { return null; } }
 
-async function rpc(fn, args, doing) {
+async function rpc(fn, args, doing, context = null) {
   let sb;
   try { sb = await client(); } catch (err) { throw explain(err, doing); }
+  context?.assertCurrent();
   const { data, error } = await sb.rpc(fn, args);
+  context?.assertCurrent();
   if (error) throw explain(error, doing);
   return data;
 }
 
 // The figure on screen, checked against the server's limits before it is sent.
 function snapshot() {
+  requireFigureReady();
   const em = studio();
   if (!em.getState().ready) throw plain('Nothing to share yet: add a collar file and an assay file.');
   const state = em.getProject();
@@ -86,10 +90,6 @@ function snapshot() {
   if (thumbnail && (thumbnail.length > 300000 || !/^data:image\/(jpeg|png|webp);base64,/.test(thumbnail))) thumbnail = null;
   return { state, thumbnail };
 }
-async function currentProjectId(user) {
-  if (!user) return null;
-  try { return (await window.EM3D?.account?.currentProject?.())?.id || null; } catch { return null; }
-}
 const describe = (id, extra = {}) => {
   const st = window.EM3D?.getState?.(), f = st?.figureSize;
   return { id, url: shareUrl(id), embedUrl: embedUrl(id), embedCode: embedCode(id, { title: st?.brand?.title, aspect: f ? f.width / f.height : undefined }), ...extra };
@@ -97,37 +97,44 @@ const describe = (id, extra = {}) => {
 
 // ── API (EM3D.share) ────────────────────────────────────────────────────────
 export async function create() {
+  const context = captureFigureContext();
   const { state, thumbnail } = snapshot();
   const user = await getUser().catch(() => null);
-  let projectId = await currentProjectId(user), id;
+  context.assertCurrent();
+  let projectId = user ? context.project : null, id;
   const args = { p_state: state, p_creator_key: creatorKey(), p_project_id: projectId, p_thumbnail: thumbnail };
   try {
-    id = await rpc('create_3d_share', args, 'create the link');
+    id = await rpc('create_3d_share', args, 'create the link', context);
   } catch (err) {
     // A figure the caller can open but does not own (a colleague's, in a company
     // workspace) is shared without the link back to its saved project.
     if (!projectId || !/not in your account/.test(err.cause?.message || '')) throw err;
+    context.assertCurrent();
     projectId = null;
-    id = await rpc('create_3d_share', { ...args, p_project_id: null }, 'create the link');
+    id = await rpc('create_3d_share', { ...args, p_project_id: null }, 'create the link', context);
   }
+  context.assertCurrent();
   remember(id, projectId);
   track('three_d_share_created', { signed_in: !!user });
   return describe(id, { signedIn: !!user, expires: user ? null : 'in 30 days' });
 }
 export async function update(id) {
   if (!/^[0-9a-f]{32}$/.test(String(id || ''))) throw plain('update(id) needs the id of one of your share links.');
+  const context = captureFigureContext();
   const { state, thumbnail } = snapshot();
-  await rpc('update_3d_share', { share_id: id, p_state: state, p_thumbnail: thumbnail, p_creator_key: creatorKey() }, 'update the link');
+  await rpc('update_3d_share', { share_id: id, p_state: state, p_thumbnail: thumbnail, p_creator_key: creatorKey() }, 'update the link', context);
   track('three_d_share_updated');
   return describe(id, { updated: true });
 }
 export async function revoke(id) {
-  const ok = await rpc('revoke_3d_share', { share_id: String(id || ''), p_creator_key: creatorKey() }, 'revoke the link');
+  const context = captureFigureContext();
+  const ok = await rpc('revoke_3d_share', { share_id: String(id || ''), p_creator_key: creatorKey() }, 'revoke the link', context);
   if (ok) { const last = recalled(); if (last?.id === id) try { localStorage.removeItem(LAST_KEY); } catch { /* optional */ } }
   return Boolean(ok);
 }
 export async function list() {
-  const rows = await rpc('list_my_3d_shares', { p_creator_key: creatorKey() }, 'load your share links');
+  const context = captureFigureContext();
+  const rows = await rpc('list_my_3d_shares', { p_creator_key: creatorKey() }, 'load your share links', context);
   const now = Date.now();
   return (rows || []).map((r) => ({
     id: r.id, url: shareUrl(r.id), title: r.title || null, projectId: r.project_id || null, createdAt: r.created_at, updatedAt: r.updated_at,
@@ -215,23 +222,27 @@ async function onDialogClick(e) {
   }
 }
 export async function openDialog() {
+  const context = captureFigureContext();
   const d = dialog();
   ui = { link: null, user: null, busy: true, msg: 'Checking for an existing link…', bad: false, shares: null };
   renderDialog();
   if (!d.open) d.showModal();
   try {
-    ui.user = await getUser().catch(() => null);
-    const projectId = await currentProjectId(ui.user);
+    const user = await getUser().catch(() => null); context.assertCurrent();
+    ui.user = user;
+    const projectId = user ? context.project : null;
     const last = recalled();
     let mine = [];
-    try { mine = await list(); ui.shares = mine; } catch { /* offer a new link */ }
+    try { mine = await list(); context.assertCurrent(); ui.shares = mine; } catch { /* offer a new link */ }
+    context.assertCurrent();
     const active = mine.filter((s) => s.active);
     // The same saved 3D map, else the last link this browser made for this figure.
     const found = (projectId && active.find((s) => s.projectId === projectId))
       || (last && (last.projectId || null) === (projectId || null) && active.find((s) => s.id === last.id));
     if (found) ui.link = { ...describe(found.id), fresh: false };
     ui.msg = found ? `Made ${fmtWhen(found.createdAt)}${found.updatedAt && found.updatedAt !== found.createdAt ? `, last updated ${fmtWhen(found.updatedAt)}` : ''}. Update it after new results so the same link shows them.` : '';
-  } catch { ui.msg = ''; }
+  } catch { if (!context.isCurrent()) return; ui.msg = ''; }
+  if (!context.isCurrent()) return;
   ui.busy = false; renderDialog();
   (d.querySelector('[data-sh="update"]') || d.querySelector('[data-sh="create"]') || d.querySelector('[data-sh="copy"]'))?.focus();
 }
@@ -312,16 +323,21 @@ function downloadPng() {
 }
 async function offerCopy() {
   if (isEmbed()) return; // nothing that acts on an account inside someone else's page
+  const offered = captureFigureContext(), route = location.pathname + location.search;
   let user = null;
   try { user = await getUser(); } catch { user = null; }
-  if (!user) return;
+  if (!user || !offered.isCurrent() || route !== location.pathname + location.search) return;
   const b = el('button', { className: 'btn', type: 'button', id: 'share-fork' }, 'Save a copy to my account');
   b.addEventListener('click', async () => {
     if (b.disabled) return;
     b.disabled = true; b.textContent = 'Saving a copy…';
     try {
+      requireFigureReady();
+      const source = figureSignature(studio().getProject(), studio().filesDigest?.());
+      const isCurrent = () => route === location.pathname + location.search && source === figureSignature(studio().getProject(), studio().filesDigest?.());
       const title = String(studio().getState().brand?.title || '').trim() || 'Shared 3D figure';
-      const res = await saveProject(`${title} (copy)`.slice(0, 200));
+      const res = await saveProject(`${title} (copy)`.slice(0, 200), null, null, { isCurrent });
+      if (res.active === false || !isCurrent()) return;
       const open = el('a', { className: 'btn', href: `/3d?project=${encodeURIComponent(res.id)}`, id: 'share-fork-open' }, 'Open my copy');
       b.replaceWith(open);
       const s = $('status'); if (s) { s.textContent = `Saved “${res.name}” to your account.`; s.style.opacity = '1'; }
@@ -338,23 +354,30 @@ async function bootViewer() {
   html.classList.add('em3d-viewer');
   viewerChrome();
   const id = shareId();
+  const context = captureFigureContext(), route = location.pathname + location.search;
+  const current = (source = true) => route === location.pathname + location.search && context.isCurrent({ source });
   if (!id) { showMessage('This link is not complete', 'Check that the whole link was copied, including the part after /3d/share/.'); return; }
   showMessage('Loading the shared figure…', '');
   let res;
   try {
     const sb = await client();
+    if (!current()) return;
     const { data, error } = await sb.rpc('get_3d_share', { share_id: id });
+    if (!current()) return;
     if (error) throw error;
     res = data;
   } catch {
+    if (!current()) return;
     showMessage('Could not load this figure', 'We could not reach Exploration Maps. The link may still be fine: check your connection and try again.', { retry: true });
     return;
   }
   const snap = cleanSnapshot(res?.state);
   if (!res || !snap) { showMessage('This figure is no longer shared', 'The link has expired, or its owner has stopped sharing it.'); return; }
   try {
-    await studio().loadProject(snap);
+    await studio().loadProject(snap, { isCurrent: () => current(false) });
+    if (!current(false)) return;
   } catch {
+    if (!current(false)) return;
     showMessage('This figure could not be opened', 'The shared figure is damaged or was made with a newer version. Ask the person who sent it for a new link.');
     return;
   }
@@ -366,7 +389,7 @@ async function bootViewer() {
   offerCopy();
   if (wantsDownload()) {
     try { await Promise.race([studio().terrainReady(), timeout(20000)]); } catch { /* draw with what has loaded */ }
-    downloadPng();
+    if (current(false)) downloadPng();
   }
 }
 

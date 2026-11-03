@@ -141,11 +141,12 @@ describe('fresh local restore account document', () => {
     const core = await import('../src/three-d/account-core.js'); await core.start({ baseline: project });
     mock.user = null; await core.save();
     const before = structuredClone(project);
-    document.getElementById('acct-email').value = 'qa@example.test';
-    document.getElementById('acct-form').dispatchEvent(new SubmitEvent('submit', {
-      bubbles: true, cancelable: true, submitter: document.getElementById('acct-link-btn'),
-    }));
-    await vi.waitFor(() => expect(document.getElementById('acct-error')).toHaveTextContent('Sign in in another tab, then return and Save this figure.'));
+    expect(document.getElementById('acct-intro')).toHaveTextContent('Sign in in another tab, then return and Save this figure. You can also use a password here.');
+    expect(document.getElementById('acct-link-btn').hidden).toBe(true);
+    expect(document.getElementById('acct-new').hidden).toBe(true);
+    expect(document.getElementById('acct-password-row').hidden).toBe(false);
+    expect(document.getElementById('acct-password-btn').hidden).toBe(false);
+    await expect(core.sendSignInLink('qa@example.test')).rejects.toMatchObject({ code: 'LOCAL_RESTORE_SIGN_IN' });
     expect(mock.otp).not.toHaveBeenCalled(); expect(mock.writes).toEqual([]);
     expect(core.currentProject()).toBeNull(); expect(project).toEqual(before); stashUnchanged();
   });

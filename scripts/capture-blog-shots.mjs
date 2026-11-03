@@ -8,11 +8,13 @@
 // Usage:
 //   npm run build           # build first (preview serves dist/)
 //   node scripts/capture-blog-shots.mjs
+//   node scripts/capture-blog-shots.mjs --check-runtime  # resolve tools only; no writes or browser
 //
 // Output: public/blog-img/*.png  (+ a summary of which shots succeeded)
 
-import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
+import { chromium } from '@playwright/test';
 import { spawn } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -22,6 +24,17 @@ const OUT = path.join(ROOT, 'public', 'blog-img');
 const CSV = path.join(ROOT, 'scripts', 'blog-data', 'sample-collars.csv');
 const PORT = 4188;
 const BASE = `http://localhost:${PORT}/`;
+const require = createRequire(import.meta.url);
+const previewCommand = process.execPath;
+const previewArgs = [path.join(path.dirname(require.resolve('vite/package.json')), 'bin', 'vite.js'), 'preview', '--port', String(PORT), '--strictPort'];
+const launchOptions = process.env.PLAYWRIGHT_CHROMIUM_PATH
+  ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH }
+  : {};
+
+if (process.argv.includes('--check-runtime')) {
+  console.log(JSON.stringify({ previewCommand, previewArgs, launchOptions, browserType: chromium.name() }));
+  process.exit(0);
+}
 
 fs.mkdirSync(OUT, { recursive: true });
 
@@ -50,7 +63,7 @@ async function closeModal(page) {
 
 // ── start vite preview ────────────────────────────────────────────────────────
 console.log(`Starting vite preview on ${PORT}…`);
-const server = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], {
+const server = spawn(previewCommand, previewArgs, {
   cwd: ROOT, stdio: 'ignore', detached: false,
 });
 
@@ -69,7 +82,7 @@ let browser;
 try {
   await waitForServer();
   console.log('Preview is up. Launching browser…');
-  browser = await chromium.launch();
+  browser = await chromium.launch(launchOptions);
   const page = await browser.newPage({ viewport: { width: 1300, height: 900 }, deviceScaleFactor: 2 });
   page.setDefaultTimeout(15000);
 

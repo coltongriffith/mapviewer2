@@ -2,11 +2,11 @@ import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { figureSignature, watchUnsavedFigure } from '../src/three-d/save-state.js';
 
 const deferred = () => { let resolve; const promise = new Promise((r) => { resolve = r; }); return { promise, resolve }; };
-let rows, objects, upload, afterCommit, core, project, stop;
+let rows, objects, upload, afterCommit, core, project, stop, beforeRead, authChange;
 const sb = {
   auth: {
     getSession: async () => ({ data: { session: { user: { id: 'u1' } } } }),
-    onAuthStateChange: () => {}, signOut: async () => ({}),
+    onAuthStateChange: fn => { authChange = fn; }, signOut: async () => ({}),
   },
   storage: { from: () => ({
     upload: async (path, text) => { await upload(path); objects.set(path, text); return {}; },
@@ -17,6 +17,7 @@ const sb = {
   from() {
     const filters = {}; let write = null, update = false;
     const result = async () => {
+      if (!write) await beforeRead(filters.id);
       const row = [...rows.values()].find((r) => Object.entries(filters).every(([k, v]) => r[k] === v));
       if (!write) return { data: structuredClone(row ?? null) };
       if (update && !row) return { data: null };
@@ -46,7 +47,7 @@ beforeEach(async () => {
   vi.stubEnv('VITE_SUPABASE_ANON_KEY', 'test-key');
   localStorage.setItem('sb-example-auth-token', '{}');
   rows = new Map([['a', row('a', 'Original')], ['b', row('b', 'Other figure')]]);
-  objects = new Map(); upload = async () => {}; afterCommit = async () => null;
+  objects = new Map(); upload = async () => {}; afterCommit = async () => null; beforeRead = async () => {};
   project = figure('Sample');
   document.body.innerHTML = '<div id="acct-note" hidden></div><div id="acct-menu" hidden></div><div id="status"></div><button id="acct-save"></button>';
   window.EM3D = {
@@ -168,5 +169,79 @@ describe('3D save reliability through the real account module', () => {
     upload = async () => { rows.get('a').updated_at = '2099-01-01T00:00:00Z'; objects.set('u1/a/other/collars.csv', 'Other'); };
     await expect(core.saveProject('Original', 'a')).rejects.toMatchObject({ code: 'CONFLICT' });
     expect([...objects.keys()]).toEqual(['u1/a/other/collars.csv']);
+  });
+});
+
+
+describe('saved figure opening context', () => {
+  it('does not apply an older open over a newer opened and edited figure', async () => {
+    const gate = deferred(), started = deferred();
+    beforeRead = async id => { if (id === 'a') { started.resolve(); await gate.promise; } };
+    const opening = core.openProject('a');
+    const rejected = expect(opening).rejects.toMatchObject({ code: 'PROJECT_CHANGED' });
+    await started.promise;
+    await core.openProject('b'); edit('Newer B work');
+    gate.resolve(); await rejected;
+    expect(project.settings.title).toBe('Newer B work');
+    expect(core.currentProject().id).toBe('b');
+  });
+  it('does not replace dirty work edited while the row is being read', async () => {
+    await core.openProject('b');
+    const gate = deferred(), started = deferred();
+    beforeRead = async () => { started.resolve(); await gate.promise; };
+    const opening = core.openProject('a');
+    const rejected = expect(opening).rejects.toMatchObject({ code: 'PROJECT_CHANGED' });
+    await started.promise; edit('Unsaved B edit'); gate.resolve(); await rejected;
+    expect(project.settings.title).toBe('Unsaved B edit');
+    expect(core.currentProject().id).toBe('b');
+  });
+  it('does not reattach a pending open after sign out', async () => {
+    const gate = deferred(), started = deferred();
+    beforeRead = async () => { started.resolve(); await gate.promise; };
+    const opening = core.openProject('a');
+    const rejected = expect(opening).rejects.toMatchObject({ code: 'PROJECT_CHANGED' });
+    await started.promise; await core.signOut(); gate.resolve(); await rejected;
+    expect(core.currentProject()).toBeNull();
+    expect(project.settings.title).toBe('Sample');
+  });
+  it('rejects a pending read after a real auth identity transition', async () => {
+    await core.openProject('b');
+    const gate = deferred(), started = deferred();
+    beforeRead = async () => { started.resolve(); await gate.promise; };
+    const opening = core.openProject('a');
+    const rejected = expect(opening).rejects.toMatchObject({ code: 'PROJECT_CHANGED' });
+    await started.promise; authChange('SIGNED_IN', { user: { id: 'different-user' } });
+    gate.resolve(); await rejected;
+    expect(project.settings.title).toBe('Other figure');
+    expect(core.currentProject().id).toBe('b');
+  });
+  it('trusts only a verified loader restoration and never attempts a second load', async () => {
+    await core.openProject('a'); edit('Unsaved original');
+    const load = vi.fn(async () => { throw Object.assign(new Error('image failed'), { stateRestored: true }); });
+    window.EM3D.loadProject = load;
+    await expect(core.openProject('b')).rejects.toThrow('previous figure is unchanged');
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(load.mock.calls[0][1].isCurrent()).toBe(true);
+    expect(project.settings.title).toBe('Unsaved original');
+    await core.saveProject('Original', 'a');
+    expect(rows.get('a').name).toBe('Original');
+  });
+  it('blocks an unsafe overwrite if restoration is unverified, until a successful open', async () => {
+    await core.openProject('a');
+    const goodLoad = window.EM3D.loadProject;
+    window.EM3D.loadProject = vi.fn(async p => { project = structuredClone(p); throw new Error('settle and restoration failed'); });
+    await expect(core.openProject('b')).rejects.toThrow('Saving is paused');
+    await expect(core.saveProject('Original', 'a')).rejects.toMatchObject({ code: 'PROJECT_LOADING' });
+    expect(rows.get('a').settings.settings.title).toBe('Original');
+    expect(window.EM3D.loadProject).toHaveBeenCalledTimes(1);
+    window.EM3D.loadProject = goodLoad;
+    await core.openProject('a');
+    await expect(core.saveProject('Original', 'a')).resolves.toMatchObject({ id: 'a' });
+  });
+  it('refuses public save and publish during a transactional figure load', async () => {
+    window.EM3D.isProjectLoading = () => true;
+    await expect(core.saveProject('Transition')).rejects.toMatchObject({ code: 'PROJECT_LOADING' });
+    expect(() => core.publishVersion()).toThrow('finish opening');
+    expect(objects.size).toBe(0);
   });
 });

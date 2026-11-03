@@ -13,7 +13,7 @@ import { panelObstacles } from './utils/calloutLayout';
 import LandingPage from './components/LandingPage';
 
 import SharedMapViewer from './components/SharedMapViewer';
-import UploadPanel from './components/UploadPanel';
+import UploadPanel, { groupUploadFiles } from './components/UploadPanel';
 import AnnotationOverlay from './components/AnnotationOverlay';
 import ShadeOverlay from './components/ShadeOverlay';
 import { getSessionId } from './utils/session';
@@ -879,6 +879,18 @@ export default function App({ initialAction = null }) {
   // Guards async save completions against workspace switches: every project
   // open/new/fork bumps the epoch, detaching in-flight saves from the UI.
   const saveCoordRef = useRef(createSaveCoordinator());
+  const uploadQueueRef = useRef(null);
+  // An import can outlive the Data tab, but must never cross workspaces.
+  useEffect(() => {
+    const queue = uploadQueueRef.current;
+    if (queue && !queue.ticket.stillCurrent()) {
+      queue.pending?.(false);
+      uploadQueueRef.current = null;
+      setCsvMappingData((value) => value?.uploadQueue === queue ? null : value);
+      setRasterPlacement((value) => value?.uploadQueue === queue ? null : value);
+      setFigureImport((value) => value?.uploadQueue === queue ? null : value);
+    }
+  }, [project, projectId, screen]);
   // Local state for title/subtitle so every keystroke doesn't write to project (stops flicker)
   const [localTitle, setLocalTitle] = useState(project.layout.title || '');
   const [localSubtitle, setLocalSubtitle] = useState(project.layout.subtitle || '');
@@ -1995,7 +2007,7 @@ export default function App({ initialAction = null }) {
 
   useEffect(() => {
     if (!selectedLayerId) return;
-    if (skipLayerRevealRef.current) return;
+    if (skipLayerRevealRef.current || uploadQueueRef.current?.firstMap) return;
     setCustomizeGroup('layers');
     revealSection('customize', layersSectionRef);
   }, [selectedLayerId, revealSection]);
@@ -2942,19 +2954,16 @@ export default function App({ initialAction = null }) {
     });
   };
 
-  const addGeoJSONLayer = async (file) => {
-    const geojson = await loadGeoJSON(file);
-    await addGeoJSONAsLayer(geojson, file.name);
-  };
-
   // A picture goes through the placement dialog: it needs edges before it
   // can be a layer. A world file beside it fills the edges in.
-  const beginRasterPlacement = async (imageFile, worldFile = null) => {
+  const beginRasterPlacement = async (imageFile, worldFile = null, uploadQueue = null) => {
     const image = await loadRasterImage(imageFile);
+    if (uploadQueue && !uploadQueue.ticket.stillCurrent()) return;
     let initialBounds = null;
     let initialCrs = null;
     if (worldFile) {
       const wf = parseWorldFile(await worldFile.text());
+      if (uploadQueue && !uploadQueue.ticket.stillCurrent()) return;
       const raw = boundsFromWorldFile(wf, image.sourceWidth, image.sourceHeight);
       if (raw) {
         initialBounds = raw;
@@ -2963,7 +2972,8 @@ export default function App({ initialAction = null }) {
         setUploadStatus({ type: 'info', message: `Could not read ${worldFile.name}; enter the image edges by hand.` });
       }
     }
-    setRasterPlacement({ image, initialBounds, initialCrs });
+    if (uploadQueue && !uploadQueue.ticket.stillCurrent()) return;
+    setRasterPlacement({ image, initialBounds, initialCrs, uploadQueue });
     if (screen !== 'editor') setScreen('editor');
   };
 
@@ -2987,52 +2997,72 @@ export default function App({ initialAction = null }) {
     setSelectedLayerId(id);
   };
 
-  const handleUploadFile = async (file) => {
-    try {
-      const name = file.name.toLowerCase();
-      if (isRasterName(name)) {
-        await beginRasterPlacement(file);
-        return;
-      }
-      if (isWorldFileName(name)) {
-        setUploadStatus({ type: 'error', message: 'Drop the world file together with its image (select both files at once).' });
-        return;
-      }
-      if (name.endsWith('.csv')) {
-        const result = await loadCSV(file);
-        if (result.needsMapping) {
-          setCsvMappingData({ headers: result.headers, rows: result.rows, filename: file.name, guesses: result.guesses, hint: result.hint });
-        } else {
-          await addGeoJSONAsLayer(result, file.name, 'csv');
-          if (result.meta?.skippedRows) {
-            setUploadStatus({ type: 'info', message: `Imported ${result.features.length} points — ${result.meta.skippedRows} row${result.meta.skippedRows === 1 ? '' : 's'} skipped (missing or invalid coordinates).` });
-          }
-          if (screen !== 'editor') setScreen('editor');
-        }
-      } else {
-        await addGeoJSONLayer(file);
-        if (screen !== 'editor') setScreen('editor');
-      }
-    } catch (err) {
-      setUploadStatus({ type: 'error', message: `Import failed: ${err.message}` });
-    }
+  const finishUploadStep = (queue, imported) => {
+    if (!queue) return;
+    const resolve = queue.pending;
+    queue.pending = null;
+    resolve?.(imported);
   };
 
   const handleUploadFiles = async (files) => {
+    if (uploadQueueRef.current) {
+      setUploadStatus({ type: 'info', message: 'Finish or cancel the current import before adding more files.' });
+      return;
+    }
+    let groups;
+    try { groups = groupUploadFiles(files); }
+    catch (err) { setUploadStatus({ type: 'error', message: err.message }); return; }
+    const queue = { ticket: saveCoordRef.current.begin(), pending: null, imported: 0, warnings: [], firstMap: project.layers.length === 0 };
+    uploadQueueRef.current = queue;
     try {
-      const imageFile = files.find((f) => isRasterName(f.name));
-      if (imageFile) {
-        await beginRasterPlacement(imageFile, worldFileFor(imageFile.name, files));
-        return;
+      for (const group of groups) {
+        if (!queue.ticket.stillCurrent()) return;
+        const file = group.files[0];
+        let imported = true;
+        if (group.kind === 'raster' || isRasterName(file.name)) {
+          const image = group.files.find((entry) => isRasterName(entry.name));
+          const confirmed = new Promise((resolve) => { queue.pending = resolve; });
+          await beginRasterPlacement(image, worldFileFor(image.name, group.files), queue);
+          if (!queue.ticket.stillCurrent()) return;
+          imported = await confirmed;
+        } else {
+          if (isWorldFileName(file.name)) throw new Error('Drop the world file together with its image (select both files at once).');
+          const result = group.kind === 'shapefile' ? await loadShapefileSet(group.files)
+            : file.name.toLowerCase().endsWith('.csv') ? await loadCSV(file) : await loadGeoJSON(file);
+          if (!queue.ticket.stillCurrent()) return;
+          if (result.needsMapping) {
+            const confirmed = new Promise((resolve) => { queue.pending = resolve; });
+            setCsvMappingData({ headers: result.headers, rows: result.rows, filename: file.name, guesses: result.guesses, hint: result.hint, uploadQueue: queue });
+            imported = await confirmed;
+          } else {
+            const name = group.kind === 'shapefile' ? group.files.find((entry) => /\.shp$/i.test(entry.name))?.name || file.name : file.name;
+            await addGeoJSONAsLayer(result, name, file.name.toLowerCase().endsWith('.csv') ? 'csv' : 'upload');
+            if (result.meta?.skippedRows) queue.warnings.push(`${file.name}: ${result.meta.skippedRows} rows skipped (missing or invalid coordinates).`);
+            if (screen !== 'editor') setScreen('editor');
+          }
+        }
+        if (!queue.ticket.stillCurrent()) return;
+        if (!imported) {
+          if (queue.error) throw queue.error;
+          setUploadStatus({ type: 'info', message: `Import cancelled. ${queue.imported} earlier ${queue.imported === 1 ? 'import was' : 'imports were'} kept; remaining files were not imported.${queue.warnings.length ? ` ${queue.warnings.join(' ')}` : ''}` });
+          return;
+        }
+        queue.imported++;
       }
-      const shpName = files.find((f) => f.name.toLowerCase().endsWith('.shp'))?.name || 'shapefile';
-      const geojson = await loadShapefileSet(files);
-      await addGeoJSONAsLayer(geojson, shpName);
-      if (screen !== 'editor') setScreen('editor');
+      if (queue.warnings.length && queue.ticket.stillCurrent()) setUploadStatus({ type: 'info', message: queue.warnings.join(' ') });
     } catch (err) {
-      setUploadStatus({ type: 'error', message: `Import failed: ${err.message}` });
+      if (queue.ticket.stillCurrent()) setUploadStatus({ type: 'error', message: `Import failed: ${err.message}. ${queue.imported} earlier ${queue.imported === 1 ? 'import was' : 'imports were'} kept; remaining files were not imported.${queue.warnings.length ? ` ${queue.warnings.join(' ')}` : ''}` });
+    } finally {
+      queue.pending = null;
+      if (queue.firstMap && queue.imported && queue.ticket.stillCurrent()) {
+        setInspectorTab('style');
+        skipLayerRevealRef.current = true;
+        setTimeout(() => { skipLayerRevealRef.current = false; }, 0);
+      }
+      if (uploadQueueRef.current === queue) uploadQueueRef.current = null;
     }
   };
+  const handleUploadFile = (file) => handleUploadFiles([file]);
 
   // The 6 gallery cards are handled by GALLERY_DEMOS (assets/galleryDemos.js);
   // aurora_demo (the before/after compare) keeps its dedicated loader.
@@ -8397,49 +8427,60 @@ export default function App({ initialAction = null }) {
       <React.Suspense fallback={null}>
         {rasterPlacement ? (
           <RasterPlacementModal
+            key={rasterPlacement.image.name}
             image={rasterPlacement.image}
             initialBounds={rasterPlacement.initialBounds}
             initialCrs={rasterPlacement.initialCrs}
             mapCenter={(() => { try { const c = leafletMapRef.current?.getCenter(); return c ? { lat: c.lat, lng: c.lng } : null; } catch { return null; } })()}
             onImport={(bounds, opacity) => {
-              const { image, layerId } = rasterPlacement;
+              const { image, layerId, uploadQueue } = rasterPlacement;
+              if (uploadQueue && !uploadQueue.ticket.stillCurrent()) return;
               setRasterPlacement(null);
               if (layerId) {
                 updateLayer(layerId, { raster: { ...(project.layers.find((l) => l.id === layerId)?.raster || {}), bounds, opacity } });
               } else {
                 addRasterLayer(image, bounds, opacity);
               }
+              finishUploadStep(uploadQueue, true);
             }}
-            onClose={() => setRasterPlacement(null)}
-            onGeoreference={() => { setFigureImport({ source: rasterPlacement.image }); setRasterPlacement(null); }}
+            onClose={() => { finishUploadStep(rasterPlacement.uploadQueue, false); setRasterPlacement(null); }}
+            onGeoreference={() => { setFigureImport({ source: rasterPlacement.image, uploadQueue: rasterPlacement.uploadQueue }); setRasterPlacement(null); }}
           />
         ) : null}
         {figureImport ? (
           <FigureImport
+            key={figureImport.source?.name || figureImport.layerId || 'new'}
             source={figureImport.source}
             existing={project.layers.find((l) => l.id === figureImport.layerId)}
             map={leafletMapRef.current}
-            setProject={setProject}
-            onClose={(id) => { setFigureImport(null); if (id) setSelectedLayerId(id); }}
+            setProject={(update) => { if (!figureImport.uploadQueue || figureImport.uploadQueue.ticket.stillCurrent()) setProject(update); }}
+            onClose={(id) => { finishUploadStep(figureImport.uploadQueue, !!id); setFigureImport(null); if (id) setSelectedLayerId(id); }}
           />
         ) : null}
         {csvMappingData ? (
           <ColumnMapperModal
+            key={csvMappingData.filename}
             headers={csvMappingData.headers}
             rows={csvMappingData.rows}
             filename={csvMappingData.filename}
             guesses={csvMappingData.guesses}
             hint={csvMappingData.hint}
             onImport={async (geojson) => {
+              const queue = csvMappingData.uploadQueue;
+              if (queue && !queue.ticket.stillCurrent()) return;
               setCsvMappingData(null);
               try {
                 await addGeoJSONAsLayer(geojson, csvMappingData.filename, 'csv');
+                if (queue && geojson.meta?.skippedRows) queue.warnings.push(`${csvMappingData.filename}: ${geojson.meta.skippedRows} rows skipped (missing or invalid coordinates).`);
                 if (screen !== 'editor') setScreen('editor');
+                finishUploadStep(queue, true);
               } catch (err) {
+                if (queue) queue.error = err;
+                finishUploadStep(queue, false);
                 setUploadStatus({ type: 'error', message: `Import failed: ${err.message}` });
               }
             }}
-            onClose={() => setCsvMappingData(null)}
+            onClose={() => { finishUploadStep(csvMappingData.uploadQueue, false); setCsvMappingData(null); }}
           />
         ) : null}
       </React.Suspense>

@@ -69,6 +69,7 @@ async function fakeSupabase(page, { failUpload = false, library = null } = {}) {
         const body = req.postDataJSON(), row = Array.isArray(body) ? body[0] : body, prev = fake.rows.get(row.id), now = new Date().toISOString();
         const full = { user_id: uid, created_at: prev?.created_at || now, ...prev, ...row, updated_at: now };
         fake.rows.set(row.id, full); fake.upserts.push(structuredClone(full));
+        await fake.onUpsert?.();
         return json(single ? full : [full], 201);
       }
       if (method === 'PATCH') {
@@ -118,6 +119,19 @@ async function open3d(page, path = '/3d') {
   await page.waitForFunction(() => window.EM3D?.getState().ready);
 }
 const state = (page) => page.evaluate(() => window.EM3D.getState());
+
+async function pendingRecords(page) {
+  return page.evaluate(async () => {
+    const key = 'em3d.pendingSave.v1';
+    const indexed = await new Promise((resolve, reject) => {
+      const request = indexedDB.open('em3d', 1);
+      request.onupgradeneeded = () => request.result.createObjectStore('kv');
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => { const db=request.result, tx=db.transaction('kv','readonly'), read=tx.objectStore('kv').get(key); tx.oncomplete=()=>{db.close();resolve(read.result ?? null);};tx.onerror=()=>{db.close();reject(tx.error);}; };
+    });
+    return { indexed, local:localStorage.getItem(key), flag:localStorage.getItem(`${key}.flag`) };
+  });
+}
 
 test('an anonymous edited figure shows unsaved work and warns before leaving without loading account services', async ({ page }) => {
   const fake = await fakeSupabase(page);
@@ -487,7 +501,9 @@ test.describe('account', () => {
     expect([...fake.objects.keys()].sort()).toEqual(saved.file_paths.map((f) => `three-d-files/${f.path}`).sort());
     await expect(page.locator('#acct-note')).toHaveText(/^Saved /);
     expect((await state(page)).brand.title).toBe('STAR · RAILS ZONE');
-    await expect.poll(() => page.evaluate(() => localStorage.getItem('em3d.pendingSave.v1.flag'))).toBeNull();
+    // Conditional cleanup removes the exact record, while the unversioned shared
+    // hint remains safe for another tab's writer to reuse.
+    await expect.poll(() => pendingRecords(page)).toEqual({ indexed:null, local:null, flag:'1' });
     expect(new URL(page.url()).searchParams.get('project')).toBe(saved.id);
 
     // A reload reopens the saved figure and does not save it again.
@@ -495,6 +511,31 @@ test.describe('account', () => {
     await expect(page.locator('#acct-note')).toHaveText(/^Saved /);
     expect((await state(page)).brand.title).toBe('STAR · RAILS ZONE');
     expect(fake.upserts).toHaveLength(1);
+  });
+
+  test('email-link completion preserves a competing tab pending record written during Save', async ({ page }) => {
+    const fake=await fakeSupabase(page);await open3d(page);
+    await page.evaluate(()=>window.EM3D.setBrand({title:'Original email-link figure'}));
+    await page.getByRole('button',{name:'Save',exact:true}).click();
+    const dialog=page.getByRole('dialog',{name:'Save to your account'});
+    await dialog.getByLabel('Name').fill('Original pending save');await dialog.getByLabel('Email').fill(user.email);
+    await dialog.getByRole('button',{name:'Email me a sign-in link'}).click();
+    await expect(page.getByRole('heading',{name:'Check your email'})).toBeVisible();
+    const original=(await pendingRecords(page)).indexed;expect(original.project.settings.title).toBe('Original email-link figure');
+    const competing={...original,at:Date.now()+1,name:'Other tab pending figure',project:structuredClone(original.project)};
+    competing.project.settings.title='Other tab must survive';
+    fake.onUpsert=async()=>{
+      await page.evaluate(async entry=>{
+        const key='em3d.pendingSave.v1';localStorage.setItem(key,JSON.stringify(entry));localStorage.setItem(`${key}.flag`,'1');
+        await new Promise((resolve,reject)=>{const request=indexedDB.open('em3d',1);request.onerror=()=>reject(request.error);request.onsuccess=()=>{const db=request.result,tx=db.transaction('kv','readwrite');tx.objectStore('kv').put(entry,key);tx.oncomplete=()=>{db.close();resolve();};tx.onerror=()=>{db.close();reject(tx.error);};};});
+      },competing);
+    };
+    await page.evaluate(([key,value])=>localStorage.setItem(key,JSON.stringify(value)),[AUTH_KEY,session]);await open3d(page);
+    await expect.poll(()=>fake.upserts.length).toBe(1);await expect(page.locator('#acct-note')).toHaveText(/^Saved /);
+    expect(fake.upserts[0].settings.settings.title).toBe('Original email-link figure');
+    expect((await state(page)).brand.title).toBe('Original email-link figure');
+    expect(await pendingRecords(page)).toEqual({indexed:competing,local:JSON.stringify(competing),flag:'1'});
+    expect(fake.otp).toHaveLength(1);expect(fake.patches).toEqual([]);
   });
 
   test('signed in: save, Ctrl/Cmd+S, list, open and delete', async ({ page }) => {

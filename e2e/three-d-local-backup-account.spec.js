@@ -177,12 +177,16 @@ test('restored editor backup refuses email-link redemption and ordinary password
   // pending-save boot exemption must still apply when Save is finally clicked.
   await child.evaluate(key => localStorage.removeItem(key), authKey);
   await child.locator('#acct-save').click(); await expect(child.locator('#acct-dialog')).toBeVisible();
-  await child.locator('#acct-email').fill(user.email); await child.locator('#acct-link-btn').click();
-  await expect(child.locator('#acct-error')).toHaveText('Sign in in another tab, then return and Save this figure.');
+  await expect(child.locator('#acct-intro')).toHaveText('Sign in in another tab, then return and Save this figure. You can also use a password here.');
+  await expect(child.locator('#acct-link-btn')).toBeHidden(); await expect(child.locator('#acct-new')).toBeHidden();
+  await child.locator('#acct-email').fill(user.email);
+  const refused = await child.evaluate(email => window.EM3D.account.sendSignInLink(email).then(() => null, error => error.message), user.email);
+  expect(refused).toBe('Sign in in another tab, then return and Save this figure.');
   await child.locator('#acct-dialog').screenshot({ path: test.info().outputPath('local-backup-email-refusal.png') });
   expect(fake.otp).toEqual([]); expect(fake.posts).toEqual([]); expect(fake.patches).toEqual([]);
   expect(await storedState(child)).toEqual(fixture.stash);
-  await child.locator('#acct-use-password').click(); await child.locator('#acct-password').fill('synthetic-password-not-real');
+  await expect(child.locator('#acct-use-password')).toBeHidden();
+  await expect(child.locator('#acct-password')).toBeVisible(); await child.locator('#acct-password').fill('synthetic-password-not-real');
   await child.locator('#acct-password-btn').click();
   await expect.poll(() => fake.posts.length).toBe(1);
   expect(fake.posts[0].id).not.toBe(savedId); expect(fake.posts[0].org_id).toBeUndefined(); expect(fake.otp).toEqual([]);

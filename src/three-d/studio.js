@@ -143,6 +143,8 @@ function sampleFiles() {
 // ============================================================
 let files = [];          // { name, text, role, header, rows, cols, grades, mesh }
 let project = null, projectLoad = 0; // derived geometry; invalidates staged styles before a load awaits assets
+let projectLoading = 0, projectCommitting = false, recoveryProject = null, projectReadSnapshot = null, projectLoaderPromise;
+const projectBusy = () => Object.assign(new Error('Wait for the figure to finish opening before editing it.'), { code: 'PROJECT_LOADING' });
 let usingSample = true;
 const S = {              // style
   title: 'EXAMPLE RIDGE · MAIN ZONE', subtitle: '3D drilling model, looking northeast',
@@ -686,7 +688,7 @@ function faceWalls() {
 // loaded when a coordinate system is set or real terrain is wanted. The page keeps the state, collars in
 // latitude/longitude (no proj4 needed) and the credits drawn on every export.
 const IMAGERY_CREDIT = 'Imagery: Esri, Maxar, Earthstar Geographics', DEM_CREDIT = 'Elevation: AWS Terrain Tiles';
-let geo = null;          // { code, label, guessed, fwd(x, y) -> [lon, lat] } once a coordinate system is set
+let geo = null, crsRequest = 0; // projection plus a monotonic async request identity
 const realT = { dem: null, img: null, job: 0, promise: null, status: 'off', message: '' };
 const LATLON = { code: 'EPSG:4326', label: 'WGS 84 latitude/longitude', latlon: true };
 let RT = null, rtP = null; // terrain.js
@@ -702,19 +704,23 @@ function geoFor(c, P) {
   return RT.projFwd(c, P);
 }
 async function setCRS(input, opts = {}) {
+  const generation = projectLoad, request = ++crsRequest;
+  const check = () => { if (generation !== projectLoad || request !== crsRequest) throw Object.assign(new Error('The figure changed while its coordinate system loaded.'), { code: 'PROJECT_CHANGED' }); };
   if (input === null || input === undefined || input === '') {
     S.crs = null; geo = null; realT.dem = realT.img = null; realT.job++; realT.status = 'off';
     renderCRS(); if (project && !project.empty) rebuildScene(true); schedulePublish(); status('Coordinate system cleared. The surface is fitted to your files.'); return getState();
   }
   const T = await rtLoad(), c = T.parseCRS(input, LATLON);
+  check();
   await T.ready(c);
+  check();
   const fwd = geoFor(c, project && !project.empty ? project : null);
   S.crs = c.code; geo = { ...c, guessed: !!opts.guessed, fwd }; realT.dem = realT.img = null;
   renderCRS(); schedulePublish();
   if (project && !project.empty) {
     const [lon, lat] = fwd(project.holes[0].c.x, project.holes[0].c.y);
     status(`${c.label}: collars near ${Math.abs(lat).toFixed(3)}°${lat < 0 ? 'S' : 'N'}, ${Math.abs(lon).toFixed(3)}°${lon < 0 ? 'W' : 'E'}. Loading real terrain…`);
-    rebuildScene(true); await realT.promise;
+    rebuildScene(true); await realT.promise; check();
   }
   return getState();
 }
@@ -724,7 +730,7 @@ function recheckCRS() {
   if (!S.crs) { if (project?.latlon) { geo = { ...LATLON, guessed: true, fwd: geoFor(LATLON, project) }; S.crs = LATLON.code; realT.dem = realT.img = null; renderCRS(); } return; }
   // A coordinate system restored with a saved project (S.crs) is re-established here.
   // A different saved project's code (geo still describes the last one) is re-parsed too.
-  if (!geo || geo.code !== S.crs) { geo = null; realT.dem = realT.img = null; setCRS(S.crs).catch((e) => { S.crs = null; renderCRS(); status(`Coordinate system cleared: ${e.message}`); }); return; }
+  if (!geo || geo.code !== S.crs) { geo = null; realT.dem = realT.img = null; const generation = projectLoad, code = S.crs; setCRS(code).catch((e) => { if (e.code === 'PROJECT_CHANGED' || generation !== projectLoad || S.crs !== code) return; S.crs = null; renderCRS(); status(`Coordinate system cleared: ${e.message}`); }); return; }
   try { geo.fwd = geoFor(geo, project && !project.empty ? project : null); } catch (e) { S.crs = null; geo = null; renderCRS(); status(`Coordinate system cleared: ${e.message}`); }
 }
 const terrainKeyOf = (B) => (geo ? `${S.crs}|${[B.x0, B.x1, B.y0, B.y1].map(Math.round).join(',')}` : '');
@@ -739,14 +745,16 @@ function syncRealTerrain() {
     if (realT.status === 'off') realT.message = hasTopo && S.terrainSource === 'auto' ? `${geo.label}. The surface is your topography; choose Satellite, or "Real elevation", to load tiles.` : `${geo.label}.`;
     return realT.promise || Promise.resolve();
   }
-  const job = ++realT.job; realT.status = 'loading'; realT.message = `Loading ${[getDem && 'real terrain', getImg && 'satellite imagery'].filter(Boolean).join(' and ')}…`; status(realT.message); schedulePublish();
+  const job = ++realT.job, generation = projectLoad, projection = geo;
+  const current = () => job === realT.job && generation === projectLoad && !!G;
+  realT.status = 'loading'; realT.message = `Loading ${[getDem && 'real terrain', getImg && 'satellite imagery'].filter(Boolean).join(' and ')}…`; status(realT.message); schedulePublish();
   realT.promise = (async () => {
-    const msgs = [], B = { ...G.B }, fwd = (x, y) => geo.fwd(x, y);
-    if (getDem) { try { realT.dem = await (await rtLoad()).loadDem(key, B, fwd); msgs.push(`real terrain (z${realT.dem.z}, ${realT.dem.tiles} tiles)`); } catch (e) { realT.dem = { key, ok: false, error: e.message }; } }
-    if (getImg) { try { realT.img = await (await rtLoad()).loadImagery(key, B, fwd); msgs.push(`satellite imagery (z${realT.img.z}, ${realT.img.tiles} tiles)`); } catch (e) { realT.img = { key, ok: false, error: e.message }; } }
+    const msgs = [], B = { ...G.B }, fwd = (x, y) => projection.fwd(x, y);
+    if (getDem) { try { const provider = await rtLoad(); if (!current()) return; const dem = await provider.loadDem(key, B, fwd); if (!current()) return; realT.dem = dem; msgs.push(`real terrain (z${dem.z}, ${dem.tiles} tiles)`); } catch (e) { if (!current()) return; realT.dem = { key, ok: false, error: e.message }; } }
+    if (getImg) { try { const provider = await rtLoad(); if (!current()) return; const img = await provider.loadImagery(key, B, fwd); if (!current()) return; realT.img = img; msgs.push(`satellite imagery (z${img.z}, ${img.tiles} tiles)`); } catch (e) { if (!current()) return; realT.img = { key, ok: false, error: e.message }; } }
     // Only for data this visitor added here: not the sample, a saved figure, a version or a shared figure opening.
     if (msgs.length && usage.own && !usingSample) usage('three_d_data_added', { kind: 'terrain' }, 'terrain');
-    if (job !== realT.job || !G) return;
+    if (!current()) return;
     const fails = [realT.dem && !realT.dem.ok && getDem && `real terrain (${realT.dem.error})`, realT.img && !realT.img.ok && getImg && `satellite imagery (${realT.img.error})`].filter(Boolean);
     realT.status = fails.length ? (msgs.length ? 'partial' : 'failed') : 'ready';
     if (getDem && realT.dem.ok) rebuildScene(true); else { paintTerrain(); restyle(); }
@@ -991,11 +999,18 @@ function restyle() {
   // Title wall labels without their own colour are painted in the brand colour.
   if (G.wallPrimary !== S.primary && S.wallLabels.some((L) => !L.color)) buildWallLabels();
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), col = new THREE.Color();
-  const r = traceR(), n = [0, 0];
+  const r = traceR(), n = [0, 0], dirty = [false, false];
+  // Geometry owns this cache: rebuilding the scene discards it. Scientific
+  // value changes happen through a new project or the equivalent recipe.
+  const valueKey = JSON.stringify([S.valueCol, S.bins, BIN_COLORS, S.displayCutoff, S.eq, uses(S, 'greyFade')]);
+  const styles = (G.intervalStyles ||= new WeakMap());
   project.holes.forEach((h) => {
     // Recompute for each restyle so edits still apply immediately, but avoid
     // rescanning all hole IDs for every assay in this synchronous pass.
     const on = holeOn(h), rw = r * (EXT.tags?.weight(h) ?? 1), faded = extFade(h);
+    const bucket = +h.prov, start = n[bucket], previous = styles.get(h);
+    const key = JSON.stringify([valueKey, !!on, rw, !!faded, bucket, start]);
+    if (previous?.key === key && previous.intervals === h.ints && previous.count === h.ints.length) { n[bucket] += h.ints.length; return; }
     h.ints.forEach((it) => {
       const v = it.vals[S.valueCol], bi = on && intervalShown(it) ? binIndex(v) : -1, T = h.prov ? G.tubesP : G.tubes, k = n[+h.prov]++;
       const a = h.posAt(it.from), b = h.posAt(it.to), va = G.V(a.x, a.y, a.z), vb = G.V(b.x, b.y, b.z), dir = vb.clone().sub(va), len = dir.length();
@@ -1004,8 +1019,12 @@ function restyle() {
       m.compose(va.clone().add(vb).multiplyScalar(0.5), q, sc);
       T.setMatrixAt(k, m); col.set(BIN_COLORS[Math.max(0, bi)]); if (faded) { const gf = uses(S, 'greyFade'); col.lerp(new THREE.Color(gf ? '#b9c1c4' : '#ffffff'), gf ? 0.7 : 0.6); } T.setColorAt(k, col); // EXT hook: fade
     });
+    styles.set(h, { key, intervals: h.ints, count: h.ints.length }); dirty[bucket] = true;
+    const tube = bucket ? G.tubesP : G.tubes;
+    tube.instanceMatrix.addUpdateRange?.(start * 16, h.ints.length * 16);
+    tube.instanceColor?.addUpdateRange?.(start * 3, h.ints.length * 3);
   });
-  [G.tubes, G.tubesP].forEach((T, i) => { T.count = n[i]; T.instanceMatrix.needsUpdate = true; if (T.instanceColor) T.instanceColor.needsUpdate = true; });
+  [G.tubes, G.tubesP].forEach((T, i) => { T.count = n[i]; if (dirty[i]) { T.instanceMatrix.needsUpdate = true; if (T.instanceColor) T.instanceColor.needsUpdate = true; } });
   styleShell();
   G.walls.forEach((w) => { w.visible = S.walls; });
   G.top.material.opacity = S.surf; G.top.material.depthWrite = S.surf >= 0.99;
@@ -1078,14 +1097,14 @@ const FORMATS = {
   a4: { w: 3508, h: 2480, label: 'Print A4 landscape', use: '300 dpi print' },
 };
 const frameEl = $('frame');
-let W = 1, H = 1, previewRevision = 0, pickingFocus = false;
+let W = 1, H = 1, previewRevision = 0, sceneRevision = 0, pickingFocus = false;
 function pickFocusMode(on) {
   pickingFocus = on; $('camera-focus').setAttribute('aria-pressed', String(on));
   glCanvas.style.cursor = on ? 'crosshair' : '';
 }
 const pad3 = (v) => String(Math.round(v)).padStart(3, '0');
 function layoutFrame() {
-  previewRevision++;
+  previewRevision++; sceneRevision++;
   const f = FORMATS[S.format], a = f.w / f.h, sw = stage.clientWidth, sh = stage.clientHeight;
   const top = 56, side = 20, bottom = 44, aw = Math.max(60, sw - side * 2), ah = Math.max(60, sh - top - bottom);
   const fw = Math.floor(Math.min(aw, ah * a)), fh = Math.floor(fw / a);
@@ -1798,21 +1817,25 @@ function drawSectionView() {
 // ============================================================
 // 8. Loop and export
 // ============================================================
-let paintedRevision = -1, paintedAt = -Infinity;
+let paintedRevision = -1, paintedSceneRevision = -1;
 const paintedPosition = new THREE.Vector3(Infinity, Infinity, Infinity), paintedRotation = new THREE.Quaternion();
 function loop(now) {
   if (tween) { const k = Math.min(1, (now - tween.t0) / 900), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
     camera.position.lerpVectors(tween.from, tween.to, e); controls.target.lerpVectors(tween.fromT, tween.toT, e); if (k >= 1) tween = null; }
   controls.update(); if (ortho()) camera.updateProjectionMatrix(); hazeNow();
   const moved = paintedPosition.distanceToSquared(camera.position) > 1e-18 || 1 - Math.abs(paintedRotation.dot(camera.quaternion)) > 1e-12;
-  // Keep controls responsive without repainting a large static model at 60 fps.
-  // Changes and motion draw immediately; crew animation keeps its full loop.
-  // A periodic refresh also covers asynchronously arriving image textures.
-  if (S.view === '3d' && (previewRevision !== paintedRevision || moved || tween || S.crew.on || now - paintedAt >= 1000)) {
-    paintedRevision = previewRevision; paintedAt = now;
+  // Async images, terrain, fonts and extensions explicitly invalidate their
+  // output. A static model needs no periodic WebGL work; legend edits repaint
+  // its overlay without re-uploading or rendering unchanged hole geometry.
+  const sceneDirty = sceneRevision !== paintedSceneRevision || moved || tween || S.crew.on;
+  if (!projectCommitting && S.view === '3d' && (previewRevision !== paintedRevision || sceneDirty)) {
+    paintedRevision = previewRevision;
     camera.updateMatrixWorld();
-    if (G && (!G.ribbonView || camera.getWorldDirection(tmpV).dot(G.ribbonView) < 0.99998)) { placeRibbons(); faceWalls(); }
-    foot(S.dropShadow); EXT.crew?.tick(now); renderer.render(scene, camera); drawOverlay(ov.getContext('2d'), DPR, false); syncCamUI();
+    if (sceneDirty) {
+      if (G && (!G.ribbonView || camera.getWorldDirection(tmpV).dot(G.ribbonView) < 0.99998)) { placeRibbons(); faceWalls(); }
+      foot(S.dropShadow); EXT.crew?.tick(now); renderer.render(scene, camera); paintedSceneRevision = sceneRevision;
+    }
+    drawOverlay(ov.getContext('2d'), DPR, false); syncCamUI();
     paintedPosition.copy(camera.position); paintedRotation.copy(camera.quaternion);
   }
   requestAnimationFrame(loop);
@@ -1879,7 +1902,7 @@ function exportPNG(opts = {}) {
 // Export buttons, exportLayers and the design desk wait here.
 // The wait is bounded: a layer whose module or data never arrives fails the export with a plain message after 20 s
 // instead of leaving it waiting. A turn first: a change event's setter starts in a microtask.
-const extPending = new Set(), settled = () => Promise.race([Promise.resolve().then(() => Promise.allSettled([...extPending])).then(extReady),
+const extPending = new Set(), settled = () => Promise.race([Promise.resolve().then(() => Promise.allSettled([...extPending])).then(() => extReady()),
   new Promise((ok, no) => setTimeout(() => no(new Error('A layer of this figure is still loading after 20 seconds, so nothing was exported. Check the connection and export again.')), 20000))]);
 const exportLayers = (o) => settled().then(desk).then((m) => m.exportLayers(o)).then((r) => { if (o?.download) exported('layers'); return r; });
 const tourSnapshot = (m) => {
@@ -1943,17 +1966,31 @@ function commitLogo(img, src, opts = {}) {
   S.logo = img;
   if (LB) { LB.state.removed = false; LB.render(); }
   $('logo-prev').textContent = img ? '' : 'No logo';
-  if (img) { const pv = new Image(); pv.src = src; pv.alt = 'Your logo'; $('logo-prev').appendChild(pv); }
+  if (img) {
+    if (opts.previewDecoded) {
+      const pv = document.createElement('canvas'), scale = Math.min(1, 90 / (img.naturalWidth || img.width || 1), 50 / (img.naturalHeight || img.height || 1));
+      pv.width = Math.max(1, Math.round((img.naturalWidth || img.width || 1) * scale)); pv.height = Math.max(1, Math.round((img.naturalHeight || img.height || 1) * scale));
+      pv.setAttribute('role', 'img'); pv.setAttribute('aria-label', 'Your logo'); pv.getContext('2d').drawImage(img, 0, 0, pv.width, pv.height); $('logo-prev').appendChild(pv);
+    } else { const pv = new Image(); pv.src = src; pv.alt = 'Your logo'; $('logo-prev').appendChild(pv); }
+  }
 }
 function setLogo(src, opts = {}) {
-  if (src && opts.removeBackground) return lbLoad().then((m) => m.set(setLogo, status, src, opts)).then(getState);
+  if (projectCommitting || recoveryProject) return Promise.reject(projectBusy());
+  const generation = projectLoad;
+  const isCurrent = () => generation === projectLoad && !projectCommitting && !recoveryProject;
+  if (src && opts.removeBackground) return lbLoad().then((m) => {
+    if (!isCurrent()) throw Object.assign(new Error('The figure changed before its logo was ready.'), { code: 'PROJECT_CHANGED' });
+    return m.set(setLogo, status, src, { ...opts, isCurrent });
+  }).then(getState);
   return new Promise((resolve, reject) => {
     if (!src) { commitLogo(null, src, opts); drawSectionView(); schedulePublish(); status('Logo removed.'); resolve(getState()); return; }
     const img = new Image();
     img.onload = async () => {
+      if (generation !== projectLoad || projectCommitting || recoveryProject) { reject(Object.assign(new Error('The figure changed before the logo finished loading.'), { code: 'PROJECT_CHANGED' })); return; }
       commitLogo(img, src, opts);
       let picked = null; // the colour picker (logo-colours.js) loads with the first logo
       if (opts.autoColor !== false) try { picked = (await import('./logo-colours.js')).brandFromLogo(img); } catch { /* keep the colours */ }
+      if (generation !== projectLoad) { reject(Object.assign(new Error('The figure changed before the logo finished loading.'), { code: 'PROJECT_CHANGED' })); return; }
       if (picked) { setBrand({ primary: picked.primary, accent: picked.accent }); $('col-note').textContent = picked.note; }
       drawSectionView(); schedulePublish(); status(picked ? 'Logo added and brand colours applied.' : 'Logo added.'); resolve(getState());
     };
@@ -1961,7 +1998,7 @@ function setLogo(src, opts = {}) {
     img.src = src;
   });
 }
-$('logo-input').addEventListener('change', (e) => { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = () => setLogo(r.result).then(() => lbLoad()).then((m) => m.offer(setLogo, status, r.result), () => {}); r.readAsDataURL(f); e.target.value = ''; });
+$('logo-input').addEventListener('change', (e) => { const f = e.target.files[0]; if (!f) return; const generation = projectLoad, isCurrent = () => generation === projectLoad && !projectCommitting && !recoveryProject; const r = new FileReader(); r.onload = () => { if (!isCurrent()) return; setLogo(r.result).then(() => lbLoad()).then((m) => { if (isCurrent()) return m.offer(setLogo, status, r.result, { isCurrent }); }).catch((error) => { if (error.code !== 'PROJECT_CHANGED') status(error.message); }); }; r.readAsDataURL(f); e.target.value = ''; });
 $('logo-clear').addEventListener('click', () => { setLogo(null); $('col-note').textContent = 'Picked automatically when you add a logo.'; });
 
 // ============================================================
@@ -2039,7 +2076,9 @@ function principalAz(holes) { const f = holes.length > 2 && fitLine(holes.map((h
 // A line set by hand or fitted turns about its middle when the azimuth changes.
 function turnSection() { const s = S.section; if (s?.a) [s.a, s.b] = lineThrough({ x: (s.a.x + s.b.x) / 2, y: (s.a.y + s.b.y) / 2 }, S.secAz, Math.hypot(s.b.x - s.a.x, s.b.y - s.a.y) / 2); }
 function addUserFiles(arr, o = {}) {
+  if (projectCommitting || recoveryProject) throw projectBusy();
   if (!Array.isArray(arr) || !arr.length || arr.some((f) => !f || typeof f.name !== 'string' || typeof f.text !== 'string')) throw new Error('addFiles expects [{ name: "collars.csv", text: "HoleID,Easting,..." }].');
+  projectLoad++;
   if (usingSample && !arr.every((a) => isOverlay(a.name, a.text))) { files = []; usingSample = false; S.meshes = {}; S.valueCol = null; S.coOverrides = {}; S.valueCol2 = null; resetDerived(); }
   if (o.drillSource !== undefined) S.drillSource = structuredClone(o.drillSource); // property-data.js
   if (o.geologyTitle !== undefined) S.geology.title = String(o.geologyTitle).slice(0, 40) || 'Lithology'; // same synchronous property-source replacement
@@ -2054,10 +2093,12 @@ function addUserFiles(arr, o = {}) {
 // A .zip is unpacked in the browser (unzip.js, loaded with the first one).
 const unzip = () => import('./unzip.js');
 async function readFileList(fl) {
+  const generation = projectLoad;
   try {
     const arr = (await Promise.all([...fl].map(async (f) => (/\.zip$/i.test(f.name)
       ? (await unzip()).unzipDataFiles(await f.arrayBuffer())
       : [{ name: f.name, text: await f.text() }])))).flat();
+    if (generation !== projectLoad) throw Object.assign(new Error('The figure changed before these files were read. Choose them again in the current figure.'), { code: 'PROJECT_CHANGED' });
     if (!arr.length) { status('No CSV, TXT or OBJ files found in that ZIP.'); return; }
     addUserFiles(arr);
   } catch (e) {
@@ -2066,7 +2107,9 @@ async function readFileList(fl) {
 }
 // For assistants: a ZIP as a data URL, base64 string or ArrayBuffer.
 async function addZip(zip) {
+  const generation = projectLoad;
   const arr = (await unzip()).zipFiles(zip);
+  if (generation !== projectLoad) throw Object.assign(new Error('The figure changed before the ZIP was read.'), { code: 'PROJECT_CHANGED' });
   if (!arr.length) throw new Error('No CSV, TXT or OBJ files found in that ZIP.');
   return addUserFiles(arr);
 }
@@ -2081,6 +2124,8 @@ $('paste-add').addEventListener('click', () => {
   addUserFiles([{ name, text }]); $('paste-text').value = '';
 });
 function loadSample() {
+  if (projectCommitting || recoveryProject) throw projectBusy();
+  projectLoad++;
   S.crs = null; geo = null; renderCRS();
   files = []; usingSample = true; S.valueCol = null; S.meshes = {}; S.coOverrides = {}; refresh.secSet = false; resetDerived();
   addFiles(sampleFiles()); refresh(); status('Sample project loaded · illustrative data. Add your CSVs in step 1 to replace it.');
@@ -2094,7 +2139,7 @@ function resetDerived() {
   // The shell belongs to the old data: switch it off and stop any build still running.
   S.shell.enabled = false; shell.pending = null; shell.mesh = null; shell.field = null; syncShell();
 }
-function clearFiles() { S.crs = null; geo = null; renderCRS(); files = []; usingSample = false; S.meshes = {}; S.coOverrides = {}; resetDerived(); refresh(); status('Files cleared. Add a collar file and an assay file.'); return getState(); }
+function clearFiles() { if (projectCommitting || recoveryProject) throw projectBusy(); projectLoad++; S.crs = null; geo = null; renderCRS(); files = []; usingSample = false; S.meshes = {}; S.coOverrides = {}; resetDerived(); refresh(); status('Files cleared. Add a collar file and an assay file.'); return getState(); }
 $('load-sample').addEventListener('click', loadSample);
 $('clear-files').addEventListener('click', clearFiles);
 
@@ -2116,6 +2161,7 @@ $('col-accent').addEventListener('input', (e) => { S.accent = e.target.value; $(
 // Layout inputs
 function rebin() { const assays = new Map(); (project?.holes || []).forEach((h) => assays.set(h.id, h.ints)); autoBins(assays); }
 function setStyle(o = {}, render = true) {
+  const legendOnly = Object.keys(o).length > 0 && Object.keys(o).every((key) => key === 'legend');
   if (o.valueCol !== undefined) {
     const av = project?.cols || []; if (!av.includes(o.valueCol)) throw new Error(`Unknown grade column "${o.valueCol}". Available: ${av.join(', ') || 'none'}.`);
     if (o.valueCol !== S.valueCol) { S.displayCutoff = null; S.shell.cutoff = null; }
@@ -2151,6 +2197,10 @@ function setStyle(o = {}, render = true) {
       else if (v && Number.isFinite(+v.x) && Number.isFinite(+v.y)) LG.pos[k] = { x: clamp01(v.x, 0), y: clamp01(v.y, 0) };
       else throw new Error('A legend position is "auto", a corner ("tl", "tr", "bl", "br") or {x, y}: its top-left corner, 0-1 across and down the frame.');
     });
+  }
+  if (legendOnly) {
+    renderLegendUI(); drawSectionView(); schedulePublish({ overlayOnly: true });
+    return getState();
   }
   if (o.traceWidth !== undefined) { const v = +o.traceWidth; if (!Number.isFinite(v)) throw new Error('traceWidth must be a number from 0.5 to 3.'); S.traceWidth = Math.max(0.5, Math.min(3, v)); }
   if (o.surface !== undefined) S.surf = Math.max(0.15, Math.min(1, +o.surface > 1 ? +o.surface / 100 : +o.surface));
@@ -2422,6 +2472,7 @@ frameEl.addEventListener('pointermove', (e) => {
   if (!labelDrag) { glCanvas.style.cursor = pickingFocus ? 'crosshair' : S.view === '3d' && (labelAt(e) || wallLabelAt(e)) ? 'move' : S.lockView ? 'default' : ''; return; }
   previewRevision++;
   if (labelDrag.wall) {
+    sceneRevision++;
     const P = rayAt(e).intersectPlane(labelDrag.plane, new THREE.Vector3()); if (!P) return;
     const L = labelDrag.wall.userData.L, [u, v] = faceUV(L.face, P); L.u = clamp01(u - labelDrag.du, L.u); L.v = clamp01(v - labelDrag.dv, L.v); placeWallLabel(labelDrag.wall); return;
   }
@@ -2503,13 +2554,18 @@ const host = () => (extHost ||= {
   holeOn, drawCard, cardSize, legendSecs, extSections, rebuild: rebuildScene, hasRole, // block.js
 });
 const extLoad = (k) => (extLoading[k] ||= EXT_IMPORT[k]().then((m) => { m.init(host()); EXT[k] = m; return m; }));
-async function extReady() {
+async function extReady(check = () => {}) {
+  const generation = projectLoad;
+  const current = () => { check(); if (generation !== projectLoad) throw Object.assign(new Error('The figure changed while its layers were loading.'), { code: 'PROJECT_CHANGED' }); };
+  current();
   const want = extWanted(), had = !!EXT.tags + 2 * !!EXT.desurvey;
   await Promise.all(Object.keys(EXT_IMPORT).filter((k) => want[k]).map(extLoad).concat(prWanted() && prLoad()));
+  current();
   // Hole fade and weights, and the surveyed paths, are read while the scene is built: rebuild once tags.js or the desurvey arrives.
   if (G && had !== !!EXT.tags + 2 * !!EXT.desurvey) rebuildScene(true);
   extScene();
   await Promise.all([EXT.geology?.imagesReady(), EXT.tags?.syncInset(), EXT.overlays?.ready()]);
+  current();
   extScene(); renderExtUI(); schedulePublish();
 }
 function extScene() {
@@ -2660,10 +2716,11 @@ function getState() {
   };
 }
 let pubT = 0;
-function schedulePublish() {
+function schedulePublish({ overlayOnly = false } = {}) {
   previewRevision++;
+  if (!overlayOnly) sceneRevision++;
   if (pubT) return;
-  pubT = setTimeout(() => { pubT = 0; const st = getState(); $('em3d-state').textContent = JSON.stringify(st); window.dispatchEvent(new CustomEvent('em3d:change', { detail: st })); histTick(); }, 60);
+  pubT = setTimeout(() => { pubT = 0; if (projectCommitting) { schedulePublish(); return; } const st = getState(); $('em3d-state').textContent = JSON.stringify(st); window.dispatchEvent(new CustomEvent('em3d:change', { detail: st })); histTick(); }, 60);
 }
 // The API notes are kept in the page (#core-help), out of the script bundle, like the layers' (#ext-help).
 const HELP = $('core-help').textContent.trim();
@@ -2701,6 +2758,8 @@ const S_DEFAULTS = toPlain(S);
 const isImg = (v) => v && typeof v === 'object' && typeof v.$image === 'string';
 const loadImg = (src) => new Promise((resolve, reject) => { const img = new Image(); img.onload = () => resolve(img); img.onerror = () => reject(new Error('A saved image could not be loaded.')); img.src = src; });
 function getProject() {
+  if (recoveryProject) return structuredClone(recoveryProject);
+  if (projectCommitting && projectReadSnapshot) return structuredClone(projectReadSnapshot);
   return {
     v: 1, app: 'Exploration Maps 3D', settings: toPlain(S), camera: G ? getCam() : null, usingSample, secSet: !!refresh.secSet,
     // Raw text, plus any file type or column the user picked by hand.
@@ -2720,50 +2779,154 @@ function fileDigest(f) {
   digestCache.set(f, { text: f.text, d });
   return d;
 }
-const filesDigest = () => files.map((f) => `${f.name}|${fileDigest(f)}${f.geophysNumericPolicy !== undefined ? `|${JSON.stringify(f.geophysNumericPolicy)}` : ''}`).join(',');
-async function loadProject(p) {
+const filesDigest = () => (recoveryProject?.files || (projectCommitting && projectReadSnapshot?.files) || files).map((f) => `${f.name}|${fileDigest(f)}${f.geophysNumericPolicy !== undefined ? `|${JSON.stringify(f.geophysNumericPolicy)}` : ''}`).join(',');
+const projectSignature = () => JSON.stringify({ ...getProject(), files: filesDigest() });
+async function loadProject(p, options = {}) {
   if (!p || p.v !== 1 || !p.settings || typeof p.settings !== 'object' || !Array.isArray(p.files)) throw new Error('loadProject expects a project from EM3D.getProject() ({ v: 1, settings, files }).');
   if (p.files.some((f) => !f || typeof f.name !== 'string' || typeof f.text !== 'string')) throw new Error('Each project file needs a name and its text.');
-  projectLoad++; window.dispatchEvent(new Event('em3d:figure-loading'));
-  const saved = withDefaults(p.settings, S_DEFAULTS), { logo, ...rest } = saved, imgs = {}; // an earlier figure keeps its look
-  await Promise.all(Object.entries(rest).filter(([, v]) => isImg(v)).map(async ([k, v]) => { imgs[k] = await loadImg(v.$image); }));
-  if (isImg(logo)) await setLogo(logo.$image, { autoColor: false }); else await setLogo(null);
-  Object.entries(rest).forEach(([k, v]) => { S[k] = imgs[k] || (v && typeof v === 'object' ? structuredClone(v) : v); });
-  S.section = cleanSection(S.section);
-  files = []; usingSample = !!p.usingSample; usage.own = false; addFiles(p.files, true);
-  p.files.forEach((sf) => {
-    const f = files.find((x) => x.name === sf.name); if (!f) return;
-    if (f.header && sf.cols && typeof sf.cols === 'object') f.cols = Object.fromEntries(Object.entries(sf.cols).filter(([, i]) => Number.isInteger(i)));
-    if (sf.role && (sf.role === 'mesh' ? !!f.mesh : !!f.header && ROLE_LABEL[sf.role])) f.role = sf.role;
-    if (f.header) f.grades = f.role === 'assay' ? gradeCols(f.header, f.cols, f.rows) : [];
-  });
-  histReset(); refresh.secSet = true; refresh(); refresh.secSet = !!p.secSet;
-  await settle(p.camera);
-  const gaps = document.documentElement.matches('.em3d-viewer,.em3d-version') ? [] : gapCallouts().map(gapText); // the owner is told, not a viewer (nor over a published version)
-  status(project && !project.empty ? `Figure opened · ${project.holes.length} holes.${gaps.length ? ` ${gaps.join('; ')}: Recalculate in Layout, Intercept callouts.` : ''}` : 'Figure opened. Add a collar file to see the holes.');
-  return getState();
+  if (!options || typeof options !== 'object' || (options.isCurrent !== undefined && typeof options.isCurrent !== 'function')) throw new Error('A project load guard must be a function.');
+  const original = projectSignature();
+  projectLoading++;
+  let entered = false;
+  try {
+    const loader = await (projectLoaderPromise ||= import('./project-load.js').then(({ createProjectLoader, cloneFigureState, snapshotCamera }) => {
+      let locked = [], readSnapshot;
+      return createProjectLoader({
+        begin() { projectLoad++; window.dispatchEvent(new Event('em3d:figure-loading')); },
+        signature: projectSignature,
+        async prepare(input, loadOptions) {
+          const saved = withDefaults(input.settings, S_DEFAULTS), { logo, ...rest } = saved, imgs = {};
+          const freshDrill = loadOptions.freshDrill && cloneFigureState(loadOptions.freshDrill);
+          const keptFiles = input.files.map((file) => cloneFigureState(file)), camera = freshDrill ? null : snapshotCamera(input.camera), sample = !!input.usingSample, secSet = !!input.secSet;
+          if (freshDrill && (!Array.isArray(freshDrill.files) || freshDrill.files.some((file) => !file || typeof file.name !== 'string' || typeof file.text !== 'string'))) throw new Error('Replacement drill files need their original names and text.');
+          await Promise.all(Object.entries(rest).filter(([, value]) => isImg(value)).map(async ([key, value]) => { imgs[key] = await loadImg(value.$image); }));
+          const image = isImg(logo) ? await loadImg(logo.$image) : null;
+          return { rest, imgs, image, logoSource: isImg(logo) ? logo.$image : null, files: keptFiles, camera, usingSample: sample, secSet, freshDrill };
+        },
+        capture() {
+          const snapshot = { plain: getProject(), settings: cloneFigureState(S), files, project, usingSample, secSet: refresh.secSet, eqApplied, own: usage.own, fit: G?.fit || 1,
+            history: HIST, restoreHistory: HIST?.checkpoint?.(), histBase: cloneFigureState(histBase), pendingHistory: !!histT,
+            geo: geo && { ...geo }, realT: { ...realT }, shell: { ...shell, waiters: shell.waiters.slice() }, logoBackground: LB && { ...LB.state }, restoreImages: EXT.geology?.checkpointImages?.(), recovery: recoveryProject };
+          clearTimeout(histT); histT = 0; clearTimeout(pubT); pubT = 0;
+          readSnapshot = snapshot.plain;
+          return snapshot;
+        },
+        lock(on) {
+          projectReadSnapshot = on ? readSnapshot : null;
+          projectCommitting = on;
+          if (on) {
+            locked = [...document.body.children].filter((el) => !['SCRIPT', 'STYLE'].includes(el.tagName)).map((el) => [el, el.inert]);
+            locked.forEach(([el]) => { el.inert = true; });
+          } else { locked.forEach(([el, inert]) => { el.inert = inert; }); locked = []; schedulePublish(); }
+        },
+        async apply(candidate, check) {
+          check(); recoveryProject = null;
+          commitLogo(candidate.image, candidate.logoSource, { autoColor: false, previewDecoded: true });
+          Object.entries(candidate.rest).forEach(([key, value]) => { S[key] = candidate.imgs[key] || cloneFigureState(value); });
+          S.section = cleanSection(S.section);
+          if (candidate.freshDrill) {
+            S.crs = null; geo = null; S.meshes = {}; S.coOverrides = {};
+            if (candidate.usingSample) { S.valueCol = null; S.valueCol2 = null; }
+            resetDerived();
+          }
+          files = []; usingSample = candidate.usingSample; usage.own = false; addFiles(candidate.files, true);
+          candidate.files.forEach((saved) => {
+            const file = files.find((entry) => entry.name === saved.name); if (!file) return;
+            if (file.header && saved.cols && typeof saved.cols === 'object') file.cols = Object.fromEntries(Object.entries(saved.cols).filter(([, index]) => Number.isInteger(index)));
+            if (saved.role && (saved.role === 'mesh' ? !!file.mesh : !!file.header && ROLE_LABEL[saved.role])) file.role = saved.role;
+            if (file.header) file.grades = file.role === 'assay' ? gradeCols(file.header, file.cols, file.rows) : [];
+          });
+          if (candidate.freshDrill) {
+            const fresh = candidate.freshDrill;
+            usingSample = false; S.drillSource = cloneFigureState(fresh.drillSource);
+            if (fresh.geologyTitle !== undefined) S.geology.title = String(fresh.geologyTitle).slice(0, 40) || 'Lithology';
+            addFiles(fresh.files); extAutoOn(fresh.files);
+            if (fresh.drillSource?.resultsRecipe) S.calloutMode = 'published';
+            usage.own = true;
+          } else histReset();
+          refresh.secSet = !candidate.freshDrill; refresh(); refresh.secSet = candidate.freshDrill ? false : candidate.secSet;
+          if (candidate.freshDrill?.crs) { try { await setCRS(candidate.freshDrill.crs); } catch (error) { if (error.code === 'PROJECT_CHANGED') throw error; } check(); }
+          await settle(candidate.camera, check); check();
+          if (candidate.freshDrill) {
+            const names = new Set(candidate.freshDrill.files.map((file) => file.name));
+            new Set(files.filter((file) => names.has(file.name)).map((file) => file.role)).forEach((kind) => usage('three_d_data_added', { kind, source: 'drill_db' }, kind));
+          }
+          const gaps = document.documentElement.matches('.em3d-viewer,.em3d-version') ? [] : gapCallouts().map(gapText);
+          status(project && !project.empty ? `Figure opened · ${project.holes.length} holes.${gaps.length ? ` ${gaps.join('; ')}: Recalculate in Layout, Intercept callouts.` : ''}` : 'Figure opened. Add a collar file to see the holes.');
+        },
+        async restore(snapshot, check) {
+          // Restore original source and decoded assets first. Even a subsequent
+          // renderer failure leaves a downloadable checkpoint, never B under A.
+          projectLoad++;
+          clearTimeout(histT); histT = 0; clearTimeout(pubT); pubT = 0;
+          Object.keys(S).forEach((key) => { delete S[key]; }); Object.assign(S, cloneFigureState(snapshot.settings));
+          files = snapshot.files; project = snapshot.project; usingSample = snapshot.usingSample; refresh.secSet = snapshot.secSet; eqApplied = snapshot.eqApplied; usage.own = snapshot.own;
+          geo = snapshot.geo; Object.assign(realT, snapshot.realT, { job: realT.job + 1, promise: null });
+          shell.worker?.terminate();
+          Object.assign(shell, snapshot.shell, { worker: null, job: shell.job + 1, busy: false, pending: null, waiters: snapshot.shell.waiters.slice() });
+          snapshot.restoreImages?.(); recoveryProject = snapshot.recovery;
+          histReset(); HIST = snapshot.history; histP = HIST ? Promise.resolve(HIST) : null; histBase = snapshot.histBase;
+          snapshot.restoreHistory?.();
+          commitLogo(S.logo, snapshot.plain.settings.logo?.$image || null, { keep: true, autoColor: false, previewDecoded: true });
+          if (LB && snapshot.logoBackground) { Object.assign(LB.state, snapshot.logoBackground); LB.render(); }
+          try {
+            rebuildScene(true); if (G) G.fit = snapshot.fit;
+            renderFiles(); renderSummary(); renderChecks(); renderStyle(); renderCalloutEditor(); renderLabelList(); renderWallLabelList(); renderCRS();
+            await settle(snapshotCamera(snapshot.plain.camera), check); check();
+          } finally { try { check(); snapshot.restoreHistory?.(); if (snapshot.pendingHistory) histTick(); } catch { /* superseded or timed-out renderer continuation */ } }
+        },
+        retainRecovery(snapshot) { recoveryProject = structuredClone(snapshot.plain); },
+        result: getState,
+      });
+    }).catch((error) => { projectLoaderPromise = null; throw error; }));
+    if (original !== projectSignature() || (options.isCurrent && !options.isCurrent())) throw Object.assign(new Error('The figure changed before opening could start. Your current work was kept.'), { code: 'PROJECT_CHANGED' });
+    entered = true;
+    return await loader(p, options);
+  } catch (error) {
+    if (!entered && error && typeof error === 'object') error.stateRestored = true;
+    throw error;
+  } finally { projectLoading--; }
 }
 // After settings are put into S wholesale (a project opened, a history step): the panel, frame and layers.
-async function settle(cam) {
-  if (S.brandStyle || EXT.type) await extLoad('type').then((m) => m.sync(), () => {}); // EXT hook: brand fonts, loaded before anything is measured
+async function settle(cam, check = () => {}) {
+  check();
+  if (S.brandStyle || EXT.type) await extLoad('type').then((m) => { check(); return m.sync(); }, () => { check(); }); // EXT hook: brand fonts, loaded before anything is measured
+  check();
   applyTheme(); syncBrandUI(); renderSizes(); layoutFrame(); restyle(); showView(S.view === 'section' ? 'section' : '3d');
   if (cam && G) setCamera(cam, true);
-  await extReady(); // EXT hook: layers, face images and the map inset
+  await extReady(check); // EXT hook: layers, face images and the map inset
+  check();
   if (cam?.zoom > 250 && G) setCamera(cam, true); // EXT hook: a close view of the drill crew, once it stands
   lastCamKey = ''; syncCamUI(); drawSectionView(); schedulePublish();
 }
 // History (history.js, loaded on the first change): snapshots of S, settings only (no files, no logo image),
 // taken 0.5 s after changes settle. Undo, redo and restore put a snapshot back and keep the camera.
-let HIST = null, histP = null, histBase = null, histT = 0;
+let HIST = null, histP = null, histBase = null, histT = 0, historyEpoch = 0;
 const snapS = () => toPlain({ ...S, logo: null });
-function histTick() { clearTimeout(histT); histT = setTimeout(() => { histT = 0; const s = snapS(); if (HIST) HIST.note(s); else if (!histBase) histBase = s; else histLoad().then((h) => h.note(s)); }, 500); }
-const histLoad = () => (histP ||= import('./history.js').then((m) => (HIST = m.init({ base: histBase || snapS(), apply: applySnap, el: $('hist') }))));
-function histReset() { HIST = null; histP = null; histBase = null; clearTimeout(histT); histT = 0; }
+function histTick() { clearTimeout(histT); histT = setTimeout(() => { histT = 0; const s = snapS(), epoch = historyEpoch; if (HIST) HIST.note(s); else if (!histBase) histBase = s; else histLoad().then((h) => { if (epoch === historyEpoch) h.note(s); }).catch((e) => { if (e.code !== 'PROJECT_CHANGED') status(e.message); }); }, 500); }
+const histLoad = () => {
+  if (!histP) {
+    const epoch = historyEpoch, base = histBase || snapS();
+    histP = import('./history.js').then((m) => {
+      if (epoch !== historyEpoch) throw Object.assign(new Error('The figure changed before its history opened.'), { code: 'PROJECT_CHANGED' });
+      return (HIST = m.init({ base, apply: applySnap, el: $('hist') }));
+    });
+  }
+  return histP;
+};
+function histReset() { historyEpoch++; HIST = null; histP = null; histBase = null; clearTimeout(histT); histT = 0; }
 // Undo/redo first record a change still inside the 500 ms debounce, so the latest edit is the one undone.
 async function histFlush() {
   if (!histT) return histLoad();
+  const epoch = historyEpoch;
   clearTimeout(histT); histT = 0;
-  const s = snapS(), h = await histLoad(); h.note(s); return h;
+  const s = snapS(), h = await histLoad(); if (epoch !== historyEpoch) throw Object.assign(new Error('The figure changed before its history action completed.'), { code: 'PROJECT_CHANGED' }); h.note(s); return h;
+}
+async function historyAction(action) {
+  if (projectCommitting || recoveryProject) throw projectBusy();
+  const epoch = historyEpoch, h = await (action === 'state' ? histLoad() : histFlush());
+  if (epoch !== historyEpoch) throw Object.assign(new Error('The figure changed before its history action completed.'), { code: 'PROJECT_CHANGED' });
+  return h[action]();
 }
 function applySnap(snap) {
   const cam = G ? getCam() : null, sec = refresh.secSet;
@@ -2773,7 +2936,7 @@ function applySnap(snap) {
 const TEXT_ENTRY = 'textarea, [contenteditable], input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]):not([type=button]):not([type=file])';
 document.addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase(); if (!(e.ctrlKey || e.metaKey) || e.altKey || (k !== 'z' && k !== 'y') || e.target.matches?.(TEXT_ENTRY)) return; // text fields keep their own undo
-  e.preventDefault(); histFlush().then((h) => (k === 'y' || e.shiftKey ? h.redo() : h.undo()));
+  e.preventDefault(); historyAction(k === 'y' || e.shiftKey ? 'redo' : 'undo').catch((error) => { if (error.code !== 'PROJECT_CHANGED') status(error.message); });
 });
 $('hist-btn').addEventListener('click', (e) => { e.stopPropagation(); const el = $('hist'), open = el.hidden; el.hidden = !open; $('hist-btn').setAttribute('aria-expanded', String(open)); if (open) histLoad().then((h) => h.render()); });
 document.addEventListener('click', (e) => { if (!$('hist').hidden && !e.target.closest('#hist')) { $('hist').hidden = true; $('hist-btn').setAttribute('aria-expanded', 'false'); } });
@@ -2787,11 +2950,23 @@ function getThumbnail(width = 320) {
   return c.toDataURL('image/jpeg', 0.8);
 }
 // Their API notes (whole projects) end #core-help, in the page.
-window.EM3D = Object.freeze({ ...window.EM3D, getProject, loadProject, getThumbnail, filesDigest });
+window.EM3D = Object.freeze({ ...window.EM3D, getProject, loadProject, getThumbnail, filesDigest,
+  isProjectLoading: () => projectLoading > 0,
+  isProjectRecoveryPending: () => !!recoveryProject,
+  getRecoveryProject: () => recoveryProject ? structuredClone(recoveryProject) : null });
 // EXT hook: the geology, geophysics and hole-tag methods, in one block (section 10b).
 const FULL_HELP = `${HELP}\n${EXT_HELP}`; $('ai-help').textContent = FULL_HELP;
 window.EM3D = Object.freeze({ ...window.EM3D, help: () => FULL_HELP, ...EXT_API,
-  undo: async () => { (await histFlush()).undo(); return getState(); }, redo: async () => { (await histFlush()).redo(); return getState(); }, history: async () => (await histLoad()).state() });
+  undo: async () => { await historyAction('undo'); return getState(); }, redo: async () => { await historyAction('redo'); return getState(); }, history: () => historyAction('state') });
+
+// A live commit is short and serialized. Neither DOM actions nor a public API
+// call may edit its partial state; ordinary edits remain available in preparation.
+const projectReaders = new Set(['help', 'getState', 'getProject', 'getRecoveryProject', 'isProjectLoading', 'isProjectRecoveryPending', 'filesDigest', 'getChecks', 'loadProject']);
+window.EM3D = Object.freeze(Object.fromEntries(Object.entries(window.EM3D).map(([key, value]) => [key,
+  typeof value === 'function' && !projectReaders.has(key) ? function (...args) {
+    if (projectCommitting || recoveryProject) throw projectBusy();
+    return value.apply(this, args);
+  } : value])));
 
 // ============================================================
 // 12. Start
@@ -2808,3 +2983,4 @@ loadSample();
 new ResizeObserver(() => { const c = G ? getCam() : null; layoutFrame(); if (c) setCamera(c, true); }).observe(stage);
 requestAnimationFrame(loop);
 if (document.fonts?.ready) document.fonts.ready.then(() => { previewRevision++; drawSectionView(); });
+document.fonts?.addEventListener?.('loadingdone', () => { previewRevision++; drawSectionView(); });
