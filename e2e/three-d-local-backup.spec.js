@@ -5,6 +5,20 @@ const files = [
   { name: 'synthetic-collars.csv', text: 'HoleID,X,Y,Z,Length\r\nQA-A,500000,5500000,100,100\r\nQA-B,500100,5500100,100,100' },
   { name: 'synthetic-ip.csv', text: 'X,Y,Z,Chargeability\n500000,5500000,100,10\n500010,5500010,90,12tail\n500020,5500020,80,"1,000"\n500030,5500030,70,<0.05\n500040,5500040,60,2e1' },
 ];
+async function downloadBackupBytes(page) {
+  if (!(await page.locator('#backup-download').isVisible())) await page.getByRole('button', { name: 'My 3D maps', exact: true }).click();
+  const downloading = page.waitForEvent('download'); await page.getByRole('button', { name: 'Download project backup', exact: true }).click();
+  const download = await downloading;
+  return { name: download.suggestedFilename(), bytes: await readFile(await download.path()) };
+}
+async function scientificPreview(page) {
+  return page.evaluate(async () => {
+    await document.fonts.ready; await window.EM3D.layersReady();
+    await new Promise(requestAnimationFrame); await new Promise(requestAnimationFrame);
+    const state = window.EM3D.getState();
+    return { project: window.EM3D.getProject(), equivalent: state.equivalent, grade: state.grade, candidates: state.callouts.candidates, png: await window.EM3D.exportPNG({ view: '3d', width: 400, background: 'transparent' }) };
+  });
+}
 for (const [label, viewport] of [['desktop', { width: 1280, height: 900 }], ['mobile', { width: 390, height: 844 }]]) {
   test(`local 3D file backup opens privately in a new figure and preserves its source tab (${label})`, async ({ page, context }) => {
     test.setTimeout(180000); await page.setViewportSize(viewport);
@@ -193,4 +207,39 @@ test('oversize files, excessive source cells and invalid geometry are refused be
     expect(await page.evaluate(() => window.EM3D.getProject())).toEqual(before);
     await expect(page.locator('#backup-dialog')).toBeHidden(); expect(context.pages()).toHaveLength(initialPages);
   }
+});
+
+test('a native synthetic CuEq recipe retains its assumptions, derived grades and exact exported figure through a backup', async ({ page, context }) => {
+  test.setTimeout(180000); await page.setViewportSize({ width: 1280, height: 900 });
+  await context.route('**/api/track', (route) => route.fulfill({ status: 204 }));
+  await page.goto('/3d/'); await page.waitForFunction(() => window.EM3D?.getState().ready);
+  const sources = [
+    { name: 'synthetic-eq-collars.csv', text: 'HoleID,X,Y,Z,Length\nQA-EQ-A,500000,5500000,100,100\nQA-EQ-B,500100,5500100,100,80' },
+    { name: 'synthetic-eq-assays.csv', text: 'HoleID,From,To,Cu_pct,Au_gpt\nQA-EQ-A,0,100,1,0.5\nQA-EQ-B,0,80,0.8,1' },
+  ];
+  await page.evaluate(async (input) => {
+    const E = window.EM3D; E.clearFiles(); E.addFiles(input); await E.layersReady();
+    E.setBrand({ title: 'Synthetic CuEq backup QA', company: 'Synthetic QA only' });
+    E.setEquivalent({ base: 'Cu', basePrice: 4.5, baseRecovery: 90, metals: { Au: { price: 2500, recovery: 80 } }, use: true });
+    E.setCamera({ azimuth: 40, plunge: 25, zoom: 90 }); await E.layersReady();
+  }, sources);
+  const before = await scientificPreview(page);
+  const factor = ((2500 / 31.1035) * 80) / (22.0462 * 4.5 * 90);
+  expect(before.equivalent).toMatchObject({ column: 'CuEq_calc', base: 'Cu', baseCol: 'Cu_pct', baseUnit: '%', basePrice: 4.5, baseRecovery: 90, metals: { Au: { col: 'Au_gpt', unit: 'g/t', price: 2500, recovery: 80 } } });
+  expect(before.equivalent.factors.Au).toBeCloseTo(factor, 5);
+  expect(before.grade.column).toBe('CuEq_calc'); expect(before.equivalent.note).toContain('Assumptions are illustrative');
+  expect(before.candidates.find((candidate) => candidate.holeId === 'QA-EQ-A').broad).toBe(`100 m @ ${(1 + factor * 0.5).toFixed(2)}% CuEq`);
+  expect(before.candidates.find((candidate) => candidate.holeId === 'QA-EQ-B').broad).toBe(`80 m @ ${(0.8 + factor).toFixed(2)}% CuEq`);
+  const backup = await downloadBackupBytes(page);
+  await page.locator('#backup-file').setInputFiles({ name: backup.name, mimeType: 'application/json', buffer: backup.bytes });
+  const opening = page.waitForEvent('popup'); await page.getByRole('button', { name: 'Open as new figure', exact: true }).click();
+  const child = await opening; await child.setViewportSize({ width: 1280, height: 900 });
+  await expect(child.locator('#status')).toHaveText('Backup opened as a new unsaved figure.');
+  const after = await scientificPreview(child);
+  expect(after.project.settings.eq).toEqual(before.project.settings.eq);
+  expect(after.project.settings).toEqual(before.project.settings); expect(after.project.camera).toEqual(before.project.camera);
+  expect(after.project.files).toEqual(before.project.files); expect(after.equivalent).toEqual(before.equivalent);
+  expect(after.grade).toEqual(before.grade); expect(after.candidates).toEqual(before.candidates); expect(after.png).toEqual(before.png);
+  expect(await page.evaluate(() => window.EM3D.getProject())).toEqual(before.project);
+  await child.locator('#stage').screenshot({ path: test.info().outputPath('local-backup-equivalent.png') }); await child.close();
 });

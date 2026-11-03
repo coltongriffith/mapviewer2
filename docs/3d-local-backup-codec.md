@@ -14,6 +14,24 @@ Initial supported settings cover the existing base figure, bins, labels/wall lab
 
 Node unit fixtures cover source-derived fictional sample/defaults; exact raw BOM/CRLF/qualified values/policy roundtrip; branded PNG and no-logo projects; camera/pan; duplicate escaped keys; malformed JSON/UTF-8; depth, byte, node and parser-expansion failures; unsafe image paths; inert source URLs; extreme renderer settings; and trajectory bombs. These prove bounded validation behavior, not browser memory peaks, atomic old-loader rollback, mobile hardware performance or full pixel parity. The app flow must independently prove fresh-tab context, new unsaved identity, account detachment, cancellation, renderer decode and unchanged original work.
 
+## User flow and account boundaries
+
+The existing My 3D maps menu downloads a local JSON file or reads one for
+preflight. Open as new figure opens a separate same-origin tab, preserving the
+original figure, history and cloud target. A window/origin/nonce-bound one-shot
+MessageChannel transfers bytes privately; neither URL nor browser storage
+contains the project. The child validates again before loading and keeps editing
+and account actions inactive until successful load. Its target starts unsaved.
+
+Restored tabs skip automatic project/version/brand/source loading throughout
+their lifetime and preserve pending sign-in stashes. Explicit Save uses ordinary
+permissions and creates a new target; paid export gates remain. Email-link
+initiation is refused in this tab before sending or changing the shared stash:
+sign in in another tab, then return and Save. Existing session/password Save is
+supported. Public shared, embedded and published read-only contexts cannot use
+these actions. This is a bounded editable 3D project backup, not an account archive
+or a fix to the existing generic loader's old-tab transaction behavior.
+
 ## Independent resource-review corrections
 
 The final source review adds regression-backed preflight for actual renderer paths, not merely finite JSON values:
