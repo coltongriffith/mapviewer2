@@ -21,6 +21,7 @@
 import { authRedirectUrl } from '../utils/authRedirect.js';
 import { track } from './track.js';
 import { figureSignature } from './save-state.js';
+import { geophysPolicyMetadata } from './geophys-policy.js';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -274,7 +275,7 @@ export async function saveProject(name, existingId, dest = null, { force = false
     let base = safeName(f.name);
     if (used.has(base)) base = `${i}-${base}`;
     used.add(base);
-    return { name: f.name, path: `${dir}/${base}`, size: f.text.length, role: f.role, cols: f.cols };
+    return { name: f.name, path: `${dir}/${base}`, size: f.text.length, role: f.role, cols: f.cols, ...geophysPolicyMetadata(f) };
   });
   let saved;
   try {
@@ -337,7 +338,7 @@ export async function openProject(id) {
     const files = Array.isArray(row.settings?.files) ? row.settings.files : await Promise.all((row.file_paths || []).map(async (fp) => {
       const { data, error } = await sb.storage.from(BUCKET).download(fp.path);
       if (error) throw error;
-      return { name: fp.name, text: await data.text(), role: fp.role, cols: fp.cols };
+      return { name: fp.name, text: await data.text(), role: fp.role, cols: fp.cols, ...geophysPolicyMetadata(fp) };
     }));
     project = { ...row.settings, files };
   } catch (err) {

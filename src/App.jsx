@@ -23,6 +23,7 @@ import BrandMarkInline from './components/BrandMark';
 
 const MapCanvas = lazyGuarded(() => import('./components/MapCanvas'));
 const SigninLinkStatus = lazyGuarded(() => import('./components/SigninLinkStatus'));
+const LocalRecoveryNotice = lazyGuarded(() => import('./components/LocalRecoveryNotice'));
 const MobileEditorBanner = lazyGuarded(() => import('./components/MobileEditorBanner'));
 const MobileClaimsViewer = lazyGuarded(() => import('./components/MobileClaimsViewer'));
 // The legend editor loads when the Legend group opens.
@@ -1341,19 +1342,17 @@ export default function App({ initialAction = null }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.layers.length]);
 
+  const [localRecoveries, setLocalRecoveries] = useState([]);
   // Corrupted-record recovery: if a stored project blob failed to decompress,
   // the original bytes were preserved under a .recovery key. Surface a
-  // non-blocking warning and expose manual export/removal helpers — the
+  // non-blocking download notice and retain legacy debugging helpers — the
   // corrupted copy is never deleted automatically.
   useEffect(() => {
     const recoveries = getRecoveryInfo();
     if (!recoveries.length) return;
     window.__exportRecovery = (key) => exportRecoveryRecord(key || recoveries[0].key);
     window.__discardRecovery = (key) => discardRecoveryRecord(key || recoveries[0].key);
-    setUploadStatus({
-      type: 'error',
-      message: 'A locally saved project record was corrupted and could not be opened. The original data was preserved — contact support, or use __exportRecovery() / __discardRecovery() in the browser console to export or remove it.',
-    });
+    setLocalRecoveries(recoveries);
   }, []);
 
   // When user logs in, apply their default brand kit to a fresh, empty workspace.
@@ -7603,6 +7602,9 @@ export default function App({ initialAction = null }) {
       </Sidebar>
 
       <div className="editor-main">
+        {localRecoveries.length > 0 && <React.Suspense fallback={null}>
+          <LocalRecoveryNotice records={localRecoveries} onDismiss={() => setLocalRecoveries([])} />
+        </React.Suspense>}
         {showStorageWarning && (
           <div className="storage-warning-banner">
             Local storage is getting full.{' '}

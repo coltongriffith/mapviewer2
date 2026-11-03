@@ -600,6 +600,12 @@ button, input, select, textarea { font: inherit; }
 }
 .ed-banner--error { background: #fbf1f1; border-bottom-color: var(--ui-danger); color: var(--ui-danger); }
 .ed-banner > button { margin-left: auto; }
+.local-recovery-notice { flex-wrap: wrap; align-items: flex-start; }
+.local-recovery-message { flex: 1 1 260px; min-width: 0; }
+.local-recovery-message p { margin: 0 0 4px; overflow-wrap: anywhere; }
+.local-recovery-message p:last-child { margin-bottom: 0; }
+.local-recovery-actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+
 
 /* ── Preview: the stage without the editing apparatus ─────────────────────
    Nothing is unmounted, so no export path, handler or measurement changes —

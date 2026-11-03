@@ -308,12 +308,17 @@ const BUDGETS = {
   // Property locator on released templates/keys: measured total1121.1/1190.0,
   // editor286.5/354.6, claims299.2/367.5 KiB plain/configured.
   // Retain 0.5 KiB total and 0.4 KiB route stamp margins; all other caps unchanged.
-  // Explicit property exterior overlay: measured 1125.5/1194.4 KiB total
-  // plain/configured (+4.4 KiB). Includes bounded input/output topology checks,
-  // frozen visibility cache, shared native/PNG/SVG stroke and contextual opt-in.
-  // Turf dissolve was already shared; no new dependency or duplicated vendor.
-  // Retain 0.5 KiB stamp margin; entry/route/standalone caps stay unchanged.
-  totalAuthJsGzipKb: 1194.9,
+  // Local recovery downloads: lazy contextual controls and lossless raw-copy
+  // checks; measured 1122.2 plain / 1191.0 configured. Retain 0.4 KiB total
+  // stamp/hash margin only; initial-route/other caps and dependencies unchanged.
+  // On-demand report content search: lazy reader/card with bounded private reads,
+  // literal snippets and current-version guards; measured 1124.7/1193.6 KiB
+  // plain/configured. Only total caps grow; initial routes and dependencies unchanged.
+  // Report search integrated with released strict-geophysics and local recovery:
+  // measured 1125.7/1194.7 KiB plain/configured, 0.4 KiB stamp margin.
+  // Only totals change; all initial-route, 3D, CSS and dependency caps remain.
+  totalAuthJsGzipKb: 1195.1,
+
   // 1009.4 → 1026.3 (measured 1026.0): lazy XLSX reader (~13.8 KiB), sheet/header preview
   // (~1.1 KiB), import wiring and numeric-format handling. Shared fflate adds ~1.2 KiB
   // for async ZIP workers; it remains one copy with the existing draft compression.
@@ -402,7 +407,10 @@ const BUDGETS = {
   // Live web map merged with main (Point inspector, numeric classification): measured 1106.1.
   // Saved-map data downloads, as above: measured 1109.1; route caps unchanged.
   // Same opt-in key graph: stamped plain 1116.5 KiB, +0.5 KiB stamp allowance.
-  totalJsGzipKb: 1126.0,
+  // Same lazy local-recovery copy controls: measured 1122.2 plain; 0.4 KiB
+  // total stamp margin. No startup, other budget or dependency allowance change.
+  totalJsGzipKb: 1126.1,
+
   // 940.9 → 957.8 (measured 957.5): Excel import, as totalAuthJsGzipKb above.
   // 940.9 → 944.8 (P2-8, measured 944.6): the same lazy property recipe path
   // in the unconfigured build. Its initial route budgets also stay unchanged.
@@ -520,7 +528,11 @@ const BUDGETS = {
   // Current measured entry176.1KiB; keep a narrow0.2KiB stamp allowance.
   // Lazy brand-kit action and async style context guards: measured176.4KiB.
   // Kit/account reads remain lazy; bound the entry to another0.3KiB.
-  threeDJsGzipKb: 176.6,
+  // Strict new geophysics imports: measured 176.9 KiB plain/configured entry
+  // after keeping row scans/diagnostic wording lazy. Eager policy/metadata
+  // guards preserve legacy restore and safe save/share/version roundtrips.
+  // Small stamp margin only; no dependencies or other route/total caps change.
+  threeDJsGzipKb: 177.2,
   // /3d's own modules fetched on first use (the geology, geophysics and tag layers, the account
   // client). They never load with the page or the app, so they sit outside the page and app totals.
   // 32 → 34 (Oct 2026, round 4): per-hole tags, grouped pending tags, callouts beside or bracketed on their
@@ -668,7 +680,9 @@ const BUDGETS = {
   // Measured 141.0 plain/configured; initial maker load remains 175.3 KiB.
   // Owned read/apply picker + verified-user boundary: measured143.2KiB.
   // Reuses the existing account client and style adapters, no new dependency.
-  threeDLazyJsGzipKb: 143.5,
+  // Same versioned geophysics parser/disclosure: measured 143.8 KiB lazy,
+  // retaining a small stamp margin. Strict row checks remain on first use.
+  threeDLazyJsGzipKb: 144.1,
   // Self-contained 3D Tour export: separate lazy Three global source plus
   // template/builder/dialog: measured 173.4. Not part of the maker's initial load.
   // Model palette/derived-field handoff, existing envelope geometry and layer toggles: ~176.2 KiB.
