@@ -8449,7 +8449,7 @@ export default function App({ initialAction = null }) {
         ) : null}
         {figureImport ? (
           <FigureImport
-            key={figureImport.source.name}
+            key={figureImport.source?.name || figureImport.layerId || 'new'}
             source={figureImport.source}
             existing={project.layers.find((l) => l.id === figureImport.layerId)}
             map={leafletMapRef.current}

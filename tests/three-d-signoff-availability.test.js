@@ -71,7 +71,8 @@ it('opens the original snapshot and downloads its ordinary PNG with unknown sign
   await versions.openDialog();
   document.querySelector('[data-ver="2"]').click();
   await waitFor(() => expect(document.getElementById('ver-banner')).not.toBeNull());
-  expect(window.EM3D.loadProject).toHaveBeenCalledWith(row.snapshot.settings);
+  expect(window.EM3D.loadProject).toHaveBeenCalledWith(row.snapshot.settings, { isCurrent: expect.any(Function) });
+  expect(window.EM3D.loadProject.mock.calls[0][1].isCurrent()).toBe(true);
   expect(host.setFrozen).toHaveBeenCalledWith(expect.objectContaining({ id: row.id, version: 2, signoffUnavailable: true }));
   expect(document.getElementById('ver-banner').textContent).toMatch(/QP sign-off status could not be loaded/);
   expect(document.getElementById('ver-inc-signoff')).toBeNull();

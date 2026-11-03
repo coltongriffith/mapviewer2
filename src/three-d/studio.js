@@ -1902,7 +1902,7 @@ function exportPNG(opts = {}) {
 // Export buttons, exportLayers and the design desk wait here.
 // The wait is bounded: a layer whose module or data never arrives fails the export with a plain message after 20 s
 // instead of leaving it waiting. A turn first: a change event's setter starts in a microtask.
-const extPending = new Set(), settled = () => Promise.race([Promise.resolve().then(() => Promise.allSettled([...extPending])).then(extReady),
+const extPending = new Set(), settled = () => Promise.race([Promise.resolve().then(() => Promise.allSettled([...extPending])).then(() => extReady()),
   new Promise((ok, no) => setTimeout(() => no(new Error('A layer of this figure is still loading after 20 seconds, so nothing was exported. Check the connection and export again.')), 20000))]);
 const exportLayers = (o) => settled().then(desk).then((m) => m.exportLayers(o)).then((r) => { if (o?.download) exported('layers'); return r; });
 const tourSnapshot = (m) => {

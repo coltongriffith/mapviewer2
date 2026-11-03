@@ -14,6 +14,7 @@ const saveSource = studio.slice(studio.indexOf('function getProject()'), studio.
 function imports() {
   const make = new Function('geophysFilePolicy', 'isXYZ', 'parseXYZ', 'matchCols', 'roleOf', 'refineRole', `
     let files = [], S = {}, G = null, usingSample = false;
+    const recoveryProject = null, projectCommitting = false, projectReadSnapshot = null;
     const refresh = {secSet:false}, toPlain = x => x;
     const isOverlay = () => false, parseOBJ = () => ({}), gradeCols = () => [];
     ${csvSource}\n${addSource}\n${saveSource}
