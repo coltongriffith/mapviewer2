@@ -308,7 +308,10 @@ const BUDGETS = {
   // Property locator on released templates/keys: measured total1121.1/1190.0,
   // editor286.5/354.6, claims299.2/367.5 KiB plain/configured.
   // Retain 0.5 KiB total and 0.4 KiB route stamp margins; all other caps unchanged.
-  totalAuthJsGzipKb: 1190.5,
+  // On-demand report content search: lazy reader/card with bounded private reads,
+  // literal snippets and current-version guards; measured 1124.7/1193.6 KiB
+  // plain/configured. Only total caps grow; initial routes and dependencies unchanged.
+  totalAuthJsGzipKb: 1194.0,
   // 1009.4 → 1026.3 (measured 1026.0): lazy XLSX reader (~13.8 KiB), sheet/header preview
   // (~1.1 KiB), import wiring and numeric-format handling. Shared fflate adds ~1.2 KiB
   // for async ZIP workers; it remains one copy with the existing draft compression.
@@ -397,7 +400,7 @@ const BUDGETS = {
   // Live web map merged with main (Point inspector, numeric classification): measured 1106.1.
   // Saved-map data downloads, as above: measured 1109.1; route caps unchanged.
   // Same opt-in key graph: stamped plain 1116.5 KiB, +0.5 KiB stamp allowance.
-  totalJsGzipKb: 1121.6,
+  totalJsGzipKb: 1125.0,
   // 940.9 → 957.8 (measured 957.5): Excel import, as totalAuthJsGzipKb above.
   // 940.9 → 944.8 (P2-8, measured 944.6): the same lazy property recipe path
   // in the unconfigured build. Its initial route budgets also stay unchanged.

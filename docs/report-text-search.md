@@ -29,6 +29,9 @@ search provider. The query stays in the tab. No migration, storage activation,
 service credential or new dependency is required.
 
 This is a local source candidate. Four focused unit/UI files pass (32 tests).
-Two configured browser cases are authored for desktop/mobile; execution and frozen
-measured builds remain required before review/publication. Merging needs human
+Both configured browser cases pass on desktop/mobile (four runs), including private
+read errors, invalid UTF-8 and a concurrently changed version. Panel captures are
+readable at both sizes. Trial totals measure 1124.7/1193.6 KiB plain/configured; only
+total caps changed, to 1125.0/1194.0. Frozen SHA-stamped builds/budgets and final browser
+confirmation remain required before publication. Merging needs human
 approval. Broader PDF/Word/report search still needs an extraction/OCR contract.
