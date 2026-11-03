@@ -5,6 +5,7 @@ import { getMapFrame } from './coordinateFrame.js';
 import { getFeatureStyle, canDissolve } from './featureStyle.js';
 import { featureKey } from './featureIdentity.js';
 import { claimKeyComposition, claimKeyObstacles } from './claimKeyComposition.js';
+import { propertyBoundaryScene } from './propertyBoundaryScene.js';
 
 // The geology and label styling (utils/geoStyle.js) on the editor's Leaflet map, painted by the same canvas
 // painter as the PNG export, on three canvases in their own panes so they stack as the exporters draw them:
@@ -13,7 +14,7 @@ import { claimKeyComposition, claimKeyObstacles } from './claimKeyComposition.js
 // own, so it follows pans, zooms (with the zoom animation) and high-DPI screens as the map's renderer does,
 // and never takes a click: the layers' own (invisible) paths stay on the map for selecting them.
 
-const PANES = { wash: 310, band: 390, labels: 640 };
+const PANES = { wash: 310, band: 390, boundary: 460, labels: 640 };
 
 const FxCanvas = L.Canvas.extend({
   initialize(paint, options) {
@@ -63,6 +64,7 @@ function inputOf({ project, template, zones, legendItems, geometry, trimLayerId,
   const layout = project?.layout || {};
   return {
     project,
+    boundaryOptions: { template, trimLayerId, featureStyleLayerId },
     layers: (project?.layers || []).filter((l) => l.fx && l.visible !== false && l.geojson),
     wash: layout.wash,
     obstacles: zones ? panelObstacles(zones, { ...layout, legendItems: legendItems || [] }) : [],
@@ -84,8 +86,8 @@ export function syncFx(map, state, editor) {
   const s = state || { canvases: {}, input: null, scene: null };
   const input = inputOf(editor);
   s.input = input;
-  const want = { wash: !!washPrims(input.wash, 1, 1).length, band: input.layers.length > 0, labels: !!input.project?.layout?.claimKey || input.layers.some((l) => l.fx?.label && l.fx.label.on !== false) };
-  if (!want.band && !want.labels) {
+  const want = { wash: !!washPrims(input.wash, 1, 1).length, band: input.layers.length > 0, boundary: input.project?.layout?.propertyBoundaryOutline === true, labels: !!input.project?.layout?.claimKey || input.layers.some((l) => l.fx?.label && l.fx.label.on !== false) };
+  if (!want.band && !want.labels && !want.boundary) {
     map.emFxReport = { overlaps: [], placed: [] };
     map.fire('emfxreport', map.emFxReport);
   }
@@ -94,13 +96,16 @@ export function syncFx(map, state, editor) {
     const size = map.getSize();
     const view = mapView(map, size.x, size.y, { obstacles: claimKeyObstacles(s.input.project, map, s.input.obstacles), family: s.input.family, frame: s.input.frameOf?.(size) });
     s.scene = s.input.project?.layout?.claimKey ? claimKeyComposition(s.input.layers.map(s.input.entry), view, s.input.project) : fxScene(s.input.layers.map(s.input.entry), view);
-    map.emFxReport = { overlaps: s.scene.overlaps, placed: s.scene.placed, ...(s.scene.claimKey ? { claimKey: s.scene.claimKey } : {}) };
+    const boundary = propertyBoundaryScene(s.input.project,view,s.input.boundaryOptions);
+    s.scene.boundary = boundary.primitives;
+    map.emFxReport = { overlaps: s.scene.overlaps, placed: s.scene.placed, ...(s.scene.claimKey ? { claimKey: s.scene.claimKey } : {}), ...(s.input.project?.layout?.propertyBoundaryOutline === true ? { propertyBoundary: { ok: boundary.ok, reason: boundary.reason } } : {}) };
     map.fire('emfxreport', map.emFxReport);
     return s.scene;
   };
   const paint = {
     wash: (ctx, pad) => { const size = map.getSize(); paintFxCanvas(ctx, washPrims(s.input.wash, size.x, size.y, Math.max(pad.x, pad.y))); },
     band: (ctx) => paintFxCanvas(ctx, scene().band),
+    boundary: (ctx) => paintFxCanvas(ctx, scene().boundary),
     labels: (ctx) => paintFxCanvas(ctx, scene().labels),
   };
   if (!s.listening) {
