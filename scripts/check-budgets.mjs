@@ -317,7 +317,11 @@ const BUDGETS = {
   // Report search integrated with released strict-geophysics and local recovery:
   // measured 1125.7/1194.7 KiB plain/configured, 0.4 KiB stamp margin.
   // Only totals change; all initial-route, 3D, CSS and dependency caps remain.
-  totalAuthJsGzipKb: 1195.1,
+  // Property boundary integrated with released geophysics/recovery/report search:
+  // measured 1130.1/1199.1 KiB plain/configured, retaining 0.5 KiB stamp margin.
+  // Original geometry guards/cache and shared painters add ~4.4 KiB; all
+  // current route, 3D, CSS, vendor and dependency caps remain unchanged.
+  totalAuthJsGzipKb: 1199.6,
 
   // 1009.4 → 1026.3 (measured 1026.0): lazy XLSX reader (~13.8 KiB), sheet/header preview
   // (~1.1 KiB), import wiring and numeric-format handling. Shared fflate adds ~1.2 KiB
@@ -409,7 +413,9 @@ const BUDGETS = {
   // Same opt-in key graph: stamped plain 1116.5 KiB, +0.5 KiB stamp allowance.
   // Same lazy local-recovery copy controls: measured 1122.2 plain; 0.4 KiB
   // total stamp margin. No startup, other budget or dependency allowance change.
-  totalJsGzipKb: 1126.1,
+  // Same combined property-boundary integration: measured 1130.1 KiB plain;
+  // preserve the existing 0.5 KiB stamp margin and all non-total allowances.
+  totalJsGzipKb: 1130.6,
 
   // 940.9 → 957.8 (measured 957.5): Excel import, as totalAuthJsGzipKb above.
   // 940.9 → 944.8 (P2-8, measured 944.6): the same lazy property recipe path
