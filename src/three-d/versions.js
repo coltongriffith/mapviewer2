@@ -18,6 +18,7 @@
 // written once and only ever retracted with a reason. Without that migration the sign-off controls are hidden
 // and the dialog says so; the PNG of a signed-off version can carry the sign-off in its metadata.
 import { track } from './track.js';
+import { geophysPolicyMetadata } from './geophys-policy.js';
 
 const $ = (id) => document.getElementById(id);
 const html = document.documentElement;
@@ -79,7 +80,7 @@ export async function projectOf(snapshot, read) {
   const files = Array.isArray(s.files) ? s.files : await Promise.all((snapshot.file_paths || []).map(async (fp) => {
     const blob = await read(fp.path), want = sizes.get(fp.path);
     if (Number.isFinite(want) && want > 0 && blob.size !== want) throw plain(`The data file ${fp.name} does not match the published version.`);
-    return { name: fp.name, text: await blob.text(), role: fp.role, cols: fp.cols };
+    return { name: fp.name, text: await blob.text(), role: fp.role, cols: fp.cols, ...geophysPolicyMetadata(fp) };
   }));
   return { ...s, files };
 }
