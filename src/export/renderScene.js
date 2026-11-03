@@ -1309,10 +1309,10 @@ async function drillPlanFor(scene) {
 async function fxFor(scene) {
   const layout = scene.project.layout || {};
   const layers = (scene.project.layers || []).filter((l) => l.fx && l.visible !== false && l.geojson);
-  if (!layers.length && !layout.claimKey && !layout.wash && !(layout.legendItems || []).some((i) => i.fx)) return null;
+  if (!layers.length && !layout.claimKey && layout.propertyBoundaryOutline !== true && !layout.wash && !(layout.legendItems || []).some((i) => i.fx)) return null;
   const mod = await import('../utils/geoStyle.js');
-  const out = { mod, wash: mod.washPrims(layout.wash, scene.width, scene.height), band: [], labels: [], overlaps: [] };
-  if ((layers.length || layout.claimKey) && scene.map) {
+  const out = { mod, wash: mod.washPrims(layout.wash, scene.width, scene.height), band: [], boundary: [], labels: [], overlaps: [] };
+  if ((layers.length || layout.claimKey || layout.propertyBoundaryOutline === true) && scene.map) {
     const keyMod = layout.claimKey ? await import('../utils/claimKeyComposition.js') : null;
     const panels = panelObstacles(getOverlayMetrics(scene), layout);
     const view = mod.mapView(scene.map, scene.width, scene.height, {
@@ -1321,6 +1321,12 @@ async function fxFor(scene) {
     });
     const entries = layers.map((layer) => ({ layer, features: featureCollectionFeatures(getLayerGeojson(layer)), styleOf: (f) => getFeatureStyle(scene.template, layer, f) }));
     Object.assign(out, keyMod ? keyMod.claimKeyComposition(entries, view, scene.project) : mod.fxScene(entries, view));
+    if (layout.propertyBoundaryOutline === true) {
+      const { propertyBoundaryScene } = await import('../utils/propertyBoundaryScene.js');
+      const boundary = propertyBoundaryScene(scene.project,view,{ template: scene.template });
+      out.boundary = boundary.primitives;
+      if (!boundary.ok) warn(scene, 'property-boundary', `Property boundary unavailable: ${boundary.reason}`, 'check the selected property geometry or disable its exterior emphasis');
+    }
     if (out.claimKey && (!out.claimKey.ok || out.claimKey.omitted)) warn(scene, 'claim-key', out.claimKey.ok ? `${out.claimKey.omitted} claims have no located reference in this view` : `Claim key unavailable: ${out.claimKey.reason}`, 'zoom or move map furniture, or rebuild the key after changing its source');
     // Labels over a results card are reported too (the cards are placed as the export places them).
     const cards = placeCallouts({ ...scene, exportContext: null }, 1).map((c) => ({ key: 'a callout', left: c.left, top: c.top, width: c.width, height: c.height }));
@@ -2320,6 +2326,7 @@ export async function renderSceneToCanvas(sourceScene, options = {}) {
     await drawRastersCanvas(ctx, scene, scale); drawRegionHighlightsCanvas(ctx, scene, scale);
     if (fx) fx.mod.paintFxCanvas(ctx, fx.band, scale);
     await drawVectorsCanvas(ctx, scene, scale);
+    if (fx) fx.mod.paintFxCanvas(ctx, fx.boundary, scale);
   }
   if (fx && notesOn) fx.mod.paintFxCanvas(ctx, fx.labels, scale);
   if (plan && mapOn) await paintCanvas(ctx, plan.base, scale);
@@ -3168,7 +3175,7 @@ export async function renderSceneToSvg(sourceScene, options = {}) {
   const plan = await drillPlanFor(scene);
   const planSvg = (layer) => (plan ? `<g id="em-drill-plan-${layer}">${paintSvg(plan[layer], scale, svgDefs)}</g>` : '');
   const fx = scene.fx = await fxFor(scene);
-  const dataLayers = notesOnly ? '' : `${basemapImage}${fxSvg(scene, fx?.wash, 'em-fx-wash', scale, svgDefs)}${renderRastersSvg(scene, scale)}${renderRegionHighlightsSvg(scene, scale)}${fxSvg(scene, fx?.band, 'em-fx-layers', scale, svgDefs)}${renderVectorsSvg(scene, scale)}`;
+  const dataLayers = notesOnly ? '' : `${basemapImage}${fxSvg(scene, fx?.wash, 'em-fx-wash', scale, svgDefs)}${renderRastersSvg(scene, scale)}${renderRegionHighlightsSvg(scene, scale)}${fxSvg(scene, fx?.band, 'em-fx-layers', scale, svgDefs)}${renderVectorsSvg(scene, scale)}${fxSvg(scene, fx?.boundary, 'em-property-boundary', scale, svgDefs)}`;
   const mapLayers = `${dataLayers}${fxSvg(scene, fx?.labels, 'em-fx-labels', scale, svgDefs)}${notesOnly ? '' : planSvg('base')}${renderEllipsesSvg(scene, scale, svgDefs)}${renderPolygonsSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${planSvg('over')}${renderCalloutsSvg(scene, scale, svgDefs)}${renderDistanceLinesSvg(scene, scale)}`;
   let mapContentGroup;
   if (frame) {

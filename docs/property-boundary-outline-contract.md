@@ -88,8 +88,30 @@ Changing the source geometry object recomputes it. Disabled or invalid selection
 are checked before cache access. This relies on the app's existing immutable
 project-state contract; in-place source mutation is not supported.
 
-The resolver remains unreferenced by application entry points. Next: share one
-presentation geometry between native/read-only/PNG/SVG paths, preserve hit
-testing and styling precedence, and inspect actual visual/export behavior before
-exposing a minimal opt-in control. There is still no usable new boundary feature
-or production deployment.
+## Shared presentation consumers (not exposed in UI)
+
+`propertyBoundaryScene` now builds one stroke plan for native/read-only map FX
+and the PNG/SVG export pipeline, gated by the strict boolean
+`layout.propertyBoundaryOutline === true`. No default sets this flag and no
+control exposes it yet. Original feature drawing and selection paths remain.
+
+The native stroke uses a separate pane above data polygons and below labels,
+with pointer events disabled. It is suppressed while directly trimming or
+styling the selected source. Exports draw it after ordinary data polygons on
+the map layer, not in annotation-only exports. Colour and opacity follow the
+selected layer/template presentation; zero stroke or opacity remains hidden.
+Explicit emphasis adds two logical pixels to the base stroke, capped at 24.
+Per-feature/class styles remain on the original paths; the optional property
+outline is a uniform additional presentation stroke.
+
+Only original projected boundary segments are clipped to the map frame; no
+viewport-edge closing segments are invented. Stroke half-width is allowed for
+inside the frame. The standard Canvas/SVG painters consume identical primitives,
+with their existing pixel-ratio behavior. Invalid projection/frame or derivation
+returns no stroke and an explanation rather than partial or replacement geometry.
+
+Tests exercise actual Leaflet/FX consumers using a mock Canvas context and the
+real SVG export pipeline, including legacy/off/removal behavior. These do not
+establish native visual or pixel-rendered PNG acceptance. Next: inspect actual
+desktop/mobile, classification/override, clipping and PNG/SVG output before the
+minimal explicit control and release gates. There is no production deployment.

@@ -581,7 +581,7 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
   const callouts = layout?.claimKey ? project?.callouts : undefined;
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || (!fxRef.current && !layout?.wash && !layout?.claimKey && !layers?.some((l) => l.fx))) return undefined;
+    if (!map || (!fxRef.current && !layout?.wash && !layout?.claimKey && layout?.propertyBoundaryOutline !== true && !layers?.some((l) => l.fx))) return undefined;
     let live = true;
     import('../utils/fxLayers.js').then(({ syncFx }) => {
       if (live && mapRef.current === map) fxRef.current = syncFx(map, fxRef.current, { project: { layers, layout, callouts }, template, zones, legendItems, geometry: geometryCache.current, trimLayerId, featureStyleLayerId });
