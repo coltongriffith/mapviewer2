@@ -1,4 +1,5 @@
 import { figureSignature, watchUnsavedFigure } from './save-state.js';
+import { localRestoreBoot, isLocalRestoreReady } from './local-restore-context.js';
 // Exploration Maps 3D: Save and My 3D maps, backed by the visitor's
 // Exploration Maps account. This module is what the page loads up front and
 // stays small: it wires the two buttons and Ctrl/Cmd+S, and exposes
@@ -12,6 +13,7 @@ let coreP = null;
 // whether there is work on screen to confirm before replacing it.
 let baseline = null;
 function core() {
+  if (localRestoreBoot && !isLocalRestoreReady()) return Promise.reject(new Error('Finish opening the local backup before using account features.'));
   if (!coreP) {
     coreP = import('./account-core.js').then(async (m) => { await m.start({ baseline }); return m; })
       .catch((err) => { coreP = null; throw err; });
@@ -48,7 +50,10 @@ const ACCOUNT_HELP = `\n\n${$('account-help')?.textContent.trim() || ''}`;
 // at once for a shared figure). Help text: <script id="share-help">.
 const viewing = /^\/3d\/(share|embed)(\/|$)/i.test(location.pathname);
 let shareP = null;
-const shareCore = () => (shareP ||= import('./share.js').then(async (m) => { await m.start(); return m; }).catch((err) => { shareP = null; throw err; }));
+const shareCore = () => {
+  if (localRestoreBoot && !isLocalRestoreReady()) return Promise.reject(new Error('Finish opening the local backup before using sharing features.'));
+  return (shareP ||= import('./share.js').then(async (m) => { await m.start(); return m; }).catch((err) => { shareP = null; throw err; }));
+};
 const via = (name) => (...args) => shareCore().then((m) => m[name](...args));
 const share = Object.freeze({ create: via('create'), update: via('update'), revoke: via('revoke'), list: via('list'), open: via('openDialog') });
 const SHARE_HELP = `\n\n${$('share-help')?.textContent.trim() || ''}`;
@@ -73,5 +78,5 @@ if (window.EM3D && $('acct-save') && !viewing) {
   document.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 's') { e.preventDefault(); run((m) => m.save()); }
   });
-  if (somethingToPickUp()) core().catch(() => { /* retried on the first click */ });
+  if (!localRestoreBoot && somethingToPickUp()) core().catch(() => { /* retried on the first click */ });
 }

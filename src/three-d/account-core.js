@@ -22,6 +22,7 @@ import { authRedirectUrl } from '../utils/authRedirect.js';
 import { track } from './track.js';
 import { figureSignature } from './save-state.js';
 import { geophysPolicyMetadata } from './geophys-policy.js';
+import { localRestoreBoot, isLocalRestoreReady } from './local-restore-context.js';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -38,6 +39,9 @@ const studio = () => {
   if (!window.EM3D?.getProject) throw new Error('The 3D editor has not started.');
   return window.EM3D;
 };
+function requireLocalRestoreReady() {
+  if (localRestoreBoot && !isLocalRestoreReady()) throw plain('Finish opening the local backup before using account features.', null, 'LOCAL_RESTORE_PENDING');
+}
 
 // ── Errors in plain words ───────────────────────────────────────────────────
 const KEEP = 'Your figure is still here in this browser.';
@@ -66,6 +70,16 @@ function explain(err, doing) {
 // ── Lazy client ─────────────────────────────────────────────────────────────
 let clientPromise = null;
 let homes = null; // company workspaces for one signed-in user: { uid, promise } (see listHomes)
+let authIdentity; // undefined until the first verified session observation
+let authEpoch = 0;
+function accountChanged() { return Object.assign(plain('Your account changed. Try this action again in the current account.', null, 'ACCOUNT_CHANGED'), { plain: true }); }
+function observeAuthIdentity(id) {
+  if (authIdentity === undefined) { authIdentity = id; return; }
+  if (authIdentity === id) return;
+  authIdentity = id;
+  authEpoch++;
+  nextProjectEpoch();
+}
 export function client() {
   if (!configured) {
     const e = plain(`Saving to an account is not available on this site right now. ${KEEP}`, null, 'NOT_CONFIGURED');
@@ -76,7 +90,11 @@ export function client() {
       .then(({ createClient }) => {
         const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
         // Another account (or none) must never see the last one's companies.
-        try { sb.auth.onAuthStateChange((event) => { if (event !== 'TOKEN_REFRESHED') homes = null; }); } catch { /* the user-id key still guards */ }
+        try { sb.auth.onAuthStateChange((event, session) => {
+          if (event === 'TOKEN_REFRESHED') return;
+          homes = null;
+          observeAuthIdentity(session?.user?.id || null);
+        }); } catch { /* verified getUser also observes identity */ }
         return sb;
       })
       .catch((err) => { clientPromise = null; throw explain(err, 'connect to your account'); });
@@ -96,9 +114,12 @@ const linkReturn = () => /access_token=|error_description=/.test(location.hash) 
 export async function getUser() {
   if (!configured || (!storedSession() && !linkReturn() && !clientPromise)) return null;
   const sb = await client();
+  const observed = authEpoch;
   const { data, error } = await sb.auth.getSession();
   if (error) throw explain(error, 'check your sign-in');
+  if (observed !== authEpoch) throw accountChanged();
   const u = data?.session?.user;
+  observeAuthIdentity(u?.id || null);
   return u ? { id: u.id, email: u.email || '' } : null;
 }
 async function requireUser(doing) {
@@ -108,6 +129,10 @@ async function requireUser(doing) {
 }
 
 export async function sendSignInLink(email) {
+  // A normal link return may redeem another tab's shared pending-save stash.
+  // This isolated document must not initiate that round trip; password or an
+  // existing signed-in session can still save this as an ordinary new figure.
+  if (localRestoreBoot) throw plain('Sign in in another tab, then return and Save this figure.', null, 'LOCAL_RESTORE_SIGN_IN');
   const sb = await client();
   const acquisition = window.emAcquisition?.get?.();
   const { error } = await sb.auth.signInWithOtp({
@@ -123,7 +148,7 @@ export async function signInWithPassword(email, password) {
   return getUser();
 }
 export async function signOut() {
-  projectEpoch++;
+  nextProjectEpoch();
   if (!clientPromise && !storedSession()) return;
   const sb = await client();
   await sb.auth.signOut();
@@ -133,6 +158,11 @@ export async function signOut() {
 
 // ── Projects ────────────────────────────────────────────────────────────────
 let projectEpoch = 0; // invalidate pending saves when the figure or account changes
+function nextProjectEpoch() {
+  projectEpoch++;
+  window.dispatchEvent(new Event('em3d:account-context')); // no user/session/project payload
+  return projectEpoch;
+}
 let current = null; // { id, name, savedAt } of the figure open in the editor
 
 const safeName = (name) => (String(name).replace(/[^\w.-]+/g, '_').replace(/^\.+/, '').slice(-120) || 'file');
@@ -183,7 +213,7 @@ let verP = null;
 // A version on screen is a different figure: the live figure's newer-data notices and pending updates go
 // (drill database, data library), and none comes back while it is shown (see drillFigure).
 function setFrozen(v) {
-  projectEpoch++;
+  nextProjectEpoch();
   frozen = v;
   if (v) { resetDrill(); const n = $('lib-notice'); if (n) n.hidden = true; }
   renderNote();
@@ -200,7 +230,7 @@ export const closeVersion = () => ver().then((m) => m.close());
 async function reopen(id) {
   try { const res = await openProject(id); setUrlProject(res.id); settle(); say(`Back to “${res.name}” as last saved.`); return res; } catch (err) { detach(); say(err.message); throw err; }
 }
-function detach() { projectEpoch++; current = null; dirty = true; setUrlProject(null); renderNote(); }
+function detach() { nextProjectEpoch(); current = null; dirty = true; setUrlProject(null); renderNote(); }
 
 // ── Property drill database ─────────────────────────────────────────────────
 // Any member can take a figure's holes from a property's drill database; a
@@ -242,11 +272,13 @@ export const isConflict = (loadedAt, savedAt) => !!(loadedAt && savedAt && Date.
  * @param {{force?:boolean}} [opts]  force: overwrite even when the saved copy is newer than this one
  */
 export async function saveProject(name, existingId, dest = null, { force = false } = {}) {
+  requireLocalRestoreReady();
   // Every save path (the button, Ctrl/Cmd+S, EM3D.account.saveProject): a version on screen never overwrites the figure.
   if (frozen) throw Object.assign(plain('A published version is open read-only. Start a new figure from it to save.', null, 'READ_ONLY'), { plain: true });
   const title = String(name || '').trim().slice(0, 200);
   if (!title) throw Object.assign(plain('Give the 3D map a name first.'), { plain: true });
-  const epoch = ++projectEpoch;
+  const epoch = nextProjectEpoch();
+  const accountEpoch = authEpoch;
   const opened = current;
   const em = studio();
   const { files, ...settings } = structuredClone(em.getProject());
@@ -255,6 +287,7 @@ export async function saveProject(name, existingId, dest = null, { force = false
   try { thumbnail = em.getThumbnail(320); } catch { /* a list without a picture is fine */ }
   const user = await requireUser('save this 3D map');
   const sb = await client();
+  if (accountEpoch !== authEpoch) throw accountChanged();
   const home = existingId ? (opened?.id === existingId ? opened.home : null) : dest;
   if (home && !canEdit(home.role)) {
     throw Object.assign(plain(`You have view-only access to ${home.propertyName || home.orgName}, so this figure cannot be saved there. Use Save as new to keep a personal copy.`), { plain: true, code: 'READ_ONLY' });
@@ -267,6 +300,7 @@ export async function saveProject(name, existingId, dest = null, { force = false
     if (error) throw explain(error, 'save this 3D map');
     if (isConflict(opened.savedAt, data?.updated_at)) throw conflict(data.updated_at);
   }
+  if (accountEpoch !== authEpoch) throw accountChanged();
   const id = existingId || crypto.randomUUID();
   const rev = `r${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   const root = home ? `org/${home.orgId}/${id}` : `${user.id}/${id}`, dir = `${root}/${rev}`;
@@ -290,6 +324,10 @@ export async function saveProject(name, existingId, dest = null, { force = false
     if (failed) {
       try { await sb.storage.from(BUCKET).remove(filePaths.map((p) => p.path)); } catch { /* unreferenced leftovers */ }
       throw failed.reason;
+    }
+    if (accountEpoch !== authEpoch) {
+      try { await sb.storage.from(BUCKET).remove(filePaths.map((p) => p.path)); } catch { /* unreferenced leftovers, never a committed revision */ }
+      throw accountChanged();
     }
     const row = { id, name: title, settings, file_paths: filePaths, thumbnail, updated_at: new Date().toISOString(), deleted_at: null };
     if (home) Object.assign(row, { org_id: home.orgId, property_id: home.propertyId });
@@ -324,7 +362,8 @@ export async function saveProject(name, existingId, dest = null, { force = false
 }
 
 export async function openProject(id) {
-  projectEpoch++;
+  requireLocalRestoreReady();
+  nextProjectEpoch();
   await requireUser('open your saved 3D maps');
   resetDrill();
   const sb = await client();
@@ -353,7 +392,7 @@ export async function openProject(id) {
     throw Object.assign(plain(`That 3D map could not be opened (${err.message}). The figure you had is back.`, err), { plain: true });
   }
   const home = await homeOf(row);
-  projectEpoch++;
+  nextProjectEpoch();
   current = { id: row.id, name: row.name, savedAt: row.updated_at, home };
   settle();
   checkLibrary(); checkDrill();
@@ -366,7 +405,7 @@ export async function deleteProject(id) {
   const { data, error } = await sb.from(TABLE).update({ deleted_at: new Date().toISOString() }).eq('id', id).is('deleted_at', null).select('id');
   if (error) throw explain(error, 'delete that 3D map');
   if (!data?.length) throw Object.assign(plain('That 3D map was not found. It may already be deleted.'), { plain: true });
-  if (current?.id === id) { projectEpoch++; current = null; renderNote(); }
+  if (current?.id === id) { nextProjectEpoch(); current = null; renderNote(); }
   return true;
 }
 
@@ -400,6 +439,9 @@ async function idbDo(mode, fn) {
   } finally { db.close(); }
 }
 export async function stashWork(extra = {}) {
+  // A different tab may be waiting for its sign-in link. Never replace its
+  // single shared stash with this restored figure, even on explicit sign-in.
+  if (localRestoreBoot) return false;
   let entry;
   try { entry = { at: Date.now(), ...extra, project: studio().getProject() }; } catch { return false; }
   try { localStorage.setItem(STASH_FLAG, '1'); } catch { /* the link return still finds it */ }
@@ -412,6 +454,7 @@ export async function stashWork(extra = {}) {
   } catch { return false; }
 }
 export async function readStash() {
+  if (localRestoreBoot) return null;
   let entry = null;
   try { entry = await idbDo('readonly', (s) => s.get(STASH_KEY)); } catch { /* none */ }
   if (!entry) try { entry = JSON.parse(localStorage.getItem(STASH_KEY) || 'null'); } catch { entry = null; }
@@ -419,6 +462,7 @@ export async function readStash() {
   return entry || null;
 }
 export async function clearStash() {
+  if (localRestoreBoot) return;
   try { await idbDo('readwrite', (s) => s.delete(STASH_KEY)); } catch { /* none */ }
   try { localStorage.removeItem(STASH_KEY); localStorage.removeItem(STASH_FLAG); } catch { /* none */ }
 }
@@ -537,6 +581,7 @@ function showError(msg) { const e = $('acct-error'); e.textContent = msg || ''; 
 function closeDialog() { const d = $('acct-dialog'); if (d?.open) d.close(); dialogMode = null; }
 
 export async function save({ asNew = false, force = false } = {}) {
+  requireLocalRestoreReady();
   if (busy || $('acct-dialog')?.open) return;
   if (frozen) { say('This is a published version, read-only. Use “Start a new figure from this version” to change it.'); return; }
   if (!configured) { say(`Saving to an account is not available on this site right now. ${KEEP}`); return; }
@@ -792,15 +837,20 @@ async function boot() {
 
 let started = null;
 export function start({ baseline = null } = {}) {
+  requireLocalRestoreReady();
   if (started) return started;
   try {
     const now = sig();
     savedSig = baseline ? sig(baseline) : now;
-    dirty = now !== savedSig;
+    // A backup is new local work, even when it equals the sample baseline.
+    if (localRestoreBoot) savedSig = null;
+    dirty = localRestoreBoot || now !== savedSig;
   } catch { /* compared from the next save */ }
   wire();
   renderButtons();
   renderNote();
-  started = boot().catch(() => { /* the editor works without an account */ });
+  // Keep this exemption for the whole document, including its first Save
+  // loading this module later. The other tab's sign-in intent stays untouched.
+  started = localRestoreBoot ? Promise.resolve() : boot().catch(() => { /* the editor works without an account */ });
   return started;
 }
