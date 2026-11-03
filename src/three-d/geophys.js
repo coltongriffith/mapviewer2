@@ -4,6 +4,8 @@
 // transparent where there is no data; resistivity and conductivity colour on a log scale.
 import * as THREE from 'three';
 import { addPainter, planeSampler, gridSize, faceWanted } from './geology.js';
+import { readPoints, geophysReadNote } from './geophys-points.js';
+export { readPoints } from './geophys-points.js';
 
 // ---------- pure: property names, ramps, interpolation ----------
 export function propertyInfo(name = '') {
@@ -26,17 +28,6 @@ const RAMP_RGB = Object.fromEntries(Object.entries(RAMPS).map(([k, v]) => [k, v.
 export function rampRGB(name, t) {
   const st = RAMP_RGB[name] || RAMP_RGB.geophys, x = Math.max(0, Math.min(1, t)) * (st.length - 1), i = Math.min(st.length - 2, Math.floor(x)), f = x - i;
   return [0, 1, 2].map((k) => st[i][k] + (st[i + 1][k] - st[i][k]) * f);
-}
-const num = (s) => { const t = String(s ?? '').trim(); return t === '' ? NaN : parseFloat(t); };
-export function readPoints(files) {
-  const x = [], y = [], z = [], v = [], line = [];
-  files.forEach((f) => f.rows.forEach((r) => {
-    const c = f.cols, a = num(r[c.east]), b = num(r[c.north]), e = num(r[c.elev]), val = num(r[c.value]);
-    if (![a, b, e, val].every(Number.isFinite)) return;
-    x.push(a); y.push(b); z.push(e); v.push(val); line.push(c.line !== undefined ? String(r[c.line] ?? '').trim() : '');
-  }));
-  const lines = [...new Set(line)].filter(Boolean);
-  return { x: Float64Array.from(x), y: Float64Array.from(y), z: Float64Array.from(z), v: Float64Array.from(v), line, lines, n: x.length };
 }
 // Principal direction of a set of plan points: origin, unit direction, and the t range along it.
 export function lineFrame(xs, ys) {
@@ -89,7 +80,7 @@ export function init(host) { H = host; }
 const cfg = () => H.S.geophys;
 const cache = { key: null, P: null, curt: {}, faces: {}, meshes: [], G: null };
 function dataNow() {
-  const fs = H.files().filter((f) => f.role === 'geophys'), key = fs.map((f) => `${f.name}|${H.digest(f)}|${JSON.stringify(f.cols)}`).join(';');
+  const fs = H.files().filter((f) => f.role === 'geophys'), key = fs.map((f) => `${f.name}|${H.digest(f)}|${JSON.stringify(f.cols)}|${JSON.stringify(f.geophysNumericPolicy)}`).join(';');
   if (cache.key !== key) {
     cache.key = key; cache.P = readPoints(fs); cache.curt = {}; cache.faces = {};
     const f = fs[0]; cache.prop = f ? f.header[f.cols.value] : null;
@@ -211,7 +202,7 @@ export const note = () => (shown() && cfg().note ? cfg().note : null);
 export function state() {
   const g = cfg(), ok = H.G && hasData(), I = ok ? info() : null, r = ok ? range() : null, un = (v) => (I.log ? 10 ** v : v);
   return { ...structuredClone(g), property: ok ? (g.property || cache.prop) : g.property, label: I?.label ?? null, unit: I?.unit ?? null, logUsed: I?.log ?? null,
-    minUsed: r ? +un(r[0]).toPrecision(4) : null, maxUsed: r ? +un(r[1]).toPrecision(4) : null, points: ok ? dataNow().n : 0, lineIds: ok ? dataNow().lines : [],
+    minUsed: r ? +un(r[0]).toPrecision(4) : null, maxUsed: r ? +un(r[1]).toPrecision(4) : null, points: ok ? dataNow().n : 0, lineIds: ok ? dataNow().lines : [], diagnostics: structuredClone(dataNow().diagnostics),
     curtains: (cache.defs || []).map((d) => ({ id: d.id, points: d.idx.length, from: d.a.map(Math.round), to: d.b.map(Math.round) })), shown: ok ? shown() : false };
 }
 export function set(o = {}) {
@@ -240,6 +231,7 @@ export function set(o = {}) {
 export function renderUI(el) {
   const g = cfg(), ok = H.G && hasData(), I = ok ? info() : null, esc = H.esc, lines = Array.isArray(g.lines) ? g.lines.filter((x) => typeof x === 'string').join(', ') : '';
   el.innerHTML = `${ok ? `<p class="muted">${dataNow().n.toLocaleString()} points · ${esc(I.label)}${I.unit ? ` (${esc(I.unit)})` : ''}${dataNow().lines.length ? ` · ${dataNow().lines.length} survey lines` : ''}</p>` : '<p class="muted">No geophysics loaded yet: add X, Y, Z and value points (CSV, or Geosoft XYZ) in step 1.</p>'}
+    ${dataNow().diagnostics.submitted ? `<p class="muted" role="status">${esc(geophysReadNote(dataNow()))}</p>` : ''}
     <div class="grid2">
       <label class="field"><span>Curtains along</span><select data-p="lines"><option value="auto" ${g.lines === 'auto' ? 'selected' : ''}>Survey lines, else A–A′</option><option value="section" ${g.lines === 'section' ? 'selected' : ''}>Section A–A′</option><option value="all" ${g.lines === 'all' ? 'selected' : ''}>Every survey line</option><option value="list" ${Array.isArray(g.lines) ? 'selected' : ''}>Chosen lines</option></select></label>
       <label class="field"><span>Line IDs (comma)</span><input type="text" data-p="lineIds" value="${esc(lines)}" placeholder="e.g. 6458300N"></label>

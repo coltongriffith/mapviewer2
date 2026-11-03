@@ -520,7 +520,11 @@ const BUDGETS = {
   // Current measured entry176.1KiB; keep a narrow0.2KiB stamp allowance.
   // Lazy brand-kit action and async style context guards: measured176.4KiB.
   // Kit/account reads remain lazy; bound the entry to another0.3KiB.
-  threeDJsGzipKb: 176.6,
+  // Strict new geophysics imports: measured 176.9 KiB plain/configured entry
+  // after keeping row scans/diagnostic wording lazy. Eager policy/metadata
+  // guards preserve legacy restore and safe save/share/version roundtrips.
+  // Small stamp margin only; no dependencies or other route/total caps change.
+  threeDJsGzipKb: 177.2,
   // /3d's own modules fetched on first use (the geology, geophysics and tag layers, the account
   // client). They never load with the page or the app, so they sit outside the page and app totals.
   // 32 → 34 (Oct 2026, round 4): per-hole tags, grouped pending tags, callouts beside or bracketed on their
@@ -668,7 +672,9 @@ const BUDGETS = {
   // Measured 141.0 plain/configured; initial maker load remains 175.3 KiB.
   // Owned read/apply picker + verified-user boundary: measured143.2KiB.
   // Reuses the existing account client and style adapters, no new dependency.
-  threeDLazyJsGzipKb: 143.5,
+  // Same versioned geophysics parser/disclosure: measured 143.8 KiB lazy,
+  // retaining a small stamp margin. Strict row checks remain on first use.
+  threeDLazyJsGzipKb: 144.1,
   // Self-contained 3D Tour export: separate lazy Three global source plus
   // template/builder/dialog: measured 173.4. Not part of the maker's initial load.
   // Model palette/derived-field handoff, existing envelope geometry and layer toggles: ~176.2 KiB.

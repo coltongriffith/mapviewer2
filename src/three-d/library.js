@@ -8,6 +8,7 @@
 // figure and saved with it); S.libRefs records which library file and
 // version each figure file came from, so the figure can be updated later.
 import { library, staleRefs } from '../utils/propertyFiles.js';
+import { GEOPHYS_NUMERIC_POLICY } from './geophys-policy.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -82,7 +83,11 @@ async function update() {
     const texts = await Promise.all(stale.map((s) => l.text(s.file.path)));
     const p = em().getProject();
     stale.forEach((s, i) => {
-      p.files.find((f) => f.name === s.name).text = texts[i];
+      const file = p.files.find((f) => f.name === s.name);
+      file.text = texts[i];
+      // Explicitly replacing this source is a fresh import. Other files in the
+      // figure retain their saved policy (or its legacy absence) unchanged.
+      file.geophysNumericPolicy = GEOPHYS_NUMERIC_POLICY;
       p.settings.libRefs[s.name] = { libFileId: s.file.id, version: s.file.version };
     });
     backup = em().getProject();
