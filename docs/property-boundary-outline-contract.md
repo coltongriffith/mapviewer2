@@ -1,8 +1,10 @@
-# Property boundary overlay: feasibility contract
+# Property boundary overlay: implementation and acceptance contract
 
 This is local, unpublished work based on released main `1a034f73`. Geometry
-validation, shared renderer bindings and an explicit contextual control exist;
-native visual/export acceptance and release checks remain pending.
+validation, shared native/read-only/PNG/SVG renderer bindings and an explicit
+contextual control exist. Desktop native and PNG checks have passed on synthetic
+QA data; mobile, read-only-route, SVG visual and final release checks remain
+pending. This feature is not published or deployed.
 
 ## Intended result
 
@@ -24,18 +26,19 @@ input. Derived polygons have no copied scientific or identifying properties.
 
 The existing `canDissolve` refusal for classified/per-feature-styled layers stays
 in force. The proof does not call that refusal defective: keeping the original
-features and drawing a separate overlay is the proposed solution. Existing
+features and drawing a separate overlay is the implemented approach. Existing
 identity and trim-consumer regressions run alongside these fixtures.
 
-## Required before runtime integration
+## Runtime invariants and acceptance requirements
 
 - Resolve only the explicitly selected, visible eligible Property & Neighbours
   subject. Stale, ambiguous, hidden, context or non-polygon selections produce
   no overlay; do not infer a replacement subject.
 - Bound source count, polygon/ring/coordinate count and topology work before
   union, and bound derived output. Reject invalid/open/nonfinite/out-of-range or
-  unsupported geometry. The test-local prototype is **not** an input validator;
-  ten fixtures do not establish arbitrary topology correctness.
+  unsupported geometry. The runtime validator enforces the bounds described
+  below; the ten initial feasibility fixtures alone do not establish arbitrary
+  topology correctness.
 - Preserve holes, disconnected pieces and gaps without snapping, buffering,
   convex hulls, smoothing or tolerance-based gap closing. Do not add a fallback
   outline around invalid data when derivation fails.
@@ -45,21 +48,24 @@ identity and trim-consumer regressions run alongside these fixtures.
   feature drawing and hit testing. Derived outlines must not intercept clicks,
   trim/style selection, or change the ordinary dissolve guard.
 - Review stroke ordering, visibility, clipping, opacity and expert overrides
-  visually on actual desktop/mobile output before exposing a minimal opt-in
-  control. Preserve saved maps, undo/redo, restore and export permissions.
+  visually on actual desktop/mobile output before release. The minimal opt-in
+  control is implemented locally. Preserve saved maps, undo/redo, restore and
+  export permissions.
 
 No new dependency, database, entitlement or account change is proposed. A future
 cohesive implementation PR needs tests, native visual/export evidence, measured
 builds and review; merge requires separate human approval.
 
-## Unbound input foundation
+## Validated input
 
 `propertyBoundaryInput` now requires an explicit enabled argument and one exact
 selected Property-recipe claims layer. It does not select another eligible layer
 when the saved selection is stale, duplicated, hidden or marked as context.
-Nothing calls this helper from the app yet, and it adds no saved setting.
+The shared geometry resolver calls this helper for both raw input and derived
+output validation. The contextual control persists the opt-in boolean described
+below; no default enables it.
 
-Conservative prototype work limits are 256 source features, 128 polygon parts,
+Conservative overlay work limits are 256 source features, 128 polygon parts,
 256 rings, 2,048 positions and 200,000 tested segment pairs. Hidden source data
 counts toward those limits and is validated before identity filtering. Larger
 inputs fail closed; these are overlay limits, not new restrictions on imports.
@@ -72,7 +78,7 @@ orientation may vary; overlapping separate polygons remain valid union inputs.
 This is planar WGS84-coordinate validation, not a general geodesic topology or
 legal-boundary validator. Antimeridian support is deliberately deferred.
 
-## Unbound union/output foundation
+## Derived geometry and cache
 
 `createPropertyBoundaryResolver` now produces a separate, frozen coordinate-only
 FeatureCollection using the existing declared Turf dissolve library. It validates
@@ -112,10 +118,9 @@ with their existing pixel-ratio behavior. Invalid projection/frame or derivation
 returns no stroke and an explanation rather than partial or replacement geometry.
 
 Tests exercise actual Leaflet/FX consumers using a mock Canvas context and the
-real SVG export pipeline, including legacy/off/removal behavior. These do not
-establish native visual or pixel-rendered PNG acceptance. Next: inspect actual
-desktop/mobile, classification/override, clipping and PNG/SVG output before
-release gates. There is no production deployment.
+real SVG export pipeline, including legacy/off/removal behavior. These tests
+complement, rather than replace, the native acceptance evidence below. There is
+no production deployment.
 
 ## Contextual control
 
@@ -128,5 +133,66 @@ successful rendering, temporarily paused editing, hidden strokes or unavailable
 geometry. A queued action cannot update a different loaded project/layer array.
 The status listener is cleaned up on unmount.
 
-This control makes the local candidate testable through the normal editor;
-desktop/mobile visual, actual PNG and history/restore acceptance remain required.
+## Acceptance evidence and remaining gates
+
+The detailed local evidence is recorded in the original workspace handoff at
+`work/tower-handoff/boundary-native/RESULT.md`. Through 3 November 2026, 04:04 UTC,
+the desktop checks used runtime `963e80cc` and synthetic QA claims A/B (adjacent),
+C (disconnected by a positive gap), and an interior hole in A. The fixture does
+not represent verified mineral titles or Tower data.
+
+Completed through the normal native editor:
+
+- Uploaded the fixture, chose Property & Neighbours, and verified the control
+  starts off. Enabling it gives stronger exteriors while retaining the thinner
+  A/B internal edge, open hole/gap, source labels and map furniture.
+- Downloaded the actual 2000 × 1250 free watermarked PNG and visually inspected
+  the same geometry, labels, title, legend, locator, scale and north arrow.
+- Checked OFF/Undo/Redo, then enabled again and reloaded through the homepage's
+  Start a map action. The ordinary local draft restored the enabled presentation.
+  This is local-device restoration, not cloud-save verification.
+- Entered individual styling, confirmed the derived outline pauses, and selected
+  original claim QA-B directly on the map. A temporary QA-B-only dashed override
+  changed only that original path; resetting it and finishing styling restored
+  the stronger exterior.
+- Trimmed QA-C through the original map hit target. Finishing trim removed its
+  fill, label and derived exterior; Restore all returned the disconnected claim
+  and its exterior without closing the gap.
+- Classified the supplied synthetic `Cu_ppm` field into three ranges with zero
+  excluded values. Distinct original fills and the range legend coexist with
+  the stronger boundary. Undo restored the unclassified QA presentation. The
+  numeric inspector is point-only and does not prove raw polygon-value inspection.
+- Used the editor's Preview mode and visually confirmed geometry and furniture
+  after the inspector was hidden. This is not public ReadOnlyStage route proof.
+
+The normal SVG export action correctly opens the existing Pro gate for the
+anonymous/free QA context. It was dismissed without a purchase, login, email or
+entitlement bypass. No native SVG download or SVG visual acceptance is claimed;
+the existing SVG renderer integration tests remain valid evidence of structure.
+
+Parallel verification added two production-build desktop/mobile browser cases in
+`e2e/property-boundary.spec.js`. Both pass upload/card/explicit-opt-in, painted
+canvas/noninteractive pane, styling/trim pause, original claim hit-testing,
+hide/restore, exact original GeoJSON preservation, undo, free PNG and gz1 draft
+restore. Pixel-readback tests request `willReadFrequently` at fixture startup so
+Chrome does not switch raster backends midway through exact canvas assertions.
+No product rendering behavior or entitlement checks are changed by the fixture.
+
+The local-only `e2e/fixtures/property-boundary-visual` harness mounts the actual
+ReadOnlyMapStage and uses the shared buildScene/renderSceneToSvg pipeline. Its
+desktop/mobile runs pass with no page errors and unchanged project input. Actual
+read-only screenshots and pixel-rendered SVGs were visually inspected: stronger
+exteriors, thinner internal edge, open hole/gap and original labels/furniture.
+This fixture uses a blank basemap and synthetic data; it does not claim production
+account, paid UI export, or authenticated public-route verification.
+
+All 67 focused boundary tests pass. Independent source review found no blocking
+finding. Measured plain/configured totals are 1125.5/1194.4 KiB, +4.4 KiB over the
+released base. A separate size audit found no duplicated dependency; the added
+input/output guards, union cache, shared stroke and control account for the cost.
+The total caps now allow those measured values plus the existing 0.5 KiB stamp
+margin. Entry/route/standalone caps and dependencies remain unchanged.
+
+Remaining release gates: frozen-head plain/configured builds and budgets, final
+browser rerun/coverage discovery, then focused PR with hosted CI/review. Merge
+still requires separate human approval after review and exact-head checks.

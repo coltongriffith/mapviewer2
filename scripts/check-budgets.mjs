@@ -308,7 +308,12 @@ const BUDGETS = {
   // Property locator on released templates/keys: measured total1121.1/1190.0,
   // editor286.5/354.6, claims299.2/367.5 KiB plain/configured.
   // Retain 0.5 KiB total and 0.4 KiB route stamp margins; all other caps unchanged.
-  totalAuthJsGzipKb: 1190.5,
+  // Explicit property exterior overlay: measured 1125.5/1194.4 KiB total
+  // plain/configured (+4.4 KiB). Includes bounded input/output topology checks,
+  // frozen visibility cache, shared native/PNG/SVG stroke and contextual opt-in.
+  // Turf dissolve was already shared; no new dependency or duplicated vendor.
+  // Retain 0.5 KiB stamp margin; entry/route/standalone caps stay unchanged.
+  totalAuthJsGzipKb: 1194.9,
   // 1009.4 → 1026.3 (measured 1026.0): lazy XLSX reader (~13.8 KiB), sheet/header preview
   // (~1.1 KiB), import wiring and numeric-format handling. Shared fflate adds ~1.2 KiB
   // for async ZIP workers; it remains one copy with the existing draft compression.
@@ -397,7 +402,7 @@ const BUDGETS = {
   // Live web map merged with main (Point inspector, numeric classification): measured 1106.1.
   // Saved-map data downloads, as above: measured 1109.1; route caps unchanged.
   // Same opt-in key graph: stamped plain 1116.5 KiB, +0.5 KiB stamp allowance.
-  totalJsGzipKb: 1121.6,
+  totalJsGzipKb: 1126.0,
   // 940.9 → 957.8 (measured 957.5): Excel import, as totalAuthJsGzipKb above.
   // 940.9 → 944.8 (P2-8, measured 944.6): the same lazy property recipe path
   // in the unconfigured build. Its initial route budgets also stay unchanged.
