@@ -1518,6 +1518,10 @@ function drawLabels(ctx, K, forExport, obst = [], area = [0, 0, W, H]) {
   if (!forExport) labelHits = hits;
 }
 function drawOverlay(ctx, k, forExport) {
+  const draw = () => drawOverlayPass(ctx, k, forExport);
+  return EXT.tags ? EXT.tags.withDisplayPass(draw) : draw();
+}
+function drawOverlayPass(ctx, k, forExport) {
   ctx.save(); ctx.scale(k, k); if (!forExport) ctx.clearRect(0, 0, W, H);
   const K = kit(ctx, W, H), { u, m, font, narrow } = K;
   if (!G) { font(600, 18); ctx.fillStyle = MUTED; ctx.textAlign = 'center'; ctx.fillText('Add a collar file and an assay file to build the figure.', W / 2, H / 2); ctx.restore(); return; }

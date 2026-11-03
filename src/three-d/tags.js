@@ -52,10 +52,24 @@ export function clusters(pts, r) {
 let H = null;
 export function init(host) { H = host; }
 const T = () => H.S.tags;
+// Each synchronous drawing/control pass may ask the same hole-wide questions
+// thousands of times. Reuse them only until that pass returns, including throws;
+// the next pass sees current data, visibility, statuses and callouts.
+let displayPass = null;
+function inDisplayPass(fn) {
+  if (displayPass) return fn();
+  displayPass = {};
+  try { return fn(); } finally { displayPass = null; }
+}
+// Internal extension hook: studio scopes the complete synchronous overlay, so
+// calls made outside this module and nested tag/plan passes share one snapshot.
+export { inDisplayPass as withDisplayPass };
 let stCache = { key: null, res: null };
 export function statuses() {
+  if (displayPass?.statuses) return displayPass.statuses;
   const hs = H.project?.holes || [], key = `${hs.map((h) => h.id).join()}|${JSON.stringify(T().status)}|${hs.length}`;
   if (stCache.key !== key || stCache.holes !== hs) stCache = { key, holes: hs, res: holeStatuses(hs.map((h) => ({ id: h.id, note: h.note, raw: h.c.raw, planned: h.planned })), T().status) };
+  if (displayPass) displayPass.statuses = stCache.res;
   return stCache.res;
 }
 export const statusOf = (h) => statuses().status.get(h.id) || null;
@@ -63,7 +77,23 @@ export const statusOf = (h) => statuses().status.get(h.id) || null;
 // dense figure reads with no setup. highlight: a hole's own trace colour ("brand": the brand accent).
 // The holes on the figure (S.holesShown, block.js: null for all), which "auto" counts.
 const holeOn = (h) => !H.S.holesShown || H.S.holesShown.includes(h.id);
-const nShown = () => (H.project?.holes || []).filter(holeOn).length;
+const nShown = () => {
+  if (displayPass?.nShown !== undefined) return displayPass.nShown;
+  const n = (H.project?.holes || []).filter(holeOn).length;
+  if (displayPass) displayPass.nShown = n;
+  return n;
+};
+const calloutHole = (h) => {
+  if (!displayPass) return H.shownCallouts().some((c) => c.h === h);
+  displayPass.calloutHoles ||= new Set(H.shownCallouts().map((c) => c.h));
+  return displayPass.calloutHoles.has(h);
+};
+const hasStatus = () => {
+  if (displayPass?.hasStatus !== undefined) return displayPass.hasStatus;
+  const value = [...statuses().status.values()].some(Boolean);
+  if (displayPass) displayPass.hasStatus = value;
+  return value;
+};
 const emph = () => (T().emphasis === 'auto' || T().emphasis === undefined ? (nShown() > 12 ? 'key' : 'none') : T().emphasis);
 export const fade = (h) => (!!T().fadePrevious && statusOf(h) === 'previous') || (emph() === 'key' && !keyHole(h));
 export const weight = (h) => (emph() !== 'key' ? 1 : keyHole(h) ? 1.25 : 0.55);
@@ -74,7 +104,8 @@ export function highlightOf(h) {
 // Highlighted traces as thin tubes along the whole hole, rebuilt when the holes or colours change.
 // Thin cylinders every 8 m (one instanced mesh, like the assay tubes), so no extra three.js code ships.
 const hl = { key: null, mesh: null };
-export function syncHoles() {
+export function syncHoles() { return inDisplayPass(() => syncHolesPass()); }
+function syncHolesPass() {
   const G = H.G, list = G ? H.project.holes.filter(holeOn).map((h) => [h, highlightOf(h)]).filter(([, c]) => c) : [], key = `${list.map(([h, c]) => h.id + c).join()}|${H.S.traceWidth}`;
   if (hl.G === G && hl.key === key) return;
   if (hl.mesh) { hl.mesh.parent?.remove(hl.mesh); hl.mesh.geometry.dispose(); hl.mesh.material.dispose(); hl.mesh = null; }
@@ -96,7 +127,7 @@ function pillColors(st) {
 }
 // Key holes: the callout holes, the new and planned holes, and any given a status by hand. "auto" picks
 // all holes up to 12 and key holes beyond, so a dense figure is clean with no setup.
-const keyHole = (h) => ['new', 'planned'].includes(statusOf(h)) || ['new', 'previous', 'planned'].includes(T().status[h.id]) || H.shownCallouts().some((c) => c.h === h);
+const keyHole = (h) => ['new', 'planned'].includes(statusOf(h)) || ['new', 'previous', 'planned'].includes(T().status[h.id]) || calloutHole(h);
 const mode = () => (T().idMode === 'auto' || !T().idMode ? (nShown() > 12 ? 'key' : 'all') : T().idMode);
 // Which holes carry an ID (at the end of the hole): a per-hole choice, else all or the key holes.
 export function idShown(h) {
@@ -112,12 +143,13 @@ export function tagShown(h) {
   const t = T(), v = t.showTag?.[h.id]; if (typeof v === 'boolean') return v;
   if (t.at === 'toe' || t.status[h.id] === 'none') return false;
   if (!uses(H.S, 'holeTags')) return idShown(h); // version 1 figures: a pill on every hole with an ID
-  return mode() === 'key' ? keyHole(h) : statusOf(h) !== null || ![...statuses().status.values()].some(Boolean);
+  return mode() === 'key' ? keyHole(h) : statusOf(h) !== null || !hasStatus();
 }
 // Collar pills and small "ASSAYS PENDING" tags, placed before the legends (which keep clear of them): the
 // pending tags first, then the pills by priority, the lowest dropped rather than drawn over another.
 let drawn = new Set(); // statuses of the pills drawn last, for the legend rows
-export function drawPills(ctx, K, opts) {
+export function drawPills(ctx, K, opts) { return inDisplayPass(() => drawPillsPass(ctx, K, opts)); }
+function drawPillsPass(ctx, K, opts) {
   const pend = H.S.pendingLabels && T().pending === 'collar' ? placePending(ctx, K, opts) : null;
   drawIdPills(ctx, K, opts);
   pend?.(); // drawn last, so no pill's leader crosses a pending tag
@@ -205,7 +237,8 @@ function placePending(ctx, K, { placed, occ, W, H: Hh }) {
 }
 // Legend rows for the statuses of the pills actually drawn (and faded previous holes), less any hidden
 // with hideRows: [{ label, draw(ctx, x, cy, u) }].
-export function legendRows() {
+export function legendRows() { return inDisplayPass(() => legendRowsPass()); }
+function legendRowsPass() {
   const st = statuses(), used = new Set(drawn), hide = new Set(T().hideRows || []);
   if (T().fadePrevious && H.project.holes.some(fade)) used.add('previous');
   hide.forEach((k) => used.delete(k));
@@ -501,7 +534,8 @@ function displayInts(h, col, G, spikes) {
 // A spike's length (style "spikes"), in parts of the face's width: linear in grade, the top colour limit at 4%, up to
 // 7%, and a short tick (0.4%) for the lowest so the baseline reads as one.
 export const spikeLength = (v, top) => Math.max(0.004, Math.min(0.07, 0.04 * v / (top || 1)));
-export function placeHistograms() {
+export function placeHistograms() { return inDisplayPass(() => placeHistogramsPass()); }
+function placeHistogramsPass() {
   const G = H.G, S = H.S, B = S.block?.hist, face = B?.side === 'face', over = S.block?.traces === 'overlay';
   if (!G || !S.histograms || !S.valueCol) { if (hist.mesh) hist.mesh.visible = false; if (hist.halo) hist.halo.visible = false; return; }
   if (hist.G !== G || !hist.mesh) {
@@ -658,7 +692,8 @@ function drawClaims(ctx, K, { W, top, occ }) {
 }
 
 // ---------- state, API, panel ----------
-export function state() {
+export function state() { return inDisplayPass(statePass); }
+function statePass() {
   const t = T(), ok = !!H.project?.holes, st = ok ? statuses() : null;
   return { ...structuredClone(t), holeStatus: ok ? Object.fromEntries(H.project.holes.map((h) => [h.id, st.status.get(h.id) || null])) : {}, newestYear: st?.newestYear ?? null,
     tagged: ok && H.G ? H.project.holes.filter(tagShown).map((h) => h.id) : [], idsShown: ok && H.G ? H.project.holes.filter(idShown).map((h) => h.id) : [],
@@ -704,7 +739,8 @@ export function set(o = {}) {
     });
   }
 }
-export function renderUI(el) {
+export function renderUI(el) { return inDisplayPass(() => renderUIPass(el)); }
+function renderUIPass(el) {
   const t = T(), esc = H.esc, hs = H.project?.holes || [], st = hs.length ? statuses() : null;
   el.innerHTML = `<div class="grid2">
       <label class="field"><span>Pill style</span><select data-t="style"><option value="dark" ${t.style !== 'light' ? 'selected' : ''}>Filled, white text</option><option value="light" ${t.style === 'light' ? 'selected' : ''}>White, coloured text</option><option value="plain" ${t.style === 'plain' ? 'selected' : ''}>Bold IDs, no pill</option></select></label>
