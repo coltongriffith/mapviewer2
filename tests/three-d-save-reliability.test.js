@@ -59,6 +59,25 @@ beforeEach(async () => {
 afterEach(() => { stop(); vi.unstubAllEnvs(); });
 
 describe('3D save reliability through the real account module', () => {
+  it('keeps strict and unsupported file policies through storage save/open while legacy remains absent', async () => {
+    await core.openProject('a');
+    project.files = [undefined, 'finite-decimal-v1', 'future-policy', { invalid: true }].map((policy, i) => ({ name: `qa-${i}.csv`, text: 'X,Y,Z,Value\n1,2,3,12tail', role: 'geophys', cols: { east: 0, north: 1, elev: 2, value: 3 }, ...(policy !== undefined ? { geophysNumericPolicy: policy } : {}) }));
+    await core.saveProject('Original', 'a');
+    expect(rows.get('a').file_paths.map(f => f.geophysNumericPolicy)).toEqual([undefined, 'finite-decimal-v1', 'future-policy', null]);
+    project = figure('Temporary');
+    await core.openProject('a');
+    expect(project.files.map(f => f.geophysNumericPolicy)).toEqual([undefined, 'finite-decimal-v1', 'future-policy', null]);
+    expect(project.files[0]).not.toHaveProperty('geophysNumericPolicy');
+    expect(project.files.every(f => f.text.endsWith('12tail'))).toBe(true);
+  });
+  it('retains bounded numeric policy metadata through the actual public-share snapshot sanitizer', async () => {
+    const { cleanSnapshot } = await import('../src/three-d/share.js');
+    const policies = [undefined, 'finite-decimal-v1', 'future-policy', null, { invalid: true }, 'x'.repeat(81)];
+    const snapshot = cleanSnapshot({ v: 1, settings: {}, files: policies.map((policy, i) => ({ name: `qa-${i}.csv`, text: '1,2,3,12tail', ...(policy !== undefined ? { geophysNumericPolicy: policy } : {}) })) });
+    expect(snapshot.files.map(f => f.geophysNumericPolicy)).toEqual([undefined, 'finite-decimal-v1', 'future-policy', null, null, null]);
+    expect(snapshot.files[0]).not.toHaveProperty('geophysNumericPolicy');
+    expect(snapshot.files.every(f => f.text === '1,2,3,12tail')).toBe(true);
+  });
   it('warns about an anonymous unsaved figure, including an edit before its change event', () => {
     expect(wouldWarn()).toBe(false);
     edit('My work');

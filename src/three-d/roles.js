@@ -1,6 +1,7 @@
 // File roles for the optional figure layers: lithology/alteration logs and geophysics points, and the
 // published-results (release) table. Small and loaded with the page, because a file's role is decided the
 // moment it is added; the layers themselves (geology.js, geophys.js, published-results.js) load on first use.
+import { GEOPHYS_NUMERIC_POLICY, finiteGeophysNumber } from './geophys-policy.js';
 
 const norm = (h) => String(h).toLowerCase().replace(/[\s\-.()/#]+/g, '_').replace(/^_+|_+$/g, '');
 const LITHO_NAME = /^(lith|litho|lithology|lith_code|lithcode|lithology_code|rock|rock_type|rocktype|rock_code|geology|geol|geol_code|unit|unit_code|formation|fm|alteration|alt|alt_code|alteration_code|alt_type|domain|code|zone|log_code)$/;
@@ -105,8 +106,14 @@ export function refineRole(entry, role, name) {
   }
   if (has('east', 'north', 'elev') && !(role === 'collar' && (has('depth') || has('az') || has('dip')))) {
     const free = n.map((h, i) => ({ h, i })).filter(({ i }) => !used.has(i));
-    const value = free.find(({ h, i }) => GEOPHYS_NAME.test(h) && share(rows, i, isNum) > 0.8)
-      || (GEOPHYS_FILE.test(name) ? free.find(({ h, i }) => !LINE_NAME.test(h) && share(rows, i, isNum) > 0.8) : null);
+    const strict = entry.geophysNumericPolicy === GEOPHYS_NUMERIC_POLICY;
+    const numeric = strict ? finiteGeophysNumber : entry.geophysNumericPolicy === undefined ? isNum : () => false;
+    const named = (h) => GEOPHYS_NAME.test(h) || (strict && h === 'chg');
+    // A named geophysics field remains mappable when every token is invalid:
+    // the reader reports exclusions instead of misrepresenting it as terrain.
+    const value = free.find(({ h, i }) => named(h) && share(rows, i, numeric) > 0.8)
+      || (strict ? free.find(({ h }) => named(h)) : null)
+      || (GEOPHYS_FILE.test(name) ? free.find(({ h, i }) => !LINE_NAME.test(h) && share(rows, i, numeric) > 0.8) : null);
     if (value) {
       cols.value = value.i;
       const l = n.findIndex((h, i) => i !== value.i && !used.has(i) && LINE_NAME.test(h)); if (l >= 0) cols.line = l;

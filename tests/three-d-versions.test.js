@@ -39,6 +39,14 @@ describe('form and wording', () => {
 });
 
 describe('a snapshot to the figure', () => {
+  it('retains strict, legacy and unsupported numeric policy metadata through stored version files', async () => {
+    const policies = ['finite-decimal-v1', undefined, 'future-policy', { invalid: true }];
+    const snapshot = { kind: 'figure', settings: { v: 1, settings: {} }, file_paths: policies.map((policy, i) => ({ name: `qa-${i}.csv`, path: `qa/${i}`, ...(policy !== undefined ? { geophysNumericPolicy: policy } : {}) })) };
+    const restored = await projectOf(snapshot, async () => ({ text: async () => 'X,Y,Z,Value\n1,2,3,12tail' }));
+    expect(restored.files.map(f => f.geophysNumericPolicy)).toEqual(['finite-decimal-v1', undefined, 'future-policy', null]);
+    expect(restored.files[1]).not.toHaveProperty('geophysNumericPolicy');
+    expect(restored.files.every(f => f.text.endsWith('12tail'))).toBe(true);
+  });
   const settings = { v: 1, settings: { title: 'RAILS', designVersion: 3 }, camera: { azimuth: 200, plunge: 35, zoom: 130 } };
   const blob = (t) => new Blob([t]);
 
