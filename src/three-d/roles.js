@@ -1,7 +1,7 @@
 // File roles for the optional figure layers: lithology/alteration logs and geophysics points, and the
 // published-results (release) table. Small and loaded with the page, because a file's role is decided the
 // moment it is added; the layers themselves (geology.js, geophys.js, published-results.js) load on first use.
-import { GEOPHYS_NUMERIC_POLICY, finiteGeophysNumber } from './geophys-points.js';
+import { GEOPHYS_NUMERIC_POLICY, finiteGeophysNumber } from './geophys-policy.js';
 
 const norm = (h) => String(h).toLowerCase().replace(/[\s\-.()/#]+/g, '_').replace(/^_+|_+$/g, '');
 const LITHO_NAME = /^(lith|litho|lithology|lith_code|lithcode|lithology_code|rock|rock_type|rocktype|rock_code|geology|geol|geol_code|unit|unit_code|formation|fm|alteration|alt|alt_code|alteration_code|alt_type|domain|code|zone|log_code)$/;

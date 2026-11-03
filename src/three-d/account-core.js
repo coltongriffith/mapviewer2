@@ -21,7 +21,7 @@
 import { authRedirectUrl } from '../utils/authRedirect.js';
 import { track } from './track.js';
 import { figureSignature } from './save-state.js';
-import { geophysPolicyMetadata } from './geophys-points.js';
+import { geophysPolicyMetadata } from './geophys-policy.js';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;

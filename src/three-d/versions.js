@@ -18,7 +18,7 @@
 // written once and only ever retracted with a reason. Without that migration the sign-off controls are hidden
 // and the dialog says so; the PNG of a signed-off version can carry the sign-off in its metadata.
 import { track } from './track.js';
-import { geophysPolicyMetadata } from './geophys-points.js';
+import { geophysPolicyMetadata } from './geophys-policy.js';
 
 const $ = (id) => document.getElementById(id);
 const html = document.documentElement;

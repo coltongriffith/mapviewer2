@@ -16,7 +16,7 @@
 // (one link a company refreshes after new assays), list and revoke links.
 import { client, getUser, saveProject } from './account-core.js';
 import { track as usage } from './track.js';
-import { geophysPolicyMetadata } from './geophys-points.js';
+import { geophysPolicyMetadata } from './geophys-policy.js';
 
 const $ = (id) => document.getElementById(id);
 const html = document.documentElement;

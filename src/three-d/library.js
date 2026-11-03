@@ -8,7 +8,7 @@
 // figure and saved with it); S.libRefs records which library file and
 // version each figure file came from, so the figure can be updated later.
 import { library, staleRefs } from '../utils/propertyFiles.js';
-import { GEOPHYS_NUMERIC_POLICY } from './geophys-points.js';
+import { GEOPHYS_NUMERIC_POLICY } from './geophys-policy.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));

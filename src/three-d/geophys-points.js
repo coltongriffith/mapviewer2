@@ -1,30 +1,6 @@
-// New geophysics files use complete finite decimal tokens. Existing saved files
-// without a policy retain their historical interpretation until replaced.
-export const GEOPHYS_NUMERIC_POLICY = 'finite-decimal-v1';
-const decimal = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
-export function geophysFilePolicy(file, restoring = false) {
-  return restoring ? geophysPolicyMetadata(file).geophysNumericPolicy : GEOPHYS_NUMERIC_POLICY;
-}
-// JSON metadata roundtrips preserve absence for legacy files. A defined but
-// malformed marker stays unsupported, never becoming legacy by omission.
-export function geophysPolicyMetadata(file) {
-  const policy = file.geophysNumericPolicy;
-  return policy === undefined ? {} : { geophysNumericPolicy: typeof policy === 'string' && policy.length <= 80 ? policy : null };
-}
-function number(value, policy) {
-  const text = String(value ?? '').trim();
-  if (policy === undefined) {
-    const n = text === '' ? NaN : parseFloat(text);
-    return { value: n, reason: Number.isFinite(n) ? null : text ? 'invalid' : 'missing' };
-  }
-  if (policy !== GEOPHYS_NUMERIC_POLICY) return { value: NaN, reason: 'unsupported-policy' };
-  if (!text) return { value: NaN, reason: 'missing' };
-  if (/^[<>≤≥]/.test(text)) return { value: NaN, reason: 'qualified' };
-  if ((typeof value !== 'number' && typeof value !== 'string') || !decimal.test(text)) return { value: NaN, reason: 'invalid' };
-  const n = Number(text);
-  return { value: n, reason: Number.isFinite(n) ? null : 'nonfinite' };
-}
-export const finiteGeophysNumber = (value) => !number(value, GEOPHYS_NUMERIC_POLICY).reason;
+// Lazy point scans and diagnostics; eager consumers import only the policy.
+import { GEOPHYS_NUMERIC_POLICY, geophysNumber as number } from './geophys-policy.js';
+export { GEOPHYS_NUMERIC_POLICY, geophysFilePolicy, geophysPolicyMetadata, finiteGeophysNumber } from './geophys-policy.js';
 
 export function readPoints(files) {
   const x = [], y = [], z = [], v = [], line = [];
