@@ -25,6 +25,8 @@ if (!call) throw new Error('Native studio loader hooks were not found');
 const hooksSource = source.slice(call.arguments[0].start, call.arguments[0].end);
 const logoNode = find(ast, n => n.type === 'FunctionDeclaration' && n.id?.name === 'commitLogo');
 const logoSource = source.slice(logoNode.start, logoNode.end);
+const signatureNode = find(ast, n => n.type === 'VariableDeclarator' && n.id?.name === 'projectSignature');
+const signatureSource = `const ${source.slice(signatureNode.start, signatureNode.end)};`;
 function fixture({ restoreFails = false } = {}) {
   const image = { src: 'data:original-logo', cloneNode: () => ({ src: 'data:original-logo' }) };
   Object.setPrototypeOf(image, { decoded: true });
@@ -69,6 +71,7 @@ function fixture({ restoreFails = false } = {}) {
   ctx.rebuildScene = vi.fn();
   vm.createContext(ctx);
   vm.runInContext(logoSource, ctx);
+  vm.runInContext(signatureSource, ctx);
   const hooks = vm.runInContext(`(${hooksSource})`, ctx);
   return { ctx, hooks, load: createProjectLoader(hooks), image, originalFile, hist, oldImages, images, worker, candidateWorker };
 }

@@ -2779,11 +2779,13 @@ function fileDigest(f) {
   digestCache.set(f, { text: f.text, d });
   return d;
 }
-const filesDigest = () => files.map((f) => `${f.name}|${fileDigest(f)}${f.geophysNumericPolicy !== undefined ? `|${JSON.stringify(f.geophysNumericPolicy)}` : ''}`).join(',');
+const filesDigest = () => (recoveryProject?.files || (projectCommitting && projectReadSnapshot?.files) || files).map((f) => `${f.name}|${fileDigest(f)}${f.geophysNumericPolicy !== undefined ? `|${JSON.stringify(f.geophysNumericPolicy)}` : ''}`).join(',');
+const projectSignature = () => JSON.stringify({ ...getProject(), files: filesDigest() });
 async function loadProject(p, options = {}) {
   if (!p || p.v !== 1 || !p.settings || typeof p.settings !== 'object' || !Array.isArray(p.files)) throw new Error('loadProject expects a project from EM3D.getProject() ({ v: 1, settings, files }).');
   if (p.files.some((f) => !f || typeof f.name !== 'string' || typeof f.text !== 'string')) throw new Error('Each project file needs a name and its text.');
   if (!options || typeof options !== 'object' || (options.isCurrent !== undefined && typeof options.isCurrent !== 'function')) throw new Error('A project load guard must be a function.');
+  const original = projectSignature();
   projectLoading++;
   let entered = false;
   try {
@@ -2791,7 +2793,7 @@ async function loadProject(p, options = {}) {
       let locked = [], readSnapshot;
       return createProjectLoader({
         begin() { projectLoad++; window.dispatchEvent(new Event('em3d:figure-loading')); },
-        signature: () => JSON.stringify({ ...getProject(), files: filesDigest() }),
+        signature: projectSignature,
         async prepare(input, loadOptions) {
           const saved = withDefaults(input.settings, S_DEFAULTS), { logo, ...rest } = saved, imgs = {};
           const keptFiles = input.files.map((file) => cloneFigureState(file)), camera = cloneFigureState(input.camera), sample = !!input.usingSample, secSet = !!input.secSet;
@@ -2872,6 +2874,7 @@ async function loadProject(p, options = {}) {
         result: getState,
       });
     }).catch((error) => { projectLoaderPromise = null; throw error; }));
+    if (original !== projectSignature() || (options.isCurrent && !options.isCurrent())) throw Object.assign(new Error('The figure changed before opening could start. Your current work was kept.'), { code: 'PROJECT_CHANGED' });
     entered = true;
     return await loader(p, options);
   } catch (error) {
