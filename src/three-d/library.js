@@ -73,6 +73,9 @@ async function add(btn) {
     const l = await lib(); context.assertCurrent();
     const text = await l.text(f.path); context.assertCurrent();
     em().addFiles([{ name: f.name, text, lib: { libFileId: f.id, version: f.version } }]);
+    // This accepted addition changes the source signature. Later clicks use
+    // its new context; downloads already in flight retain their original guard.
+    if (shownContext === context) shownContext = capture();
     btn.textContent = 'Added';
   } catch (err) {
     if (context.isCurrent()) { host.say(err.message); btn.disabled = false; btn.textContent = 'Add'; }

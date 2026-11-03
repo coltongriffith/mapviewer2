@@ -64,6 +64,59 @@ describe('property library async figure ownership', () => {
     gate.resolve('A extra'); await Promise.resolve(); await Promise.resolve();
     expect(window.EM3D.addFiles).not.toHaveBeenCalled();
   });
+  it('adds collars, surveys and assays consecutively from one picker without losing the accepted context', async () => {
+    const sources = ['collars', 'surveys', 'assays'].map((name, index) => ({ ...file(`f${index}`, `${name}.csv`), raw: `ID,Value\r\n${name},${index}` }));
+    mocks.list.mockResolvedValue(sources); mocks.text.mockImplementation(path => Promise.resolve(sources.find(f => f.path === path).raw));
+    const original = structuredClone(project.files);
+    window.EM3D.addFiles.mockImplementation(files => {
+      for (const incoming of files) {
+        project.files.push({ name: incoming.name, text: incoming.text });
+        project.settings.libRefs[incoming.name] = { ...incoming.lib };
+      }
+    });
+    await module.toggle();
+    for (const source of sources) {
+      const button = document.querySelector(`[data-lib="${source.id}"]`); button.click();
+      await vi.waitFor(() => expect(button.textContent).toBe('Added'));
+      expect(button.disabled).toBe(true);
+    }
+    expect(window.EM3D.addFiles).toHaveBeenCalledTimes(3);
+    expect(project.files).toEqual([...original, ...sources.map(source => ({ name: source.name, text: source.raw }))]);
+    for (const source of sources) expect(project.settings.libRefs[source.name]).toEqual({ libFileId: source.id, version: source.version });
+    expect(host.say).not.toHaveBeenCalled();
+  });
+  it('does not let an older concurrent download borrow the refreshed context of an accepted add', async () => {
+    const first = deferred(), second = deferred();
+    mocks.list.mockResolvedValue([file('collar', 'collars.csv'), file('survey', 'surveys.csv')]);
+    mocks.text.mockImplementation(path => path === 'collar/v2' ? first.promise : second.promise);
+    window.EM3D.addFiles.mockImplementation(files => { project.files.push(...files.map(({ name, text }) => ({ name, text }))); });
+    await module.toggle();
+    document.querySelector('[data-lib="collar"]').click(); document.querySelector('[data-lib="survey"]').click();
+    await vi.waitFor(() => expect(mocks.text).toHaveBeenCalledTimes(2));
+    first.resolve('ID,X,Y\nA,1,2'); await vi.waitFor(() => expect(window.EM3D.addFiles).toHaveBeenCalledOnce());
+    second.resolve('ID,Depth,Dip\nA,0,-45'); await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+    expect(window.EM3D.addFiles).toHaveBeenCalledOnce();
+    expect(project.files.some(file => file.name === 'collars.csv')).toBe(true);
+    expect(project.files.some(file => file.name === 'surveys.csv')).toBe(false);
+  });
+  it.each(['edit', 'navigation'])('keeps the next download guarded after an accepted add when a later %s occurs', async action => {
+    const sources = [file('collar', 'collars.csv'), file('survey', 'surveys.csv')], gate = deferred();
+    mocks.list.mockResolvedValue(sources); mocks.text.mockImplementation(path => path === sources[0].path ? Promise.resolve('ID,X,Y\nA,1,2') : gate.promise);
+    window.EM3D.addFiles.mockImplementation(files => {
+      project.files.push(...files.map(({ name, text }) => ({ name, text })));
+      files.forEach(file => { project.settings.libRefs[file.name] = { ...file.lib }; });
+    });
+    await module.toggle();
+    document.querySelector('[data-lib="collar"]').click();
+    await vi.waitFor(() => expect(window.EM3D.addFiles).toHaveBeenCalledOnce());
+    document.querySelector('[data-lib="survey"]').click();
+    await vi.waitFor(() => expect(mocks.text).toHaveBeenCalledWith(sources[1].path));
+    if (action === 'edit') project.settings.title = 'New user edit';
+    else { current = { id: 'b', home: { propertyId: 'pb' } }; project = make('B', 'fb'); }
+    const before = structuredClone(project); gate.resolve('ID,Depth,Dip\nA,0,-45');
+    await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+    expect(window.EM3D.addFiles).toHaveBeenCalledOnce(); expect(project).toEqual(before);
+  });
   it('does not perform a blind rollback or claim unchanged after an unverified failure', async () => {
     mocks.list.mockResolvedValue([file('fa')]); mocks.text.mockResolvedValue('replacement'); await module.check();
     window.EM3D.loadProject.mockRejectedValue(new Error('failed restoration'));
