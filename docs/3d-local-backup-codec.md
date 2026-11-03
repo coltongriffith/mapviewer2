@@ -24,7 +24,7 @@ The final source review adds regression-backed preflight for actual renderer pat
 - Geology categories cap32 across BOTH saved legend and effective native raw code mappings. `geology.classifyGrid` uses up to256×256 cells, so32 classes alone occupy8MiB of weights per grid before blur copies, coverage, other faces and textures. This is a conservative bound, not a total-process memory guarantee.
 - Native label limits200 and wall-label limits120 characters are enforced without truncation, including actual coordinates/size/scale and stat rows up to12×120. Backup-specific label count ceilings are200 ordinary/8wall labels. Other rendered settings text caps4096 per string/32,768 aggregate, excluding raw scientific files and the separately validated inline image paths.
 
-The99-test combined source suite covers codec, transport, restore context, account isolation and existing save reliability. Codec includes41 targeted cases. Trial builds/browser captures performed before these corrections do not validate the corrected source: fresh combined graph/budget/browser evidence remains mandatory before publication. These limits do not establish physical mobile peak-memory safety.
+The102-test combined source suite covers codec, transport, restore context, account isolation and existing save reliability. Codec includes44 targeted cases. Trial builds/browser captures performed before these corrections do not validate the corrected source: fresh combined graph/budget/browser evidence remains mandatory before publication. These limits do not establish physical mobile peak-memory safety.
 
 Final alias/effective-role correction: the codec now reuses native pure
 matchCols/roleOf/refineRole with the same300-row sample before applying saved
@@ -32,5 +32,13 @@ manual columns/recognized role, matching addFiles→loadProject ordering. CSV
 classification buffers only300 bounded rows; all remaining rows stream through
 the resolved geometry/category/line checks. Slash/dash/parenthesis-wrapped aliases
 and unsupported saved-role fallbacks have dedicated regressions. No duplicated
-code/line alias regex remains. Latest combined99tests and affected lint/diff pass;
+code/line alias regex remains. Latest combined102tests and affected lint/diff pass;
 fresh post-correction build/browser gates remain outstanding.
+
+Equivalent-grade resource bound: use native pure `eqFactors` to validate supplied units and finite positive factors, after finite positive prices and0<recovery<=100 checks. Preserve the original recipe and scientific source rows. Limit the component map to1–16 entries (bounded80-character component names) and estimated component-count×native-valid-assay-interval work to400,000. This independently prevents a small JSON recipe from multiplying existing row work into hundreds of millions of component loops. Regression fixtures cover encode/decode count and cross-product bombs plus exact valid multi-metal roundtrip and invalid unit/recovery/factor failure. Post-change combined102tests and affected lint/diff pass. Fresh final builds/browser gates remain required before publication.
+
+Equivalent work and interval-span counters use the same leading-qualifier prefix
+reading as native studio geometry (including '<0'/'<1'), solely to bound work.
+The stored raw strings are never rewritten or policy-upgraded. Latest combined
+source validation:102tests across5files, including44codec cases; no renderer
+execution was used for adversarial resource fixtures.

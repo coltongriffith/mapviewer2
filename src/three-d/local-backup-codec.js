@@ -1,6 +1,7 @@
 import { STYLE_FONTS, validateFigureStyle } from '../../shared/figureStyle.js';
 import { matchCols, roleOf, refineRole, isXYZ, parseXYZ } from './roles.js';
 import { pubCols } from './published-results.js';
+import { eqFactors } from '../../shared/metalEq.js';
 export const MAX_BACKUP_BYTES = 8 * 1024 * 1024;
 const BACKUP_LIMITS = {
   depth: 16,
@@ -420,8 +421,44 @@ function validateSettings(s) {
     if (e.holes) validateArray(e.holes, validateString);
   });
   if (s.eq) {
-    if (s.eq.metals && !isPlainObject(s.eq.metals)) rejectBackup('metal-settings');
-    for (const m of Object.values(s.eq.metals || {})) validateRecordKeys(m, 'col unit price recovery');
+    if (!isPlainObject(s.eq.metals)) rejectBackup('metal-settings');
+    const components = Object.entries(s.eq.metals);
+    if (!components.length || components.length > 16) rejectBackup('equivalent-components');
+    validateString(s.eq.base);
+    validateString(s.eq.baseCol);
+    if (!s.eq.base.trim() || !s.eq.baseCol.trim()) rejectBackup('metal-settings');
+    const priceAndRecovery = (price, recovery) => {
+      validateFiniteNumber(price);
+      validateFiniteNumber(recovery);
+      if (!(price > 0) || !(recovery > 0 && recovery <= 100)) rejectBackup('equivalent-assumptions');
+    };
+    priceAndRecovery(s.eq.basePrice, s.eq.baseRecovery);
+    const metals = components.map(([metal, component]) => {
+      validateRecordKeys(component, 'col unit price recovery');
+      validateString(component.col);
+      if (!metal.trim() || metal.length > 80 || !component.col.trim()) rejectBackup('metal-settings');
+      if (component.unit !== undefined && component.unit !== null) validateString(component.unit);
+      priceAndRecovery(component.price, component.recovery);
+      return {
+        metal,
+        unit: component.unit,
+        price: component.price,
+        recovery: component.recovery
+      };
+    });
+    // Use native pure unit/factor semantics, but never write the derived
+    // factors or a normalized recipe back into the supplied scientific data.
+    try {
+      const factors = eqFactors({
+        metal: s.eq.base,
+        unit: s.eq.baseUnit,
+        price: s.eq.basePrice,
+        recovery: s.eq.baseRecovery
+      }, metals);
+      if (factors.some(component => !Number.isFinite(component.factor) || component.factor <= 0)) rejectBackup('equivalent-factors');
+    } catch {
+      rejectBackup('equivalent-factors');
+    }
   }
   if (s.block?.hist) validateRecordKeys(s.block.hist, 'side scale halo length palette style width');
   if (s.shell?.shells) {
@@ -510,7 +547,9 @@ function validateSourceComplexity(files, settings) {
     cells = 0,
     vertices = 0,
     faces = 0,
-    intervalSteps = 0;
+    intervalSteps = 0,
+    equivalentWork = 0;
+  const equivalentComponents = Object.keys(settings.eq?.metals || {}).length;
   const depths = new Map(),
     collars = new Set(),
     geologyCodes = new Set((settings.geology?.legend || []).map(row => row.code)),
@@ -546,11 +585,15 @@ function validateSourceComplexity(files, settings) {
       }
     }
     if (['assay', 'published'].includes(role)) {
-      const from = parseFloat(String(row[mapping.from] || '').trim());
-      const to = parseFloat(String(row[mapping.to] || '').trim());
+      const from = parseFloat(String(row[mapping.from] || '').trim().replace(/^</, ''));
+      const to = parseFloat(String(row[mapping.to] || '').trim().replace(/^</, ''));
       if (Number.isFinite(from) && Number.isFinite(to) && to > from) {
         intervalSteps += Math.ceil((to - from) / 2);
         if (intervalSteps > 100000) rejectBackup('interval-complexity');
+        if (role === 'assay') {
+          equivalentWork += equivalentComponents;
+          if (equivalentWork > 400000) rejectBackup('equivalent-work');
+        }
       }
     }
   };

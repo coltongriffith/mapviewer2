@@ -597,4 +597,93 @@ describe('lossless bounded 3D local backup codec', () => {
     }];
     await reject(p, 'file-role');
   });
+  it('rejects equivalent component-count bombs on encode and decode before native interval expansion', async () => {
+    const p = project();
+    p.settings.eq = {
+      base: 'Cu',
+      baseCol: 'Cu',
+      baseUnit: '%',
+      basePrice: 1,
+      baseRecovery: 90,
+      metals: Object.fromEntries(Array.from({
+        length: 5000
+      }, (_, i) => ['X' + i, {
+        col: 'Au',
+        unit: '%',
+        price: 1,
+        recovery: 90
+      }]))
+    };
+    await reject(p, 'equivalent-components');
+    await expect(decodeBackup(bytes(envelope(p)))).rejects.toMatchObject({
+      code: 'equivalent-components'
+    });
+  });
+  it('bounds equivalent component times native-valid assay intervals independently of row and trajectory bounds', async () => {
+    const p = project();
+    p.settings.eq = {
+      base: 'Cu',
+      baseCol: 'Cu',
+      baseUnit: '%',
+      basePrice: 1,
+      baseRecovery: 90,
+      metals: Object.fromEntries(Array.from({
+        length: 16
+      }, (_, i) => ['X' + i, {
+        col: 'Au',
+        unit: 'g/t',
+        price: 1,
+        recovery: 90
+      }]))
+    };
+    p.files.push({
+      name: 'qa-assays.csv',
+      role: 'assay',
+      cols: {
+        hole: 0,
+        from: 1,
+        to: 2
+      },
+      text: 'HoleID,From,To,Cu,Au\n' + 'QA,0,1,1,1\n'.repeat(25001)
+    });
+    await reject(p, 'equivalent-work');
+    await expect(decodeBackup(bytes(envelope(p)))).rejects.toMatchObject({
+      code: 'equivalent-work'
+    });
+    p.files[1].text = p.files[1].text.replaceAll('QA,0,1,1,1', 'QA,<0,<1,1,1');
+    await reject(p, 'equivalent-work');
+  });
+  it('preserves valid multi-metal assumptions exactly while refusing invalid units, recoveries and nonfinite factors', async () => {
+    const p = project();
+    p.settings.eq = {
+      base: 'Cu',
+      baseCol: 'Cu_pct',
+      baseUnit: '%',
+      basePrice: 4.25,
+      baseRecovery: 88,
+      metals: {
+        Au: {
+          col: 'Au_gpt',
+          unit: 'g/t',
+          price: 2500,
+          recovery: 90
+        },
+        Ag: {
+          col: 'Ag_ppm',
+          unit: 'ppm',
+          price: 25,
+          recovery: 85
+        }
+      }
+    };
+    expect((await decodeBackup((await encodeBackup(p)).bytes)).project.settings.eq).toEqual(p.settings.eq);
+    p.settings.eq.metals.Au.unit = 'vendor-units';
+    await reject(p, 'equivalent-factors');
+    p.settings.eq.metals.Au.unit = 'g/t';
+    p.settings.eq.metals.Au.recovery = 101;
+    await reject(p, 'equivalent-assumptions');
+    p.settings.eq.metals.Au.recovery = 90;
+    p.settings.eq.basePrice = Number.MIN_VALUE;
+    await reject(p, 'equivalent-factors');
+  });
 });
