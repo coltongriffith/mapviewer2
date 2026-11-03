@@ -5,6 +5,7 @@ import { pullPropertyResults, selectRecipe, recipeChange, RESULTS_FILE } from '.
 import { parseTable, guessKind, buildPlan } from '../src/utils/drillPlanData.js';
 import { readResults, pubCols, pubCallouts, pubLines } from '../src/three-d/published-results.js';
 import { matchCols } from '../src/three-d/roles.js';
+import { GEOPHYS_NUMERIC_POLICY } from '../src/three-d/geophys-policy.js';
 import { parseDrillFilter, matchesDrillFilter } from './fixtures/drill-filter.js';
 
 // Entirely synthetic fixtures: these are not measured Tower positions or grades.
@@ -21,7 +22,7 @@ function figureHarness(f) {
     getState: () => ({ drillSource: project.settings.drillSource, terrain: { crs: 'EPSG:4326' }, usingSample: false }),
     getProject: () => structuredClone(project),
     clearFiles: vi.fn(() => { project.files = []; project.settings.drillSource = null; }),
-    addFiles: vi.fn((files, { drillSource }) => { project.files = structuredClone(files); project.settings.drillSource = drillSource; }),
+    addFiles: vi.fn((files, { drillSource }) => { project.files = project.files.filter((old) => !files.some((fresh) => fresh.name === old.name)).concat(structuredClone(files)); project.settings.drillSource = drillSource; }),
     setStyle: vi.fn((style) => Object.assign(project.settings, style)),
     setCRS: vi.fn(async () => {}),
     loadProject: vi.fn(async (p) => { project = structuredClone(p); }),
@@ -56,6 +57,21 @@ describe('property recipe geology selection', () => {
 });
 
 describe('3D property recipe controls', () => {
+  it('retains legacy and strict geophysics metadata while appending newly calculated property files', async () => {
+    const f = fixture(), h = figureHarness(f), before = h.get();
+    const kept = [
+      { name: 'legacy-geophys.csv', role: 'geophys', text: 'X,Y,Z,Value\n1,2,3,12tail' },
+      { name: 'strict-geophys.csv', role: 'geophys', text: 'X,Y,Z,Value\n1,2,3,12tail', geophysNumericPolicy: GEOPHYS_NUMERIC_POLICY },
+    ];
+    before.files.push(...kept); h.set(before);
+    await toggle(); await clickAction('drill-load');
+    expect(h.E.loadProject.mock.calls[0][0].files).toEqual(before.files);
+    for (const retained of kept) expect(h.get().files).toContainEqual(retained);
+    expect(h.get().files.find((file) => file.name === kept[0].name)).not.toHaveProperty('geophysNumericPolicy');
+    expect(h.E.addFiles.mock.calls[0][0].some((file) => kept.some((old) => old.name === file.name))).toBe(false);
+    expect(h.get().files.find((file) => file.name === RESULTS_FILE).role).toBe('published');
+  });
+
   it('defaults to the saved recipe, preserves other files and enables its exact callouts', async () => {
     const f = fixture(), h = figureHarness(f);
     await toggle();
@@ -110,6 +126,7 @@ describe('3D property recipe controls', () => {
   it('refuses a recipe update when an uploaded results file was added after loading the recipe', async () => {
     const f = fixture(), h = figureHarness(f);
     await toggle(); await clickAction('drill-load');
+    h.E.loadProject.mockClear(); // Retained files were restored during initial load; this update must not load.
     const before = h.get();
     before.files.push({ name: 'release.csv', role: 'published', text: before.files.find((x) => x.name === RESULTS_FILE).text });
     h.set(before);
