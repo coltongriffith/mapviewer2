@@ -16,7 +16,8 @@ async function scientificPreview(page) {
     await document.fonts.ready; await window.EM3D.layersReady();
     await new Promise(requestAnimationFrame); await new Promise(requestAnimationFrame);
     const state = window.EM3D.getState();
-    return { project: window.EM3D.getProject(), equivalent: state.equivalent, grade: state.grade, candidates: state.callouts.candidates, png: await window.EM3D.exportPNG({ view: '3d', width: 400, background: 'transparent' }) };
+    const { mode, coMin, coCut, coIncl } = state.callouts;
+    return { project: window.EM3D.getProject(), equivalent: state.equivalent, grade: state.grade, candidates: state.callouts.candidates, calloutSettings: { mode, coMin, coCut, coIncl }, png: await window.EM3D.exportPNG({ view: '3d', width: 400, background: 'transparent' }) };
   });
 }
 for (const [label, viewport] of [['desktop', { width: 1280, height: 900 }], ['mobile', { width: 390, height: 844 }]]) {
@@ -221,9 +222,14 @@ test('a native synthetic CuEq recipe retains its assumptions, derived grades and
     const E = window.EM3D; E.clearFiles(); E.addFiles(input); await E.layersReady();
     E.setBrand({ title: 'Synthetic CuEq backup QA', company: 'Synthetic QA only' });
     E.setEquivalent({ base: 'Cu', basePrice: 4.5, baseRecovery: 90, metals: { Au: { price: 2500, recovery: 80 } }, use: true });
+    // Uploads retain the previous figure's presentation cut-offs; make these
+    // synthetic CuEq thresholds explicit instead of inheriting the sample's 3%.
+    E.setStyle({ calloutMode: 'calculated', coMin: 20, coCut: 0.2, coIncl: 0.5 });
     E.setCamera({ azimuth: 40, plunge: 25, zoom: 90 }); await E.layersReady();
   }, sources);
   const before = await scientificPreview(page);
+  await test.info().attach('native-equivalent-config', { body: JSON.stringify({ equivalent: before.equivalent, callouts: before.calloutSettings, candidates: before.candidates }), contentType: 'application/json' });
+  expect(before.calloutSettings).toEqual({ mode: 'calculated', coMin: 20, coCut: 0.2, coIncl: 0.5 });
   const factor = ((2500 / 31.1035) * 80) / (22.0462 * 4.5 * 90);
   expect(before.equivalent).toMatchObject({ column: 'CuEq_calc', base: 'Cu', baseCol: 'Cu_pct', baseUnit: '%', basePrice: 4.5, baseRecovery: 90, metals: { Au: { col: 'Au_gpt', unit: 'g/t', price: 2500, recovery: 80 } } });
   expect(before.equivalent.factors.Au).toBeCloseTo(factor, 5);
@@ -239,7 +245,7 @@ test('a native synthetic CuEq recipe retains its assumptions, derived grades and
   expect(after.project.settings.eq).toEqual(before.project.settings.eq);
   expect(after.project.settings).toEqual(before.project.settings); expect(after.project.camera).toEqual(before.project.camera);
   expect(after.project.files).toEqual(before.project.files); expect(after.equivalent).toEqual(before.equivalent);
-  expect(after.grade).toEqual(before.grade); expect(after.candidates).toEqual(before.candidates); expect(after.png).toEqual(before.png);
+  expect(after.grade).toEqual(before.grade); expect(after.calloutSettings).toEqual(before.calloutSettings); expect(after.candidates).toEqual(before.candidates); expect(after.png).toEqual(before.png);
   expect(await page.evaluate(() => window.EM3D.getProject())).toEqual(before.project);
   await child.locator('#stage').screenshot({ path: test.info().outputPath('local-backup-equivalent.png') }); await child.close();
 });
