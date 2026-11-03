@@ -1,7 +1,8 @@
 # Property boundary overlay: feasibility contract
 
-This is a test-only geometry proof on released main `1a034f73`. There is no
-editor control, renderer binding, saved setting or production behavior yet.
+This is local, unpublished work based on released main `1a034f73`. Geometry
+validation, shared renderer bindings and an explicit contextual control exist;
+native visual/export acceptance and release checks remain pending.
 
 ## Intended result
 
@@ -88,12 +89,12 @@ Changing the source geometry object recomputes it. Disabled or invalid selection
 are checked before cache access. This relies on the app's existing immutable
 project-state contract; in-place source mutation is not supported.
 
-## Shared presentation consumers (not exposed in UI)
+## Shared presentation consumers
 
 `propertyBoundaryScene` now builds one stroke plan for native/read-only map FX
 and the PNG/SVG export pipeline, gated by the strict boolean
-`layout.propertyBoundaryOutline === true`. No default sets this flag and no
-control exposes it yet. Original feature drawing and selection paths remain.
+`layout.propertyBoundaryOutline === true`. No default sets this flag. Original
+feature drawing and selection paths remain.
 
 The native stroke uses a separate pane above data polygons and below labels,
 with pointer events disabled. It is suppressed while directly trimming or
@@ -113,5 +114,19 @@ returns no stroke and an explanation rather than partial or replacement geometry
 Tests exercise actual Leaflet/FX consumers using a mock Canvas context and the
 real SVG export pipeline, including legacy/off/removal behavior. These do not
 establish native visual or pixel-rendered PNG acceptance. Next: inspect actual
-desktop/mobile, classification/override, clipping and PNG/SVG output before the
-minimal explicit control and release gates. There is no production deployment.
+desktop/mobile, classification/override, clipping and PNG/SVG output before
+release gates. There is no production deployment.
+
+## Contextual control
+
+The existing Customize → Layers geology/label area now offers one unchecked
+“Emphasize property boundary” checkbox for the explicitly selected Property
+subject. It adds no panel, size slider, colour picker or automatic template
+default. It changes only the layout boolean, not layer/scientific state.
+An enabled but stale selection can still be disabled. Native status explains
+successful rendering, temporarily paused editing, hidden strokes or unavailable
+geometry. A queued action cannot update a different loaded project/layer array.
+The status listener is cleaned up on unmount.
+
+This control makes the local candidate testable through the normal editor;
+desktop/mobile visual, actual PNG and history/restore acceptance remain required.
