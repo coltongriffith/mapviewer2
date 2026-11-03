@@ -16,6 +16,7 @@
 // (one link a company refreshes after new assays), list and revoke links.
 import { client, getUser, saveProject } from './account-core.js';
 import { track as usage } from './track.js';
+import { geophysPolicyMetadata } from './geophys-points.js';
 
 const $ = (id) => document.getElementById(id);
 const html = document.documentElement;
@@ -257,6 +258,7 @@ export function cleanSnapshot(p) {
   if (imgs && typeof imgs === 'object') for (const k of Object.keys(imgs)) if (typeof imgs[k] !== 'string' || !IMG_URL.test(imgs[k])) delete imgs[k];
   const files = p.files.filter((f) => f && typeof f.name === 'string' && typeof f.text === 'string').slice(0, 100).map((f) => ({
     name: f.name.slice(0, 300), text: f.text, role: typeof f.role === 'string' ? f.role : undefined,
+    ...geophysPolicyMetadata(f),
     cols: f.cols && typeof f.cols === 'object' ? Object.fromEntries(Object.entries(f.cols).filter(([k, i]) => !BAD_KEYS.has(k) && Number.isInteger(i))) : undefined,
   }));
   const cam = p.camera && typeof p.camera === 'object' ? Object.fromEntries(['azimuth', 'plunge', 'zoom'].filter((k) => Number.isFinite(p.camera[k])).map((k) => [k, p.camera[k]])) : null;

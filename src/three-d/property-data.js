@@ -302,8 +302,17 @@ async function load() {
     const keep = st.usingSample ? [] : prior.files.filter((f) => !(changedGeology && f.role === 'lithlegend') && !DRILL_ROLES.includes(f.role) && !Object.values(FILE_NAMES).includes(f.name) && f.name !== managed);
     if (ref.resultsRecipe && keep.some((f) => f.role === 'published' || f.name === ref.resultsRecipe.fileName)) throw new Error('This figure already has uploaded results. Choose raw drill data only to keep them, or remove that results file before using a property recipe.');
     backup = prior;
-    if (!st.usingSample) E.clearFiles();
-    E.addFiles([...keep, ...files], { drillSource: ref, ...(changedGeology ? { geologyTitle: geologySource === 'alteration' ? 'Alteration' : 'Lithology' } : {}) });
+    if (!st.usingSample) {
+      E.clearFiles();
+      if (keep.length) {
+        // These are existing figure files, not new imports. Restore their
+        // exact interpretation/column mappings (including unset legacy policy)
+        // while retaining clearFiles' normal reset of drill-derived settings.
+        await E.loadProject({ ...E.getProject(), files: keep });
+        if (!current()) return;
+      }
+    }
+    E.addFiles(files, { drillSource: ref, ...(changedGeology ? { geologyTitle: geologySource === 'alteration' ? 'Alteration' : 'Lithology' } : {}) });
     if (ref.resultsRecipe) E.setStyle({ calloutMode: 'published' });
     // The property's coordinate system when it has one; the figure's earlier one otherwise.
     if (ref.crs || crs) await E.setCRS(ref.crs || crs).catch(() => {});
