@@ -39,7 +39,7 @@ function fixture({ restoreFails = false } = {}) {
   const worker = { terminate: vi.fn() }, candidateWorker = { terminate: vi.fn() };
   const ctx = {
     structuredClone, cloneFigureState, snapshotCamera, withDefaults, drawDecoded, Image: newImage, S, files: [originalFile], project: { holes: [{ id: 'A' }], empty: false },
-    usingSample: false, refresh: null, eqApplied: true, usage: Object.assign(vi.fn(), { own: true }),
+    usingSample: false, refresh: null, eqApplied: true, G: { fit: 1 }, usage: Object.assign(vi.fn(), { own: true }),
     HIST: hist, histP: Promise.resolve(hist), histBase: { title: 'Opened' }, histT: 0, pubT: 0,
     geo: { code: 'EPSG:4326', fwd: () => ['A-longitude', 'A-latitude'] }, realT: { job: 4, dem: { key: 'A-dem' }, img: { key: 'A-image' } },
     shell: { job: 3, worker, busy: true, waiters: [vi.fn()], field: { source: 'A-field' }, mesh: { source: 'A-mesh' } },
@@ -128,6 +128,29 @@ describe('actual native studio checkpoint hooks with deterministic renderer seam
     expect(f.candidateWorker.terminate).toHaveBeenCalledOnce();
     expect(f.ctx.shell.worker).toBeNull(); expect(f.ctx.shell.busy).toBe(false);
     expect(f.ctx.shell.field.source).toBe('A-field');
+    expect(f.ctx.projectCommitting).toBe(false);
+  });
+  it('restores the original renderer fit and physical camera distance after differently fitted candidate geometry fails', async () => {
+    const f = fixture(); f.ctx.G.fit = 1.7;
+    const original = f.ctx.getProject(), distanceFor = cam => 100 * f.ctx.G.fit * 100 / cam.zoom;
+    const originalDistance = distanceFor(original.camera), originalRefresh = f.ctx.refresh;
+    f.ctx.physicalCameraDistance = originalDistance;
+    f.ctx.refresh = Object.assign(() => { originalRefresh(); f.ctx.G = { fit: 3.2 }; }, { secSet: false });
+    // Native rebuildScene(true) retains the current G.fit, even when its
+    // geometry belongs to the failed candidate. The restore hook must replace
+    // that retained fit before settling the checkpoint camera.
+    f.ctx.rebuildScene = vi.fn(keepCamera => { f.ctx.G = { fit: keepCamera ? f.ctx.G.fit : 1.7 }; });
+    f.ctx.settle = vi.fn(async cam => {
+      if (cam) f.ctx.camera = structuredClone(cam);
+      if (f.ctx.camera?.pan === null) delete f.ctx.camera.pan;
+      f.ctx.physicalCameraDistance = distanceFor(f.ctx.camera);
+      if (f.ctx.S.title === 'Candidate') throw new Error('differently fitted candidate failed');
+    });
+    await expect(f.load(candidate())).rejects.toMatchObject({ message: 'differently fitted candidate failed', stateRestored: true });
+    expect(f.ctx.rebuildScene).toHaveBeenCalledWith(true);
+    expect(f.ctx.G.fit).toBe(1.7);
+    expect(f.ctx.physicalCameraDistance).toBeCloseTo(originalDistance, 10);
+    expect(f.ctx.getProject()).toEqual(original);
     expect(f.ctx.projectCommitting).toBe(false);
   });
   it('retains the original native project even when original preview rebuilding also fails', async () => {

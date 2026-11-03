@@ -2804,7 +2804,7 @@ async function loadProject(p, options = {}) {
           return { rest, imgs, image, logoSource: isImg(logo) ? logo.$image : null, files: keptFiles, camera, usingSample: sample, secSet, freshDrill };
         },
         capture() {
-          const snapshot = { plain: getProject(), settings: cloneFigureState(S), files, project, usingSample, secSet: refresh.secSet, eqApplied, own: usage.own,
+          const snapshot = { plain: getProject(), settings: cloneFigureState(S), files, project, usingSample, secSet: refresh.secSet, eqApplied, own: usage.own, fit: G?.fit || 1,
             history: HIST, restoreHistory: HIST?.checkpoint?.(), histBase: cloneFigureState(histBase), pendingHistory: !!histT,
             geo: geo && { ...geo }, realT: { ...realT }, shell: { ...shell, waiters: shell.waiters.slice() }, logoBackground: LB && { ...LB.state }, restoreImages: EXT.geology?.checkpointImages?.(), recovery: recoveryProject };
           clearTimeout(histT); histT = 0; clearTimeout(pubT); pubT = 0;
@@ -2870,7 +2870,8 @@ async function loadProject(p, options = {}) {
           commitLogo(S.logo, snapshot.plain.settings.logo?.$image || null, { keep: true, autoColor: false, previewDecoded: true });
           if (LB && snapshot.logoBackground) { Object.assign(LB.state, snapshot.logoBackground); LB.render(); }
           try {
-            rebuildScene(true); renderFiles(); renderSummary(); renderChecks(); renderStyle(); renderCalloutEditor(); renderLabelList(); renderWallLabelList(); renderCRS();
+            rebuildScene(true); if (G) G.fit = snapshot.fit;
+            renderFiles(); renderSummary(); renderChecks(); renderStyle(); renderCalloutEditor(); renderLabelList(); renderWallLabelList(); renderCRS();
             await settle(snapshotCamera(snapshot.plain.camera), check); check();
           } finally { try { check(); snapshot.restoreHistory?.(); if (snapshot.pendingHistory) histTick(); } catch { /* superseded or timed-out renderer continuation */ } }
         },

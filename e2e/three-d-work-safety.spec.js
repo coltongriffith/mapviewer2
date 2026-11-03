@@ -57,7 +57,8 @@ async function fixture(page,context){
   const candidate=structuredClone(f.before.project);candidate.settings.title='Candidate B';candidate.settings.logo=null;
   candidate.settings.geophys={...candidate.settings.geophys,mode:'curtain',lines:'section'};
   candidate.camera={...candidate.camera,pan:[100,0,0]};
-  candidate.files=files.map(x=>({...x,name:x.name.replace('original-A','candidate-B')}));
+  candidate.files=files.map(x=>({...x,name:x.name.replace('original-A','candidate-B'),
+    text:x.name.includes('collars')?'HoleID,X,Y,Z,Length\r\nQA-A,500000,5500000,100,10000\r\nQA-B,510000,5520000,5000,15000':x.text}));
   candidate.files.push({name:'candidate-B-ip.csv',text:'X,Y,Z,Chargeability\n500000,5500000,100,10\n500010,5500010,90,20',role:'geophys',cols:{east:0,north:1,elev:2,value:3},geophysNumericPolicy:'finite-decimal-v1'});
   f.rows.set(b,{id:b,name:'Candidate B',settings:candidate,file_paths:[],deleted_at:null,updated_at:'2026-11-03T00:00:00Z'});
   return f;
