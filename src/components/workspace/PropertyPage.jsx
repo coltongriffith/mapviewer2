@@ -7,7 +7,7 @@ import {
 } from '../../utils/workspace';
 import { listCloudProjects } from '../../utils/cloudStorage';
 import { supabase } from '../../lib/supabase';
-import { library, FILE_KINDS, guessKind, kindLabel, formatBytes, opensInMap, MAP_IMPORT_ACCEPT } from '../../utils/propertyFiles';
+import { library, FILE_KINDS, guessKind, kindLabel, formatBytes, opensInMap, MAP_IMPORT_ACCEPT, canSearchReportText } from '../../utils/propertyFiles';
 import { createPortfolio } from '../../utils/tenureMonitor';
 import { jurisdictionLabel } from '../../utils/jurisdictions';
 import { lazyGuarded } from '../../utils/preloadGuard';
@@ -19,6 +19,7 @@ import {
 // The drill database tab (import, checks, history) loads with the tab.
 const DrillPanel = lazyGuarded(() => import('./DrillPanel'));
 const ReleasePackPanel = lazyGuarded(() => import('./ReleasePackPanel'));
+const ReportTextSearch = lazyGuarded(() => import('./ReportTextSearch.jsx'));
 
 // /workspace/p/<slug>: one exploration project and everything it owns.
 // Viewers get the same page with every editing control left out; the
@@ -258,19 +259,35 @@ function ClaimsTab({ property, perms, userId, onOpenTenureMonitor }) {
 // The property's shared data files. 3D figures in this property pick files
 // from here, and offer to update when a newer version is uploaded.
 function DataTab({ property, perms, onNewMap }) {
+  const { user } = useAuth();
   const lib = useMemo(() => (supabase ? library(supabase) : null), []);
   const [files, setFiles] = useState(null);
+  const [filesScope, setFilesScope] = useState(null);
   const [error, setError] = useState(null);
   const [note, setNote] = useState(null);
   const [busy, setBusy] = useState(null); // a file id, or 'new'
   const [pending, setPending] = useState(null); // { file, kind } waiting for Upload
+  const [report, setReport] = useState(null);
+  const [searchGeneration, setSearchGeneration] = useState(0);
+  const generation = useRef(0), loadRequest = useRef(0), identity = useRef('');
+  const scope = `${user?.id || ''}:${property.id}`;
+  identity.current = scope;
+  const visibleFiles = filesScope === scope ? files : null;
   const load = useCallback(async () => {
+    const token = ++loadRequest.current, context = `${user?.id || ''}:${property.id}`;
+    generation.current++; setSearchGeneration(generation.current); setReport(null);
+    const current = () => token === loadRequest.current && context === identity.current;
     try {
       if (!lib) throw new Error('The data library is not available on this site right now.');
-      setFiles(await lib.list(property.id));
-    } catch (e) { setError(e.message); setFiles((f) => f || []); }
-  }, [lib, property.id]);
-  useEffect(() => { load(); }, [load]);
+      const next = await lib.list(property.id);
+      if (current()) { setFiles(next); setFilesScope(context); }
+    } catch (e) { if (current()) { setError(e.message); setFiles([]); setFilesScope(context); } }
+  }, [lib, property.id, user?.id]);
+  useEffect(() => {
+    const requests = loadRequest, epochs = generation;
+    setFiles(null); load();
+    return () => { requests.current++; epochs.current++; };
+  }, [load]);
   const run = async (key, fn) => {
     setBusy(key); setError(null); setNote(null);
     try { await fn(); } catch (e) { setError(e.message); } finally { setBusy(null); }
@@ -304,14 +321,14 @@ function DataTab({ property, perms, onNewMap }) {
         </div>
       ))}
       {note && <p className="ws-ok" role="status" style={{ marginBottom: 12 }}>{note}</p>}
-      {files === null ? <p className="dash-muted">Loading the data library…</p> : files.length === 0 ? (
+      {visibleFiles === null ? <p className="dash-muted">Loading the data library…</p> : visibleFiles.length === 0 ? (
         <p className="dash-muted">No data files in this property yet.</p>
       ) : (
         <div className="ws-table-wrap">
           <table className="ws-table" aria-label="Data files">
             <thead><tr><th>Name</th><th>Kind</th><th>Version</th><th>Updated</th><th>By</th><th><span className="dash-sr-only">Actions</span></th></tr></thead>
             <tbody>
-              {files.map((f) => (
+              {visibleFiles.map((f) => (
                 <tr key={f.id}>
                   <td><b>{f.name}</b><br /><small className="dash-muted">{formatBytes(f.bytes)}{f.note ? ` · ${f.note}` : ''}</small></td>
                   <td>{kindLabel(f.kind)}{f.role ? ` · ${f.role}` : ''}</td>
@@ -326,6 +343,8 @@ function DataTab({ property, perms, onNewMap }) {
                       )}
                       <button type="button" className="dash-link" aria-label={`Download ${f.name}`} disabled={!!busy}
                         onClick={() => run(f.id, async () => { window.location.assign(await lib.downloadUrl(f.path, f.name)); })}>Download</button>
+                      {canSearchReportText(f) && <button type="button" className="dash-link" aria-label={`Find in report text: ${f.name}`} disabled={!!busy}
+                        onClick={() => setReport({ file: f, scope, generation: generation.current })}>Find in report text</button>}
                       {perms.edit && <FileButton label={busy === f.id ? 'Uploading…' : 'New version'} className="dash-link" disabled={!!busy}
                         ariaLabel={`Upload a new version of ${f.name}`} onFile={(file) => upload(file, f)} />}
                       {perms.deleteFile && (
@@ -341,6 +360,10 @@ function DataTab({ property, perms, onNewMap }) {
           </table>
         </div>
       )}
+      {report?.scope === scope && report.generation === searchGeneration && <Suspense fallback={<p className="dash-muted">Opening text search…</p>}>
+        <ReportTextSearch key={`${scope}:${searchGeneration}:${report.file.id}:${report.file.version}`} file={report.file} propertyId={property.id} userId={user?.id} lib={lib}
+          isCurrent={() => identity.current === scope && generation.current === report.generation} onClose={() => { generation.current++; setSearchGeneration(generation.current); setReport(null); }} />
+      </Suspense>}
     </section>
   );
 }

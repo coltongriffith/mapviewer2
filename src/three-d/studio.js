@@ -5,6 +5,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { composite, collarGroups, autoCell, autoSearch } from './shell-core.js';
 import { METAL_DEFAULTS, defaultUnit, priceUnit, eqFactors, eqFormula, eqValue } from './metal-eq.js';
 import { isXYZ, parseXYZ, refineRole, matchCols, roleOf } from './roles.js';
+import { geophysFilePolicy } from './geophys-policy.js';
 import { makeLayout, isClick, legendRows as binRows, wrapNotes, shouldMerge, hits as boxHits } from './layout.js';
 import { DESIGN_VERSION, FEATURES, uses, withDefaults } from './design-version.js';
 import { intercept, calloutText, avgOver, ribbonPieces, gradeText } from './intercepts.js';
@@ -184,9 +185,10 @@ const BIN_COLORS = ['#a3abaf', '#e2dc4f', '#ff9a1f', '#ef3b2c', '#e93ad1'];
 const MESH_COLORS = ['#ff9a1f', '#e93ad1', '#2b8fd6', '#6aa84f', '#8e5bd6'];
 const RIB_COLORS = ['#d6b48a', '#6aa84f']; // reported (broad) interval, "incl." interval
 
-function addFiles(list) {
+function addFiles(list, restoring = false) {
   for (const f of list) {
-    const entry = { name: f.name, text: f.text };
+    const policy = geophysFilePolicy(f, restoring);
+    const entry = { name: f.name, text: f.text, ...(policy !== undefined ? { geophysNumericPolicy: policy } : {}) };
     if (/\.obj$/i.test(f.name)) { entry.role = 'mesh'; entry.mesh = parseOBJ(f.text); }
     else if (isOverlay(f.name, f.text)) Object.assign(entry, { role: 'overlay', header: [], rows: [], cols: {}, grades: [] }); // EXT hook
     else {
@@ -1884,7 +1886,7 @@ const tourSnapshot = (m) => {
   const provisional = project?.holes.filter(isProvisional).map(h=>h.id) || [];
   const model=m.modelSnapshot({project,state:S,shell:shell.status==='ready'?shell.mesh:null,shells:shellList(),opacities:Object.fromEntries((G?.shellMesh?.children||[]).map(c=>[c.userData.part,c.material.opacity])),binColors:BIN_COLORS,equivalentInfo:S.eq?eqInfo():null});
   return { files, project, provisional,...model,
-    signature: filesDigest()+'|'+JSON.stringify([files.map(f=>[f.role,f.cols,f.grades]),S.crs,S.overlays,provisional,model.modelKey]),
+    signature: filesDigest()+'|'+JSON.stringify([files.map(f=>[f.role,f.cols,f.grades,f.geophysNumericPolicy]),S.crs,S.overlays,provisional,model.modelKey]),
     state: { ...S, overlays: S.overlays.map(o=>({...o,data:o.data || {features:EXT.overlays?.sourceData(o)?.feats || []}})) } };
 };
 const openTour = () => settled().then(()=>shell.busy?Promise.race([new Promise(ok=>shell.waiters.push(ok)),new Promise((_,no)=>setTimeout(()=>no(new Error('The envelope is still building. Wait for it to finish and try the tour again.')),20000))]):null).then(()=>shell.placing).then(()=>import('../features/tour3d/studio.js')).then(m=>m.openTour(()=>tourSnapshot(m)));
@@ -2628,7 +2630,7 @@ function getState() {
   const f = FORMATS[S.format], ok = project && !project.empty;
   return {
     app: 'Exploration Maps 3D', version: 3, ready: !!G, usingSample, step: currentStep, view: S.view,
-    files: files.map((x) => ({ name: x.name, role: x.role, rows: x.rows ? x.rows.length : undefined,
+    files: files.map((x) => ({ name: x.name, role: x.role, ...(x.geophysNumericPolicy !== undefined ? { geophysNumericPolicy: x.geophysNumericPolicy } : {}), rows: x.rows ? x.rows.length : undefined,
       columns: x.cols ? Object.fromEntries(Object.entries(x.cols).map(([k, i]) => [k, x.header[i]])) : undefined, gradeColumns: x.grades && x.grades.length ? x.grades.map((g) => g.name) : undefined })),
     libRefs: structuredClone(S.libRefs), drillSource: structuredClone(S.drillSource),
     project: ok ? { holes: project.holes.length, holeIds: project.holes.map((h) => h.id), metresDrilled: Math.round(project.holes.reduce((s, h) => s + h.len, 0)), pendingHoles: project.holes.filter(isPending).map((h) => h.id), intervals: project.holes.reduce((s, h) => s + h.ints.length, 0), dipsPositiveDown: project.posDown, warnings: project.warnings } : null,
@@ -2702,7 +2704,7 @@ function getProject() {
   return {
     v: 1, app: 'Exploration Maps 3D', settings: toPlain(S), camera: G ? getCam() : null, usingSample, secSet: !!refresh.secSet,
     // Raw text, plus any file type or column the user picked by hand.
-    files: files.map((f) => ({ name: f.name, text: f.text, role: f.role, cols: f.cols ? { ...f.cols } : undefined })),
+    files: files.map((f) => ({ name: f.name, text: f.text, role: f.role, ...(f.geophysNumericPolicy !== undefined ? { geophysNumericPolicy: f.geophysNumericPolicy } : {}), cols: f.cols ? { ...f.cols } : undefined })),
   };
 }
 // A short fingerprint of every file's raw text, so a replaced file whose
@@ -2718,7 +2720,7 @@ function fileDigest(f) {
   digestCache.set(f, { text: f.text, d });
   return d;
 }
-const filesDigest = () => files.map((f) => `${f.name}|${fileDigest(f)}`).join(',');
+const filesDigest = () => files.map((f) => `${f.name}|${fileDigest(f)}${f.geophysNumericPolicy !== undefined ? `|${JSON.stringify(f.geophysNumericPolicy)}` : ''}`).join(',');
 async function loadProject(p) {
   if (!p || p.v !== 1 || !p.settings || typeof p.settings !== 'object' || !Array.isArray(p.files)) throw new Error('loadProject expects a project from EM3D.getProject() ({ v: 1, settings, files }).');
   if (p.files.some((f) => !f || typeof f.name !== 'string' || typeof f.text !== 'string')) throw new Error('Each project file needs a name and its text.');
@@ -2728,7 +2730,7 @@ async function loadProject(p) {
   if (isImg(logo)) await setLogo(logo.$image, { autoColor: false }); else await setLogo(null);
   Object.entries(rest).forEach(([k, v]) => { S[k] = imgs[k] || (v && typeof v === 'object' ? structuredClone(v) : v); });
   S.section = cleanSection(S.section);
-  files = []; usingSample = !!p.usingSample; usage.own = false; addFiles(p.files.map(({ name, text }) => ({ name, text })));
+  files = []; usingSample = !!p.usingSample; usage.own = false; addFiles(p.files, true);
   p.files.forEach((sf) => {
     const f = files.find((x) => x.name === sf.name); if (!f) return;
     if (f.header && sf.cols && typeof sf.cols === 'object') f.cols = Object.fromEntries(Object.entries(sf.cols).filter(([, i]) => Number.isInteger(i)));
