@@ -686,4 +686,90 @@ describe('lossless bounded 3D local backup codec', () => {
     p.settings.eq.basePrice = Number.MIN_VALUE;
     await reject(p, 'equivalent-factors');
   });
+  it('preserves native manual geology colour flags true, false and absence exactly', async () => {
+    for (const flag of [true, false, undefined]) {
+      const p = project();
+      const entry = {
+        code: 'QA',
+        name: 'Supplied unit',
+        color: '#123456',
+        show: true,
+        order: 0,
+        ...(flag === undefined ? {} : {
+          colorSet: flag
+        })
+      };
+      p.settings.geology = {
+        legend: [entry]
+      };
+      const restored = (await decodeBackup((await encodeBackup(p)).bytes)).project.settings.geology.legend[0];
+      expect(restored).toEqual(entry);
+      expect(Object.hasOwn(restored, 'colorSet')).toBe(flag !== undefined);
+    }
+  });
+  it.each([null, 1, 'true', {}, []])('rejects malformed native geology colorSet %j', async flag => {
+    const p = project();
+    p.settings.geology = {
+      legend: [{
+        code: 'QA',
+        color: '#123456',
+        colorSet: flag
+      }]
+    };
+    await reject(p, 'geology-color-flag');
+    await expect(decodeBackup(bytes(envelope(p)))).rejects.toMatchObject({
+      code: 'geology-color-flag'
+    });
+  });
+  it('rejects aggregate CR-only record expansion across sixteen bounded-size files', async () => {
+    const p = project();
+    p.files = Array.from({
+      length: 16
+    }, (_, index) => ({
+      name: `QA-${index}.csv`,
+      role: 'unknown',
+      cols: {},
+      text: '"A,B"\r' + 'x\r'.repeat(30000)
+    }));
+    await reject(p, 'source-rows');
+    await expect(decodeBackup(bytes(envelope(p)))).rejects.toMatchObject({
+      code: 'source-rows'
+    });
+  });
+  it.each(['\r', '\n', '\r\n'])('counts native record ending %j once while preserving multicolumn quoted data', async ending => {
+    const p = project();
+    p.files = [{
+      name: 'QA.csv',
+      role: 'unknown',
+      cols: {},
+      text: 'A,B' + ending + ('"x,y","quote""d"' + ending).repeat(60000)
+    }];
+    expect((await decodeBackup((await encodeBackup(p)).bytes)).project.files).toEqual(p.files);
+  });
+  it('preserves embedded quoted CR and CRLF characters and doubled quotes without resetting cells', async () => {
+    const p = project();
+    p.files = [{
+      name: 'QA.csv',
+      role: 'unknown',
+      cols: {},
+      text: 'A,B\rQA,"one\rtwo\r\nthree""quoted"\r'
+    }];
+    expect((await decodeBackup((await encodeBackup(p)).bytes)).project.files).toEqual(p.files);
+    p.files[0].text = 'A,B\rQA,"' + 'x\r'.repeat(32769) + '"\r';
+    await reject(p, 'source-cell');
+  });
+  it('uses native first-LF delimiter frequency across an entire CR-only file', async () => {
+    const p = project();
+    p.files = [{
+      name: 'QA.csv',
+      role: 'unknown',
+      cols: {
+        value: 1
+      },
+      text: 'A;B\r"x,y,z";"ok"\r'
+    }];
+    // Native counts comma and semicolon twice, retaining comma on the tie.
+    // Its header therefore has one column; first-CR sniffing would differ.
+    await reject(p, 'columns');
+  });
 });

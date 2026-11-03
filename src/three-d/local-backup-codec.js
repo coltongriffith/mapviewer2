@@ -497,7 +497,10 @@ function validateSettings(s) {
       }
     } else if (!['auto', 'section', 'all'].includes(lines)) rejectBackup('geophys-lines');
   }
-  if (s.geology?.legend) validateArray(s.geology.legend, e => validateRecordKeys(e, 'code name nameSet color order pattern show'));
+  if (s.geology?.legend) validateArray(s.geology.legend, entry => {
+    validateRecordKeys(entry, 'code name nameSet color colorSet order pattern show');
+    if (entry.colorSet !== undefined && typeof entry.colorSet !== 'boolean') rejectBackup('geology-color-flag');
+  });
   const range = (x, lo, hi) => {
     validateFiniteNumber(x);
     if (x < lo || x > hi) rejectBackup('setting-range');
@@ -653,9 +656,15 @@ function validateSourceComplexity(files, settings) {
         if (++physicalRows > 100000) rejectBackup('source-rows');
       }
     }
-    const first = f.text.slice(0, Math.min(f.text.indexOf('\n') < 0 ? f.text.length : f.text.indexOf('\n'), 65536));
-    const xyz = isXYZ(f.name, f.text),
-      counts = [',', ';', '\t'].map(d => [d, first.split(d).length]);
+    // Match native parseCSV's first-LF-segment sniff, including CR-only files,
+    // without allocating one split array per possible delimiter. A CR-only
+    // file's native sniff includes its entire text, so using only its first
+    // physical row here could select a different parser from the live loader.
+    const xyz = isXYZ(f.name, f.text);
+    const counts = [',', ';', '\t'].map(delimiter => [delimiter, 1]);
+    for (let index = 0; index < f.text.length && f.text[index] !== '\n'; index++) {
+      for (const count of counts) if (f.text[index] === count[0]) count[1]++;
+    }
     counts.sort((a, b) => b[1] - a[1]);
     const delimiter = counts[0][0];
     let quoted = false,
@@ -664,7 +673,7 @@ function validateSourceComplexity(files, settings) {
     for (let i = 0; i < f.text.length; i++) {
       const c = f.text[i];
       if (++cellChars > 65536) rejectBackup('source-cell');
-      if (c === '\n') {
+      if (c === '\r' || c === '\n') {
         if (++lines > 100000) rejectBackup('source-rows');
         if (xyz || !quoted) {
           if (cols > 128) rejectBackup('source-columns');
@@ -672,7 +681,12 @@ function validateSourceComplexity(files, settings) {
           if (cells > 400000) rejectBackup('source-cells');
           cols = 1;
           cellChars = 0;
+        } else if (c === '\r' && f.text[i + 1] === '\n') {
+          // Native CSV keeps both characters inside a quoted field.
+          if (++cellChars > 65536) rejectBackup('source-cell');
         }
+        if (c === '\r' && f.text[i + 1] === '\n') i++;
+        continue;
       }
       if (c === '"') {
         if (quoted && f.text[i + 1] === '"') {

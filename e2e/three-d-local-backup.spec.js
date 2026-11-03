@@ -249,3 +249,38 @@ test('a native synthetic CuEq recipe retains its assumptions, derived grades and
   expect(await page.evaluate(() => window.EM3D.getProject())).toEqual(before.project);
   await child.locator('#stage').screenshot({ path: test.info().outputPath('local-backup-equivalent.png') }); await child.close();
 });
+
+test('native custom geology legend colours retain their override flags through the local backup file', async ({ page, context }) => {
+  test.setTimeout(180000); await page.setViewportSize({ width: 1280, height: 900 });
+  await context.route('**/api/track', (route) => route.fulfill({ status: 204 }));
+  await page.goto('/3d/'); await page.waitForFunction(() => window.EM3D?.getState().ready);
+  const sources = [
+    { name: 'synthetic-geology-collars.csv', text: 'HoleID,X,Y,Z,Length\nQA-L-A,500000,5500000,100,100\nQA-L-B,500100,5500100,100,80' },
+    { name: 'synthetic-lithology.csv', text: 'HoleID,From,To,LithCode\nQA-L-A,0,50,BAS\nQA-L-A,50,100,GRN\nQA-L-B,0,80,BAS' },
+    { name: 'synthetic-lithology-legend.csv', text: 'Code,Name,Color\nBAS,Basalt supplied,#aabbcc\nGRN,Granite supplied,#ccddee' },
+  ];
+  await page.evaluate(async (input) => {
+    const E = window.EM3D; E.clearFiles(); E.addFiles(input); await E.layersReady();
+    E.setBrand({ title: 'Synthetic custom geology backup QA', company: 'Synthetic QA only' });
+    // Native apply creates nameSet/colorSet; the backup fixture never inserts
+    // these implementation flags directly into settings.
+    await E.setGeology({ enabled: true, faces: 'all', strength: 1, legend: [{ code: 'BAS', name: 'Basalt custom QA', color: '#164e63' }] });
+    E.setCamera({ azimuth: 40, plunge: 25, zoom: 90 }); await E.layersReady();
+  }, sources);
+  const before = await scientificPreview(page), legend = before.project.settings.geology.legend;
+  expect(before.project.files.find((file) => file.name === sources[2].name).role).toBe('lithlegend');
+  expect(legend.find((entry) => entry.code === 'BAS')).toMatchObject({ name: 'Basalt custom QA', color: '#164e63', nameSet: true, colorSet: true });
+  expect(legend.find((entry) => entry.code === 'GRN')).toMatchObject({ name: 'Granite supplied', color: '#ccddee' });
+  const backup = await downloadBackupBytes(page);
+  await page.locator('#backup-file').setInputFiles({ name: backup.name, mimeType: 'application/json', buffer: backup.bytes });
+  const opening = page.waitForEvent('popup'); await page.getByRole('button', { name: 'Open as new figure', exact: true }).click();
+  const child = await opening; await child.setViewportSize({ width: 1280, height: 900 });
+  await expect(child.locator('#status')).toHaveText('Backup opened as a new unsaved figure.');
+  const after = await scientificPreview(child);
+  expect(after.project.settings.geology.legend).toEqual(legend);
+  expect(await child.evaluate(() => window.EM3D.getState().geology.legend)).toEqual(legend);
+  expect(after.project.settings).toEqual(before.project.settings); expect(after.project.files).toEqual(before.project.files);
+  expect(after.project.camera).toEqual(before.project.camera); expect(after.png).toEqual(before.png);
+  expect(await page.evaluate(() => window.EM3D.getProject())).toEqual(before.project);
+  await child.locator('#stage').screenshot({ path: test.info().outputPath('local-backup-custom-geology.png') }); await child.close();
+});

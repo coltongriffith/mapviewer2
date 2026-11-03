@@ -2,6 +2,12 @@
 
 Source candidate, not release or physical-device acceptance. `local-backup-codec.js` is lazy, network-free and does not mutate a project. It validates the same envelope for export and import. `encodeBackup` returns UTF-8 bytes, a filename and a recomputed summary. `decodeBackup` returns the original validated plain project, name and recomputed dependencies. `validateBackupProject` checks project data and returns its dependencies.
 
+Native geology legend `colorSet` flags preserve manual colour overrides as
+optional booleans. CSV work limits count standalone CR, LF and CRLF record
+boundaries consistently with the native parser, retain quoted line breaks and
+escaped quotes, and accumulate row/cell work across all files. Raw text remains
+unchanged; delimiter selection follows the native first-LF-segment rule.
+
 Format is `exploration-maps-project`, version1, kind `3d`; inner project is the existing v1 `EM3D.getProject()` shape. Exact raw scientific file text, names/order, manual roles/column mappings, scientific settings, camera/pan, legacy policy absence and string/null policy markers are retained. Defined malformed policy objects are rejected. No values are rounded, repaired or policy-upgraded. Auth/session/save-target/share authority has no envelope slot. Errors contain fixed reason codes, never source text or image URLs.
 
 Validation occurs before handing a project to the app: 8 MiB encoded bytes; fatal UTF-8; unpaired-surrogate rejection; JSON grammar and duplicate decoded-key checks before JSON.parse; depth16, 50,000 values, 200,000 tokens, 10,000 entries/container and100 files. Prototype/credential fields, unknown envelope/project/file/settings fields and unsupported required versions fail. Optional undefined fields produced by the existing API are omitted by ordinary JSON serialization; decoded JSON never introduces undefined values.
