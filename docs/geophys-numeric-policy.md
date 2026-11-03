@@ -42,3 +42,9 @@ The trial plain build, affected lint and diff checks pass. Final frozen-head
 plain/configured builds, measured budgets, hosted checks/review and approval
 remain required before release. No production database or account writes were
 used for this evidence.
+
+Startup graph review separated the small eager policy/metadata primitives from
+the lazy point scan and diagnostic wording. Final-source measurements are
+176.9 KiB entry and 143.8 KiB lazy in both plain/configured builds. Only these
+two 3D caps allow a small stamp margin (177.2/144.1 KiB); total, other routes
+and dependencies stay unchanged. Final stamped gates still run after this change.
