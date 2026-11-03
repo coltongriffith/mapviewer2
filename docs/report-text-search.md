@@ -35,3 +35,9 @@ readable at both sizes. Trial totals measure 1124.7/1193.6 KiB plain/configured;
 total caps changed, to 1125.0/1194.0. Frozen SHA-stamped builds/budgets and final browser
 confirmation remain required before publication. Merging needs human
 approval. Broader PDF/Word/report search still needs an extraction/OCR contract.
+
+Combined release candidate: normally integrated actual main 32a0b94c (released
+strict geophysics and local recovery). Ten affected unit/UI files pass, 103 tests.
+Combined trial totals measure 1125.7/1194.7 KiB; only total caps grow to
+1126.1/1195.1 with 0.4 KiB stamp margin. Other caps/dependencies remain unchanged.
+Final SHA-stamped builds and configured browser confirmation follow this freeze.
