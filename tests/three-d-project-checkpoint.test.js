@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { parse } from '@babel/parser';
 import { describe, expect, it, vi } from 'vitest';
-import { cloneFigureState, createProjectLoader } from '../src/three-d/project-load.js';
+import { cloneFigureState, createProjectLoader, snapshotCamera } from '../src/three-d/project-load.js';
 import { withDefaults } from '../src/three-d/design-version.js';
 import { geophysFilePolicy, GEOPHYS_NUMERIC_POLICY } from '../src/three-d/geophys-policy.js';
 import { isXYZ, parseXYZ, refineRole, matchCols, roleOf } from '../src/three-d/roles.js';
@@ -38,7 +38,7 @@ function fixture({ restoreFails = false } = {}) {
   const images = { N: { decoded: true } }, oldImages = images.N;
   const worker = { terminate: vi.fn() }, candidateWorker = { terminate: vi.fn() };
   const ctx = {
-    structuredClone, cloneFigureState, withDefaults, drawDecoded, Image: newImage, S, files: [originalFile], project: { holes: [{ id: 'A' }], empty: false },
+    structuredClone, cloneFigureState, snapshotCamera, withDefaults, drawDecoded, Image: newImage, S, files: [originalFile], project: { holes: [{ id: 'A' }], empty: false },
     usingSample: false, refresh: null, eqApplied: true, usage: Object.assign(vi.fn(), { own: true }),
     HIST: hist, histP: Promise.resolve(hist), histBase: { title: 'Opened' }, histT: 0, pubT: 0,
     geo: { code: 'EPSG:4326', fwd: () => ['A-longitude', 'A-latitude'] }, realT: { job: 4, dem: { key: 'A-dem' }, img: { key: 'A-image' } },
@@ -65,7 +65,8 @@ function fixture({ restoreFails = false } = {}) {
     history({ base: { title: 'Candidate history' }, apply: vi.fn(), el: { hidden: true } });
   }, { secSet: false });
   ctx.settle = vi.fn(async cam => {
-    ctx.camera = structuredClone(cam);
+    if (cam) ctx.camera = structuredClone(cam);
+    if (ctx.camera?.pan === null) delete ctx.camera.pan; // native getCam omits zero pan
     if (S.title === 'Candidate' || restoreFails) throw new Error('preview failed');
   });
   ctx.rebuildScene = vi.fn();
@@ -147,7 +148,11 @@ describe('actual native studio checkpoint hooks with deterministic renderer seam
 describe('native fresh drill replacement inside the checkpoint', () => {
   it('resets old derived settings atomically while retaining exact legacy interpretation and marking new imports strict', async () => {
     const f = freshFixture(), original = f.ctx.getProject(), fresh = freshDrill();
+    const fitted = { azimuth: 90, plunge: 20, zoom: 100 };
+    f.ctx.refresh.mockImplementation(() => { f.ctx.project = { empty: false, holes: [{ id: 'B' }] }; f.ctx.camera = structuredClone(fitted); });
     await f.load(original, { freshDrill: fresh });
+    expect(f.ctx.getProject().camera).toEqual(fitted); // new data keeps its native fitted view, not the old figure's camera
+    expect(f.ctx.usage).toHaveBeenCalledWith('three_d_data_added', { kind: 'collar', source: 'drill_db' }, 'collar');
     const kept = f.ctx.files.find(file => file.name === f.legacy.name);
     expect(kept).toMatchObject({ text: f.legacy.text, role: f.legacy.role, cols: f.legacy.cols });
     expect(kept).not.toHaveProperty('geophysNumericPolicy');

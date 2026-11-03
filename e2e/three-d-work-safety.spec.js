@@ -48,7 +48,7 @@ async function fixture(page,context){
   f.rows.set(a,{id:a,name:'Original saved A',settings:initial,file_paths:[],deleted_at:null,updated_at:'2026-11-03T00:00:00Z'});
   await page.evaluate(id=>window.EM3D.account.openProject(id),a);
   await page.evaluate(()=>window.EM3D.history());
-  await page.evaluate(()=>window.EM3D.setStyle({surf:.72}));
+  await page.evaluate(()=>window.EM3D.setStyle({surface:.72}));
   await expect.poll(()=>page.evaluate(async()=>(await window.EM3D.history()).entries.length)).toBeGreaterThanOrEqual(2);
   await page.evaluate(()=>window.EM3D.setStyle({traceWidth:3}));
   await expect.poll(()=>page.evaluate(async()=>(await window.EM3D.history()).entries.length)).toBeGreaterThanOrEqual(3);
@@ -56,6 +56,7 @@ async function fixture(page,context){
   f.before=await snapshot(page);expect(f.before.project.files.map(x=>x.text)).toEqual(files.map(x=>x.text));
   const candidate=structuredClone(f.before.project);candidate.settings.title='Candidate B';candidate.settings.logo=null;
   candidate.settings.geophys={...candidate.settings.geophys,mode:'curtain',lines:'section'};
+  candidate.camera={...candidate.camera,pan:[100,0,0]};
   candidate.files=files.map(x=>({...x,name:x.name.replace('original-A','candidate-B')}));
   candidate.files.push({name:'candidate-B-ip.csv',text:'X,Y,Z,Chargeability\n500000,5500000,100,10\n500010,5500010,90,20',role:'geophys',cols:{east:0,north:1,elev:2,value:3},geophysNumericPolicy:'finite-decimal-v1'});
   f.rows.set(b,{id:b,name:'Candidate B',settings:candidate,file_paths:[],deleted_at:null,updated_at:'2026-11-03T00:00:00Z'});

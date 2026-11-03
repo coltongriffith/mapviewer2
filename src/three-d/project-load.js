@@ -15,6 +15,13 @@ export function cloneFigureState(value) {
   return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, cloneFigureState(item)]));
 }
 
+// getCam omits zero pan; setCamera intentionally preserves omitted fields for
+// partial edits. A full saved snapshot must instead restore its unpanned view.
+export function snapshotCamera(camera) {
+  if (!camera || typeof camera !== 'object' || Array.isArray(camera)) return camera;
+  return { ...cloneFigureState(camera), pan: camera.pan === undefined ? null : cloneFigureState(camera.pan) };
+}
+
 export function createProjectLoader(hooks, { timeoutMs = 90000, pollMs = 100 } = {}) {
   let latest = 0, active = null;
   const preparations = new Set();

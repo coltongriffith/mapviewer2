@@ -2789,15 +2789,15 @@ async function loadProject(p, options = {}) {
   projectLoading++;
   let entered = false;
   try {
-    const loader = await (projectLoaderPromise ||= import('./project-load.js').then(({ createProjectLoader, cloneFigureState }) => {
+    const loader = await (projectLoaderPromise ||= import('./project-load.js').then(({ createProjectLoader, cloneFigureState, snapshotCamera }) => {
       let locked = [], readSnapshot;
       return createProjectLoader({
         begin() { projectLoad++; window.dispatchEvent(new Event('em3d:figure-loading')); },
         signature: projectSignature,
         async prepare(input, loadOptions) {
           const saved = withDefaults(input.settings, S_DEFAULTS), { logo, ...rest } = saved, imgs = {};
-          const keptFiles = input.files.map((file) => cloneFigureState(file)), camera = cloneFigureState(input.camera), sample = !!input.usingSample, secSet = !!input.secSet;
           const freshDrill = loadOptions.freshDrill && cloneFigureState(loadOptions.freshDrill);
+          const keptFiles = input.files.map((file) => cloneFigureState(file)), camera = freshDrill ? null : snapshotCamera(input.camera), sample = !!input.usingSample, secSet = !!input.secSet;
           if (freshDrill && (!Array.isArray(freshDrill.files) || freshDrill.files.some((file) => !file || typeof file.name !== 'string' || typeof file.text !== 'string'))) throw new Error('Replacement drill files need their original names and text.');
           await Promise.all(Object.entries(rest).filter(([, value]) => isImg(value)).map(async ([key, value]) => { imgs[key] = await loadImg(value.$image); }));
           const image = isImg(logo) ? await loadImg(logo.$image) : null;
@@ -2847,6 +2847,10 @@ async function loadProject(p, options = {}) {
           refresh.secSet = !candidate.freshDrill; refresh(); refresh.secSet = candidate.freshDrill ? false : candidate.secSet;
           if (candidate.freshDrill?.crs) { try { await setCRS(candidate.freshDrill.crs); } catch (error) { if (error.code === 'PROJECT_CHANGED') throw error; } check(); }
           await settle(candidate.camera, check); check();
+          if (candidate.freshDrill) {
+            const names = new Set(candidate.freshDrill.files.map((file) => file.name));
+            new Set(files.filter((file) => names.has(file.name)).map((file) => file.role)).forEach((kind) => usage('three_d_data_added', { kind, source: 'drill_db' }, kind));
+          }
           const gaps = document.documentElement.matches('.em3d-viewer,.em3d-version') ? [] : gapCallouts().map(gapText);
           status(project && !project.empty ? `Figure opened · ${project.holes.length} holes.${gaps.length ? ` ${gaps.join('; ')}: Recalculate in Layout, Intercept callouts.` : ''}` : 'Figure opened. Add a collar file to see the holes.');
         },
@@ -2867,7 +2871,7 @@ async function loadProject(p, options = {}) {
           if (LB && snapshot.logoBackground) { Object.assign(LB.state, snapshot.logoBackground); LB.render(); }
           try {
             rebuildScene(true); renderFiles(); renderSummary(); renderChecks(); renderStyle(); renderCalloutEditor(); renderLabelList(); renderWallLabelList(); renderCRS();
-            await settle(snapshot.plain.camera, check); check();
+            await settle(snapshotCamera(snapshot.plain.camera), check); check();
           } finally { try { check(); snapshot.restoreHistory?.(); if (snapshot.pendingHistory) histTick(); } catch { /* superseded or timed-out renderer continuation */ } }
         },
         retainRecovery(snapshot) { recoveryProject = structuredClone(snapshot.plain); },
