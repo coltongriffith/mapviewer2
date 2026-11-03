@@ -20,6 +20,7 @@ export const FILE_KINDS = [
   { value: 'other', label: 'Other' },
 ];
 export const kindLabel = (kind) => FILE_KINDS.find((k) => k.value === kind)?.label || 'Other';
+export const canSearchReportText = (file) => file?.kind === 'document' && /\.(md|txt)$/i.test(file.name || '');
 
 /** A first guess at { kind, role } from a file name; the uploader can change the kind. */
 export function guessKind(name) {
@@ -162,6 +163,12 @@ export function library(sb) {
       const { data, error } = await store().download(path);
       if (error) throw libraryError(error);
       return data.text();
+    },
+
+    /** Current-version, bounded on-demand report text; no persistent index. */
+    async reportText(propertyId, file, options) {
+      const { readPropertyReportText } = await import('./reportTextSearch.js');
+      return readPropertyReportText({ client: sb, list: () => this.list(propertyId), store: store(), hash: sha256Hex }, file, options);
     },
 
     /** Soft delete (admins). Its versions stay, so it can be restored. */
