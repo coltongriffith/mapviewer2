@@ -280,13 +280,21 @@ export function updateProjectThumbnailRecord(id, thumbnail) {
   return writeProjects(projects).ok;
 }
 
-/** → { ok, reason?, message? } — the caller decides how loudly to fail. */
-export function saveDraft({ payload, projectId, projectName }) {
+/**
+ * → { ok, reason?, message? } — the caller decides how loudly to fail.
+ *
+ * `baseRevision` is the cloud revision this payload was edited from. It is
+ * stored WITH the payload so a restored draft is never paired with a revision
+ * written by another tab, or written after a draft write failed: either made
+ * the next save overwrite newer cloud content without a conflict (ED-5).
+ */
+export function saveDraft({ payload, projectId, projectName, baseRevision = null }) {
   const result = safeSetItem(DRAFT_KEY, compress(JSON.stringify({
     schemaVersion: STORAGE_SCHEMA_VERSION,
     payload,
     projectId: projectId || null,
     projectName: projectName || null,
+    baseRevision: projectId ? (baseRevision ?? null) : null,
     updatedAt: new Date().toISOString(),
   })));
   if (result.ok) {
@@ -359,6 +367,18 @@ export function rememberedCloudRevision(projectId) {
   } catch { return null; }
 }
 
+/**
+ * A save landed: the stored draft of that project is now based on `revision`.
+ * Only the base moves; the payload may hold newer edits, which descend from
+ * what was saved.
+ */
+export function updateDraftBaseRevision(projectId, revision) {
+  if (!projectId || revision == null) return;
+  const draft = loadDraft();
+  if (!draft?.payload || draft.projectId !== projectId) return;
+  saveDraft({ payload: draft.payload, projectId, projectName: draft.projectName, baseRevision: revision });
+}
+
 export function resolveInitialWorkspace(fallbackProject) {
   const draft = loadDraft();
   if (draft?.payload) {
@@ -366,6 +386,8 @@ export function resolveInitialWorkspace(fallbackProject) {
       project: draft.payload,
       projectId: draft.projectId || null,
       projectName: draft.projectName || draft.payload?.layout?.title || 'Untitled map',
+      // undefined: a draft written before base revisions were stored.
+      baseRevision: Object.prototype.hasOwnProperty.call(draft, 'baseRevision') ? draft.baseRevision : undefined,
     };
   }
 

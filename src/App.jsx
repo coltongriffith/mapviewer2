@@ -134,7 +134,8 @@ import {
   rememberedCloudRevision,
   renameProjectRecord,
   resolveInitialWorkspace,
-  saveDraft,
+  saveDraft as saveDraftRecord,
+  updateDraftBaseRevision,
   saveProjectRecord,
   touchLastOpenedProject,
   updateProjectThumbnailRecord,
@@ -868,8 +869,15 @@ export default function App({ initialAction = null }) {
   // update so the server can refuse a save that would clobber another
   // tab's work (P1-01). null = no expectation (deliberate overwrite). Seeded
   // from the revision this browser last saved/opened the restored project at.
-  const initialRevision = useMemo(() => rememberedCloudRevision(initialWorkspace.projectId), [initialWorkspace]);
+  // A draft records the revision it was edited from; only drafts written
+  // before that existed fall back to the browser-wide remembered revision,
+  // which another tab may have moved past this draft's content (ED-5).
+  const initialRevision = useMemo(() => (initialWorkspace.baseRevision !== undefined
+    ? initialWorkspace.baseRevision
+    : rememberedCloudRevision(initialWorkspace.projectId)), [initialWorkspace]);
   const projectRevisionRef = useRef(initialRevision);
+  // Every draft write records the revision its payload is based on.
+  const saveDraft = (draft) => saveDraftRecord({ ...draft, baseRevision: projectRevisionRef.current });
   // Set when a save is refused because the row changed elsewhere.
   const [saveConflict, setSaveConflict] = useState(null);
   // Always-fresh serialization of the current project, updated by the local
@@ -1124,10 +1132,10 @@ export default function App({ initialAction = null }) {
         snapshot,
         doSave: () => saveCloudProject({ id: projectId, name: currentMapName, payload: project, expectedRevision: projectRevisionRef.current }),
         getCurrentSerialized: () => lastSerializedRef.current,
-        onSaved: (r) => { projectRevisionRef.current = r?.revision ?? null; lastSavedSnapshotRef.current = snapshot; setIsDirty(false); flashSaved(); },
+        onSaved: (r) => { projectRevisionRef.current = r?.revision ?? null; updateDraftBaseRevision(projectId, r?.revision); lastSavedSnapshotRef.current = snapshot; setIsDirty(false); flashSaved(); },
         // Saved, but the user kept editing: advance the baseline to what the
         // cloud now holds and stay dirty so the newer edits save next pass.
-        onMismatch: (r) => { projectRevisionRef.current = r?.revision ?? null; lastSavedSnapshotRef.current = snapshot; },
+        onMismatch: (r) => { projectRevisionRef.current = r?.revision ?? null; updateDraftBaseRevision(projectId, r?.revision); lastSavedSnapshotRef.current = snapshot; },
         onError: () => {},
       }));
       if (outcome.status === 'error') {
@@ -8154,8 +8162,8 @@ export default function App({ initialAction = null }) {
                     snapshot,
                     doSave: () => saveCloudProject({ id: targetId, name: currentMapName, payload: payloadToSave, expectedRevision: null }),
                     getCurrentSerialized: () => lastSerializedRef.current,
-                    onSaved: (r) => { projectRevisionRef.current = r?.revision ?? null; lastSavedSnapshotRef.current = snapshot; setIsDirty(false); },
-                    onMismatch: (r) => { projectRevisionRef.current = r?.revision ?? null; lastSavedSnapshotRef.current = snapshot; },
+                    onSaved: (r) => { projectRevisionRef.current = r?.revision ?? null; updateDraftBaseRevision(targetId, r?.revision); lastSavedSnapshotRef.current = snapshot; setIsDirty(false); },
+                    onMismatch: (r) => { projectRevisionRef.current = r?.revision ?? null; updateDraftBaseRevision(targetId, r?.revision); lastSavedSnapshotRef.current = snapshot; },
                     onError: (e) => setUploadStatus({ type: 'error', message: `Overwrite failed: ${e.message}` }),
                   }));
                   if (outcome.status === 'saved' || outcome.status === 'saved-but-dirty') {
