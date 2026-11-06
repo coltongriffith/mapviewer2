@@ -51,7 +51,14 @@ export async function listTrashedProjects() {
 
 export async function restoreCloudProject(id) {
   const { data, error } = await requireSupabase().rpc('restore_cloud_project', { p_id: id });
-  if (error) throw error;
+  if (error) {
+    // Restoring counts against the plan's map limit, like creating.
+    if (/ORG_PROJECT_LIMIT/.test(error.message || '')) {
+      throw Object.assign(new Error('This workspace has reached its map limit on the current plan. Delete a map before restoring this one.'), { code: 'ORG_PROJECT_LIMIT' });
+    }
+    if (/PROJECT_LIMIT/.test(error.message || '')) throw projectLimitError();
+    throw error;
+  }
   return Boolean(data);
 }
 
