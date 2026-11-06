@@ -1317,6 +1317,8 @@ export default function App({ initialAction = null }) {
         userId: user.id,
         localProjects: listProjects().filter(p => p.id !== pending?.projectId),
         maxUploads: 10,
+        // Over the plan's map limit, a pass stops and backs off (ED-8).
+        unlimited: tier === 'pro' || tier === 'company',
         // The explicit account-save handoff owns this draft, including retries.
         draft: pending ? null : loadDraft(),
         uploadProject: ({ name, payload }) => saveCloudProject({ id: null, name, payload, silent: true }),

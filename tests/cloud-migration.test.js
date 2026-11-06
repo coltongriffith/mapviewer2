@@ -139,3 +139,32 @@ describe('migration passes are bounded but complete', () => {
     }
   });
 });
+
+// docs/state-machines.md, ED-8.
+describe('the plan limit stops a pass and backs off', () => {
+  const projects = Array.from({ length: 4 }, (_, i) => ({ id: `m${i}`, name: `Map ${i}`, payload: { layers: [] } }));
+  const limit = () => Object.assign(new Error('The free plan saves up to 2 cloud projects'), { code: 'PROJECT_LIMIT' });
+
+  it('stops at the first limit refusal and skips uploads on the next sign-ins', async () => {
+    const { runCloudMigration } = await import('../src/utils/cloudMigration');
+    let calls = 0;
+    const uploadProject = async () => { calls += 1; if (calls > 2) throw limit(); return { id: `c${calls}` }; };
+    const t0 = Date.parse('2026-11-06T12:00:00Z');
+    const first = await runCloudMigration({ userId: 'u-limit', localProjects: projects, draft: null, uploadProject, now: t0 });
+    expect([first.migrated, first.failed, calls]).toEqual([2, 1, 3]);
+    const next = await runCloudMigration({ userId: 'u-limit', localProjects: projects, draft: null, uploadProject, now: t0 + 86_400_000 });
+    expect(calls).toBe(3);
+    expect(next.complete).toBe(false);
+  });
+
+  it('retries after the back-off, or at once on an unlimited plan', async () => {
+    const { runCloudMigration } = await import('../src/utils/cloudMigration');
+    let calls = 0;
+    const t0 = Date.parse('2026-11-06T12:00:00Z');
+    await runCloudMigration({ userId: 'u-up', localProjects: projects, draft: null, now: t0,
+      uploadProject: async () => { calls += 1; if (calls > 1) throw limit(); return { id: 'c1' }; } });
+    const upgraded = await runCloudMigration({ userId: 'u-up', localProjects: projects, draft: null, now: t0 + 1000, unlimited: true,
+      uploadProject: async () => ({ id: `u${++calls}` }) });
+    expect(upgraded.complete).toBe(true);
+  });
+});
