@@ -97,3 +97,45 @@ describe('local → cloud migration reliability', () => {
     expect(readMigrationState(USER).projects.p1.cloudId).toBe('cloud-Project p1');
   });
 });
+
+// docs/state-machines.md, ED-6.
+describe('migration passes are bounded but complete', () => {
+  it('uploads at most maxUploads per pass and finishes the rest on the next pass', async () => {
+    const { runCloudMigration } = await import('../src/utils/cloudMigration');
+    const projects = Array.from({ length: 13 }, (_, i) => ({ id: `p${i}`, name: `Map ${i}`, payload: { layers: [] } }));
+    let n = 0;
+    const uploadProject = async () => ({ id: `c${n++}` });
+    const first = await runCloudMigration({ userId: 'u-many', localProjects: projects, draft: null, uploadProject, maxUploads: 10 });
+    expect(first.migrated).toBe(10);
+    expect(first.complete).toBe(false);
+    const second = await runCloudMigration({ userId: 'u-many', localProjects: projects, draft: null, uploadProject, maxUploads: 10 });
+    expect(second.migrated).toBe(3);
+    expect(second.complete).toBe(true);
+    expect(n).toBe(13);
+  });
+
+  it('a second tab skips the pass while one is running', async () => {
+    const { runCloudMigrationExclusive } = await import('../src/utils/cloudMigration');
+    const held = new Set();
+    const original = navigator.locks;
+    Object.defineProperty(navigator, 'locks', { configurable: true, value: { request: async (name, opts, fn) => {
+      if (held.has(name)) return fn(null);
+      held.add(name);
+      try { return await fn({ name }); } finally { held.delete(name); }
+    } } });
+    try {
+      let release; const gate = new Promise((r) => { release = r; });
+      let uploads = 0;
+      const uploadProject = async () => { uploads += 1; await gate; return { id: 'c' }; };
+      const opts = { userId: 'u-tabs', localProjects: [{ id: 'a', name: 'A', payload: { layers: [] } }], draft: null, uploadProject };
+      const tabA = runCloudMigrationExclusive(opts);
+      const tabB = await runCloudMigrationExclusive(opts);
+      expect(tabB.busy).toBe(true);
+      release();
+      await tabA;
+      expect(uploads).toBe(1);
+    } finally {
+      Object.defineProperty(navigator, 'locks', { configurable: true, value: original });
+    }
+  });
+});

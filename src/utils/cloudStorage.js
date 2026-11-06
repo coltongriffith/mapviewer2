@@ -177,13 +177,22 @@ export async function deleteCloudProject(id) {
   if (!data) throw new Error('Project not found');
 }
 
+/**
+ * A rename moves the row's revision (ED-7), so it returns the new one: the
+ * tab that renamed its open map adopts it instead of seeing its own rename
+ * as a conflict.
+ */
 export async function renameCloudProject(id, name) {
   await currentUser();
-  const { error } = await requireSupabase()
+  const { data, error } = await requireSupabase()
     .from('projects')
     .update({ name, updated_at: new Date().toISOString() })
-    .eq('id', id);
+    .eq('id', id)
+    .select('revision')
+    .maybeSingle();
   if (error) throw error;
+  if (data?.revision != null) rememberCloudRevision(id, data.revision);
+  return { revision: data?.revision ?? null };
 }
 
 // ── Brand Kits (stored in the `templates` table) ────────────────────────────

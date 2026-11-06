@@ -263,7 +263,7 @@ function WorkspaceProperties({ onOpenWorkspace, onOpenProperty }) {
 export default function DashboardPage({
   onOpenProject, onNewProject, onOpenEditor, onOpenTenureMonitor,
   onOpenAccount, onOpenBrandKits, onSearchClaims, onExit,
-  onOpenWorkspace = () => {}, onOpenProperty = () => {},
+  onOpenWorkspace = () => {}, onOpenProperty = () => {}, onRenamedProject = () => {},
 }) {
   const { user, signOut } = useAuth();
   const [projects, setProjects] = useState([]);
@@ -399,7 +399,7 @@ export default function DashboardPage({
                     key={entry.id}
                     entry={entry}
                     onOpen={onOpenProject}
-                    onRename={(id, name) => renameCloudProject(id, name).then(refresh).catch(() => setError('Renaming failed.'))}
+                    onRename={(id, name) => renameCloudProject(id, name).then((r) => { onRenamedProject(id, name, r?.revision ?? null); refresh(); }).catch(() => setError('Renaming failed.'))}
                     onDelete={(id) => deleteCloudProject(id).then(refresh).catch(() => setError('Deleting failed.'))}
                     onDuplicate={duplicate}
                   />

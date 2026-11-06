@@ -43,7 +43,7 @@ function legacyFlagSet(userId) {
  * @returns {{ attempted:number, migrated:number, failed:number, skipped:number, complete:boolean,
  *   uploaded: Object<string, {id:string, revision:?number}> }}  uploaded: this pass, by local id ('draft' for the draft)
  */
-export async function runCloudMigration({ userId, localProjects, draft, uploadProject }) {
+export async function runCloudMigration({ userId, localProjects, draft, uploadProject, maxUploads = Infinity }) {
   // Users migrated under the old single-flag scheme are treated as complete:
   // re-uploading everything they already migrated would create duplicates.
   if (legacyFlagSet(userId)) {
@@ -65,9 +65,16 @@ export async function runCloudMigration({ userId, localProjects, draft, uploadPr
   let skipped = 0;
   const uploaded = {};
 
+  // maxUploads bounds the work of ONE pass. The remaining maps stay in the
+  // job list, so completion is still judged over every map and the next pass
+  // picks them up. Slicing the input instead dropped the 11th map onward and
+  // then recorded the migration as complete (ED-6).
+  let uploads = 0;
   for (const job of jobs) {
     const prior = state.projects[job.key];
     if (prior?.status === 'done' && prior.cloudId) { skipped += 1; continue; }
+    if (uploads >= maxUploads) continue;
+    uploads += 1;
     try {
       const result = await uploadProject({ name: job.name, payload: job.payload });
       const cloudId = typeof result === 'object' ? result?.id : result;
@@ -92,4 +99,18 @@ export async function runCloudMigration({ userId, localProjects, draft, uploadPr
   }
 
   return { attempted: jobs.length - skipped, migrated, failed, skipped, complete, uploaded };
+}
+
+/**
+ * Run a pass in at most one tab at a time. The email sign-in reaches every
+ * open tab, and each used to upload every local map (ED-6). Without Web Locks
+ * (older browsers) the pass runs unguarded, as before.
+ */
+export async function runCloudMigrationExclusive(opts) {
+  const locks = typeof navigator !== 'undefined' ? navigator.locks : null;
+  if (!locks?.request) return runCloudMigration(opts);
+  return locks.request(`em-cloud-migration:${opts.userId}`, { ifAvailable: true }, async (lock) => {
+    if (!lock) return { attempted: 0, migrated: 0, failed: 0, skipped: 0, complete: false, uploaded: {}, busy: true };
+    return runCloudMigration(opts);
+  });
 }

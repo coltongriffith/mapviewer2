@@ -733,6 +733,9 @@ export default function App({ initialAction = null }) {
   const initialWorkspace = useMemo(() => initialWorkspaceState(), []);
   const [project, setProject] = useState(initialWorkspace.project);
   const [projectId, setProjectId] = useState(initialWorkspace.projectId);
+  // The open map's id for async completions that outlive the render.
+  const projectIdRef = useRef(initialWorkspace.projectId);
+  projectIdRef.current = projectId;
   const [projectName, setProjectName] = useState(initialWorkspace.projectName);
   // The one name the header, saves and copies use (utils/mapName.js).
   const currentMapName = mapName(projectName, project.layout.title);
@@ -1296,10 +1299,12 @@ export default function App({ initialAction = null }) {
     const ticket = saveCoordRef.current.begin();
     (async () => {
       const pending = loadAccountSave();
-      const { runCloudMigration } = await import('./utils/cloudMigration');
-      const result = await runCloudMigration({
+      const { runCloudMigrationExclusive } = await import('./utils/cloudMigration');
+      const openAtStart = projectIdRef.current;
+      const result = await runCloudMigrationExclusive({
         userId: user.id,
-        localProjects: listProjects().filter(p => p.id !== pending?.projectId).slice(0, 10),
+        localProjects: listProjects().filter(p => p.id !== pending?.projectId),
+        maxUploads: 10,
         // The explicit account-save handoff owns this draft, including retries.
         draft: pending ? null : loadDraft(),
         uploadProject: ({ name, payload }) => saveCloudProject({ id: null, name, payload, silent: true }),
@@ -1307,8 +1312,10 @@ export default function App({ initialAction = null }) {
       // If the open map was just uploaded, point the workspace at its cloud copy.
       // Left on the local id, Save failed ("not found") and autosave's fallback
       // created a second cloud copy of the same map.
-      const moved = result.uploaded?.[projectId || 'draft'];
-      if (moved?.id && ticket.stillCurrent()) {
+      // Only if the map is still the one that was open when the pass began: a
+      // manual Save during the pass already gave it a cloud row (ED-6).
+      const moved = result.uploaded?.[openAtStart || 'draft'];
+      if (moved?.id && ticket.stillCurrent() && projectIdRef.current === openAtStart) {
         setProjectId(moved.id);
         projectRevisionRef.current = moved.revision;
       }
@@ -5449,6 +5456,13 @@ export default function App({ initialAction = null }) {
     return (
       <React.Suspense fallback={null}>
       <DashboardPage
+        // The open map renamed here: the editor must save the new name, not
+        // put the old one back (ED-7).
+        onRenamedProject={(id, name, revision) => {
+          if (id !== projectIdRef.current) return;
+          setProjectName(name);
+          if (revision != null) { projectRevisionRef.current = revision; updateDraftBaseRevision(id, revision); }
+        }}
         onOpenProject={(entry) => { openProjectFromRecent(entry); setScreen('editor'); }}
         onNewProject={() => { startNewProject(); setScreen('editor'); }}
         onOpenEditor={() => setScreen('editor')}
@@ -8208,7 +8222,10 @@ export default function App({ initialAction = null }) {
           onOpen={(entry) => { openProjectFromRecent(entry); setShowRecentProjects(false); }}
           onRename={(id, newName) => {
             if (user) {
-              renameCloudProject(id, newName).then(() => listCloudProjects().then(setRecentProjects)).catch(() => {});
+              renameCloudProject(id, newName).then((r) => {
+                if (id === projectIdRef.current && r?.revision != null) { projectRevisionRef.current = r.revision; updateDraftBaseRevision(id, r.revision); }
+                return listCloudProjects().then(setRecentProjects);
+              }).catch(() => {});
             } else {
               renameProjectRecord(id, newName);
               setRecentProjects(listProjects());
