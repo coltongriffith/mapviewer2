@@ -101,6 +101,36 @@ export async function liveSubscription(subscriptionId, snapshot = null) {
   return stripeRequest(`/subscriptions/${encodeURIComponent(subscriptionId)}`, null, { method: 'GET' });
 }
 
+/** The invoice's current state, for the same reason as liveSubscription. */
+export async function liveInvoice(invoiceId, snapshot = null) {
+  if (!invoiceId || !stripeConfigured()) return snapshot;
+  return stripeRequest(`/invoices/${encodeURIComponent(invoiceId)}`, null, { method: 'GET' });
+}
+
+/**
+ * The invoice a refunded charge paid. Basil removed `Charge.invoice` and
+ * events do not expand the payment intent, so ask Invoice Payments (BILL-6b).
+ */
+export async function refundedInvoiceId(charge) {
+  const direct = chargeInvoiceId(charge);
+  if (direct) return direct;
+  const pi = typeof charge?.payment_intent === 'string' ? charge.payment_intent : null;
+  if (!pi || !stripeConfigured()) return null;
+  const list = await stripeRequest(
+    `/invoice_payments?payment[type]=payment_intent&payment[payment_intent]=${encodeURIComponent(pi)}&limit=1`,
+    null, { method: 'GET' },
+  );
+  const invoice = list?.data?.[0]?.invoice;
+  return typeof invoice === 'string' ? invoice : invoice?.id || null;
+}
+
+/** Credited total as the invoice itself states it, or null if it does not. */
+function invoiceCredited(invoice) {
+  return invoice?.post_payment_credit_notes_amount != null || invoice?.pre_payment_credit_notes_amount != null
+    ? (invoice.post_payment_credit_notes_amount ?? 0) + (invoice.pre_payment_credit_notes_amount ?? 0)
+    : null;
+}
+
 /** Basil moved current_period_end from the subscription onto its items. */
 export function subscriptionPeriodEnd(sub) {
   const seconds = sub?.current_period_end ?? sub?.items?.data?.[0]?.current_period_end;
@@ -151,8 +181,12 @@ export function deriveInvoiceStatus({ stripeStatus, total, amountPaid, amountRef
 
 // Standalone (Dashboard-created) invoice → public.custom_invoices. Never
 // runs for subscription invoices.
-async function syncCustomInvoice(sb, invoice, { paymentFailed = false, eventAt = null } = {}) {
-  if (!invoice?.id || invoiceSubscriptionId(invoice)) return;
+async function syncCustomInvoice(sb, snapshot, { paymentFailed = false, eventAt = null } = {}) {
+  if (!snapshot?.id || invoiceSubscriptionId(snapshot)) return;
+  // Restate from the live invoice when we can: two events in the same second
+  // cannot be ordered by timestamp, and a live read cannot regress (BILL-8).
+  const invoice = (await liveInvoice(snapshot.id, snapshot)) || snapshot;
+  const isLive = invoice !== snapshot;
   let userId = invoice.metadata?.supabase_user_id || null;
   if (!userId && invoice.customer) {
     const lookup = must(
@@ -172,16 +206,13 @@ async function syncCustomInvoice(sb, invoice, { paymentFailed = false, eventAt =
   ).data;
 
   // Out-of-order delivery: an older event must not overwrite newer state.
-  if (eventAt && prior?.last_event_at && new Date(eventAt) < new Date(prior.last_event_at)) {
+  if (!isLive && eventAt && prior?.last_event_at && new Date(eventAt) < new Date(prior.last_event_at)) {
     return;
   }
 
   const total = invoice.total ?? invoice.amount_due ?? 0;
   const amountRefunded = prior?.amount_refunded ?? 0;
-  const amountCredited = invoice.post_payment_credit_notes_amount != null
-    || invoice.pre_payment_credit_notes_amount != null
-    ? (invoice.post_payment_credit_notes_amount ?? 0) + (invoice.pre_payment_credit_notes_amount ?? 0)
-    : (prior?.amount_credited ?? 0);
+  const amountCredited = invoiceCredited(invoice) ?? (prior?.amount_credited ?? 0);
 
   must(await sb.from('custom_invoices').upsert({
     stripe_invoice_id: invoice.id,
@@ -204,7 +235,8 @@ async function syncCustomInvoice(sb, invoice, { paymentFailed = false, eventAt =
     description: invoice.description || null,
     number: invoice.number || null,
     hosted_invoice_url: invoice.hosted_invoice_url || null,
-    last_event_at: eventAt,
+    last_event_at: isLive && prior?.last_event_at && eventAt && new Date(eventAt) < new Date(prior.last_event_at)
+      ? prior.last_event_at : eventAt,
     updated_at: new Date().toISOString(),
   }, { onConflict: 'stripe_invoice_id' }), 'custom_invoice upsert');
 }
@@ -288,7 +320,10 @@ export default async function handler(req, res) {
       const live = userId && session.mode === 'subscription'
         ? await liveSubscription(session.subscription, null)
         : null;
-      if (userId && session.mode === 'subscription' && (!live || mapSubscription(live).plan === 'pro')) {
+      // An unpaid session (a delayed payment method) is granted when its
+      // subscription becomes active, through customer.subscription.updated.
+      const unpaid = session.payment_status && !['paid', 'no_payment_required'].includes(session.payment_status);
+      if (userId && session.mode === 'subscription' && !unpaid && (!live || mapSubscription(live).plan === 'pro')) {
         // Read the existing row first: a grandfathered/admin account that
         // chooses to subscribe must KEEP its protected entitlement source.
         // Blindly upserting source='stripe' here was the bug that let a later
@@ -383,6 +418,18 @@ export default async function handler(req, res) {
           })
           .eq(match.column, match.value)
           .eq('source', 'stripe'), 'subscription downgrade');
+        // A protected (grandfathered/admin) row keeps its plan, but must not
+        // keep pointing at the ended subscription: checkout reads that as
+        // "already subscribed" and would refuse them forever (BILL-10).
+        if (sub.id) {
+          for (const source of ['grandfathered', 'admin']) {
+            must(await sb.from('user_plans')
+              .update({ stripe_subscription_id: null, current_period_end: periodEnd, updated_at: new Date().toISOString() })
+              .eq(match.column, match.value)
+              .eq('source', source)
+              .eq('stripe_subscription_id', sub.id), 'protected subscription clear');
+          }
+        }
       }
     } else if (
       // Every material invoice event restates the whole row from the invoice
@@ -410,7 +457,11 @@ export default async function handler(req, res) {
         ).data;
         // Only touch invoices we actually mirror (subscription invoices aren't).
         if (row) {
-          const credited = (row.amount_credited ?? 0) + (note.amount ?? 0);
+          // The invoice states its credited total; adding this note to our
+          // copy double-counts it when invoice.updated already restated the
+          // total (BILL-7). Only without a live read do we add.
+          const live = await liveInvoice(invoiceId, null);
+          const credited = invoiceCredited(live) ?? ((row.amount_credited ?? 0) + (note.amount ?? 0));
           const total = row.amount_due ?? 0;
           must(await sb.from('custom_invoices').update({
             amount_credited: credited,
@@ -428,7 +479,7 @@ export default async function handler(req, res) {
       }
     } else if (event.type === 'charge.refunded') {
       const charge = event.data?.object || {};
-      const invoiceId = chargeInvoiceId(charge);
+      const invoiceId = await refundedInvoiceId(charge);
       if (invoiceId) {
         const row = must(
           await sb.from('custom_invoices')

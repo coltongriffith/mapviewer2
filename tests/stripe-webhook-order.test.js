@@ -7,7 +7,7 @@ import crypto from 'node:crypto';
 // handler can die between claiming an event and applying it. See
 // docs/state-machines.md (Billing, BILL-1..3).
 
-const db = vi.hoisted(() => ({ plans: new Map(), events: new Map() }));
+const db = vi.hoisted(() => ({ plans: new Map(), events: new Map(), invoices: new Map() }));
 vi.mock('@supabase/supabase-js', () => ({ createClient: () => ({ from(table) {
   let action, values, columns, filters = [];
   const chain = {
@@ -19,8 +19,8 @@ vi.mock('@supabase/supabase-js', () => ({ createClient: () => ({ from(table) {
     eq: (key, value) => { filters.push([key, value]); return chain; },
     maybeSingle: () => chain,
     then(resolve) {
-      const store = table === 'stripe_events' ? db.events : db.plans;
-      const key = table === 'stripe_events' ? 'event_id' : 'user_id';
+      const store = { stripe_events: db.events, custom_invoices: db.invoices }[table] || db.plans;
+      const key = { stripe_events: 'event_id', custom_invoices: 'stripe_invoice_id' }[table] || 'user_id';
       const rows = [...store.values()].filter(row => filters.every(([k, v]) => row[k] === v));
       if (action === 'insert') {
         if (store.has(values[key])) return resolve({ data: null, error: { code: '23505' } });
@@ -38,12 +38,12 @@ vi.mock('@supabase/supabase-js', () => ({ createClient: () => ({ from(table) {
 } }) }));
 
 // Stripe's live subscriptions, as GET /v1/subscriptions/:id would return them.
-let live;
+let live, liveInvoices, invoicePayments;
 const secret = 'whsec_order_test';
 let sequence;
 beforeEach(() => {
-  db.plans.clear(); db.events.clear(); sequence = 0;
-  live = new Map();
+  db.plans.clear(); db.events.clear(); db.invoices.clear(); sequence = 0;
+  live = new Map(); liveInvoices = new Map(); invoicePayments = new Map();
   db.plans.set('u1', { user_id: 'u1', plan: 'free', status: 'active', source: 'signup', stripe_customer_id: 'cus_1' });
   vi.resetModules();
   vi.stubEnv('SUPABASE_URL', 'https://test.supabase.co');
@@ -51,9 +51,15 @@ beforeEach(() => {
   vi.stubEnv('STRIPE_WEBHOOK_SECRET', secret);
   vi.stubEnv('STRIPE_SECRET_KEY', 'sk_test_order');
   vi.stubGlobal('fetch', vi.fn(async (url) => {
-    const id = decodeURIComponent(String(url).split('/subscriptions/')[1] || '');
-    const sub = live.get(id);
-    return { ok: Boolean(sub), status: sub ? 200 : 404, json: async () => sub || { error: { message: 'No such subscription' } } };
+    const u = String(url);
+    let found;
+    if (u.includes('/subscriptions/')) found = live.get(decodeURIComponent(u.split('/subscriptions/')[1]));
+    else if (u.includes('/invoices/')) found = liveInvoices.get(decodeURIComponent(u.split('/invoices/')[1]));
+    else if (u.includes('/invoice_payments')) {
+      const pi = decodeURIComponent(u.split('payment[payment_intent]=')[1].split('&')[0]);
+      found = { data: invoicePayments.has(pi) ? [{ invoice: invoicePayments.get(pi) }] : [] };
+    }
+    return { ok: Boolean(found), status: found ? 200 : 404, json: async () => found || { error: { message: 'No such object' } } };
   }));
 });
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
@@ -159,5 +165,51 @@ describe('event ledger completes only after the work lands (BILL-3)', () => {
     expect(res.statusCode).toBe(500);
     expect(db.events.has('evt_fail')).toBe(false);
     expect(plan()).toMatchObject({ plan: 'free' });
+  });
+});
+
+describe('checkout payment status and protected rows (BILL-9, BILL-10)', () => {
+  it('an unpaid checkout session does not grant Pro on its own', async () => {
+    vi.stubEnv('STRIPE_SECRET_KEY', '');
+    const event = checkout('sub_a');
+    event.data.object.payment_status = 'unpaid';
+    await deliver(event);
+    expect(plan()).toMatchObject({ plan: 'free' });
+  });
+
+  it('a grandfathered subscriber keeps Pro and is unlinked from the ended subscription', async () => {
+    db.plans.set('u1', { user_id: 'u1', plan: 'pro', status: 'active', source: 'grandfathered', stripe_customer_id: 'cus_1', stripe_subscription_id: 'sub_g' });
+    live.set('sub_g', sub('sub_g', 'canceled'));
+    await deliver(deleted(sub('sub_g', 'canceled')));
+    expect(plan()).toMatchObject({ plan: 'pro', source: 'grandfathered', stripe_subscription_id: null });
+  });
+});
+
+describe('custom invoices restate from Stripe (BILL-6b, BILL-7, BILL-8)', () => {
+  const invoice = (over = {}) => ({ id: 'in_1', customer: 'cus_1', status: 'paid', total: 1000, amount_due: 1000, amount_paid: 1000, amount_remaining: 0, ...over });
+
+  it('two invoice events in the same second cannot push a paid invoice back to open', async () => {
+    liveInvoices.set('in_1', invoice());
+    await deliver({ type: 'invoice.paid', data: { object: invoice() } });
+    // An older "finalized" snapshot redelivered within the same second
+    // (an explicit id keeps `created` on the same second as the paid event).
+    await deliver({ type: 'invoice.finalized', data: { object: invoice({ status: 'open', amount_paid: 0 }) } }, 'evt_same_second');
+    expect(db.invoices.get('in_1').status).toBe('paid');
+  });
+
+  it('a credit note already restated by invoice.updated is not counted twice', async () => {
+    liveInvoices.set('in_1', invoice({ post_payment_credit_notes_amount: 300 }));
+    await deliver({ type: 'invoice.updated', data: { object: invoice({ post_payment_credit_notes_amount: 300 }) } });
+    await deliver({ type: 'credit_note.created', data: { object: { invoice: 'in_1', amount: 300 } } });
+    expect(db.invoices.get('in_1').amount_credited).toBe(300);
+    expect(db.invoices.get('in_1').status).toBe('partially_credited');
+  });
+
+  it('a Basil refund finds its invoice through Invoice Payments', async () => {
+    liveInvoices.set('in_1', invoice());
+    await deliver({ type: 'invoice.paid', data: { object: invoice() } });
+    invoicePayments.set('pi_1', 'in_1');
+    await deliver({ type: 'charge.refunded', data: { object: { id: 'ch_1', payment_intent: 'pi_1', amount_refunded: 1000 } } });
+    expect(db.invoices.get('in_1')).toMatchObject({ amount_refunded: 1000, status: 'refunded' });
   });
 });
