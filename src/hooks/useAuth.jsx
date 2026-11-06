@@ -111,7 +111,12 @@ export function AuthProvider({ children }) {
         // A late request for another account must never change entitlements.
         invalidatePlan();
         setPlanState({ plan: null, source: null, ready: !next });
-        if (previousId) clearProGrace();
+        if (previousId) {
+          clearProGrace();
+          // An invite link saved by the previous account must not follow the
+          // next one on a shared browser (WS-6). Same key as utils/workspace.js.
+          try { localStorage.removeItem('em.pendingInvite.v1'); } catch { /* optional */ }
+        }
       }
       currentUserRef.current = next;
       setUser(next);
@@ -181,7 +186,11 @@ export function AuthProvider({ children }) {
   async function signOut() {
     if (!supabase) return;
     const { error } = await supabase.auth.signOut();
-    if (error) throw error;
+    if (!error) return;
+    // The server could not be reached. Signing out on this device still has
+    // to work: a click that silently keeps the session is worse (WS-6).
+    const local = await supabase.auth.signOut({ scope: 'local' });
+    if (local?.error) throw local.error;
   }
 
   async function resetPassword(email) {

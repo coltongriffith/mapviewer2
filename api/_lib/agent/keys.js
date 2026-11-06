@@ -18,6 +18,25 @@ function cleanScopes(value) {
   return scopes.length ? scopes : DEFAULT_AGENT_SCOPES;
 }
 
+/**
+ * Whether the bearer was issued to a third-party OAuth client (an MCP
+ * connector) rather than to a first-party sign-in. Such a token is a
+ * revocable, consented grant; letting it create a permanent API key would let
+ * a connector outlive its own revocation (WS-2). getUser has already verified
+ * the token, so the payload is only read here, never trusted for identity.
+ */
+export function isOAuthClientToken(req) {
+  const token = String(req.headers?.authorization || '').replace(/^Bearer\s+/i, '').trim();
+  const part = token.split('.')[1];
+  if (!part) return false;
+  try {
+    const claims = JSON.parse(Buffer.from(part, 'base64url').toString('utf8'));
+    return Boolean(claims?.client_id);
+  } catch { return false; }
+}
+
+const MAX_ACTIVE_KEYS = 10;
+
 function parseBody(req) {
   if (req.body && typeof req.body === 'object' && !Array.isArray(req.body)) return req.body;
   if (typeof req.body === 'string') {
@@ -67,6 +86,10 @@ export default async function handler(req, res) {
     return res.status(200).json({ revoked: true, id });
   }
 
+  if (isOAuthClientToken(req)) {
+    return agentError(res, 403, 'FORBIDDEN', 'Create agent connections from your Exploration Maps account, not from a connected app.', false);
+  }
+
   const body = parseBody(req);
   const { count, error: countError } = await sb
     .from('agent_api_keys')
@@ -74,7 +97,7 @@ export default async function handler(req, res) {
     .eq('user_id', userId)
     .is('revoked_at', null);
   if (countError) return agentError(res, 503, 'INTERNAL_ERROR', 'Could not create the agent connection.', true);
-  if ((count || 0) >= 10) return agentError(res, 409, 'KEY_LIMIT', 'Revoke an unused agent connection before creating another.', false);
+  if ((count || 0) >= MAX_ACTIVE_KEYS) return agentError(res, 409, 'KEY_LIMIT', 'Revoke an unused agent connection before creating another.', false);
 
   const token = `em_live_${randomBytes(32).toString('base64url')}`;
   const row = {
@@ -91,6 +114,19 @@ export default async function handler(req, res) {
     .select('id,name,token_prefix,scopes,created_at')
     .single();
   if (error) return agentError(res, 503, 'INTERNAL_ERROR', 'Could not create the agent connection.', true);
+
+  // Parallel requests all pass the count above. Re-count with this key in
+  // place and withdraw it if the limit is now exceeded (WS-6).
+  const { count: after, error: afterError } = await sb
+    .from('agent_api_keys')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .is('revoked_at', null);
+  if (afterError || (after || 0) > MAX_ACTIVE_KEYS) {
+    await sb.from('agent_api_keys').update({ revoked_at: new Date().toISOString() }).eq('id', data.id);
+    if (afterError) return agentError(res, 503, 'INTERNAL_ERROR', 'Could not create the agent connection.', true);
+    return agentError(res, 409, 'KEY_LIMIT', 'Revoke an unused agent connection before creating another.', false);
+  }
 
   // The plaintext token is deliberately returned exactly once.
   return res.status(201).json({ key: { ...data, token } });

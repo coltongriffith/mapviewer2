@@ -34,7 +34,7 @@ async function getRun(sb, apiKeyId, key) {
   return data || null;
 }
 
-async function beginRun(sb, auth, key, platform) {
+export async function beginRun(sb, auth, key, platform) {
   const existing = await getRun(sb, auth.apiKey.id, key);
   if (existing?.status === 'ready' && existing.result) return { replay: true, run: existing };
   if (existing?.status === 'started') {
@@ -42,6 +42,10 @@ async function beginRun(sb, auth, key, platform) {
     if (ageMs < 2 * 60_000) return { inProgress: true, run: existing };
   }
   if (existing) {
+    // Compare-and-swap on the state we read: two retries of a failed or
+    // stale run both used to take it over and both created a map (WS-3).
+    // The attempt time is reset, so this attempt is not "stale" to the next
+    // retry two minutes after the ORIGINAL attempt.
     const { data, error } = await sb
       .from('agent_runs')
       .update({
@@ -49,11 +53,15 @@ async function beginRun(sb, auth, key, platform) {
         error_code: null,
         result: null,
         completed_at: null,
+        created_at: new Date().toISOString(),
       })
       .eq('id', existing.id)
+      .eq('status', existing.status)
+      .eq('created_at', existing.created_at)
       .select('id,status,result,error_code,created_at')
-      .single();
+      .maybeSingle();
     if (error) throw error;
+    if (!data) return { inProgress: true, run: existing };
     return { run: data };
   }
 
