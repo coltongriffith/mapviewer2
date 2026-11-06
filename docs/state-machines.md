@@ -38,48 +38,59 @@ Ranked by impact within each priority. P1 loses or corrupts user data, mis-bills
 | 3D-3 | P2 | A save that landed while an Open failed, or a double-clicked Save, left `current.savedAt` stale. Every later save then reported the tab's own write as "saved somewhere else". | Record the new version when the figure on screen is still the one saved. Block a second save before the first await. | `tests/three-d-save-reliability.test.js` (3D-3) |
 | 3D-4 | P2 | An older Open that finished after a newer one replaced that figure. Edits made to the newer figure were lost without the unsaved-changes prompt. | Only the latest Open may change the screen. | `tests/three-d-save-reliability.test.js` (3D-4) |
 
-### Open
+### Fixed in the second pass
 
-Confirmed by trace unless marked suspected. None of these is reproduced yet.
+These were open after the first pass. Each one is now fixed and pinned by a regression test that fails on the old code, except where the row says otherwise.
 
-| ID | P | Finding | Evidence | Suggested fix |
+| ID | P | Finding | Fix | Regression test |
 |---|---|---|---|---|
-| ED-5 | P1 | A restored draft is paired with a revision it was not based on, so a later save silently overwrites newer cloud content. Reached through two tabs closed in the wrong order, or a draft write that fails on a full storage quota while the small revision write succeeds. | `App.jsx:871-872` seeds the revision from the browser-wide `em_cloud_revisions`. The draft envelope (`projectStorage.js:284-297`) has no base revision. | Store `baseRevision` in the draft and seed `projectRevisionRef` from it. |
-| BILL-2b | P1 | Two payable Checkout sessions for one customer: a monthly tab and a yearly tab, or two clicks more than 10 minutes apart. The customer can be charged twice. A subscription that goes `unpaid` is written as `free/canceled`, so a new checkout is allowed while the old subscription still exists. | `stripe-checkout.js:196-201` checks for an existing subscription only when the session is created. The idempotency key includes the interval and a 10-minute bucket (`:245`). | Re-check for a live subscription in `checkout.session.completed` and cancel or refund the duplicate. Or key idempotency per customer. |
-| TEN-4 | P2 | Change notices go out from runs the guardrails did not trust, and pending notices are superseded for good after any unsafe run. | `alerts run.mjs:94` checks only the latest run's `alerts_safe`. `loadRecentChanges` (`run.mjs:371-384`) does not filter by the run that produced each event. | Filter change events to trusted runs. Do not supersede CHANGE rows on an unsafe run. |
-| TEN-5 | P2 | A sync dry run is recorded as a real successful sync with `records_processed 0`. It shows as the last sync, makes alerts unsafe, and becomes the guardrail baseline, which disables the sharp-drop check on the next real run. | `tenure-sync run.mjs:274-287`, `0001:341-345`, `guardrails.mjs:72-73` | Record dry runs with their own status, or do not record them. |
-| TEN-6 | P3 | "Reappeared" events can never fire, because promotion resets `missing_run_count` before reconcile reads it. | `tenure-sync run.mjs:580` vs `0001:425,430` | Carry the count through promotion. |
-| TEN-7 | P2 | A crash between the tenure upsert and the change-event insert loses those change events for good. | `run.mjs:598` runs before `:646/:648`. | Insert events in the same transaction, or before the upsert. |
-| TEN-8 | P2 | Direct table writes bypass the tenure limits: authenticated users have a table-wide UPDATE grant on memberships, so `removed_at = null` revives tenures without the quota check. The recipient guard runs on INSERT only. | `0002:297`, `0003:435-437` | Revoke the UPDATE grant or add an update trigger. Make the recipient guard `before insert or update`. |
-| TEN-9 | P3 | Forfeited or cancelled titles still get countdown reminders. | `plan.mjs:40-57` ignores `tenure.status`. | Product decision: stop expiry reminders for terminal statuses. |
-| TEN-10 | P2 | An alert killed mid-send stays in `sending` forever. Nothing picks it up again and admin retry excludes it. | `run.mjs:218` leaves the update result unchecked. `0003:841` | Add a reaper for `sending` rows older than an hour, and let admin retry include them. |
-| BILL-4 | P2 | After a downgrade, everything above the free limits keeps running: up to 50 monitored tenures, several portfolios and recipients, the Pro-only 7-day reminder, more than 2 editable maps and saved brand kits. | Limits are checked only on insert. `tenure-alerts/run.mjs:78-85` uses every stored row. | Decide the product rule, then enforce it at read time: schedule only within the plan, lock maps over the limit. |
-| BILL-5 | P2 | `plan = 'company'` on an unprotected source (signup or stripe) is Company for tenures, shares and the UI, but Free for maps, brand kits and live maps. | `20261023100000:544`, `20260728000003:119`, `20261103110000:73` vs `20261028120000:36` | Use one plan resolver function in SQL. |
-| WS-1 | P2 | Share and preview caps can be bypassed with parallel calls: `create_shared_map` and `create_agent_share` count, then insert, with no lock between. For signed-in MCP callers this is the only limit. | `20261027174653:56-75`, `api/mcp.js:595-601` | Take an advisory lock per user or creator key before counting. |
-| WS-2 | P2 | A Supabase access token issued for MCP OAuth can create a permanent API key with any scopes. Revoking the OAuth grant does not revoke the key. (Suspected: depends on Supabase accepting OAuth-issued tokens in `getUser`.) | `api/_lib/agent/keys.js:94,136-142`, `api/_lib/user-auth.js:10` | Only accept first-party session tokens for key creation. Cap scopes and set an expiry. |
-| WS-3 | P2 | Agent request idempotency can run the same request twice: the takeover update is unconditional and the staleness check reads a `created_at` that is never reset. Two retries both create a map and share, which can use up a free user's limit. | `api/_lib/agent/maps.js:40-58` | Conditional takeover (compare and swap on status and an attempt timestamp). |
-| WS-4 | P2 | Release pack approval fails for every member except the original owner after a 3D figure was moved in from another home: they always get `APPROVAL_STALE`. | `20261103120000:165-166` vs `20261029100000:117-118` | Compare against the latest version the approver can read, or the version recorded in the pack. |
-| WS-5 | P2 | A QP sign-off retracted by another editor is still written into a downloaded PNG. | `src/three-d/versions.js:169-171,234`, `src/utils/figureSignoffs.js:53-58` | Re-read the sign-off before embedding it. |
-| ED-6 | P2 | Local-map migration stops after 10 maps but records itself complete. It also runs in every signed-in tab at once, and a manual Save during migration is re-pointed at the migration's copy. | `App.jsx:1299`, `cloudMigration.js:90-93`, `App.jsx:1290-1311` | Loop until done, and take a Web Lock for the run. |
-| BILL-6b | P3 | Suspected. Under Basil, `charge.refunded` events do not carry the invoice, so refunds on custom invoices are never recorded. | `stripe-webhook.js:93-95` | Look up the invoice payment by `payment_intent`. |
-| BILL-7..9 | P3 | Suspected. A credit note counted twice when `invoice.updated` arrives first. Same-second invoice events regressing status (strict `<`). Checkout granting Pro without checking `payment_status`. | `stripe-webhook.js:137,143-146,347` | Derive credited totals from the invoice only; compare event ids on equal timestamps; check `payment_status` in checkout. |
-| BILL-10 | P3 | A grandfathered or admin subscriber whose Stripe subscription ends keeps `status active` and the subscription id, so checkout answers `ALREADY_SUBSCRIBED` for them forever. | `stripe-webhook.js` downgrade filter on `source='stripe'` | Clear the subscription fields on protected rows without changing the plan. |
-| WS-6 | P3 | Narrow role-check race: a just-demoted admin can complete one last action. Small count-then-insert limits (10 keys, 100 invites a day) exceed under concurrency. A re-sent invite racing an accept leaves a pending invite for a member. Sign-out leaves the invite token and fails silently on network errors. | `20261023100000:1437/1444,1476/1479,1209-1227`, `keys.js:127-148`, `workspace.js:149-158`, `useAuth.jsx:183` | Re-check after the lock; advisory locks on counts. |
-| ED-7 | P3 | A rename from the Dashboard does not bump the revision or update the open map's name, so the next autosave puts the old name back. | `cloudStorage.js:175-182`, `DashboardPage.jsx:402` | Rename through `save_cloud_project`, or tell the editor. |
+| ED-5 | P1 | A restored draft was paired with the browser-wide remembered revision, not the revision it was edited from. After two tabs closed in the wrong order, or a draft write failed on a full storage quota while the small revision write succeeded, the next save overwrote newer cloud content without a conflict. | The draft stores `baseRevision`, and a landed save moves it. Drafts from before the change fall back to the remembered revision. | `tests/project-storage.test.js` (draft base revision) |
+| BILL-2b | P1 | Checkout trusted our row, which can lag Stripe and stores an `unpaid` subscription as canceled. Two tabs or two attempts could leave two payable sessions, so a customer could be charged twice. | Checkout asks Stripe for live subscriptions and refuses while one exists, then expires older open sessions so only the newest is payable. | `tests/stripe-checkout-duplicates.test.js` |
+| TEN-4 | P2 | Change notices went out for events recorded by untrusted runs, and an untrusted run retired notices already queued. | Only events whose import run succeeded with `alerts_safe` reach an inbox, and queued CHANGE and NOT_OBSERVED rows are held, not superseded, while imports are untrusted. | `tests/tenure-alerts.test.js` (TEN-4) |
+| TEN-5 | P2 | A sync dry run was recorded as a successful sync. | It is recorded with status `dry_run`, which no reader treats as a sync. | `tests/tenure-sync-promotion-order.test.js`, `tests/tenure-guards-sql.test.js` |
+| TEN-6 | P3 | "Reappeared" events could never fire, because promotion zeroed `missing_run_count` before reconcile read it. | Promotion leaves the count for reconcile. | `tests/tenure-sync-promotion-order.test.js` |
+| TEN-7 | P2 | A crash between the tenure upsert and the event insert lost that batch's change events for good. | Events and snapshots are written before the tenure rows move. A resume of the same run skips tenures whose events it already recorded. | `tests/tenure-sync-promotion-order.test.js` |
+| TEN-8 | P2 | A direct `update ... set removed_at = null` revived tenures past the quota. Recipient checks ran on insert only, and the row lock did nothing on an empty policy. | UPDATE on memberships is limited to the columns the app edits. The recipient guard runs on insert and update under an advisory lock. | `tests/tenure-guards-sql.test.js` |
+| TEN-9 | P3 | Forfeited or cancelled titles still got countdown reminders. | Known terminal wording (the rule that raises TENURE_TERMINATED) stops expiry reminders. Unfamiliar wording still gets them, so a real deadline is never silenced. | `tests/tenure-alerts.test.js` (TEN-9) |
+| TEN-10 | P2 | An alert killed mid-send stayed in `sending` forever. A failed write of the `sent` status could also send it back to pending, and so send it twice. | Rows stuck in `sending` for an hour become `failed`, where admin retry can reach them. A failure to record a send no longer requeues the row. | `tests/tenure-alerts-reaper.test.js` |
+| TEN-11 | P3 | Long id lists in `.in()` could fail the whole alert job. An owner lookup error was ignored, so emails said the owner was unpublished. An alert dry run changed the queue. | Lists are chunked at 200, owner errors fail the run, and a dry run skips scheduling. | Covered by the code path; no dedicated test. |
+| BILL-4 | P2 | After a downgrade, tenures, portfolios, recipients and reminder offsets above the free limits kept being served. | The alert scheduler reads each owner's current limits (`tenure_plan_limits_for`) and schedules the oldest rows that fit. Nothing is deleted, and an upgrade plans the rest again. Maps and brand kits over the limit stay usable but cannot be added to; locking existing maps is a product decision, so it was not made here. | `tests/tenure-alerts.test.js` (limitPortfolio), `tests/plan-resolution-sql.test.js` |
+| BILL-5 | P2 | `plan = 'company'` on an unprotected source was Company for tenures and shares but Free for maps, brand kits and live maps. | `ws_personal_map_limit` and `check_brand_kit_quota` treat Company like Pro. Live maps use the former. | `tests/plan-resolution-sql.test.js` |
+| WS-1 | P2 | Share caps were counted and then inserted with no lock, so parallel calls passed together. | A per-caller advisory lock is taken before counting, in `create_shared_map` and `create_agent_share`. | `tests/workspace-races-sql.test.js` (lock order; PGlite cannot interleave two connections) |
+| WS-2 | P2 | A token issued to a connected OAuth app could create a permanent API key. | Key creation refuses tokens that carry a `client_id` claim. | `tests/agent-run-races.test.js` |
+| WS-3 | P2 | Two retries of a failed or stale agent run could both take it over and both create a map. | The takeover is a compare-and-swap on status and start time, and it resets the start time. | `tests/agent-run-races.test.js` |
+| WS-4 | P2 | Release pack approval failed for every member except the owner after a figure was moved in from another home. | `release_pack_figures` only reads versions published in the pack's company. | `tests/workspace-races-sql.test.js` |
+| WS-5 | P2 | A QP sign-off retracted by another editor was still written into a downloaded PNG. | The signed download re-reads the sign-off and refuses if it is no longer the same live one. | `tests/three-d-signoff-availability.test.js` |
+| BILL-6b, 7, 8 | P3 | Basil refunds never found their invoice, a credit note could be counted twice, and same-second invoice events could regress status. | Invoices restate from the live invoice. Refunds find their invoice through Invoice Payments. | `tests/stripe-webhook-order.test.js` |
+| BILL-9 | P3 | Checkout granted Pro without checking `payment_status`. | An unpaid session grants nothing on its own; the subscription update grants Pro once it is active. | `tests/stripe-webhook-order.test.js` |
+| BILL-10 | P3 | A protected subscriber whose subscription ended kept its id, so checkout refused them forever. | The ended subscription is unlinked from protected rows; the plan is unchanged. | `tests/stripe-webhook-order.test.js` |
+| WS-6 | P3 | A just-demoted admin could finish one last role change. Invites raced across workspaces and against an accept. Parallel key creation passed the 10-key limit. Sign-out left the invite token and failed silently offline. | Admin is re-checked after the owner lock. Invites lock per person and re-check membership. Keys are re-counted after insert. Sign-out falls back to this device and drops the saved invite. | `tests/workspace-races-sql.test.js`, `tests/auth-plan-race.test.jsx` |
+| ED-6 | P2 | Migration sliced local maps to 10 and recorded itself complete. It ran in every tab, and re-pointed a map that a manual Save had already given a row. | Passes are bounded without dropping maps, run under a Web Lock per account, and re-point only the map still open from the start of the pass. | `tests/cloud-migration.test.js` |
+| ED-7 | P3 | A Dashboard rename was saved back over by the open editor's autosave. | A rename bumps the revision (trigger), so another tab gets SAVE_CONFLICT. The renaming tab adopts the new revision and name. | `tests/rename-revision-sql.test.js` |
+
+### Still open
+
+| ID | Finding | Why it is open |
+|---|---|---|
+| WS-7 | The anonymous MCP per-caller allowance is keyed on identifiers the caller chooses, so the real ceiling is the 300/hour per-IP limit (`api/mcp.js:416-426`). | A design gap. Fixing it means signing session ids, which needs a server secret and a protocol change. |
+| WS-8 | Deleting the last owner's auth account cascades their membership away and leaves the workspace ownerless. | No in-app account deletion exists, so this is reachable only through the Supabase dashboard. |
+| ED-8 | A free user with more local maps than the plan allows retries the over-limit uploads at every sign-in. | Suspected only; the uploads fail cleanly with PROJECT_LIMIT and nothing is lost. |
 
 ### Issue groups
 
 | Group | IDs | State | Issue |
 |---|---|---|---|
-| Billing webhook ordering and retries | BILL-1, BILL-2, BILL-3, BILL-6a | Fixed | [#416](https://github.com/coltongriffith/mapviewer2/issues/416) |
-| Tenure reminder lifecycle | TEN-1, TEN-2, TEN-3 | Fixed | [#417](https://github.com/coltongriffith/mapviewer2/issues/417) |
-| 2D editor save serialization and the map lifecycle | ED-1, ED-2, ED-3, ED-4 | Fixed | [#418](https://github.com/coltongriffith/mapviewer2/issues/418) |
-| 3D sign-in stash and open/save races | 3D-1, 3D-2, 3D-3, 3D-4 | Fixed | [#419](https://github.com/coltongriffith/mapviewer2/issues/419) |
-| 2D editor local drafts and migration | ED-5, ED-6, ED-7 | Open | [#420](https://github.com/coltongriffith/mapviewer2/issues/420) |
-| Billing entitlements and checkout duplicates | BILL-2b, BILL-4, BILL-5, BILL-6b, BILL-7..9, BILL-10 | Open | [#421](https://github.com/coltongriffith/mapviewer2/issues/421) |
-| Tenure sync trust and alert recovery | TEN-4 to TEN-10 | Open | [#422](https://github.com/coltongriffith/mapviewer2/issues/422) |
-| Agent API and share limits | WS-1, WS-2, WS-3 | Open | [#423](https://github.com/coltongriffith/mapviewer2/issues/423) |
-| Workspace approvals, sign-offs and roles | WS-4, WS-5, WS-6 | Open | [#424](https://github.com/coltongriffith/mapviewer2/issues/424) |
+| Billing webhook ordering and retries | BILL-1, BILL-2, BILL-3, BILL-6a | Fixed | 416 |
+| Tenure reminder lifecycle | TEN-1, TEN-2, TEN-3 | Fixed | 417 |
+| 2D editor save serialization and the map lifecycle | ED-1, ED-2, ED-3, ED-4 | Fixed | 418 |
+| 3D sign-in stash and open/save races | 3D-1, 3D-2, 3D-3, 3D-4 | Fixed | 419 |
+| 2D editor local drafts and migration | ED-5, ED-6, ED-7 | Fixed | 420 |
+| Billing entitlements and checkout duplicates | BILL-2b, BILL-4, BILL-5, BILL-6b, BILL-7..9, BILL-10 | Fixed | 421 |
+| Tenure sync trust and alert recovery | TEN-4 to TEN-11 | Fixed | 422 |
+| Agent API and share limits | WS-1, WS-2, WS-3 | Fixed | 423 |
+| Workspace approvals, sign-offs and roles | WS-4, WS-5, WS-6 | Fixed | 424 |
+
+"Issue" is the GitHub issue number in this repository.
 
 ## 1. 2D editor saving
 
@@ -189,6 +200,17 @@ States: NONE, then PENDING(nonce) (queueAccountSave :317), then SAVING (resume, 
 | restore (RPC or direct UPDATE) | TRASHED | active count < plan limit | ACTIVE | otherwise `PROJECT_LIMIT` / `ORG_PROJECT_LIMIT` | `ws_c_restore_quota` trigger |
 
 New invariant I5: at most one revision-checked save per tab is in flight.
+
+Second pass:
+
+| event | from | guard | to | side effects | where |
+|---|---|---|---|---|---|
+| draft write | any | - | - | stores `baseRevision` = the revision the payload was edited from | `saveDraft` |
+| boot with draft | page load | draft has `baseRevision` | CLOUD_* at that revision | legacy drafts fall back to `em_cloud_revisions` | `App.jsx` initial revision |
+| save lands | SAVING | - | - | the stored draft's base moves to the new revision | `updateDraftBaseRevision` |
+| rename (Dashboard, Recent) | ACTIVE(n) | name changed | ACTIVE(n+1) | the renaming tab adopts n+1 and the name; other tabs get SAVE_CONFLICT | `ws_d_rename_revision` trigger |
+| migration pass | sign-in | Web Lock held by another tab | skipped | - | `runCloudMigrationExclusive` |
+| migration pass | sign-in | lock acquired | done when every map is uploaded | at most 10 uploads a pass; re-points the open map only if it is unchanged since the pass began | `runCloudMigration` |
 
 ### Checked and already guarded
 
@@ -402,6 +424,18 @@ No transition on downgrade; nothing trims or re-evaluates existing rows.
 
 New invariant I3 holds: every applied plan change reflects Stripe's present subscription state, so retried and out-of-order deliveries converge. I4 is still not enforced (BILL-2b).
 
+Second pass:
+
+| event | from | guard | to | side effects | where |
+|---|---|---|---|---|---|
+| POST /api/stripe-checkout | any | Stripe lists a subscription in active, trialing, past_due, unpaid or paused | refused (409) | - | `stripe-checkout.js` |
+| POST /api/stripe-checkout | any | no live subscription | new session | other open sessions for the customer are expired first | |
+| checkout.session.completed | any | `payment_status` not paid or no_payment_required | unchanged | Pro arrives with the active subscription update | `stripe-webhook.js` |
+| subscription deleted | protected source, row on that subscription | - | plan unchanged | `stripe_subscription_id` cleared | |
+| invoice events, credit note, refund | any | Stripe key configured | restated from the live invoice | refunds find the invoice through Invoice Payments | `liveInvoice`, `refundedInvoiceId` |
+| plan resolution | - | plan in pro or company, or a protected source | unlimited maps and brand kits | the same rule as tenures and shares | `ws_personal_map_limit`, `check_brand_kit_quota` |
+| alert scheduling | any | owner's current plan | oldest tenures, portfolios and recipients that fit; offsets the plan allows | the rest are superseded until an upgrade | `limitPortfolio` |
+
 ### Checked and already guarded
 
 Signature + 300 s replay tolerance; duplicate event id (23505) acked without writes (billing.test.js:442); ledger released on
@@ -469,6 +503,20 @@ Recipients: limit enforced by a BEFORE INSERT trigger only (0003:435-437).
 | plan: every threshold passed | - | an offset >= days left exists | catch-up row keyed on that offset | stable key, sent once | `planExpiryAlerts` |
 
 The alert identity invariant still holds: one row per key across all statuses. What changed is that a never-sent row can now return to `pending` instead of blocking its key forever.
+
+Second pass:
+
+| event | from | guard | to | side effects | where |
+|---|---|---|---|---|---|
+| sync dry run ends | running | - | `dry_run` | - | `tenure-sync/run.mjs` |
+| promotion batch | running | - | running | events and snapshots written first; `missing_run_count` left for reconcile; a resume skips tenures already recorded | `promoteStaging` |
+| membership UPDATE | live / removed | column outside the edit set (`removed_at`, `tenure_id`) | refused | - | column grant |
+| recipient INSERT or UPDATE | - | invalid email, or a move onto a full policy | refused | advisory lock per policy | `tenure_recipient_guard` |
+| plan expiry | - | known terminal status | no reminders | - | `planExpiryAlerts` |
+| plan change notices | - | event's run not succeeded with `alerts_safe` | not planned | - | `trustedChanges` |
+| schedule on an untrusted run | pending CHANGE / NOT_OBSERVED | - | pending (held) | - | `reconcileAlerts` |
+| dispatch start | sending | `last_attempt_at` over an hour old | failed | reason recorded | `reapStuckSends` |
+| send ok, status write fails | sending | - | sending, then failed by the reaper | never back to pending | `dispatch` |
 
 ### Checked and already guarded
 
@@ -550,6 +598,20 @@ Run per (api_key, idempotency_key): `none -> started -> ready | failed`; `failed
 #### 1.8 Preview allowance (MCP and REST)
 REST /preview: in-memory 6/h/IP (preview.js:33), check_rate_limit 3/h per IP hash (atomic upsert, 20260901000001_shared_rate_limit.sql), create_shared_map 10/h per creator key.
 MCP: per-caller count read from shared_maps (api/mcp.js:595-596), anonymous network ceiling via check_rate_limit 300/h/IP (mcp.js:597-601), authoritative cap in create_shared_map (CS:55-70).
+
+### Changes from the fixes
+
+| event | from | guard | to | side effects | where |
+|---|---|---|---|---|---|
+| create share (editor, MCP, agent) | - | per-caller advisory lock held | counted, then inserted | parallel calls queue | `create_shared_map`, `create_agent_share` |
+| POST agent key | - | bearer has `client_id` (OAuth app) | refused (403) | - | `keys.js` |
+| POST agent key | - | more than 10 active after insert | refused (409) | the new key is revoked | `keys.js` |
+| agent retry | failed / stale started | compare-and-swap on status and start time | started | start time reset | `beginRun` |
+| release pack figures | - | version published outside the pack's company | ignored | - | `release_pack_figures` |
+| signed PNG download | version open | sign-off no longer the same live one | refused | the bar is redrawn | `downloadSignedIfLive` |
+| set_member_role / remove_member | - | caller no longer admin after the owner lock | refused | - | SQL |
+| create_org_invite | - | per-person lock; member after revoking the earlier invite | refused (ALREADY_MEMBER) | - | SQL |
+| sign-out | signed_in | server unreachable | anon (local) | saved invite link dropped on any account change | `useAuth` |
 
 ### Checked and already guarded
 

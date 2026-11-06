@@ -321,7 +321,8 @@ const BUDGETS = {
   // measured 1130.1/1199.1 KiB plain/configured, retaining 0.5 KiB stamp margin.
   // Original geometry guards/cache and shared painters add ~4.4 KiB; all
   // current route, 3D, CSS, vendor and dependency caps remain unchanged.
-  totalAuthJsGzipKb: 1199.6,
+  // Nov 2026, state-machine fixes (docs/state-machines.md: draft base revision, migration lock, rename revision, sign-off recheck): measured 1199.8.
+  totalAuthJsGzipKb: 1200.3,
 
   // 1009.4 → 1026.3 (measured 1026.0): lazy XLSX reader (~13.8 KiB), sheet/header preview
   // (~1.1 KiB), import wiring and numeric-format handling. Shared fflate adds ~1.2 KiB
@@ -415,7 +416,8 @@ const BUDGETS = {
   // total stamp margin. No startup, other budget or dependency allowance change.
   // Same combined property-boundary integration: measured 1130.1 KiB plain;
   // preserve the existing 0.5 KiB stamp margin and all non-total allowances.
-  totalJsGzipKb: 1130.6,
+  // Nov 2026, state-machine fixes (docs/state-machines.md: draft base revision, migration lock, rename revision, sign-off recheck): measured 1130.6+.
+  totalJsGzipKb: 1131.2,
 
   // 940.9 → 957.8 (measured 957.5): Excel import, as totalAuthJsGzipKb above.
   // 940.9 → 944.8 (P2-8, measured 944.6): the same lazy property recipe path
@@ -702,7 +704,8 @@ const BUDGETS = {
   // check). Measured 201.9 plain / 202.1 configured, not eager startup growth.
   // Combined lazy+Tour caps rise only 3.1 KiB (340.8 -> 343.9).
   // Shared account restore-context guards:202.2plain/202.6configured;0.3KiB margin.
-  threeDTourJsGzipKb: 202.9,
+  // Nov 2026, state-machine fixes (docs/state-machines.md: draft base revision, migration lock, rename revision, sign-off recheck): measured 203.0 (shares versions.js).
+  threeDTourJsGzipKb: 203.4,
   // 161.2 → 162.7 (P2-8, measured 162.2 plain / 162.4 configured): explicit
   // recipe selection, snapshot ownership, collision/edited-wording guards and
   // recipe-only update notices in property-data. No eager 3D page growth.
@@ -744,7 +747,8 @@ const BUDGETS = {
   // Live web map merged with main (Point inspector, numeric classification): measured 348.6.
   // Same explicit template recipe: measured 350.3 configured / 282.1 plain.
   // Per-tab save queue and missing-map detach (docs/state-machines.md ED-1/ED-2): measured 355.0.
-  editorAuthJsGzipKb: 355.3,
+  // Nov 2026, state-machine fixes (docs/state-machines.md: draft base revision, migration lock, rename revision, sign-off recheck): measured 355.4.
+  editorAuthJsGzipKb: 355.9,
   // Excel import: shared fflate's async ZIP worker support adds ~1.2 KiB (342.5 measured).
   // The XLSX parser and sheet picker remain lazy; the homepage does not load compression.
   // 270 → 271.0 (Oct 2026, production errors, measured 270.7, 269.6 on main): the same as editorAuthJsGzipKb above.
@@ -762,7 +766,8 @@ const BUDGETS = {
   // Same chunk split for the live web map; measured 279.5 plain.
   // Same shared error helper: measured 279.8 plain, fractionally over the former cap.
   // Live web map merged with main (Point inspector, numeric classification): measured 280.5.
-  editorJsGzipKb: 286.9,
+  // Nov 2026, state-machine fixes (docs/state-machines.md: draft base revision, migration lock, rename revision, sign-off recheck): measured 287.2.
+  editorJsGzipKb: 287.6,
   // 355 to 355.3 (Oct 2026): claims shares the editor API bridge/control names; measured 355.0 in CI.
   // Same shared compression increase as above (274.4 measured).
   // Claims also restores drafts through shared compression (355.3 measured).
@@ -775,11 +780,13 @@ const BUDGETS = {
   // Live web map merged with main (Point inspector, numeric classification): measured 361.4.
   // Claims shares that editor graph: measured 363.1 configured / 294.8 plain.
   // Same save queue and detach in the shared editor graph: measured 367.9.
-  claimsAuthJsGzipKb: 368.2,
+  // Nov 2026, state-machine fixes (docs/state-machines.md: draft base revision, migration lock, rename revision, sign-off recheck): measured 368.2+.
+  claimsAuthJsGzipKb: 368.8,
   // Live web map merged with main (Point inspector, numeric classification): measured 293.2.
   // Per-tab save queue and missing-map detach in the shared editor graph
   // (docs/state-machines.md ED-1/ED-2): measured just over 299.6.
-  claimsJsGzipKb: 299.9,
+  // Nov 2026, state-machine fixes (docs/state-machines.md: draft base revision, migration lock, rename revision, sign-off recheck): measured 299.9+.
+  claimsJsGzipKb: 300.4,
   // Live investor web map (/embed/map/<id>): map, legend, layer list, drill-result callouts and the drill plan
   // (its overlay loaded only when published with one), no editor; measured 243.9 configured, 177.5 plain with main.
   // MapCanvas opt-in key/annotation hand-off: measured 244.2 configured;
