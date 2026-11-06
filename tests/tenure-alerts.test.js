@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  planExpiryAlerts, planChangeAlerts, reconcileAlerts, alertKey, dueNow, maySend, limitPortfolio,
+  planExpiryAlerts, planChangeAlerts, reconcileAlerts, alertKey, dueNow, maySend, limitPortfolio, trustedChanges,
   ALERT_TYPE,
 } from '../scripts/tenure-alerts/plan.mjs';
 import { expiryEmail, changeEmail, notObservedEmail, renderAlert } from '../scripts/tenure-alerts/templates.mjs';
@@ -569,5 +569,27 @@ describe('limitPortfolio', () => {
     const out = limitPortfolio({ limits: null, used: { portfolios: 5, tenures: 500 }, memberships: members(3), recipients: recips, offsets: [7] });
     expect(out.memberships).toHaveLength(3);
     expect(out.offsets).toEqual([7]);
+  });
+});
+
+// docs/state-machines.md, TEN-4 and TEN-9.
+describe('change notices and terminal titles', () => {
+  it('TEN-4: only change events recorded by a trusted import reach an inbox', () => {
+    const events = [{ id: 'e1', import_run_id: 'safe' }, { id: 'e2', import_run_id: 'unsafe' }, { id: 'e3', import_run_id: null }, { id: 'e4', import_run_id: 'failed' }];
+    const runs = [{ id: 'safe', status: 'succeeded', alerts_safe: true }, { id: 'unsafe', status: 'succeeded', alerts_safe: false }, { id: 'failed', status: 'failed', alerts_safe: true }];
+    expect(trustedChanges(events, runs).map((e) => e.id)).toEqual(['e1']);
+  });
+
+  it('TEN-4: an untrusted run does not retire change notices already queued', () => {
+    const change = { id: 'c1', status: 'pending', portfolio_id: 'p1', tenure_id: 't1', recipient_id: 'r1', alert_type: ALERT_TYPE.CHANGE, offset_days: 0, change_event_id: 'e1' };
+    expect(reconcileAlerts([], [change], NOW, { alertsSafe: false }).toSupersede).toEqual([]);
+    expect(reconcileAlerts([], [change], NOW, { alertsSafe: true }).toSupersede).toEqual(['c1']);
+  });
+
+  it('TEN-9: a forfeited or cancelled title gets no countdown, an unfamiliar status still does', () => {
+    for (const status of ['FORFEITED', 'Cancelled', 'Expired']) {
+      expect(planExpiryAlerts(membership({ tenure: { ...membership().tenure, status } }), [90], [recipient()], NOW)).toEqual([]);
+    }
+    expect(planExpiryAlerts(membership({ tenure: { ...membership().tenure, status: 'PROTECTED' } }), [90], [recipient()], NOW)).toHaveLength(1);
   });
 });

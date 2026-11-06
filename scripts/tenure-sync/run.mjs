@@ -273,7 +273,10 @@ async function main() {
       await clearStaging(sb, run.id);
       const aborted = evaluation.verdict === VERDICT.ABORT;
       await finishRun(sb, run.id, {
-        status: aborted ? 'aborted' : 'succeeded',
+        // A dry run promoted nothing, so it is not a sync: recording it as
+        // 'succeeded' made it the "last sync", the alert job's trust signal and
+        // the next run's guardrail baseline (TEN-5).
+        status: aborted ? 'aborted' : 'dry_run',
         alerts_safe: false,
         records_received: stats.recordsReceived,
         records_processed: 0,
@@ -577,7 +580,9 @@ async function promoteStaging(sb, runId, { observedAt, log, alertsSafe }) {
         ...tenure,
         geometry_hash: geometryHash(tenure.geometry),
         last_import_run_id: runId,
-        missing_run_count: 0,
+        // missing_run_count is NOT reset here: tenure_reconcile_run resets it,
+        // and it needs the old count to see that a missing title came back
+        // (TENURE_REAPPEARED never fired while promotion zeroed it first, TEN-6).
         updated_at: observedAt,
       };
       tenureRows.push(row);
@@ -595,22 +600,16 @@ async function promoteStaging(sb, runId, { observedAt, log, alertsSafe }) {
     const existingIds = diffs.map((d) => d.prev?.id).filter(Boolean);
     const previousOwnersByTenure = await loadOwnersFor(sb, existingIds);
 
-    const idBySourceId = await upsertTenures(sb, tenureRows, { log });
-
-    const ownerRows = [];
-    const touchedTenureIds = [];
+    // Change events and snapshots are written BEFORE the tenure rows move.
+    // They are derived from the stored row, so once upsertTenures has run a
+    // resume diffs the staged row against itself and finds nothing: a crash
+    // between the two used to lose the batch's events for good (TEN-7). A
+    // resume of the same run skips tenures whose events it already recorded.
     const snapshots = [];
     const events = [];
-
+    const recorded = await tenuresWithRunEvents(sb, runId, existingIds);
     for (const { prev, row, owners } of diffs) {
-      const tenureId = idBySourceId.get(row.source_record_id) || prev?.id;
-      if (!tenureId) continue;
-      touchedTenureIds.push(tenureId);
-
-      for (const o of owners) ownerRows.push({ ...o, tenure_id: tenureId });
-
-      if (!prev) continue;
-
+      if (!prev || recorded.has(prev.id)) continue;
       const all = detectChanges(prev, row, {
         previousOwners: previousOwnersByTenure.get(prev.id) || [],
         currentOwners: owners,
@@ -619,7 +618,7 @@ async function promoteStaging(sb, runId, { observedAt, log, alertsSafe }) {
 
       for (const e of all) {
         events.push({
-          tenure_id: tenureId,
+          tenure_id: prev.id,
           event_type: e.event_type,
           previous_value: e.previous_value == null ? null : String(e.previous_value).slice(0, 500),
           current_value: e.current_value == null ? null : String(e.current_value).slice(0, 500),
@@ -633,7 +632,7 @@ async function promoteStaging(sb, runId, { observedAt, log, alertsSafe }) {
         // The snapshot records what we believed BEFORE this run, so the history
         // reads as a sequence of states rather than a sequence of diffs.
         snapshots.push({
-          tenure_id: tenureId,
+          tenure_id: prev.id,
           snapshot_data: prev,
           geometry: null,   // geometry history lives in the hash + the change event
           source_updated_at: prev.source_updated_at || null,
@@ -642,10 +641,21 @@ async function promoteStaging(sb, runId, { observedAt, log, alertsSafe }) {
         });
       }
     }
-
-    await upsertOwners(sb, ownerRows, { log });
     await insertSnapshots(sb, snapshots, { log });
     await insertChangeEvents(sb, events, { log });
+
+    const idBySourceId = await upsertTenures(sb, tenureRows, { log });
+
+    const ownerRows = [];
+    const touchedTenureIds = [];
+    for (const { prev, row, owners } of diffs) {
+      const tenureId = idBySourceId.get(row.source_record_id) || prev?.id;
+      if (!tenureId) continue;
+      touchedTenureIds.push(tenureId);
+      for (const o of owners) ownerRows.push({ ...o, tenure_id: tenureId });
+    }
+
+    await upsertOwners(sb, ownerRows, { log });
     // Only prune owners on a run we trust; on an unsafe run an owner missing
     // from the response is far more likely to be a truncated field than a
     // transfer of title.
@@ -681,6 +691,22 @@ async function promoteStaging(sb, runId, { observedAt, log, alertsSafe }) {
  * it was the exception because it lives here rather than beside them.
  */
 const OWNER_LOOKUP_CHUNK = 200;
+
+/** Tenures that already have change events recorded by this run (a resume). */
+async function tenuresWithRunEvents(sb, runId, tenureIds) {
+  const seen = new Set();
+  if (!runId || !tenureIds.length) return seen;
+  for (const chunk of chunked(tenureIds, OWNER_LOOKUP_CHUNK)) {
+    const { data, error } = await sb
+      .from('tenure_change_events')
+      .select('tenure_id')
+      .eq('import_run_id', runId)
+      .in('tenure_id', chunk);
+    if (error) throw new Error(`Could not read this run's change events: ${error.message}`);
+    for (const row of data || []) seen.add(row.tenure_id);
+  }
+  return seen;
+}
 
 async function loadOwnersFor(sb, tenureIds) {
   const byTenure = new Map();

@@ -28,6 +28,7 @@
 // invariant this important should not depend on application code being right.
 
 import { bcToday, daysRemaining, alertDateFor, toIsoDate } from '../../src/utils/tenureDates.js';
+import { TERMINAL_STATUS } from '../tenure-sync/changeDetect.mjs';
 
 export const ALERT_TYPE = { EXPIRY: 'EXPIRY', CHANGE: 'CHANGE', NOT_OBSERVED: 'NOT_OBSERVED' };
 
@@ -49,6 +50,12 @@ export function planExpiryAlerts(membership, offsets, recipients, now = new Date
   // missing date would be worse than saying nothing.
   if (!goodTo) return [];
   if (membership.monitoring_enabled === false) return [];
+  // A forfeited or cancelled title has no deadline left to meet, and
+  // TENURE_TERMINATED already told the owner; a countdown email would
+  // contradict it (TEN-9). Only KNOWN terminal wording stops reminders, the
+  // same rule that raises TENURE_TERMINATED: unfamiliar wording must never
+  // silence a real deadline.
+  if (tenure.status && TERMINAL_STATUS.test(tenure.status)) return [];
 
   const days = daysRemaining(goodTo, now);
   // Already past. The dashboard shows it as expired; an email counting down to
@@ -189,7 +196,7 @@ export function alertKey(row) {
  */
 const REVIVABLE = new Set(['suppressed', 'cancelled', 'superseded']);
 
-export function reconcileAlerts(planned, existing, now = new Date()) {
+export function reconcileAlerts(planned, existing, now = new Date(), { alertsSafe = true } = {}) {
   const plannedByKey = new Map(planned.map((p) => [alertKey(p), p]));
   const existingKeys = new Set(existing.map(alertKey));
   const today = bcToday(now);
@@ -221,9 +228,13 @@ export function reconcileAlerts(planned, existing, now = new Date()) {
   // is almost always a good-to-date that moved: the old rows carry the old
   // source_good_to_date, so their keys stop matching and they are retired
   // instead of being sent with a deadline the province has since changed.
+  // On an untrusted run no change notices are planned at all, which is not a
+  // reason to retire the ones already queued from a trusted run: leave them
+  // for maySend, which holds them until a clean import (TEN-4).
+  const heldChange = (e) => !alertsSafe && (e.alert_type === ALERT_TYPE.CHANGE || e.alert_type === ALERT_TYPE.NOT_OBSERVED);
   const toSupersede = existing
     .filter((e) => (e.status === undefined || e.status === 'pending'))
-    .filter((e) => !plannedByKey.has(alertKey(e)) && !keptOverdue.has(e.id))
+    .filter((e) => !plannedByKey.has(alertKey(e)) && !keptOverdue.has(e.id) && !heldChange(e))
     .map((e) => e.id);
 
   // Never-sent rows whose key the plan wants again come back to pending.
@@ -314,4 +325,15 @@ export function limitPortfolio({ limits, used, memberships, recipients, offsets 
     recipients: [...recipients].sort(byDate('created_at')).slice(0, maxRecipients),
     offsets: offsets.filter((o) => allowed.has(o)),
   };
+}
+
+/**
+ * Change events an inbox may hear about: only those recorded by an import the
+ * guardrails trusted. The alert job used to check only the LATEST run, so
+ * events written by an earlier untrusted run (a schema change, a resume) were
+ * sent once a later run came back clean (TEN-4).
+ */
+export function trustedChanges(events, runs) {
+  const trusted = new Set(runs.filter((r) => r.status === 'succeeded' && r.alerts_safe).map((r) => r.id));
+  return events.filter((e) => e.import_run_id && trusted.has(e.import_run_id));
 }
