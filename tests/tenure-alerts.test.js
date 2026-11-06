@@ -81,8 +81,9 @@ describe('planExpiryAlerts — the things it refuses to do', () => {
     );
     expect(rows).toHaveLength(1);
     expect(rows[0].scheduled_for).toBe('2026-08-01');
-    // The offset IS the real days remaining, so the email says something true.
-    expect(rows[0].offset_days).toBe(3);
+    // The key is the threshold being caught up (7), so it stays the same from
+    // day to day; the email computes the real days remaining when it is sent.
+    expect(rows[0].offset_days).toBe(7);
   });
 
   it('schedules nothing for a claim with no published good-to-date', () => {
@@ -201,11 +202,11 @@ describe('reconcileAlerts — idempotency and recalculation', () => {
     expect(toInsert).toHaveLength(3);
   });
 
-  it('leaves sent, failed and superseded rows alone', () => {
-    // Only `suppressed` is a held obligation. A sent alert is history, a failed
-    // one is an administrator's to retry, a superseded one was retired on
-    // purpose — reviving any of them would re-send a deadline.
-    for (const status of ['sent', 'failed', 'superseded']) {
+  it('leaves sent and failed rows alone', () => {
+    // A sent alert is history and a failed one is an administrator's to retry:
+    // reviving either would re-send a deadline. (Never-sent superseded and
+    // cancelled rows are revived when their key comes back — see TEN-3 below.)
+    for (const status of ['sent', 'failed']) {
       const existing = planned().map((p, i) => ({ ...p, id: `${status}${i}`, status }));
       expect(reconcileAlerts(planned(), existing).toRevive).toEqual([]);
     }
@@ -444,5 +445,94 @@ describe('email templates', () => {
       { alert_type: 'CHANGE' },
       { ...context, change: { event_type: 'STATUS_CHANGED', previous_value: 'GOOD', current_value: 'PENDING' } },
     ).subject).toMatch(/status changed/);
+  });
+});
+
+// ── Reminder lifecycle regressions (docs/state-machines.md, TEN-1..3) ──────
+describe('reminders survive missed days, re-adds and date flickers', () => {
+  const at = (iso) => new Date(`${iso}T18:00:00Z`);
+  const stored = (rows, status = 'pending') => rows.map((p, i) => ({ ...p, id: `e${i}`, status }));
+
+  it('TEN-1: a reminder whose day passed unsent is kept and sent late, not superseded', () => {
+    // Planned on 2026-12-13; the 90-day reminder is due 2026-12-14 but the
+    // send that day failed. On 2026-12-15 the 90-day threshold is in the past.
+    const existing = stored(planExpiryAlerts(membership(), [90, 30, 7], [recipient()], at('2026-12-13')));
+    const next = at('2026-12-15');
+    const { toSupersede, toInsert } = reconcileAlerts(
+      planExpiryAlerts(membership(), [90, 30, 7], [recipient()], next), existing, next,
+    );
+    const ninety = existing.find((e) => e.offset_days === 90);
+    expect(toSupersede).not.toContain(ninety.id);
+    expect(toInsert).toEqual([]);
+    expect(dueNow([ninety], next)).toHaveLength(1);
+  });
+
+  it('TEN-1: a held reminder released after its day is revived and sent late', () => {
+    const existing = stored(planExpiryAlerts(membership(), [90, 30, 7], [recipient()], at('2026-12-13')))
+      .map((e) => (e.offset_days === 90 ? { ...e, status: 'suppressed' } : e));
+    const next = at('2026-12-20');
+    const { toRevive } = reconcileAlerts(
+      planExpiryAlerts(membership(), [90, 30, 7], [recipient()], next), existing, next,
+    );
+    expect(toRevive).toEqual([existing.find((e) => e.offset_days === 90).id]);
+  });
+
+  it('TEN-1: only the latest overdue threshold is kept, and a moved deadline still supersedes', () => {
+    const existing = stored(planExpiryAlerts(membership(), [90, 30, 7], [recipient()], at('2026-12-13')));
+    const late = at('2027-02-20'); // both 90 and 30 have passed unsent
+    const { toSupersede } = reconcileAlerts(
+      planExpiryAlerts(membership(), [90, 30, 7], [recipient()], late), existing, late,
+    );
+    expect(toSupersede).toContain(existing.find((e) => e.offset_days === 90).id);
+    expect(toSupersede).not.toContain(existing.find((e) => e.offset_days === 30).id);
+
+    const moved = planExpiryAlerts(
+      membership({ tenure: { good_to_date: '2027-09-14' } }), [90, 30, 7], [recipient()], late,
+    );
+    expect(reconcileAlerts(moved, existing, late).toSupersede).toHaveLength(3);
+  });
+
+  it('TEN-2: the catch-up reminder is sent once, not every day', () => {
+    // Offsets [90, 30] and a claim added 20 days out: one catch-up, then the
+    // stored row's key matches the next day's plan, so nothing new is inserted.
+    const m = membership({ tenure: { good_to_date: '2026-08-21' } });
+    const first = planExpiryAlerts(m, [90, 30], [recipient()], NOW);
+    expect(first).toHaveLength(1);
+    let existing = stored(first, 'sent');
+    for (const day of ['2026-08-02', '2026-08-03', '2026-08-10', '2026-08-20']) {
+      const { toInsert } = reconcileAlerts(planExpiryAlerts(m, [90, 30], [recipient()], at(day)), existing, at(day));
+      expect(toInsert).toEqual([]);
+      existing = [...existing, ...stored(toInsert, 'sent')];
+    }
+  });
+
+  it('TEN-2: no extra email on the good-to-date after the 1-day reminder went out', () => {
+    const m = membership({ tenure: { good_to_date: '2026-08-02' } });
+    const sent = stored(planExpiryAlerts(m, [90, 30, 1], [recipient()], NOW), 'sent');
+    expect(sent.map((r) => r.offset_days)).toEqual([1]);
+    const dayOf = at('2026-08-02');
+    expect(reconcileAlerts(planExpiryAlerts(m, [90, 30, 1], [recipient()], dayOf), sent, dayOf).toInsert).toEqual([]);
+  });
+
+  it('TEN-3: removing and re-adding a claim brings its reminders back', () => {
+    const existing = stored(planExpiryAlerts(membership(), [90, 30, 7], [recipient()], NOW), 'cancelled');
+    const { toInsert, toRevive } = reconcileAlerts(
+      planExpiryAlerts(membership(), [90, 30, 7], [recipient()], NOW), existing, NOW,
+    );
+    expect(toInsert).toEqual([]); // the unique index would reject these
+    expect(toRevive).toEqual(['e0', 'e1', 'e2']);
+  });
+
+  it('TEN-3: a good-to-date that went null for a night and returned is planned again', () => {
+    const original = planExpiryAlerts(membership(), [90, 30, 7], [recipient()], NOW);
+    // Night 1: the date is null, so the plan is empty and every row is superseded.
+    const night = reconcileAlerts(
+      planExpiryAlerts(membership({ tenure: { good_to_date: null } }), [90, 30, 7], [recipient()], NOW),
+      stored(original), NOW,
+    );
+    expect(night.toSupersede).toHaveLength(3);
+    // Night 2: the same date is back.
+    const { toRevive } = reconcileAlerts(original, stored(original, 'superseded'), NOW);
+    expect(toRevive).toHaveLength(3);
   });
 });

@@ -12,8 +12,11 @@
 //
 // 2. NO SILENT GAPS. A claim added with 20 days left has already passed every
 //    standard threshold, and rule 1 would leave it with no reminder at all.
-//    So it gets one catch-up reminder, dated today, whose offset is the ACTUAL
-//    days remaining — truthful by construction.
+//    So it gets one catch-up reminder, dated today. The email states the
+//    ACTUAL days remaining (templates.mjs computes it at send time), so it is
+//    truthful by construction. Its key is the threshold being caught up — the
+//    smallest policy offset at or above the days left — so the key is stable
+//    from one day to the next and the catch-up is sent once, not daily.
 //
 // 3. NO STALE DEADLINES. Every planned alert records the good-to-date it was
 //    computed from. When the province moves that date, the old plan no longer
@@ -79,11 +82,12 @@ export function planExpiryAlerts(membership, offsets, recipients, now = new Date
   // Property 2: a claim whose thresholds have all gone by still deserves to be
   // heard from once. `offset_days` is the real number of days left, so the
   // email that goes out says something true rather than something convenient.
-  if (scheduledOffsets.length === 0 && days >= 0) {
+  const catchUpOffset = Math.min(...[...new Set(offsets)].filter((o) => o >= days));
+  if (scheduledOffsets.length === 0 && Number.isFinite(catchUpOffset)) {
     for (const r of eligible) {
       rows.push(makeRow(membership, r, {
         alert_type: ALERT_TYPE.EXPIRY,
-        offset_days: days,
+        offset_days: catchUpOffset,
         scheduled_for: today,
         source_good_to_date: goodTo,
       }));
@@ -183,9 +187,31 @@ export function alertKey(row) {
  * @param {object[]} existing  rows already in the database, with `status`
  * @returns {{toInsert: object[], toSupersede: string[], toRevive: string[]}}
  */
-export function reconcileAlerts(planned, existing) {
+const REVIVABLE = new Set(['suppressed', 'cancelled', 'superseded']);
+
+export function reconcileAlerts(planned, existing, now = new Date()) {
   const plannedByKey = new Map(planned.map((p) => [alertKey(p), p]));
   const existingKeys = new Set(existing.map(alertKey));
+  const today = bcToday(now);
+
+  // OVERDUE IS NOT OBSOLETE. A threshold whose day passed before it was sent
+  // (a skipped cron day, a provider outage, a pause that lifted) drops out of
+  // the plan, because the planner never schedules into the past. If the
+  // deadline it was computed from is still the planned deadline, the reminder
+  // is late, not wrong: keep it so the dispatcher sends it now, with the real
+  // days remaining. Only the latest overdue threshold per deadline is kept;
+  // one late email is enough.
+  const deadlineOf = (r) => [r.portfolio_id, r.tenure_id, r.recipient_id, r.source_good_to_date].join('|');
+  const liveDeadlines = new Set(planned.filter((p) => p.alert_type === ALERT_TYPE.EXPIRY).map(deadlineOf));
+  const overdue = new Map();
+  for (const e of existing) {
+    if (!['pending', 'suppressed', undefined].includes(e.status)) continue;
+    if (e.alert_type !== ALERT_TYPE.EXPIRY || plannedByKey.has(alertKey(e))) continue;
+    if (!e.scheduled_for || e.scheduled_for > today || !liveDeadlines.has(deadlineOf(e))) continue;
+    const kept = overdue.get(deadlineOf(e));
+    if (!kept || e.offset_days < kept.offset_days) overdue.set(deadlineOf(e), e);
+  }
+  const keptOverdue = new Set([...overdue.values()].map((e) => e.id));
 
   const toInsert = [...plannedByKey.entries()]
     .filter(([key]) => !existingKeys.has(key))
@@ -197,12 +223,17 @@ export function reconcileAlerts(planned, existing) {
   // instead of being sent with a deadline the province has since changed.
   const toSupersede = existing
     .filter((e) => (e.status === undefined || e.status === 'pending'))
-    .filter((e) => !plannedByKey.has(alertKey(e)))
+    .filter((e) => !plannedByKey.has(alertKey(e)) && !keptOverdue.has(e.id))
     .map((e) => e.id);
 
+  // Never-sent rows whose key the plan wants again come back to pending.
+  // Without this the unique index (which spans every status) blocks the
+  // re-planned row forever: remove and re-add a claim (cancelled), or a
+  // good-to-date that went null for a night and returned (superseded), and
+  // that claim never got another reminder.
   const toRevive = existing
-    .filter((e) => e.status === 'suppressed')
-    .filter((e) => plannedByKey.has(alertKey(e)))
+    .filter((e) => REVIVABLE.has(e.status))
+    .filter((e) => plannedByKey.has(alertKey(e)) || keptOverdue.has(e.id))
     .map((e) => e.id);
 
   return { toInsert, toSupersede, toRevive };

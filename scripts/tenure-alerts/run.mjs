@@ -100,7 +100,7 @@ async function schedule(sb, { now, alertsSafe }) {
       }
     }
 
-    const { toInsert, toSupersede, toRevive } = reconcileAlerts(planned, existing);
+    const { toInsert, toSupersede, toRevive } = reconcileAlerts(planned, existing, now);
 
     if (toInsert.length) {
       inserted += await insertIgnoringDuplicates(sb, toInsert);
@@ -335,7 +335,7 @@ async function loadRecipients(sb, policyId) {
 async function loadScheduled(sb, portfolioId) {
   const { data, error } = await sb
     .from('tenure_alert_instances')
-    .select('id, status, portfolio_id, tenure_id, recipient_id, alert_type, offset_days, source_good_to_date, change_event_id')
+    .select('id, status, portfolio_id, tenure_id, recipient_id, alert_type, offset_days, source_good_to_date, change_event_id, scheduled_for')
     .eq('portfolio_id', portfolioId);
   if (error) throw new Error(`Could not load scheduled alerts: ${error.message}`);
   return data || [];
