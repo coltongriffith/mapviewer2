@@ -95,7 +95,7 @@ import { studioOn } from './utils/studioLayout.js';
 import { saveLead, getLastLeadEmail } from './utils/leadCapture';
 import { trackSearch, trackEvent, trackEventOnce } from './utils/track';
 import { isPhoneDevice } from './utils/device';
-import { createSaveCoordinator, runGuardedSave } from './utils/saveCoordinator';
+import { createSaveCoordinator, runGuardedSave, isMissingProjectError } from './utils/saveCoordinator';
 import { US_CLAIMS_ENABLED, US_STATES, US_GROUP_LABEL, US_GEOMETRY_DISCLAIMER, isUsJurisdiction } from './utils/jurisdictions';
 import { parseWorkspacePath, propertyPath } from './utils/workspaceRoutes';
 import { clampExportSize, canExportFormat, maxPixelRatioFor, PRO_MAX_EXPORT_PIXELS } from './utils/entitlements';
@@ -1117,7 +1117,9 @@ export default function App({ initialAction = null }) {
         clearTimeout(saveFlashTimerRef.current);
         saveFlashTimerRef.current = setTimeout(() => setSaveFlash(false), 2000);
       };
-      const outcome = await runGuardedSave({
+      // Serialized: expectedRevision is read when THIS save starts, after any
+      // save already in flight has recorded the revision it produced.
+      const outcome = await saveCoordRef.current.serialize(() => runGuardedSave({
         ticket,
         snapshot,
         doSave: () => saveCloudProject({ id: projectId, name: currentMapName, payload: project, expectedRevision: projectRevisionRef.current }),
@@ -1127,7 +1129,7 @@ export default function App({ initialAction = null }) {
         // cloud now holds and stay dirty so the newer edits save next pass.
         onMismatch: (r) => { projectRevisionRef.current = r?.revision ?? null; lastSavedSnapshotRef.current = snapshot; },
         onError: () => {},
-      });
+      }));
       if (outcome.status === 'error') {
         const err = outcome.err;
         if (err?.code === 'ORG_READ_ONLY') {
@@ -1141,24 +1143,17 @@ export default function App({ initialAction = null }) {
             type: 'error',
             message: 'This project was changed in another tab or device. Your edits here are unsaved — reload it, or choose Overwrite to keep this version.',
           });
-        } else if (String(err?.message || '').includes('not found')) {
-          // projectId exists locally but not in cloud (draft migration case):
-          // create it as a new cloud project instead of failing silently.
-          const created = await runGuardedSave({
-            ticket,
-            snapshot,
-            doSave: () => saveCloudProject({ id: null, name: currentMapName, payload: project }),
-            getCurrentSerialized: () => lastSerializedRef.current,
-            onSaved: () => { lastSavedSnapshotRef.current = snapshot; setIsDirty(false); flashSaved(); },
-            onMismatch: () => { lastSavedSnapshotRef.current = snapshot; },
-            onError: (createErr) => {
-              setUploadStatus({ type: 'error', message: `Couldn't save to the cloud (${createErr.message}). Your work is safe in this browser — click Save to retry.` });
-            },
-          });
-          // Re-point the workspace at the new row only if we're still in it.
-          if ((created.status === 'saved' || created.status === 'saved-but-dirty') && ticket.stillCurrent()) {
-            setProjectId(created.result.id);
-            projectRevisionRef.current = created.result.revision ?? 1;
+        } else if (isMissingProjectError(err)) {
+          // The map was deleted, trashed, or this account can no longer save
+          // it (signed in as someone else, company access removed). Creating
+          // a new row here used to resurrect deleted maps and copy one
+          // account's or company's map into another account without asking.
+          // Detach instead: the edits stay open and in this browser, and Save
+          // creates a new map only when the user chooses to.
+          if (ticket.stillCurrent()) {
+            setProjectId(null);
+            projectRevisionRef.current = null;
+            setUploadStatus({ type: 'error', message: 'This map is no longer in your account (it was deleted, or you no longer have access). Your edits are still open in this browser — click Save to keep them as a new map.' });
           }
         } else {
           setUploadStatus({ type: 'error', message: `Couldn't auto-save to the cloud (${err.message}). Your work is safe in this browser — click Save to retry.` });
@@ -4915,13 +4910,17 @@ export default function App({ initialAction = null }) {
       // saveCloudProject INSERTS a fresh row and returns its id. Fabricating
       // a random id here would send it down the UPDATE path, which matches no
       // row and silently saves nothing while the UI reports success.
-      const outcome = await runGuardedSave({
+      // Serialized with autosave so both never send the same expectedRevision
+      // (that made this tab's own saves look like a conflict from elsewhere).
+      // The revision is recorded inside the callbacks, before the next queued
+      // save reads it.
+      const outcome = await saveCoordRef.current.serialize(() => runGuardedSave({
         ticket,
         snapshot,
-        doSave: () => saveCloudProject({ id: accountSave ? null : projectId, name: nameToSave, payload: payloadToSave, expectedRevision: projectRevisionRef.current }),
+        doSave: () => saveCloudProject({ id: accountSave ? null : projectId, name: nameToSave, payload: payloadToSave, expectedRevision: accountSave ? null : projectRevisionRef.current }),
         getCurrentSerialized: () => lastSerializedRef.current,
-        onSaved: () => { lastSavedSnapshotRef.current = snapshot; setIsDirty(false); },
-        onMismatch: () => { lastSavedSnapshotRef.current = snapshot; },
+        onSaved: (r) => { projectRevisionRef.current = r?.revision ?? 1; lastSavedSnapshotRef.current = snapshot; setIsDirty(false); },
+        onMismatch: (r) => { projectRevisionRef.current = r?.revision ?? 1; lastSavedSnapshotRef.current = snapshot; },
         onError: (err) => {
           if (err?.code === 'SAVE_CONFLICT') {
             setSaveConflict({ name: nameToSave });
@@ -4933,10 +4932,9 @@ export default function App({ initialAction = null }) {
             setUploadStatus({ type: 'error', message: `Cloud save failed: ${err.message}. Your work is still saved in this browser.` });
           }
         },
-      });
+      }));
       if ((outcome.status === 'saved' || outcome.status === 'saved-but-dirty') && ticket.stillCurrent()) {
         const cloudId = outcome.result.id;
-        projectRevisionRef.current = outcome.result.revision ?? 1;
         setProjectId(cloudId);
         setProjectName(nameToSave);
         const pending = loadAccountSave();
@@ -8118,16 +8116,26 @@ export default function App({ initialAction = null }) {
                   // Keep both: save these edits as a separate project.
                   setSaveConflict(null);
                   const copyName = `${saveConflict.name} (this device)`;
-                  try {
-                    const created = await saveCloudProject({ id: null, name: copyName, payload: project });
-                    setProjectId(created.id);
-                    projectRevisionRef.current = created.revision ?? 1;
+                  // Guarded like every other save: edits made while this is
+                  // in flight stay dirty, and opening another map meanwhile
+                  // must not re-point THAT map at this copy.
+                  const snapshot = JSON.stringify(project);
+                  const payloadToSave = project;
+                  const ticket = saveCoordRef.current.begin();
+                  const outcome = await saveCoordRef.current.serialize(() => runGuardedSave({
+                    ticket,
+                    snapshot,
+                    doSave: () => saveCloudProject({ id: null, name: copyName, payload: payloadToSave }),
+                    getCurrentSerialized: () => lastSerializedRef.current,
+                    onSaved: (r) => { projectRevisionRef.current = r?.revision ?? 1; lastSavedSnapshotRef.current = snapshot; setIsDirty(false); },
+                    onMismatch: (r) => { projectRevisionRef.current = r?.revision ?? 1; lastSavedSnapshotRef.current = snapshot; },
+                    onError: (e) => setUploadStatus({ type: 'error', message: `Couldn't save a copy: ${e.message}` }),
+                  }));
+                  if ((outcome.status === 'saved' || outcome.status === 'saved-but-dirty') && ticket.stillCurrent()) {
+                    setProjectId(outcome.result.id);
                     setProjectName(copyName);
-                    setIsDirty(false);
                     listCloudProjects().then(setRecentProjects).catch(() => {});
                     setUploadStatus({ type: 'success', message: `Saved your version separately as “${copyName}”.` });
-                  } catch (e) {
-                    setUploadStatus({ type: 'error', message: `Couldn't save a copy: ${e.message}` });
                   }
                 }}
               >Save mine as a copy</button>
@@ -8137,13 +8145,21 @@ export default function App({ initialAction = null }) {
                 onClick={async () => {
                   // Deliberate overwrite: null expectation skips the check.
                   setSaveConflict(null);
-                  try {
-                    const res = await saveCloudProject({ id: projectId, name: currentMapName, payload: project, expectedRevision: null });
-                    projectRevisionRef.current = res.revision ?? null;
-                    setIsDirty(false);
+                  const snapshot = JSON.stringify(project);
+                  const payloadToSave = project;
+                  const targetId = projectId;
+                  const ticket = saveCoordRef.current.begin();
+                  const outcome = await saveCoordRef.current.serialize(() => runGuardedSave({
+                    ticket,
+                    snapshot,
+                    doSave: () => saveCloudProject({ id: targetId, name: currentMapName, payload: payloadToSave, expectedRevision: null }),
+                    getCurrentSerialized: () => lastSerializedRef.current,
+                    onSaved: (r) => { projectRevisionRef.current = r?.revision ?? null; lastSavedSnapshotRef.current = snapshot; setIsDirty(false); },
+                    onMismatch: (r) => { projectRevisionRef.current = r?.revision ?? null; lastSavedSnapshotRef.current = snapshot; },
+                    onError: (e) => setUploadStatus({ type: 'error', message: `Overwrite failed: ${e.message}` }),
+                  }));
+                  if (outcome.status === 'saved' || outcome.status === 'saved-but-dirty') {
                     setUploadStatus({ type: 'success', message: 'Overwrote the cloud version with this one.' });
-                  } catch (e) {
-                    setUploadStatus({ type: 'error', message: `Overwrite failed: ${e.message}` });
                   }
                 }}
               >Overwrite with mine</button>

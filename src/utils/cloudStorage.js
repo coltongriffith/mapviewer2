@@ -117,7 +117,7 @@ export async function saveCloudProject({ id, name, payload, silent = false, expe
         e.code = 'SAVE_CONFLICT';
         throw e;
       }
-      if (/PROJECT_NOT_FOUND/.test(error.message || '')) throw new Error('Project not found in cloud');
+      if (/PROJECT_NOT_FOUND/.test(error.message || '')) throw Object.assign(new Error('Project not found in cloud'), { code: 'PROJECT_NOT_FOUND' });
       if (/ORG_READ_ONLY/.test(error.message || '')) throw readOnlyError();
       throw error;
     }

@@ -17,9 +17,22 @@
 //                 that snapshot; otherwise the baseline advances but the app
 //                 stays dirty so the next autosave picks up the newer edits.
 
+//  * serialize  — cloud writes that carry an expected revision run one at a
+//                 time per tab. Two overlapping saves (autosave + Save, or a
+//                 save slower than the autosave delay) both read the same
+//                 revision, so the second was rejected as SAVE_CONFLICT and
+//                 the user was told another tab had saved. Queued, each save
+//                 reads the revision its predecessor left behind.
 export function createSaveCoordinator() {
   let epoch = 0;
+  let chain = Promise.resolve();
   return {
+    /** Run `fn` after every earlier serialized save has settled. */
+    serialize(fn) {
+      const run = chain.then(fn, fn);
+      chain = run.then(() => {}, () => {});
+      return run;
+    },
     /** Call at every workspace switch — detaches all in-flight completions. */
     switchWorkspace() { epoch += 1; },
     /** Capture a ticket at save start; check stillCurrent() after the await. */
@@ -43,6 +56,10 @@ export function createSaveCoordinator() {
  * Stale completions (workspace switched mid-save) touch nothing.
  */
 export async function runGuardedSave({ ticket, snapshot, doSave, getCurrentSerialized, onSaved, onMismatch, onError }) {
+  // A save that waited behind another (serialize) may start after the
+  // workspace switched. Its payload belongs to a workspace that is gone and
+  // the revision it would read belongs to the new one: do not send it.
+  if (!ticket.stillCurrent()) return { status: 'stale' };
   let result;
   try {
     result = await doSave();
@@ -58,4 +75,12 @@ export async function runGuardedSave({ ticket, snapshot, doSave, getCurrentSeria
   }
   onSaved?.(result);
   return { status: 'saved', result };
+}
+
+/**
+ * The save target is gone for this account: deleted, trashed, or no longer
+ * saveable by this user. Never answered by creating a new row automatically.
+ */
+export function isMissingProjectError(err) {
+  return err?.code === 'PROJECT_NOT_FOUND' || /not found/i.test(String(err?.message || ''));
 }
