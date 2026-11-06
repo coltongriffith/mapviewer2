@@ -2554,6 +2554,30 @@ const host = () => (extHost ||= {
   holeOn, drawCard, cardSize, legendSecs, extSections, rebuild: rebuildScene, hasRole, // block.js
 });
 const extLoad = (k) => (extLoading[k] ||= EXT_IMPORT[k]().then((m) => { m.init(host()); EXT[k] = m; return m; }));
+// The faces canvas text is drawn in. A browser fetches a web font face only
+// once something asks for it, and canvas drawing does not wait: text drawn
+// before its face arrives uses a fallback. Labels, wall text and legends are
+// cached as textures, so that fallback stuck for the whole session and showed
+// in every export from the tab. Ask for every face up front, bounded, and
+// rebuild the cached text once they are in. layersReady waits for this, so an
+// export taken after it is drawn in the figure's real fonts.
+const CANVAS_FACES = [
+  ...[400, 500, 600, 700, 800].map((w) => `${w} 16px "Source Sans 3"`), 'italic 400 16px "Source Sans 3"',
+  ...[400, 500, 600, 700].map((w) => `${w} 16px "IBM Plex Mono"`),
+];
+let canvasFonts = null;
+function canvasFontsReady() {
+  if (canvasFonts) return canvasFonts;
+  if (!document.fonts?.load) return (canvasFonts = Promise.resolve());
+  const loads = Promise.all(CANVAS_FACES.map((f) => document.fonts.load(f, 'Aa0').catch(() => [])));
+  canvasFonts = Promise.race([loads, new Promise((r) => { setTimeout(r, 5000); })]).then(() => {
+    previewRevision++;
+    if (G) { rebuildScene(true); buildWallLabels(); }
+    drawSectionView();
+  });
+  return canvasFonts;
+}
+
 async function extReady(check = () => {}) {
   const generation = projectLoad;
   const current = () => { check(); if (generation !== projectLoad) throw Object.assign(new Error('The figure changed while its layers were loading.'), { code: 'PROJECT_CHANGED' }); };
@@ -2655,7 +2679,7 @@ const EXT_API = {
   async setMapUse(o = {}) { await (await extLoad('mapuse')).set(o); await extReady(); return getState(); },
   async setCrew(o = {}) { (await extLoad('crew')).set(o); await extReady(); return getState(); },
   async zoomToCrew() { const m = await extLoad('crew'); await extReady(); showView('3d'); m.zoomTo(); return getState(); },
-  layersReady: async () => { await extReady(); return getState(); },
+  layersReady: async () => { await canvasFontsReady(); await extReady(); return getState(); },
   async setFigureStyle(style, meta = {}) {
     const target = project, generation = projectLoad, check = meta.isCurrent;
     await (await extLoad('type')).setFigureStyle(style, { ...meta, isCurrent: () => project === target && projectLoad === generation && (typeof check !== 'function' || check()) });
@@ -2983,4 +3007,5 @@ loadSample();
 new ResizeObserver(() => { const c = G ? getCam() : null; layoutFrame(); if (c) setCamera(c, true); }).observe(stage);
 requestAnimationFrame(loop);
 if (document.fonts?.ready) document.fonts.ready.then(() => { previewRevision++; drawSectionView(); });
+canvasFontsReady();
 document.fonts?.addEventListener?.('loadingdone', () => { previewRevision++; drawSectionView(); });
