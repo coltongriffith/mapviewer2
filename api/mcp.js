@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { capabilities, AGENT_JURISDICTIONS, AGENT_BASEMAPS } from '../shared/agentSchema.js';
 import { createAgentMapProject } from '../shared/agentMapBuilder.js';
 import { runClaimsSearch } from './_lib/claims-internal.js';
@@ -406,6 +406,34 @@ function hashSubject(value) {
 // Session ids this server issues on initialize: visible ASCII, per the spec.
 const SESSION_ID = /^[\x21-\x7e]{16,128}$/;
 
+// Session ids are SIGNED, so a caller cannot mint a fresh per-session budget
+// by sending a new random id with every call (WS-7). The id stays stateless:
+// `<uuid>.<hmac>` verifies with the server secret alone.
+function sessionSecret() {
+  const explicit = process.env.MCP_SESSION_SECRET;
+  if (explicit) return explicit;
+  const service = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  return service ? createHash('sha256').update(`mcp-session:${service}`).digest('hex') : '';
+}
+function sessionMac(id, secret) {
+  return createHmac('sha256', secret).update(id).digest('base64url').slice(0, 32);
+}
+export function issueSessionId() {
+  const id = randomUUID();
+  const secret = sessionSecret();
+  return secret ? `${id}.${sessionMac(id, secret)}` : id;
+}
+export function verifiedSessionId(value) {
+  const session = String(value || '');
+  if (!SESSION_ID.test(session)) return null;
+  const secret = sessionSecret();
+  const dot = session.lastIndexOf('.');
+  if (!secret || dot < 1) return null;
+  const expected = Buffer.from(sessionMac(session.slice(0, dot), secret));
+  const given = Buffer.from(session.slice(dot + 1));
+  return expected.length === given.length && timingSafeEqual(expected, given) ? session : null;
+}
+
 // Per-caller key. Hosted assistants call from shared egress IPs, so an IP-only
 // key would give every user of one platform a single budget. ChatGPT sends an
 // anonymised per-user `openai/subject`; legacy Streamable HTTP clients (Claude
@@ -419,8 +447,10 @@ function callerSubject(req, toolName) {
   const meta = req.body?.params?._meta || {};
   const user = typeof meta['openai/subject'] === 'string' ? meta['openai/subject'].slice(0, 200) : '';
   if (user) return hashSubject(`mcp:${toolName}:openai:${user}`);
-  const session = String(req.headers?.['mcp-session-id'] || '');
-  if (SESSION_ID.test(session)) return hashSubject(`mcp:${toolName}:session:${session}`);
+  // Only a session id this server signed partitions the budget; an unsigned
+  // or forged one falls through to IP + client.
+  const session = verifiedSessionId(req.headers?.['mcp-session-id']);
+  if (session) return hashSubject(`mcp:${toolName}:session:${session}`);
   const clientName = String(meta['io.modelcontextprotocol/clientInfo']?.name || 'unknown').slice(0, 100);
   return hashSubject(`mcp:${toolName}:${ip}:${clientName}`);
 }
@@ -1045,7 +1075,7 @@ export default async function handler(req, res) {
       const negotiated = LEGACY_VERSIONS.includes(requested) ? requested : '2025-11-25';
       // Stateless: the id is never stored or required, only echoed back by the
       // client so previews can be rate limited per conversation (callerSubject).
-      res.setHeader('Mcp-Session-Id', randomUUID());
+      res.setHeader('Mcp-Session-Id', issueSessionId());
       return res.status(200).json(jsonRpcResult(body.id, {
         protocolVersion: negotiated,
         capabilities: { tools: { listChanged: false } },

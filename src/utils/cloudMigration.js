@@ -43,7 +43,12 @@ function legacyFlagSet(userId) {
  * @returns {{ attempted:number, migrated:number, failed:number, skipped:number, complete:boolean,
  *   uploaded: Object<string, {id:string, revision:?number}> }}  uploaded: this pass, by local id ('draft' for the draft)
  */
-export async function runCloudMigration({ userId, localProjects, draft, uploadProject, maxUploads = Infinity }) {
+// After the plan's map limit refuses an upload, the remaining maps would be
+// refused too: stop the pass and wait this long before trying again, unless
+// the account is on an unlimited plan (ED-8). The maps stay in this browser.
+const LIMIT_BACKOFF_MS = 7 * 24 * 3600 * 1000;
+
+export async function runCloudMigration({ userId, localProjects, draft, uploadProject, maxUploads = Infinity, unlimited = false, now = Date.now() }) {
   // Users migrated under the old single-flag scheme are treated as complete:
   // re-uploading everything they already migrated would create duplicates.
   if (legacyFlagSet(userId)) {
@@ -70,10 +75,13 @@ export async function runCloudMigration({ userId, localProjects, draft, uploadPr
   // picks them up. Slicing the input instead dropped the 11th map onward and
   // then recorded the migration as complete (ED-6).
   let uploads = 0;
+  const blockedAt = Date.parse(state.limitBlockedAt || '');
+  if (!unlimited && Number.isFinite(blockedAt) && now - blockedAt < LIMIT_BACKOFF_MS) maxUploads = 0;
+  let limitHit = false;
   for (const job of jobs) {
     const prior = state.projects[job.key];
     if (prior?.status === 'done' && prior.cloudId) { skipped += 1; continue; }
-    if (uploads >= maxUploads) continue;
+    if (uploads >= maxUploads || limitHit) continue;
     uploads += 1;
     try {
       const result = await uploadProject({ name: job.name, payload: job.payload });
@@ -81,7 +89,12 @@ export async function runCloudMigration({ userId, localProjects, draft, uploadPr
       state.projects[job.key] = { status: 'done', cloudId, at: new Date().toISOString() };
       uploaded[job.key] = { id: cloudId, revision: typeof result === 'object' ? result?.revision ?? null : null };
       migrated += 1;
+      delete state.limitBlockedAt;
     } catch (e) {
+      if (e?.code === 'PROJECT_LIMIT') {
+        limitHit = true;
+        state.limitBlockedAt = new Date(now).toISOString();
+      }
       state.projects[job.key] = {
         status: 'failed',
         error: String(e?.message || e).slice(0, 200),

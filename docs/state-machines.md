@@ -68,13 +68,17 @@ These were open after the first pass. Each one is now fixed and pinned by a regr
 | ED-6 | P2 | Migration sliced local maps to 10 and recorded itself complete. It ran in every tab, and re-pointed a map that a manual Save had already given a row. | Passes are bounded without dropping maps, run under a Web Lock per account, and re-point only the map still open from the start of the pass. | `tests/cloud-migration.test.js` |
 | ED-7 | P3 | A Dashboard rename was saved back over by the open editor's autosave. | A rename bumps the revision (trigger), so another tab gets SAVE_CONFLICT. The renaming tab adopts the new revision and name. | `tests/rename-revision-sql.test.js` |
 
-### Still open
+### Fixed in the third pass
 
-| ID | Finding | Why it is open |
-|---|---|---|
-| WS-7 | The anonymous MCP per-caller allowance is keyed on identifiers the caller chooses, so the real ceiling is the 300/hour per-IP limit (`api/mcp.js:416-426`). | A design gap. Fixing it means signing session ids, which needs a server secret and a protocol change. |
-| WS-8 | Deleting the last owner's auth account cascades their membership away and leaves the workspace ownerless. | No in-app account deletion exists, so this is reachable only through the Supabase dashboard. |
-| ED-8 | A free user with more local maps than the plan allows retries the over-limit uploads at every sign-in. | Suspected only; the uploads fail cleanly with PROJECT_LIMIT and nothing is lost. |
+| ID | P | Finding | Fix | Regression test |
+|---|---|---|---|---|
+| WS-7 | P3 | The anonymous MCP per-caller allowance trusted any `Mcp-Session-Id`, so sending a fresh random id with each call gave a fresh 10/hour budget, up to the 300/hour per-IP ceiling. | Session ids issued on `initialize` are signed (`<uuid>.<hmac>`, key `MCP_SESSION_SECRET`, else derived from the service key). Only a valid signed id gets its own budget; anything else falls back to IP + client. Still stateless. | `tests/mcp-session-signing.test.js` |
+| WS-8 | P3 | Deleting the only owner's auth account cascaded their membership away and left the workspace with no owner. | After any membership delete, if the organization still exists and has no owner, its longest-standing admin (then editor, then viewer) becomes owner. | `tests/workspace-owner-sql.test.js` |
+| ED-8 | P3 | A free user with more local maps than the plan allows retried the refused uploads at every sign-in. | The first PROJECT_LIMIT refusal stops the pass and starts a 7-day back-off; an unlimited plan, or a later successful upload, ends it. The maps stay in this browser. | `tests/cloud-migration.test.js` (ED-8) |
+
+### Known limit
+
+ChatGPT's `openai/subject` still partitions the anonymous MCP budget without proof, because the platform does not sign it. A caller that forges it is bounded by the per-IP ceiling (300/hour), the same as before. Closing it would need a platform-issued signature or a lower per-IP ceiling, which would also throttle real ChatGPT users who share egress addresses.
 
 ### Issue groups
 
@@ -84,11 +88,11 @@ These were open after the first pass. Each one is now fixed and pinned by a regr
 | Tenure reminder lifecycle | TEN-1, TEN-2, TEN-3 | Fixed | 417 |
 | 2D editor save serialization and the map lifecycle | ED-1, ED-2, ED-3, ED-4 | Fixed | 418 |
 | 3D sign-in stash and open/save races | 3D-1, 3D-2, 3D-3, 3D-4 | Fixed | 419 |
-| 2D editor local drafts and migration | ED-5, ED-6, ED-7 | Fixed | 420 |
+| 2D editor local drafts and migration | ED-5, ED-6, ED-7, ED-8 | Fixed | 420 |
 | Billing entitlements and checkout duplicates | BILL-2b, BILL-4, BILL-5, BILL-6b, BILL-7..9, BILL-10 | Fixed | 421 |
 | Tenure sync trust and alert recovery | TEN-4 to TEN-11 | Fixed | 422 |
-| Agent API and share limits | WS-1, WS-2, WS-3 | Fixed | 423 |
-| Workspace approvals, sign-offs and roles | WS-4, WS-5, WS-6 | Fixed | 424 |
+| Agent API and share limits | WS-1, WS-2, WS-3, WS-7 | Fixed | 423 |
+| Workspace approvals, sign-offs and roles | WS-4, WS-5, WS-6, WS-8 | Fixed | 424 |
 
 "Issue" is the GitHub issue number in this repository.
 
