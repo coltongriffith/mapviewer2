@@ -69,17 +69,17 @@ Confirmed by trace unless marked suspected. None of these is reproduced yet.
 
 ### Issue groups
 
-| Group | IDs | State |
-|---|---|---|
-| Billing webhook ordering and retries | BILL-1, BILL-2, BILL-3, BILL-6a | Fixed |
-| Tenure reminder lifecycle | TEN-1, TEN-2, TEN-3 | Fixed |
-| 2D editor save serialization and the map lifecycle | ED-1, ED-2, ED-3, ED-4 | Fixed |
-| 3D sign-in stash and open/save races | 3D-1, 3D-2, 3D-3, 3D-4 | Fixed |
-| 2D editor local drafts and migration | ED-5, ED-6, ED-7 | Open |
-| Billing entitlements and checkout duplicates | BILL-2b, BILL-4, BILL-5, BILL-6b, BILL-7..9, BILL-10 | Open |
-| Tenure sync trust and alert recovery | TEN-4 to TEN-10 | Open |
-| Agent API and share limits | WS-1, WS-2, WS-3 | Open |
-| Workspace approvals, sign-offs and roles | WS-4, WS-5, WS-6 | Open |
+| Group | IDs | State | Issue |
+|---|---|---|---|
+| Billing webhook ordering and retries | BILL-1, BILL-2, BILL-3, BILL-6a | Fixed | [#416](https://github.com/coltongriffith/mapviewer2/issues/416) |
+| Tenure reminder lifecycle | TEN-1, TEN-2, TEN-3 | Fixed | [#417](https://github.com/coltongriffith/mapviewer2/issues/417) |
+| 2D editor save serialization and the map lifecycle | ED-1, ED-2, ED-3, ED-4 | Fixed | [#418](https://github.com/coltongriffith/mapviewer2/issues/418) |
+| 3D sign-in stash and open/save races | 3D-1, 3D-2, 3D-3, 3D-4 | Fixed | [#419](https://github.com/coltongriffith/mapviewer2/issues/419) |
+| 2D editor local drafts and migration | ED-5, ED-6, ED-7 | Open | [#420](https://github.com/coltongriffith/mapviewer2/issues/420) |
+| Billing entitlements and checkout duplicates | BILL-2b, BILL-4, BILL-5, BILL-6b, BILL-7..9, BILL-10 | Open | [#421](https://github.com/coltongriffith/mapviewer2/issues/421) |
+| Tenure sync trust and alert recovery | TEN-4 to TEN-10 | Open | [#422](https://github.com/coltongriffith/mapviewer2/issues/422) |
+| Agent API and share limits | WS-1, WS-2, WS-3 | Open | [#423](https://github.com/coltongriffith/mapviewer2/issues/423) |
+| Workspace approvals, sign-offs and roles | WS-4, WS-5, WS-6 | Open | [#424](https://github.com/coltongriffith/mapviewer2/issues/424) |
 
 ## 1. 2D editor saving
 
