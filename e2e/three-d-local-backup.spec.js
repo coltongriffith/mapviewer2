@@ -11,6 +11,31 @@ async function downloadBackupBytes(page) {
   const download = await downloading;
   return { name: download.suggestedFilename(), bytes: await readFile(await download.path()) };
 }
+// Two exports of the same figure, from two tabs, are not byte-identical in
+// headless Chromium: its software renderer anti-aliases text and edges slightly
+// differently per tab (measured: up to 0.44% of pixels differ, under 0.1% by more
+// than 8 of 255, with the same project, state and loaded fonts). Byte equality
+// made these restores fail about one run in ten. The image check is for the
+// figure as a whole (a lost layer, logo, colour or a font swap changes far more
+// pixels than the noise); exact text and values are covered by the project and
+// settings equality each test asserts alongside it.
+async function expectSameFigure(page, actual, expected) {
+  if (actual === expected) return;
+  const { size, differing } = await page.evaluate(async ([a, b]) => {
+    const load = (src) => new Promise((resolve, reject) => { const img = new Image(); img.onload = () => resolve(img); img.onerror = reject; img.src = src; });
+    const [ia, ib] = await Promise.all([load(a), load(b)]);
+    const pixels = (img) => { const c = document.createElement('canvas'); c.width = img.width; c.height = img.height; const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(img, 0, 0); return g.getImageData(0, 0, img.width, img.height).data; };
+    if (ia.width !== ib.width || ia.height !== ib.height) return { size: false, differing: 1 };
+    const pa = pixels(ia), pb = pixels(ib);
+    let n = 0;
+    for (let i = 0; i < pa.length; i += 4) {
+      if (Math.max(Math.abs(pa[i] - pb[i]), Math.abs(pa[i + 1] - pb[i + 1]), Math.abs(pa[i + 2] - pb[i + 2]), Math.abs(pa[i + 3] - pb[i + 3])) > 16) n++;
+    }
+    return { size: true, differing: n / (pa.length / 4) };
+  }, [actual, expected]);
+  expect(size, 'exported figures have the same dimensions').toBe(true);
+  expect(differing, 'share of pixels that differ by more than anti-aliasing noise').toBeLessThanOrEqual(0.0025);
+}
 async function scientificPreview(page) {
   return page.evaluate(async () => {
     await document.fonts.ready; await window.EM3D.layersReady();
@@ -58,11 +83,11 @@ for (const [label, viewport] of [['desktop', { width: 1280, height: 900 }], ['mo
     expect(after.diagnostics).toEqual(before.diagnostics);
     expect(after.opener).toBeNull(); expect(after.hash).toBe('');
     expect(after.project.files.find((f) => f.name === files[1].name).geophysNumericPolicy).toBe('finite-decimal-v1');
-    expect(await restored.evaluate(async () => {
+    await expectSameFigure(page, await restored.evaluate(async () => {
       await document.fonts.ready; await window.EM3D.layersReady();
       await new Promise(requestAnimationFrame); await new Promise(requestAnimationFrame);
       return window.EM3D.exportPNG({ view: '3d', width: 400, background: 'transparent' });
-    })).toEqual(before.png);
+    }), before.png);
     expect(await page.evaluate(() => window.EM3D.getProject())).toEqual(before.project);
     await expect(page.locator('#status')).toContainText('This figure is unchanged');
     await expect(restored.locator('#camera-fit')).toBeEnabled();
@@ -128,7 +153,7 @@ test('the actual bundled sample and a 102-hole synthetic source project are acce
     return { project: window.EM3D.getProject(), png: await window.EM3D.exportPNG({ view: '3d', width: 400, background: 'transparent' }) };
   });
   await test.info().attach('backup-camera-roundtrip', { body: JSON.stringify({ before: before.project.camera, after: after.project.camera }), contentType: 'application/json' });
-  expect(after.project.files).toEqual(before.project.files); expect(after.project.settings).toEqual(before.project.settings); expect(after.project.camera).toEqual(before.project.camera); expect(after.png).toEqual(before.png);
+  expect(after.project.files).toEqual(before.project.files); expect(after.project.settings).toEqual(before.project.settings); expect(after.project.camera).toEqual(before.project.camera); await expectSameFigure(page, after.png, before.png);
   expect(await page.evaluate(() => window.EM3D.getProject())).toEqual(before.project);
   await restored.locator('#stage').screenshot({ path: test.info().outputPath('local-backup-102-holes.png') });
   await restored.close();
@@ -184,7 +209,7 @@ test('inline PNG logo and JPEG geology face survive the actual local file and ch
     await new Promise(requestAnimationFrame); await new Promise(requestAnimationFrame);
     return { project: window.EM3D.getProject(), png: await window.EM3D.exportPNG({ view: '3d', width: 400, background: 'transparent' }) };
   });
-  expect(after.project.settings).toEqual(before.project.settings); expect(after.project.files).toEqual(before.project.files); expect(after.project.camera).toEqual(before.project.camera); expect(after.png).toEqual(before.png);
+  expect(after.project.settings).toEqual(before.project.settings); expect(after.project.files).toEqual(before.project.files); expect(after.project.camera).toEqual(before.project.camera); await expectSameFigure(page, after.png, before.png);
   expect(await page.evaluate(() => window.EM3D.getProject())).toEqual(before.project);
   await child.locator('#stage').screenshot({ path: test.info().outputPath('local-backup-inline-images.png') }); await child.close();
 });
@@ -245,7 +270,7 @@ test('a native synthetic CuEq recipe retains its assumptions, derived grades and
   expect(after.project.settings.eq).toEqual(before.project.settings.eq);
   expect(after.project.settings).toEqual(before.project.settings); expect(after.project.camera).toEqual(before.project.camera);
   expect(after.project.files).toEqual(before.project.files); expect(after.equivalent).toEqual(before.equivalent);
-  expect(after.grade).toEqual(before.grade); expect(after.calloutSettings).toEqual(before.calloutSettings); expect(after.candidates).toEqual(before.candidates); expect(after.png).toEqual(before.png);
+  expect(after.grade).toEqual(before.grade); expect(after.calloutSettings).toEqual(before.calloutSettings); expect(after.candidates).toEqual(before.candidates); await expectSameFigure(page, after.png, before.png);
   expect(await page.evaluate(() => window.EM3D.getProject())).toEqual(before.project);
   await child.locator('#stage').screenshot({ path: test.info().outputPath('local-backup-equivalent.png') }); await child.close();
 });
@@ -280,7 +305,7 @@ test('native custom geology legend colours retain their override flags through t
   expect(after.project.settings.geology.legend).toEqual(legend);
   expect(await child.evaluate(() => window.EM3D.getState().geology.legend)).toEqual(legend);
   expect(after.project.settings).toEqual(before.project.settings); expect(after.project.files).toEqual(before.project.files);
-  expect(after.project.camera).toEqual(before.project.camera); expect(after.png).toEqual(before.png);
+  expect(after.project.camera).toEqual(before.project.camera); await expectSameFigure(page, after.png, before.png);
   expect(await page.evaluate(() => window.EM3D.getProject())).toEqual(before.project);
   await child.locator('#stage').screenshot({ path: test.info().outputPath('local-backup-custom-geology.png') }); await child.close();
 });
