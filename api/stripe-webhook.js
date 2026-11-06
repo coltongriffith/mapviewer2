@@ -29,7 +29,7 @@
 // customer.subscription.* handling above, and are ignored here.
 
 import { createClient } from '@supabase/supabase-js';
-import { verifyStripeSignature } from './_lib/stripe.js';
+import { verifyStripeSignature, stripeConfigured, stripeRequest } from './_lib/stripe.js';
 
 // Signature verification needs the exact raw bytes Stripe sent — disable the
 // framework body parser and buffer the stream ourselves.
@@ -37,6 +37,21 @@ export const config = { api: { bodyParser: false } };
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+// Mark the ledger claim complete, then ack. A failed mark is logged, not
+// retried: the work is done, and a redelivery would only reprocess
+// idempotently against the live subscription.
+async function finish(res, sb, event, outcome, detail = null, body = {}) {
+  if (event?.id) {
+    const marked = await sb.from('stripe_events')
+      .update({ outcome, detail, processed_at: new Date().toISOString() })
+      .eq('event_id', event.id);
+    if (marked?.error) {
+      console.error(JSON.stringify({ at: 'stripe-webhook', outcome: 'ledger_mark_failed', stripe_event_id: event.id }));
+    }
+  }
+  return res.status(200).json({ received: true, ...body });
+}
 
 async function rawBody(req) {
   if (typeof req.body === 'string') return req.body;           // parser disabled but populated
@@ -67,6 +82,29 @@ function must(result, what) {
     throw err;
   }
   return result;
+}
+
+/**
+ * The subscription's CURRENT state, not the event's snapshot of it.
+ *
+ * Stripe does not deliver events in order and retries failed deliveries for
+ * days, so a snapshot can be older than state we already applied: a retried
+ * `customer.subscription.updated` (active) landing after
+ * `customer.subscription.deleted` used to hand Pro back for free. Reading the
+ * live object makes every delivery converge on Stripe's present truth, which
+ * is also what makes reprocessing a retried event safe.
+ *
+ * Without a Stripe key (local/test deploys) the snapshot is the best we have.
+ */
+export async function liveSubscription(subscriptionId, snapshot = null) {
+  if (!subscriptionId || !stripeConfigured()) return snapshot;
+  return stripeRequest(`/subscriptions/${encodeURIComponent(subscriptionId)}`, null, { method: 'GET' });
+}
+
+/** Basil moved current_period_end from the subscription onto its items. */
+export function subscriptionPeriodEnd(sub) {
+  const seconds = sub?.current_period_end ?? sub?.items?.data?.[0]?.current_period_end;
+  return seconds ? new Date(seconds * 1000).toISOString() : null;
 }
 
 /**
@@ -206,24 +244,38 @@ export default async function handler(req, res) {
   // Idempotency: Stripe redelivers on any non-2xx, and at-least-once delivery
   // means the same event can arrive twice even after success. Claim the event
   // id first; a duplicate insert means we already processed it (audit P1-08).
+  //
+  // The claim is written as outcome='failed' (detail 'processing') and only
+  // marked 'ok' AFTER the side effects land. A delivery that finds a claim
+  // that never reached 'ok' — the function was killed, or the release below
+  // failed — reprocesses instead of being acked as a duplicate, so a crash
+  // can no longer drop a paid checkout for good.
   const eventAt = event.created ? new Date(event.created * 1000).toISOString() : null;
   if (event.id) {
     const claim = await sb.from('stripe_events').insert({
       event_id: event.id,
       event_type: event.type || 'unknown',
       event_created: eventAt || new Date().toISOString(),
+      outcome: 'failed',
+      detail: 'processing',
     });
     if (claim.error) {
-      // 23505 = unique violation → already handled; ack so Stripe stops.
+      // 23505 = unique violation → seen before. Ack only if it completed.
       if (claim.error.code === '23505') {
-        return res.status(200).json({ received: true, duplicate: true });
+        const prior = await sb.from('stripe_events')
+          .select('outcome').eq('event_id', event.id).maybeSingle();
+        if (prior.error) return res.status(500).json({ error: 'ledger unavailable' });
+        if (prior.data?.outcome !== 'failed') {
+          return res.status(200).json({ received: true, duplicate: true });
+        }
+      } else {
+        // Any other ledger failure is a real database problem — retry.
+        console.error(JSON.stringify({
+          at: 'stripe-webhook', outcome: 'ledger_failed',
+          stripe_event_id: event.id, message: String(claim.error.message).slice(0, 200),
+        }));
+        return res.status(500).json({ error: 'ledger unavailable' });
       }
-      // Any other ledger failure is a real database problem — retry.
-      console.error(JSON.stringify({
-        at: 'stripe-webhook', outcome: 'ledger_failed',
-        stripe_event_id: event.id, message: String(claim.error.message).slice(0, 200),
-      }));
-      return res.status(500).json({ error: 'ledger unavailable' });
     }
   }
 
@@ -231,7 +283,12 @@ export default async function handler(req, res) {
     if (event.type === 'checkout.session.completed') {
       const session = event.data?.object || {};
       const userId = session.client_reference_id || null;
-      if (userId && session.mode === 'subscription') {
+      // A retried checkout event can arrive after the subscription it created
+      // was already cancelled: only grant Pro while it is still live.
+      const live = userId && session.mode === 'subscription'
+        ? await liveSubscription(session.subscription, null)
+        : null;
+      if (userId && session.mode === 'subscription' && (!live || mapSubscription(live).plan === 'pro')) {
         // Read the existing row first: a grandfathered/admin account that
         // chooses to subscribe must KEEP its protected entitlement source.
         // Blindly upserting source='stripe' here was the bug that let a later
@@ -262,23 +319,22 @@ export default async function handler(req, res) {
       }
     } else if (event.type === 'customer.subscription.updated'
       || event.type === 'customer.subscription.deleted') {
-      const sub = event.data?.object || {};
-      const mapped = event.type === 'customer.subscription.deleted'
-        ? { plan: 'free', status: 'canceled' }
-        : mapSubscription(sub);
-      const periodEnd = sub.current_period_end
-        ? new Date(sub.current_period_end * 1000).toISOString()
-        : null;
+      const snapshot = event.data?.object || {};
+      const sub = (await liveSubscription(snapshot.id, snapshot)) || snapshot;
+      const mapped = mapSubscription(event.type === 'customer.subscription.deleted' && sub === snapshot
+        ? { ...snapshot, status: 'canceled' }
+        : sub);
+      const periodEnd = subscriptionPeriodEnd(sub);
       // Subscription `items` (unlike Checkout Session line items) is a
       // standard field present on every subscription object, no expand
       // needed — safe to read directly for admin MRR reporting.
       const interval = sub.items?.data?.[0]?.price?.recurring?.interval || null;
 
-      const userId = sub.metadata?.supabase_user_id || null;
+      const userId = sub.metadata?.supabase_user_id || snapshot.metadata?.supabase_user_id || null;
       const match = userId
         ? { column: 'user_id', value: userId }
-        : { column: 'stripe_customer_id', value: sub.customer };
-      if (!match.value) return res.status(200).json({ received: true, skipped: 'no user match' });
+        : { column: 'stripe_customer_id', value: sub.customer || snapshot.customer };
+      if (!match.value) return finish(res, sb, event, 'skipped', 'no user match', { skipped: 'no user match' });
 
       if (mapped.plan === 'pro') {
         // Protected origins (grandfathered/admin) keep their source. Anything
@@ -307,7 +363,17 @@ export default async function handler(req, res) {
           .eq(match.column, match.value), 'subscription upgrade');
       } else {
         // Downgrade path — NEVER touches grandfathered (or admin-granted)
-        // rows. Only subscriptions we created may be revoked.
+        // rows. Only subscriptions we created may be revoked, and only the
+        // subscription the row is on: ending an OLD subscription must not
+        // revoke a newer one the customer is paying for.
+        const existing = must(
+          await sb.from('user_plans').select('stripe_subscription_id').eq(match.column, match.value).maybeSingle(),
+          'subscription downgrade lookup',
+        );
+        const currentSub = existing.data?.stripe_subscription_id;
+        if (currentSub && sub.id && currentSub !== sub.id) {
+          return finish(res, sb, event, 'skipped', 'not the current subscription');
+        }
         must(await sb.from('user_plans')
           .update({
             plan: 'free',
@@ -391,7 +457,7 @@ export default async function handler(req, res) {
       }
     }
     // Unhandled event types are acknowledged so Stripe stops retrying them.
-    return res.status(200).json({ received: true });
+    return finish(res, sb, event, 'ok');
   } catch (e) {
     // Structured, non-sensitive log so a failed billing write is greppable and
     // alertable — never a silent 200.
@@ -406,9 +472,12 @@ export default async function handler(req, res) {
     // Release the ledger claim, or Stripe's retry would hit the unique key,
     // be acked as a duplicate, and the event (e.g. a paid checkout that never
     // granted Pro) would be lost for good.
+    // If the release fails too, the claim stays outcome='failed' and the retry
+    // still reprocesses (see the claim above).
     if (event?.id) {
       try {
-        await sb.from('stripe_events').delete().eq('event_id', event.id);
+        const released = await sb.from('stripe_events').delete().eq('event_id', event.id);
+        if (released?.error) console.error(JSON.stringify({ at: 'stripe-webhook', outcome: 'release_failed', stripe_event_id: event.id }));
       } catch { /* the 500 still asks Stripe to retry */ }
     }
     // 500 → Stripe retries with backoff, which is what we want on a DB blip.
