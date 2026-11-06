@@ -2,7 +2,7 @@ import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { figureSignature, watchUnsavedFigure } from '../src/three-d/save-state.js';
 
 const deferred = () => { let resolve; const promise = new Promise((r) => { resolve = r; }); return { promise, resolve }; };
-let rows, objects, upload, afterCommit, core, project, stop;
+let rows, objects, upload, afterCommit, readGate, core, project, stop;
 const sb = {
   auth: {
     getSession: async () => ({ data: { session: { user: { id: 'u1' } } } }),
@@ -17,6 +17,7 @@ const sb = {
   from() {
     const filters = {}; let write = null, update = false;
     const result = async () => {
+      if (!write) await readGate(filters.id);
       const row = [...rows.values()].find((r) => Object.entries(filters).every(([k, v]) => r[k] === v));
       if (!write) return { data: structuredClone(row ?? null) };
       if (update && !row) return { data: null };
@@ -46,7 +47,7 @@ beforeEach(async () => {
   vi.stubEnv('VITE_SUPABASE_ANON_KEY', 'test-key');
   localStorage.setItem('sb-example-auth-token', '{}');
   rows = new Map([['a', row('a', 'Original')], ['b', row('b', 'Other figure')]]);
-  objects = new Map(); upload = async () => {}; afterCommit = async () => null;
+  objects = new Map(); upload = async () => {}; afterCommit = async () => null; readGate = async () => {};
   project = figure('Sample');
   document.body.innerHTML = '<div id="acct-note" hidden></div><div id="acct-menu" hidden></div><div id="status"></div><button id="acct-save"></button>';
   window.EM3D = {
@@ -168,5 +169,43 @@ describe('3D save reliability through the real account module', () => {
     upload = async () => { rows.get('a').updated_at = '2099-01-01T00:00:00Z'; objects.set('u1/a/other/collars.csv', 'Other'); };
     await expect(core.saveProject('Original', 'a')).rejects.toMatchObject({ code: 'CONFLICT' });
     expect([...objects.keys()]).toEqual(['u1/a/other/collars.csv']);
+  });
+});
+
+// docs/state-machines.md, 3D-3 and 3D-4.
+describe('3D open and save races', () => {
+  it('3D-3: a save that lands during a failed Open still records its version', async () => {
+    await core.openProject('a');
+    const gate = deferred(), started = deferred();
+    upload = async () => { started.resolve(); await gate.promise; };
+    const saving = core.save(); await started.promise;
+    rows.delete('b');
+    await expect(core.openProject('b')).rejects.toThrow(/not found/);
+    gate.resolve(); await saving;
+    expect(core.currentProject()).toMatchObject({ id: 'a', savedAt: rows.get('a').updated_at });
+    upload = async () => {};
+    edit('More work');
+    await expect(core.saveProject('Original', 'a')).resolves.toMatchObject({ id: 'a', active: true });
+  });
+
+  it('3D-3: a double-clicked Save uploads once', async () => {
+    await core.openProject('a');
+    let uploads = 0;
+    upload = async () => { uploads += 1; };
+    edit('Changed');
+    await Promise.all([core.save(), core.save()]);
+    expect(uploads).toBe(1);
+  });
+
+  it('3D-4: an older Open that finishes late does not replace the newer figure', async () => {
+    const gate = deferred();
+    readGate = async (id) => { if (id === 'a') await gate.promise; };
+    const openingA = core.openProject('a');
+    await core.openProject('b');
+    edit('Edits to b');
+    gate.resolve();
+    await expect(openingA).rejects.toMatchObject({ code: 'SUPERSEDED' });
+    expect(core.currentProject().id).toBe('b');
+    expect(state().brand.title).toBe('Edits to b');
   });
 });

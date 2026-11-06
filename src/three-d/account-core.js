@@ -228,7 +228,7 @@ export const listVersions = (id) => ver().then((m) => m.list(id));
 export const openVersion = (n, o) => ver().then((m) => m.open(n, o));
 export const closeVersion = () => ver().then((m) => m.close());
 async function reopen(id) {
-  try { const res = await openProject(id); setUrlProject(res.id); settle(); say(`Back to “${res.name}” as last saved.`); return res; } catch (err) { detach(); say(err.message); throw err; }
+  try { const res = await openProject(id); setUrlProject(res.id); settle(); say(`Back to “${res.name}” as last saved.`); return res; } catch (err) { if (err.code !== 'SUPERSEDED') { detach(); say(err.message); } throw err; }
 }
 function detach() { nextProjectEpoch(); current = null; dirty = true; setUrlProject(null); renderNote(); }
 
@@ -355,14 +355,25 @@ export async function saveProject(name, existingId, dest = null, { force = false
     savedSig = snapshotSig;
     dirty = sig() !== savedSig;
     renderNote();
+  } else if (current && opened && current.id === saved.id && current.savedAt === opened.savedAt) {
+    // The epoch moved (an Open that failed, a second save) but the figure on
+    // screen is still the one this save wrote. Record the new version, or the
+    // next save would report this tab's own write as "saved somewhere else".
+    current = { ...current, savedAt: saved.savedAt };
   }
   // Once per figure per tab, like the editor's project_saved: "worked on this session", not a count of Ctrl+S.
   track('three_d_project_saved', { project: saved.id, created: !existingId, workspace: !!home }, saved.id);
   return { ...saved, active };
 }
 
+// Only the latest Open may change the screen. A slow Open that finishes after
+// a newer one used to replace that figure, edits and all, without asking.
+let openSeq = 0;
+const superseded = () => Object.assign(plain('A newer Open replaced this one.'), { plain: true, code: 'SUPERSEDED' });
+
 export async function openProject(id) {
   requireLocalRestoreReady();
+  const mine = ++openSeq;
   nextProjectEpoch();
   await requireUser('open your saved 3D maps');
   resetDrill();
@@ -383,6 +394,7 @@ export async function openProject(id) {
   } catch (err) {
     throw explain(err, 'open that 3D map');
   }
+  if (mine !== openSeq) throw superseded();
   const em = studio();
   const backup = em.getProject();
   try {
@@ -392,6 +404,7 @@ export async function openProject(id) {
     throw Object.assign(plain(`That 3D map could not be opened (${err.message}). The figure you had is back.`, err), { plain: true });
   }
   const home = await homeOf(row);
+  if (mine !== openSeq) throw superseded();
   nextProjectEpoch();
   current = { id: row.id, name: row.name, savedAt: row.updated_at, home };
   settle();
@@ -452,6 +465,9 @@ export async function stashWork(extra = {}) {
     localStorage.setItem(STASH_KEY, json);
     return true;
   } catch { return false; }
+}
+function stashFlagSet() {
+  try { return localStorage.getItem(STASH_FLAG) === '1'; } catch { return true; }
 }
 export async function readStash() {
   if (localRestoreBoot) return null;
@@ -580,9 +596,14 @@ async function chosenDest() {
 function showError(msg) { const e = $('acct-error'); e.textContent = msg || ''; e.hidden = !msg; }
 function closeDialog() { const d = $('acct-dialog'); if (d?.open) d.close(); dialogMode = null; }
 
+let starting = false; // a save that has not reached doSave yet: a second click must not start another
 export async function save({ asNew = false, force = false } = {}) {
   requireLocalRestoreReady();
-  if (busy || $('acct-dialog')?.open) return;
+  if (busy || starting || $('acct-dialog')?.open) return;
+  starting = true;
+  try { await startSave({ asNew, force }); } finally { starting = false; }
+}
+async function startSave({ asNew, force }) {
   if (frozen) { say('This is a published version, read-only. Use “Start a new figure from this version” to change it.'); return; }
   if (!configured) { say(`Saving to an account is not available on this site right now. ${KEEP}`); return; }
   try { user = await getUser(); } catch (err) { say(err.message); return; }
@@ -687,7 +708,7 @@ async function onMenuClick(e) {
       if (pending) { pending = null; clearTimeout(pendingT); await clearStash(); }
       setUrlProject(res.id); settle(); toggleMenu(false);
       say(`Opened “${res.name}”.`);
-    } catch (err) { say(err.message); t.disabled = false; t.textContent = 'Open'; delete t.dataset.confirm; }
+    } catch (err) { if (err.code !== 'SUPERSEDED') say(err.message); t.disabled = false; t.textContent = 'Open'; delete t.dataset.confirm; }
     return;
   }
   if (t.dataset.del) {
@@ -741,7 +762,10 @@ function wire() {
     if (frozen) return; // a published version on screen is not the figure's work
     const now = sig() !== savedSig;
     if (now !== dirty) { dirty = now; renderNote(); }
-    // While a sign-in link is out, keep the stashed copy up to date.
+    // While a sign-in link is out, keep the stashed copy up to date. Once
+    // another tab has used and cleared it, stop: re-creating it would replay
+    // this copy on the next /3d load.
+    if (pending && !stashFlagSet()) { pending = null; clearTimeout(pendingT); }
     if (pending) { clearTimeout(pendingT); pendingT = setTimeout(() => stashWork(pending), 1500); }
   });
 
@@ -756,7 +780,12 @@ function wire() {
   $('acct-asnew').addEventListener('click', () => { closeDialog(); save({ asNew: true }); });
   $('acct-reload').addEventListener('click', async () => {
     closeDialog(); if (!current) return;
-    try { const res = await openProject(current.id); settle(); say(`Reloaded “${res.name}” as saved at ${fmtWhen(res.savedAt, { timeStyle: 'short' })}.`); } catch (err) { say(err.message); }
+    try {
+      const res = await openProject(current.id);
+      // Reloading discards the copy a sign-in link was carrying.
+      if (pending) { pending = null; clearTimeout(pendingT); await clearStash(); }
+      settle(); say(`Reloaded “${res.name}” as saved at ${fmtWhen(res.savedAt, { timeStyle: 'short' })}.`);
+    } catch (err) { if (err.code !== 'SUPERSEDED') say(err.message); }
   });
   $('acct-name-cancel').addEventListener('click', closeDialog);
   $('acct-sent-close').addEventListener('click', closeDialog);
@@ -766,6 +795,7 @@ function wire() {
     showError('');
     const submit = e.submitter || $('acct-link-btn');
     if (dialogMode === 'name') {
+      if (busy || starting) return;
       const name = $('acct-name').value.trim();
       if (!name) { showError('Give the 3D map a name.'); return; }
       const dest = await chosenDest();
@@ -785,7 +815,10 @@ function wire() {
       } else {
         // The link opens a fresh /3d: keep this figure so it can be restored and saved there.
         let kept = true;
-        const meta = { intent: 'save', name: $('acct-name').value.trim() || 'Untitled 3D map', id: current?.id || null };
+        // The attachment travels with the copy: which version it was based on
+        // (so the replay is a guarded save, never a blind overwrite) and its
+        // company home (so its files stay where the other members read them).
+        const meta = { intent: 'save', name: $('acct-name').value.trim() || current?.name || 'Untitled 3D map', id: current?.id || null, savedAt: current?.savedAt || null, home: current?.home || null };
         if (dialogMode === 'save-signin') kept = await stashWork(meta);
         await sendSignInLink(email);
         if (dialogMode === 'save-signin' && kept) pending = meta;
@@ -819,8 +852,23 @@ async function boot() {
   try { user = await getUser(); } catch { user = null; }
   renderButtons();
   if (stash && user && stash.intent === 'save') {
-    const ok = await doSave(stash.name || 'Untitled 3D map', stash.id || null);
-    if (ok) await clearStash();
+    const name = stash.name || 'Untitled 3D map';
+    if (stash.id && !stash.savedAt) {
+      // An older stash that does not say which version it was based on: saving
+      // it over the figure could silently undo later saves. Keep it on screen,
+      // unattached, so Save makes it a new figure.
+      await clearStash();
+      say(`Restored the figure you were saving. Press Save to keep it as a new 3D map, or open “${name}” from My 3D maps for the saved version.`);
+      return;
+    }
+    // Reattach to the version the copy was taken from: the save below is then
+    // guarded (a later save elsewhere shows the conflict dialog) and goes to
+    // the figure's company home. This tab owns the stash from here on, so any
+    // later successful save — not only this one — clears it.
+    if (stash.id) current = { id: stash.id, name, savedAt: stash.savedAt, home: stash.home || null };
+    pending = { intent: 'save', name, id: stash.id || null, savedAt: stash.savedAt || null, home: stash.home || null };
+    const ok = await doSave(name, stash.id || null);
+    if (ok) { pending = null; clearTimeout(pendingT); await clearStash(); }
     return;
   }
   if (stash && !user) { pending = { intent: stash.intent, name: stash.name, id: stash.id || null }; say('Restored the figure you were saving. Sign in to finish saving it.'); return; }
@@ -831,7 +879,7 @@ async function boot() {
     // the live figure has been deleted or moved where this reader cannot follow.
     await openVersion(Number(n), { figure: wanted, force: true }).catch((err) => { setUrlProject(null); say(err.message); });
   } else if (wanted && user) {
-    try { const res = await openProject(wanted); settle(); say(`Opened “${res.name}”.`); } catch (err) { setUrlProject(null); say(err.message); }
+    try { const res = await openProject(wanted); settle(); say(`Opened “${res.name}”.`); } catch (err) { if (err.code !== 'SUPERSEDED') { setUrlProject(null); say(err.message); } }
   }
 }
 
