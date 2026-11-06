@@ -743,7 +743,8 @@ const BUDGETS = {
   // Narrow missing-RPC messages in shared cloud storage: measured 347.9 configured.
   // Live web map merged with main (Point inspector, numeric classification): measured 348.6.
   // Same explicit template recipe: measured 350.3 configured / 282.1 plain.
-  editorAuthJsGzipKb: 355.0,
+  // Per-tab save queue and missing-map detach (docs/state-machines.md ED-1/ED-2): measured 355.0.
+  editorAuthJsGzipKb: 355.3,
   // Excel import: shared fflate's async ZIP worker support adds ~1.2 KiB (342.5 measured).
   // The XLSX parser and sheet picker remain lazy; the homepage does not load compression.
   // 270 → 271.0 (Oct 2026, production errors, measured 270.7, 269.6 on main): the same as editorAuthJsGzipKb above.
@@ -773,9 +774,12 @@ const BUDGETS = {
   // Same measured shared helper graph: 360.7 configured / 292.5 plain.
   // Live web map merged with main (Point inspector, numeric classification): measured 361.4.
   // Claims shares that editor graph: measured 363.1 configured / 294.8 plain.
-  claimsAuthJsGzipKb: 367.9,
+  // Same save queue and detach in the shared editor graph: measured 367.9.
+  claimsAuthJsGzipKb: 368.2,
   // Live web map merged with main (Point inspector, numeric classification): measured 293.2.
-  claimsJsGzipKb: 299.6,
+  // Per-tab save queue and missing-map detach in the shared editor graph
+  // (docs/state-machines.md ED-1/ED-2): measured just over 299.6.
+  claimsJsGzipKb: 299.9,
   // Live investor web map (/embed/map/<id>): map, legend, layer list, drill-result callouts and the drill plan
   // (its overlay loaded only when published with one), no editor; measured 243.9 configured, 177.5 plain with main.
   // MapCanvas opt-in key/annotation hand-off: measured 244.2 configured;
