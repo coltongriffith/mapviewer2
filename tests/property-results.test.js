@@ -25,7 +25,7 @@ function figureHarness(f) {
     addFiles: vi.fn((files, { drillSource }) => { project.files = project.files.filter((old) => !files.some((fresh) => fresh.name === old.name)).concat(structuredClone(files)); project.settings.drillSource = drillSource; }),
     setStyle: vi.fn((style) => Object.assign(project.settings, style)),
     setCRS: vi.fn(async () => {}),
-    loadProject: vi.fn(async (p) => { project = structuredClone(p); }),
+    loadProject: vi.fn(async (p, options = {}) => { project = structuredClone(p); if (options.freshDrill) { const fresh = options.freshDrill; project.files.push(...structuredClone(fresh.files)); project.settings.drillSource = structuredClone(fresh.drillSource); if (fresh.drillSource.resultsRecipe) project.settings.calloutMode = 'published'; } }),
   };
   document.body.innerHTML = '<button id="drill-add"></button><div id="drill-pick" hidden><div id="drill-body"></div></div><div id="drill-notice" hidden><span id="drill-notice-text"></span><button id="drill-update"></button><button id="drill-dismiss"></button></div>';
   window.EM3D = E;
@@ -68,7 +68,8 @@ describe('3D property recipe controls', () => {
     expect(h.E.loadProject.mock.calls[0][0].files).toEqual(before.files);
     for (const retained of kept) expect(h.get().files).toContainEqual(retained);
     expect(h.get().files.find((file) => file.name === kept[0].name)).not.toHaveProperty('geophysNumericPolicy');
-    expect(h.E.addFiles.mock.calls[0][0].some((file) => kept.some((old) => old.name === file.name))).toBe(false);
+    expect(h.E.loadProject.mock.calls[0][1].freshDrill.files.some((file) => kept.some((old) => old.name === file.name))).toBe(false);
+    expect(h.E.addFiles).not.toHaveBeenCalled();
     expect(h.get().files.find((file) => file.name === RESULTS_FILE).role).toBe('published');
   });
 
@@ -160,9 +161,10 @@ describe('3D property recipe controls', () => {
 
   it('restores the previous figure if applying newly loaded data fails', async () => {
     const f = fixture(), h = figureHarness(f), before = h.get();
-    h.E.addFiles.mockImplementationOnce(() => { throw new Error('bad figure'); });
+    h.E.loadProject.mockRejectedValueOnce(Object.assign(new Error('bad figure'), { stateRestored: true }));
     await toggle(); await clickAction('drill-load');
-    expect(h.get()).toEqual(before); expect(el('drill-progress').textContent).toBe('bad figure');
+    expect(h.get()).toEqual(before); expect(el('drill-progress').textContent).toBe('bad figure The figure is unchanged.');
+    expect(h.E.loadProject).toHaveBeenCalledOnce(); // no caller-side rollback
   });
 
   it('preserves edited result wording rather than silently carrying stale grades into a recipe update', async () => {

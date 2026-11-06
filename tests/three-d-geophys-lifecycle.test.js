@@ -22,7 +22,7 @@ function studio(files) {
     getProject: () => structuredClone(project),
     getState: () => ({ usingSample: false, terrain: { crs: null }, drillSource: project.settings.drillSource, libRefs: project.settings.libRefs, files: project.files }),
     clearFiles: vi.fn(() => { project.files = []; project.settings.eq = null; project.settings.drillSource = null; }),
-    loadProject: vi.fn(async (p) => { project = structuredClone(p); }),
+    loadProject: vi.fn(async (p, options = {}) => { project = structuredClone(p); if (options.freshDrill) { project.settings.eq = null; project.settings.drillSource = structuredClone(options.freshDrill.drillSource); project.files.push(...options.freshDrill.files.map(f => ({ ...f, geophysNumericPolicy: geophysFilePolicy(f) }))); } }),
     addFiles: vi.fn((fresh, options) => {
       project.files.push(...fresh.map((file) => ({ ...file, geophysNumericPolicy: geophysFilePolicy(file) })));
       project.settings.drillSource = options?.drillSource ?? null;
@@ -57,11 +57,12 @@ describe('unrelated property drill replacement preserves source interpretation',
     const button = await propertyPicker(E);
     button.click();
     await vi.waitFor(() => expect(button.disabled).toBe(false));
-    expect(E.clearFiles).toHaveBeenCalledTimes(1);
+    expect(E.clearFiles).not.toHaveBeenCalled();
     expect(E.loadProject).toHaveBeenCalledTimes(1);
     expect(E.loadProject.mock.calls[0][0].files).toEqual(kept);
-    expect(E.loadProject.mock.calls[0][0].settings.eq).toBeNull(); // normal old-data reset retained
-    expect(E.addFiles.mock.calls[0][0]).toEqual([newDrill]);
+    expect(E.getProject().settings.eq).toBeNull(); // atomic native freshDrill reset retained
+    expect(E.loadProject.mock.calls[0][1].freshDrill.files).toEqual([newDrill]);
+    expect(E.addFiles).not.toHaveBeenCalled();
     const saved = E.getProject();
     expect(saved.files.slice(0, 3)).toEqual(kept);
     expect(saved.files[0]).not.toHaveProperty('geophysNumericPolicy');
@@ -96,7 +97,7 @@ describe('explicit library replacement updates only replaced source policy', () 
     document.body.innerHTML = '<div id="lib-list"></div><button id="lib-update"></button><button id="lib-dismiss"></button>'
       + '<div id="lib-notice" hidden></div><div id="lib-notice-text"></div>';
     const module = await import('../src/three-d/library.js');
-    module.init({ client: async () => ({}), current: () => ({ home: { propertyId: prop.id } }), say: vi.fn() });
+    module.init({ client: async () => ({}), current: () => ({ home: { propertyId: prop.id } }), say: vi.fn(), captureContext: () => { const signature = JSON.stringify(E.getProject()); return { isCurrent: ({ source = true } = {}) => !source || signature === JSON.stringify(E.getProject()) }; } });
     await module.check();
     const button = document.getElementById('lib-update'); button.click();
     await vi.waitFor(() => expect(button.disabled).toBe(false));

@@ -330,10 +330,10 @@ identity check on the holes array (l.70-71). Manual entries for holes that no lo
 | send link (save-signin) | DIALOG | stashWork ok | PENDING-LINK | the stash now carries `savedAt` and `home` | `account-core.js` form submit |
 | em3d:change | PENDING-LINK | stash flag gone (another tab used it) | ATTACHED / NEW | `pending` dropped, no re-stash | `wire()` |
 | boot with stash, signed in | page load | stash has `id` and `savedAt` | SAVING, guarded | `current` = stash attachment; `pending` set; success clears the stash, failure keeps it for this tab's next save | `boot()` |
-| boot with stash, signed in | page load | stash has `id`, no `savedAt` (older stash) | NEW (unattached) | stash cleared, user told to Save as new; never written over the figure | `boot()` |
+| boot with stash, signed in | page load | stash has `id`, no `savedAt` (older stash) | NEW (unattached) | kept as the recovery copy until this tab saves it as a new figure; never written over the figure | `boot()` |
 | Save click | any | `starting` or `busy` | ignored | `starting` is set before the first await | `save()` |
 | saveProject commits | in-flight | epoch moved, but the figure on screen is the one saved | ATTACHED | `current.savedAt` advances | `saveProject()` |
-| openProject finishes | any | a newer Open started | unchanged | throws `SUPERSEDED`, callers ignore it | `openProject()` |
+| openProject finishes | any | a newer Open started (figure context moved) | unchanged | throws `PROJECT_CHANGED`, callers ignore it; the guard came from main (#415), and the 3D-4 test pins it | `openProject()` |
 | conflict: Reload | DIALOG(conflict) | open ok | ATTACHED(clean) | a pending stash is cleared | `wire()` |
 
 ### Checked and already guarded

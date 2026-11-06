@@ -12,14 +12,21 @@ const imageOf = (src) => new Promise((ok, no) => { const im = new Image(); im.on
 export function render() { $('logo-bg-on').checked = state.removed; if (!state.src) $('logo-bg').hidden = true; }
 // setLogo: studio.js's, given the logo with its background removed (or as it is when none is found).
 export async function set(setLogo, status, src, opts) {
+  const current = () => { if (opts.isCurrent && !opts.isCurrent()) throw Object.assign(new Error('The figure changed before its logo was ready.'), { code: 'PROJECT_CHANGED' }); };
+  current();
   const r = logoWithoutBackground(await imageOf(src));
+  current();
   await setLogo(r.found ? r.canvas.toDataURL('image/png') : src, { ...opts, removeBackground: false, keep: true });
+  current();
   Object.assign(state, { src, removed: !!r.found }); render();
   if (!r.found) status('No white or flat background found round the logo: kept as it is.');
 }
 let wired = false;
-export async function offer(setLogo, status, src) {
-  Object.assign(state, { src, removed: false }); const r = logoWithoutBackground(await imageOf(src)); $('logo-bg').hidden = !r.found; if (!r.found) return;
+export async function offer(setLogo, status, src, opts = {}) {
+  const current = () => !opts.isCurrent || opts.isCurrent();
+  if (!current()) return;
+  const r = logoWithoutBackground(await imageOf(src)); if (!current()) return;
+  Object.assign(state, { src, removed: false }); $('logo-bg').hidden = !r.found; if (!r.found) return;
   const pv = $('logo-bg-prev'); pv.innerHTML = ''; r.canvas.setAttribute('aria-label', 'Your logo without its background'); pv.appendChild(r.canvas); render();
   if (!wired) { wired = true; $('logo-bg-on').addEventListener('change', (e) => setLogo(state.src, { removeBackground: e.target.checked, autoColor: false, keep: true }).catch((err) => status(err.message))); }
 }

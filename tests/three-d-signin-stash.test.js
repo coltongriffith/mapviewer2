@@ -93,7 +93,8 @@ describe('sign-in link stash replay', () => {
     await core.start();
     expect(db.rows.get('x').settings.settings.title).toBe('Saved X');
     expect(db.rows.size).toBe(1);
-    expect(stashed()).toBeNull();
+    // Kept as the recovery copy until this tab saves it as a new figure.
+    expect(stashed()).not.toBeNull();
     expect(core.currentProject()).toBeNull();
   });
 

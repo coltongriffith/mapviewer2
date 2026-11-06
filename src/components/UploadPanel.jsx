@@ -1,36 +1,55 @@
 import React, { useState } from 'react';
+import { isRasterName, isWorldFileName } from '../utils/rasterOverlay.js';
 
 const MULTI_ACCEPT = '.zip,.shp,.dbf,.prj,.shx,.geojson,.json,.kml,.kmz,.csv,.png,.jpg,.jpeg,.gif,.webp,.pgw,.jgw,.wld,.tfw';
 
-// A shapefile's parts, or an image with its world file, travel together.
-const needsGroup = (files) => files.some((f) => /\.(shp|pgw|jgw|jpgw|wld|tfw|pngw|gfw)$/i.test(f.name));
+const shapePart = (name) => /\.(shp|dbf|prj|shx|cpg|qix|sbn|sbx)$/i.test(name);
+const stem = (name) => name.replace(/\.[^.]+$/, '').toLowerCase();
+
+// Keep paired source files together, and independent imports in selection order.
+export function groupUploadFiles(input) {
+  const files = Array.from(input), names = new Set(), used = new Set(), groups = [];
+  for (const f of files) {
+    const name = f.name.toLowerCase();
+    if (names.has(name)) throw new Error('Several selected files have the same name. Import those files separately.');
+    names.add(name);
+  }
+  for (let i = 0; i < files.length; i++) {
+    if (used.has(i)) continue;
+    const f = files[i], same = files.map((file, index) => ({ file, index })).filter(({ file }) => stem(file.name) === stem(f.name));
+    let selected = [{ file: f, index: i }], kind = 'file';
+    if (shapePart(f.name)) {
+      selected = same.filter(({ file }) => shapePart(file.name)); kind = 'shapefile';
+    } else if (isRasterName(f.name) || isWorldFileName(f.name)) {
+      const images = same.filter(({ file }) => isRasterName(file.name)), worlds = same.filter(({ file }) => isWorldFileName(file.name));
+      if (worlds.length > 1 || (worlds.length && images.length > 1)) throw new Error('An image has more than one possible matching world file or image. Import each image and its world file separately.');
+      if (images.length === 1 && worlds.length === 1) { selected = same.filter(({ file }) => isRasterName(file.name) || isWorldFileName(file.name)); kind = 'raster'; }
+    }
+    selected.forEach(({ index }) => used.add(index));
+    groups.push({ kind, files: selected.map(({ file }) => file) });
+  }
+  return groups;
+}
 
 export default function UploadPanel({ onUploadFile, onUploadFiles, inputRef, status, layers }) {
   const [dragging, setDragging] = useState(false);
+  const upload = async (files) => {
+    if (!files.length) return;
+    if (files.length > 1 && onUploadFiles) await onUploadFiles(files);
+    else for (const file of files) await onUploadFile(file);
+  };
 
   const handleDrop = async (event) => {
     event.preventDefault();
     setDragging(false);
     const files = Array.from(event.dataTransfer?.files || []);
-    if (!files.length) return;
-
-    if (files.length > 1 && needsGroup(files) && onUploadFiles) {
-      await onUploadFiles(files);
-    } else {
-      await onUploadFile(files[0]);
-    }
+    await upload(files);
   };
 
   const handleChange = async (event) => {
     const files = Array.from(event.target.files || []);
     event.target.value = '';
-    if (!files.length) return;
-
-    if (files.length > 1 && needsGroup(files) && onUploadFiles) {
-      await onUploadFiles(files);
-    } else {
-      await onUploadFile(files[0]);
-    }
+    await upload(files);
   };
 
   return (

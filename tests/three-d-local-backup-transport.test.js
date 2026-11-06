@@ -166,6 +166,15 @@ describe('file preflight and downloads', () => {
     expect(document.body.textContent).toContain('could not be backed up'); expect(document.body.textContent).not.toContain('downloaded');
     expect(document.body.textContent).not.toContain('private download detail');
   });
+  it('returns focus to visible My 3D maps when the Restore menu has closed', async () => {
+    document.body.innerHTML += '<button id="acct-maps">My 3D maps</button><div hidden><button id="backup-restore">Restore</button></div><dialog id="backup-dialog"><p id="backup-name"></p><p id="backup-dependencies"></p><p id="backup-error"></p><button id="backup-open"></button></dialog>';
+    document.getElementById('acct-maps').getBoundingClientRect = () => ({ width:100, height:30 });
+    const dialog = document.getElementById('backup-dialog'); dialog.showModal = vi.fn();
+    mocks.decode.mockResolvedValue({ project, name:'Figure', dependencies:{} });
+    await reviewLocalBackup({ size:1, arrayBuffer:async()=>new Uint8Array([1]).buffer });
+    dialog.dispatchEvent(new Event('close'));
+    expect(document.activeElement).toBe(document.getElementById('acct-maps'));
+  });
   it('shows only fixed dependency labels and treats the name as text in the confirmation', async () => {
     document.body.innerHTML += '<dialog id="backup-dialog"><p id="backup-name"></p><p id="backup-dependencies"></p><p id="backup-error"></p><button id="backup-open"></button></dialog>';
     const dialog = document.getElementById('backup-dialog'); dialog.showModal = vi.fn();

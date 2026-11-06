@@ -164,6 +164,24 @@ function nextProjectEpoch() {
   return projectEpoch;
 }
 let current = null; // { id, name, savedAt } of the figure open in the editor
+let savePaused = false;
+export function requireFigureReady() {
+  const paused = savePaused || studio().isProjectRecoveryPending?.();
+  if (studio().isProjectLoading?.() || paused) throw Object.assign(plain(paused
+    ? 'The figure could not be fully restored. Open a saved figure successfully before saving or publishing.'
+    : 'Wait for the figure to finish opening before saving or publishing.', null, 'PROJECT_LOADING'), { plain: true });
+}
+const projectChanged = () => Object.assign(plain('The figure or account changed. Try this action again on the current figure.', null, 'PROJECT_CHANGED'), { plain: true });
+// Exact signatures catch edits before their change event. During a load, its
+// own generation guard handles edits and this token checks account/navigation.
+export function captureFigureContext() {
+  const epoch = projectEpoch, accountEpoch = authEpoch, signature = sig();
+  return {
+    project: current?.id || null,
+    isCurrent: ({ source = true } = {}) => epoch === projectEpoch && accountEpoch === authEpoch && (!source || signature === sig()),
+    assertCurrent(options) { if (!this.isCurrent(options)) throw projectChanged(); },
+  };
+}
 
 const safeName = (name) => (String(name).replace(/[^\w.-]+/g, '_').replace(/^\.+/, '').slice(-120) || 'file');
 
@@ -202,7 +220,7 @@ async function homeOf(row) {
 // A figure in a company property can take files from the property's data
 // library and is told when one has a newer version (library.js, on first use).
 let libP = null;
-const lib = () => (libP ||= import('./library.js').then((m) => { m.init({ client, current: () => current, say }); return m; })
+const lib = () => (libP ||= import('./library.js').then((m) => { m.init({ client, current: () => current, captureContext: captureFigureContext, pauseSaving: () => { savePaused = true; dirty = true; renderNote(); }, say }); return m; })
   .catch((err) => { libP = null; throw err; }));
 const checkLibrary = () => { if (current?.home?.propertyId) lib().then((m) => m.check()).catch(() => { /* the figure is fine as it is */ }); };
 
@@ -220,15 +238,16 @@ function setFrozen(v) {
 }
 const ver = () => (verP ||= import('./versions.js').then((m) => {
   m.init({ client, current: () => current, dirty: () => dirty, canPublish: () => !!current && (!current.home || canEdit(current.home.role)), say,
+    captureContext: captureFigureContext, pauseSaving: () => { savePaused = true; dirty = true; renderNote(); }, afterLive: () => { checkLibrary(); checkDrill(); },
     frozen: () => frozen, setFrozen, reopen, detach, saveAsNew: (name) => openDialog('name', { name }) });
   return m;
 }).catch((err) => { verP = null; throw err; }));
-export const publishVersion = (o) => ver().then((m) => m.publish(o));
+export const publishVersion = (o) => { requireFigureReady(); return ver().then((m) => { requireFigureReady(); return m.publish(o); }); };
 export const listVersions = (id) => ver().then((m) => m.list(id));
 export const openVersion = (n, o) => ver().then((m) => m.open(n, o));
 export const closeVersion = () => ver().then((m) => m.close());
 async function reopen(id) {
-  try { const res = await openProject(id); setUrlProject(res.id); settle(); say(`Back to “${res.name}” as last saved.`); return res; } catch (err) { if (err.code !== 'SUPERSEDED') { detach(); say(err.message); } throw err; }
+  try { const res = await openProject(id, { fromVersion: true }); setUrlProject(res.id); settle(); say(`Back to “${res.name}” as last saved.`); return res; } catch (err) { if (err?.code !== 'PROJECT_CHANGED') say(err.message); throw err; }
 }
 function detach() { nextProjectEpoch(); current = null; dirty = true; setUrlProject(null); renderNote(); }
 
@@ -239,7 +258,7 @@ function detach() { nextProjectEpoch(); current = null; dirty = true; setUrlProj
 // when the version opened never shows, and Update never rewrites the version.
 export const drillFigure = (figure, version) => (version ? null : figure);
 let drillP = null;
-const drill = () => (drillP ||= import('./property-data.js').then((m) => { m.init({ client, current: () => drillFigure(current, frozen), say, listHomes }); return m; })
+const drill = () => (drillP ||= import('./property-data.js').then((m) => { m.init({ client, current: () => drillFigure(current, frozen), captureContext: captureFigureContext, pauseSaving: () => { savePaused = true; dirty = true; renderNote(); }, say, listHomes }); return m; })
   .catch((err) => { drillP = null; throw err; }));
 const resetDrill = () => drillP?.then((m) => m.reset(), () => {}); // a notice belongs to the figure it was shown for
 const checkDrill = () => { if (!frozen && studio().getState().drillSource?.kind === 'property') drill().then((m) => m.check()).catch(() => { /* the figure is fine as it is */ }); };
@@ -271,13 +290,16 @@ export const isConflict = (loadedAt, savedAt) => !!(loadedAt && savedAt && Date.
  *   a company property for a new figure (an existing one stays where it is)
  * @param {{force?:boolean}} [opts]  force: overwrite even when the saved copy is newer than this one
  */
-export async function saveProject(name, existingId, dest = null, { force = false } = {}) {
+export async function saveProject(name, existingId, dest = null, { force = false, isCurrent = null } = {}) {
   requireLocalRestoreReady();
+  requireFigureReady();
   // Every save path (the button, Ctrl/Cmd+S, EM3D.account.saveProject): a version on screen never overwrites the figure.
   if (frozen) throw Object.assign(plain('A published version is open read-only. Start a new figure from it to save.', null, 'READ_ONLY'), { plain: true });
   const title = String(name || '').trim().slice(0, 200);
   if (!title) throw Object.assign(plain('Give the 3D map a name first.'), { plain: true });
+  if (isCurrent && !isCurrent()) throw projectChanged();
   const epoch = nextProjectEpoch();
+  const saveCurrent = () => !isCurrent || (epoch === projectEpoch && isCurrent());
   const accountEpoch = authEpoch;
   const opened = current;
   const em = studio();
@@ -288,6 +310,7 @@ export async function saveProject(name, existingId, dest = null, { force = false
   const user = await requireUser('save this 3D map');
   const sb = await client();
   if (accountEpoch !== authEpoch) throw accountChanged();
+  if (!saveCurrent()) throw projectChanged();
   const home = existingId ? (opened?.id === existingId ? opened.home : null) : dest;
   if (home && !canEdit(home.role)) {
     throw Object.assign(plain(`You have view-only access to ${home.propertyName || home.orgName}, so this figure cannot be saved there. Use Save as new to keep a personal copy.`), { plain: true, code: 'READ_ONLY' });
@@ -301,6 +324,7 @@ export async function saveProject(name, existingId, dest = null, { force = false
     if (isConflict(opened.savedAt, data?.updated_at)) throw conflict(data.updated_at);
   }
   if (accountEpoch !== authEpoch) throw accountChanged();
+  if (!saveCurrent()) throw projectChanged();
   const id = existingId || crypto.randomUUID();
   const rev = `r${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   const root = home ? `org/${home.orgId}/${id}` : `${user.id}/${id}`, dir = `${root}/${rev}`;
@@ -325,9 +349,10 @@ export async function saveProject(name, existingId, dest = null, { force = false
       try { await sb.storage.from(BUCKET).remove(filePaths.map((p) => p.path)); } catch { /* unreferenced leftovers */ }
       throw failed.reason;
     }
-    if (accountEpoch !== authEpoch) {
+    if (accountEpoch !== authEpoch || !saveCurrent()) {
       try { await sb.storage.from(BUCKET).remove(filePaths.map((p) => p.path)); } catch { /* unreferenced leftovers, never a committed revision */ }
-      throw accountChanged();
+      if (accountEpoch !== authEpoch) throw accountChanged();
+      throw projectChanged();
     }
     const row = { id, name: title, settings, file_paths: filePaths, thumbnail, updated_at: new Date().toISOString(), deleted_at: null };
     if (home) Object.assign(row, { org_id: home.orgId, property_id: home.propertyId });
@@ -349,6 +374,7 @@ export async function saveProject(name, existingId, dest = null, { force = false
   }
   // Never sweep other revision folders from a browser: another save may be
   // uploading there, or a published version may still reference those files.
+  if (!saveCurrent()) throw projectChanged();
   const active = epoch === projectEpoch;
   if (active) {
     current = saved;
@@ -358,7 +384,7 @@ export async function saveProject(name, existingId, dest = null, { force = false
   } else if (current && opened && current.id === saved.id && current.savedAt === opened.savedAt) {
     // The epoch moved (an Open that failed, a second save) but the figure on
     // screen is still the one this save wrote. Record the new version, or the
-    // next save would report this tab's own write as "saved somewhere else".
+    // next save would report this tab's own write as "saved somewhere else" (3D-3).
     current = { ...current, savedAt: saved.savedAt };
   }
   // Once per figure per tab, like the editor's project_saved: "worked on this session", not a count of Ctrl+S.
@@ -366,46 +392,51 @@ export async function saveProject(name, existingId, dest = null, { force = false
   return { ...saved, active };
 }
 
-// Only the latest Open may change the screen. A slow Open that finishes after
-// a newer one used to replace that figure, edits and all, without asking.
-let openSeq = 0;
-const superseded = () => Object.assign(plain('A newer Open replaced this one.'), { plain: true, code: 'SUPERSEDED' });
-
-export async function openProject(id) {
+export async function openProject(id, { fromVersion = false } = {}) {
   requireLocalRestoreReady();
-  const mine = ++openSeq;
   nextProjectEpoch();
+  const context = captureFigureContext();
   await requireUser('open your saved 3D maps');
-  resetDrill();
+  context.assertCurrent();
   const sb = await client();
-  let project, row;
+  context.assertCurrent();
+  let project, row, home;
   try {
     const res = await sb.from(TABLE).select('id, name, settings, file_paths, updated_at, org_id, property_id').eq('id', id).is('deleted_at', null).maybeSingle();
+    context.assertCurrent();
     if (res.error) throw res.error;
     row = res.data;
     if (!row) throw Object.assign(plain('That 3D map was not found. It may have been deleted.'), { plain: true });
-    // Files normally live in storage; a row may also carry them inline.
     const files = Array.isArray(row.settings?.files) ? row.settings.files : await Promise.all((row.file_paths || []).map(async (fp) => {
       const { data, error } = await sb.storage.from(BUCKET).download(fp.path);
+      context.assertCurrent();
       if (error) throw error;
-      return { name: fp.name, text: await data.text(), role: fp.role, cols: fp.cols, ...geophysPolicyMetadata(fp) };
+      const text = await data.text();
+      context.assertCurrent();
+      return { name: fp.name, text, role: fp.role, cols: fp.cols, ...geophysPolicyMetadata(fp) };
     }));
+    context.assertCurrent();
     project = { ...row.settings, files };
-  } catch (err) {
-    throw explain(err, 'open that 3D map');
-  }
-  if (mine !== openSeq) throw superseded();
+    home = await homeOf(row);
+    context.assertCurrent();
+  } catch (err) { throw explain(err, 'open that 3D map'); }
+  const acceptedVersionView = !fromVersion && frozen && verP ? await verP : null;
+  context.assertCurrent();
   const em = studio();
-  const backup = em.getProject();
   try {
-    await em.loadProject(project);
+    await em.loadProject(project, { isCurrent: () => context.isCurrent({ source: false }) });
+    context.assertCurrent({ source: false });
   } catch (err) {
-    try { await em.loadProject(backup); } catch { /* the editor keeps whatever it has */ }
-    throw Object.assign(plain(`That 3D map could not be opened (${err.message}). The figure you had is back.`, err), { plain: true });
+    // The loader owns the checkpoint; never reload an old backup over newer work.
+    if (!context.isCurrent({ source: false }) || err?.code === 'PROJECT_CHANGED') throw projectChanged();
+    if (err?.stateRestored !== true) { savePaused = true; dirty = true; renderNote(); }
+    throw Object.assign(plain(`That 3D map could not be opened (${err.message}). ${err?.stateRestored === true
+      ? 'Your previous figure is unchanged.' : 'The previous figure could not be fully restored. Saving is paused; keep this tab open.'}`, err), { plain: true });
   }
-  const home = await homeOf(row);
-  if (mine !== openSeq) throw superseded();
+  resetDrill();
+  if (!fromVersion) { acceptedVersionView?.acceptLive?.(); frozen = null; }
   nextProjectEpoch();
+  savePaused = false;
   current = { id: row.id, name: row.name, savedAt: row.updated_at, home };
   settle();
   checkLibrary(); checkDrill();
@@ -451,18 +482,31 @@ async function idbDo(mode, fn) {
     });
   } finally { db.close(); }
 }
+const stashTokens = new WeakMap();
+let pendingRecovery = null, lastStashedEntry = null, pendingRecord = null;
+const stashJSON = value => { try { return JSON.stringify(value ?? null); } catch { return null; } };
+function recordStash(entry, idbValue, localRaw, flag) {
+  stashTokens.set(entry, { idbJSON: idbValue == null ? null : stashJSON(idbValue), localRaw, flag });
+  lastStashedEntry = entry;
+  return entry;
+}
 export async function stashWork(extra = {}) {
-  // A different tab may be waiting for its sign-in link. Never replace its
-  // single shared stash with this restored figure, even on explicit sign-in.
   if (localRestoreBoot) return false;
-  let entry;
-  try { entry = { at: Date.now(), ...extra, project: studio().getProject() }; } catch { return false; }
-  try { localStorage.setItem(STASH_FLAG, '1'); } catch { /* the link return still finds it */ }
-  try { await idbDo('readwrite', (s) => s.put(entry, STASH_KEY)); return true; } catch { /* fall through */ }
+  let entry, localRaw = null, flag = null;
+  try { entry = { at: Date.now(), ...extra, project: studio().getProject() }; localRaw = localStorage.getItem(STASH_KEY); flag = localStorage.getItem(STASH_FLAG); } catch { return false; }
+  try { localStorage.setItem(STASH_FLAG, '1'); } catch { /* optional */ }
+  try {
+    await idbDo('readwrite', store => store.put(entry, STASH_KEY));
+    recordStash(entry, entry, localRaw, flag);
+    if (pending === extra) pendingRecord = entry;
+    return true;
+  } catch { /* local fallback */ }
   try {
     const json = JSON.stringify(entry);
     if (json.length > 2_000_000) return false;
     localStorage.setItem(STASH_KEY, json);
+    recordStash(entry, undefined, json, flag);
+    if (pending === extra) pendingRecord = entry;
     return true;
   } catch { return false; }
 }
@@ -471,16 +515,56 @@ function stashFlagSet() {
 }
 export async function readStash() {
   if (localRestoreBoot) return null;
-  let entry = null;
-  try { entry = await idbDo('readonly', (s) => s.get(STASH_KEY)); } catch { /* none */ }
-  if (!entry) try { entry = JSON.parse(localStorage.getItem(STASH_KEY) || 'null'); } catch { entry = null; }
-  if (!entry || !entry.project || Date.now() - (entry.at || 0) > STASH_MAX_AGE) { await clearStash(); return null; }
-  return entry || null;
+  let idbEntry = null, localRaw = null, flag = null, entry = null;
+  try { idbEntry = await idbDo('readonly', store => store.get(STASH_KEY)); } catch { /* local fallback */ }
+  try { localRaw = localStorage.getItem(STASH_KEY); flag = localStorage.getItem(STASH_FLAG); } catch { /* optional */ }
+  if (idbEntry) {
+    entry = idbEntry;
+    const raw = stashJSON(entry); if (raw !== null) pendingRecovery = { raw, source: 'idb' };
+  } else if (localRaw !== null) {
+    pendingRecovery = { raw: localRaw, source: 'local' };
+    try { entry = JSON.parse(localRaw); } catch { /* retain the exact corrupt text */ }
+  }
+  // Invalid/expired records are recovery evidence, never a reason to delete it.
+  if (!entry || typeof entry !== 'object' || !entry.project || !Number.isFinite(entry.at) || Date.now() - entry.at > STASH_MAX_AGE) {
+    renderRecoveryAction(); return null;
+  }
+  recordStash(entry, idbEntry, localRaw, flag);
+  renderRecoveryAction();
+  return entry;
 }
-export async function clearStash() {
-  if (localRestoreBoot) return;
-  try { await idbDo('readwrite', (s) => s.delete(STASH_KEY)); } catch { /* none */ }
+async function clearExpectedIDB(expectedJSON, isCurrent) {
+  if (expectedJSON === null) return false;
+  const db = await idb();
+  try {
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction('kv', 'readwrite'), store = tx.objectStore('kv'), request = store.get(STASH_KEY);
+      let matched = false;
+      request.onsuccess = () => { if (isCurrent() && stashJSON(request.result) === expectedJSON) { matched = true; store.delete(STASH_KEY); } };
+      tx.oncomplete = () => resolve(matched);
+      tx.onerror = tx.onabort = () => reject(tx.error);
+    });
+  } finally { db.close(); }
+}
+export async function clearStash(expected, { isCurrent = () => true } = {}) {
+  if (localRestoreBoot) return false;
+  if (expected !== undefined) {
+    const token = stashTokens.get(expected); if (!token) return false;
+    let clearedIDB = false, clearedLocal = false;
+    try { clearedIDB = await clearExpectedIDB(token.idbJSON, isCurrent); } catch { /* retain uncertain data */ }
+    try {
+      if (isCurrent() && token.localRaw !== null && localStorage.getItem(STASH_KEY) === token.localRaw) { localStorage.removeItem(STASH_KEY); clearedLocal = true; }
+    } catch { /* retain uncertain data */ }
+    // The shared flag has no revision. A newer writer may have set the same
+    // value, so conditional cleanup intentionally leaves it alone.
+    if (pendingRecovery && ((pendingRecovery.source === 'idb' && clearedIDB && pendingRecovery.raw === token.idbJSON)
+      || (pendingRecovery.source === 'local' && clearedLocal && pendingRecovery.raw === token.localRaw))) pendingRecovery = null;
+    renderRecoveryAction(); return clearedIDB || clearedLocal;
+  }
+  // Explicit public/manual clear retains its original meaning.
+  try { await idbDo('readwrite', store => store.delete(STASH_KEY)); } catch { /* none */ }
   try { localStorage.removeItem(STASH_KEY); localStorage.removeItem(STASH_FLAG); } catch { /* none */ }
+  pendingRecovery = null; renderRecoveryAction(); return true;
 }
 
 // ── UI ──────────────────────────────────────────────────────────────────────
@@ -512,6 +596,7 @@ function say(msg) {
 }
 function settle() { dirty = false; try { savedSig = sig(); } catch { savedSig = null; } renderNote(); }
 function renderNote() {
+  renderRecoveryAction();
   window.dispatchEvent(new CustomEvent('em3d:save-state', { detail: { dirty: !frozen && dirty, isDirty: () => !frozen && (busy || sig() !== savedSig) } }));
   // "From property library" only for a figure in a company property.
   const lb = $('lib-add');
@@ -528,6 +613,26 @@ function renderNote() {
   const where = current.home ? ` · ${current.home.propertyName || current.home.orgName}${canEdit(current.home.role) ? '' : ' (view only)'}` : '';
   note.textContent = (dirty ? 'Unsaved changes' : `Saved ${fmtWhen(current.savedAt, { timeStyle: 'short' })}`) + where;
   note.title = dirty ? `Last saved ${when(current.savedAt)}${where}` : `${current.name} · saved ${when(current.savedAt)}${where}`;
+}
+function renderRecoveryAction() {
+  if (frozen || document.documentElement?.matches?.('.em3d-viewer,.em3d-version')) { $('acct-recovery')?.remove?.(); return; }
+  const project = studio().getRecoveryProject?.(), existing = $('acct-recovery');
+  if (!project && !pendingRecovery) { existing?.remove?.(); return; }
+  if (existing || !$('acct-note')?.insertAdjacentElement) return;
+  const button = document.createElement('button'); button.id = 'acct-recovery'; button.type = 'button'; button.className = 'btn'; button.textContent = 'Download recovery data';
+  button.addEventListener('click', async () => {
+    const recovery = studio().getRecoveryProject?.(), pendingCopy = pendingRecovery; if (!recovery && !pendingCopy) return;
+    button.disabled = true;
+    try {
+      const { downloadBlob } = await import('../utils/svg.js');
+      const raw = recovery ? JSON.stringify(recovery) : pendingCopy.raw, bytes = new TextEncoder().encode(raw);
+      if (new TextDecoder('utf-8', { ignoreBOM: true }).decode(bytes) !== raw) throw new Error('This recovery text cannot be encoded without changing it.');
+      await downloadBlob(recovery ? 'original-3d-recovery.json' : 'pending-signin-recovery.json', new Blob([bytes], { type: 'application/json' }));
+      say(recovery ? 'Recovery data downloaded: your original raw files and settings. It contains private project data.' : 'Pending sign-in data downloaded. It may contain private raw files and settings; keep it somewhere safe. This copy is recovery evidence and may need repair before use.');
+    } catch { say('Recovery data could not be downloaded. Keep this tab open and try again.'); }
+    finally { button.disabled = false; }
+  });
+  $('acct-note').insertAdjacentElement('afterend', button);
 }
 function setUrlProject(id) {
   try {
@@ -549,6 +654,8 @@ function openDialog(mode, { error = '', asNew = false, toProperty = false, name 
   $('acct-title').textContent = saving ? 'Save to your account' : 'Sign in to Exploration Maps';
   $('acct-intro').textContent = mode === 'name'
     ? 'Name this 3D map. You can open it again from My 3D maps.'
+    : localRestoreBoot
+      ? 'Sign in in another tab, then return and Save this figure. You can also use a password here.'
     : saving
       ? 'Sign in to keep this figure in your Exploration Maps account and open it again later. It stays in this browser while you sign in.'
       : 'Sign in to see and open the 3D maps saved to your account.';
@@ -560,11 +667,11 @@ function openDialog(mode, { error = '', asNew = false, toProperty = false, name 
   $('acct-name-actions').hidden = mode !== 'name';
   $('acct-sent').hidden = true;
   $('acct-form').hidden = false;
-  $('acct-password-row').hidden = true;
-  $('acct-use-password').hidden = false;
-  $('acct-link-btn').hidden = false;
-  $('acct-password-btn').hidden = true;
-  $('acct-new').hidden = false;
+  $('acct-password-row').hidden = !localRestoreBoot;
+  $('acct-use-password').hidden = localRestoreBoot;
+  $('acct-link-btn').hidden = localRestoreBoot;
+  $('acct-password-btn').hidden = !localRestoreBoot;
+  $('acct-new').hidden = localRestoreBoot;
   showError(error);
   if (!d.open) d.showModal();
   (mode === 'name' ? $('acct-name') : $('acct-email')).focus();
@@ -596,9 +703,10 @@ async function chosenDest() {
 function showError(msg) { const e = $('acct-error'); e.textContent = msg || ''; e.hidden = !msg; }
 function closeDialog() { const d = $('acct-dialog'); if (d?.open) d.close(); dialogMode = null; }
 
-let starting = false; // a save that has not reached doSave yet: a second click must not start another
+let starting = false; // a save that has not reached doSave yet: a second click must not start another (3D-3)
 export async function save({ asNew = false, force = false } = {}) {
   requireLocalRestoreReady();
+  try { requireFigureReady(); } catch (err) { say(err.message); return; }
   if (busy || starting || $('acct-dialog')?.open) return;
   starting = true;
   try { await startSave({ asNew, force }); } finally { starting = false; }
@@ -620,9 +728,11 @@ async function doSave(name, id, dest = null, opts) {
   busy = true; renderNote(); renderButtons();
   try {
     const res = await saveProject(name, id, dest, opts);
-    if (!res.active) return true; // saved the old figure; leave the newly opened one alone
-    if (pending && !dirty) { pending = null; clearTimeout(pendingT); await clearStash(); }
-    if (current?.id !== res.id || current.savedAt !== res.savedAt) return true;
+    if (!res.active) return false; // saved the old figure; leave newer work and pending records alone
+    const expected = opts?.expectedStash || pendingRecord, accepted = captureFigureContext();
+    const stillAccepted = () => accepted.isCurrent() && (!opts?.isCurrent || opts.isCurrent());
+    if (!dirty && expected) { await clearStash(expected, { isCurrent: stillAccepted }); if (stillAccepted() && pendingRecord === expected) { pending = null; pendingRecord = null; clearTimeout(pendingT); } }
+    if (!stillAccepted() || current?.id !== res.id || current.savedAt !== res.savedAt) return false;
     setUrlProject(res.id);
     say(`Saved “${res.name}” to ${res.home ? (res.home.propertyName || res.home.orgName) : 'your account'} at ${fmtWhen(res.savedAt, { timeStyle: 'short' })}.${dirty ? ' Newer changes still need saving.' : ''}`);
     if (!$('acct-menu').hidden) renderMenu();
@@ -704,11 +814,12 @@ async function onMenuClick(e) {
     if (dirty && t.dataset.confirm !== '1') { t.dataset.confirm = '1'; t.textContent = 'Replace current figure?'; return; }
     t.disabled = true; t.textContent = 'Opening…';
     try {
-      const res = await openProject(t.dataset.open);
-      if (pending) { pending = null; clearTimeout(pendingT); await clearStash(); }
+      const res = await openProject(t.dataset.open), accepted = captureFigureContext();
+      if (pending) { const expected = pendingRecord; pending = null; pendingRecord = null; clearTimeout(pendingT); if (expected) await clearStash(expected, { isCurrent: () => accepted.isCurrent() }); }
+      if (!accepted.isCurrent()) return;
       setUrlProject(res.id); settle(); toggleMenu(false);
       say(`Opened “${res.name}”.`);
-    } catch (err) { if (err.code !== 'SUPERSEDED') say(err.message); t.disabled = false; t.textContent = 'Open'; delete t.dataset.confirm; }
+    } catch (err) { say(err.message); t.disabled = false; t.textContent = 'Open'; delete t.dataset.confirm; }
     return;
   }
   if (t.dataset.del) {
@@ -762,10 +873,10 @@ function wire() {
     if (frozen) return; // a published version on screen is not the figure's work
     const now = sig() !== savedSig;
     if (now !== dirty) { dirty = now; renderNote(); }
-    // While a sign-in link is out, keep the stashed copy up to date. Once
-    // another tab has used and cleared it, stop: re-creating it would replay
-    // this copy on the next /3d load.
-    if (pending && !stashFlagSet()) { pending = null; clearTimeout(pendingT); }
+    // While a sign-in link is out, keep the stashed copy up to date.
+    // Once another tab has used and cleared the stash, stop: re-creating it
+    // would replay this copy on the next /3d load (3D-1).
+    if (pending && !stashFlagSet()) { pending = null; pendingRecord = null; clearTimeout(pendingT); }
     if (pending) { clearTimeout(pendingT); pendingT = setTimeout(() => stashWork(pending), 1500); }
   });
 
@@ -780,12 +891,7 @@ function wire() {
   $('acct-asnew').addEventListener('click', () => { closeDialog(); save({ asNew: true }); });
   $('acct-reload').addEventListener('click', async () => {
     closeDialog(); if (!current) return;
-    try {
-      const res = await openProject(current.id);
-      // Reloading discards the copy a sign-in link was carrying.
-      if (pending) { pending = null; clearTimeout(pendingT); await clearStash(); }
-      settle(); say(`Reloaded “${res.name}” as saved at ${fmtWhen(res.savedAt, { timeStyle: 'short' })}.`);
-    } catch (err) { if (err.code !== 'SUPERSEDED') say(err.message); }
+    try { const res = await openProject(current.id); settle(); say(`Reloaded “${res.name}” as saved at ${fmtWhen(res.savedAt, { timeStyle: 'short' })}.`); } catch (err) { say(err.message); }
   });
   $('acct-name-cancel').addEventListener('click', closeDialog);
   $('acct-sent-close').addEventListener('click', closeDialog);
@@ -815,13 +921,13 @@ function wire() {
       } else {
         // The link opens a fresh /3d: keep this figure so it can be restored and saved there.
         let kept = true;
-        // The attachment travels with the copy: which version it was based on
-        // (so the replay is a guarded save, never a blind overwrite) and its
-        // company home (so its files stay where the other members read them).
+        // The attachment travels with the copy: the version it was based on (so
+        // the replay is a guarded save, never a blind overwrite) and its company
+        // home (so its files stay where the other members read them) (3D-1, 3D-2).
         const meta = { intent: 'save', name: $('acct-name').value.trim() || current?.name || 'Untitled 3D map', id: current?.id || null, savedAt: current?.savedAt || null, home: current?.home || null };
         if (dialogMode === 'save-signin') kept = await stashWork(meta);
         await sendSignInLink(email);
-        if (dialogMode === 'save-signin' && kept) pending = meta;
+        if (dialogMode === 'save-signin' && kept) { pending = meta; pendingRecord = lastStashedEntry; }
         $('acct-form').hidden = true; $('acct-sent').hidden = false;
         $('acct-sent-text').textContent = dialogMode !== 'save-signin'
           ? `We sent a sign-in link to ${email}. Open it in this browser to finish signing in.`
@@ -842,45 +948,69 @@ async function boot() {
     say(`Sign-in did not complete: ${hash.get('error_description')}. Try again from Save.`);
     try { history.replaceState(history.state, '', location.pathname + location.search); } catch { /* cosmetic */ }
   }
+  const initial = captureFigureContext(), path = location.href;
+  const unchanged = (source = true) => location.href === path && initial.isCurrent({ source });
+  const query = new URLSearchParams(location.search), wanted = query.get('project'), n = query.get('version');
+  const explicitTarget = query.has('project') || query.has('version');
   const stash = await readStash();
-  if (stash) {
+  if (!unchanged()) return;
+  let restored = false, accepted = initial;
+  if (stash && !explicitTarget) {
     try {
-      await studio().loadProject(stash.project);
+      await studio().loadProject(stash.project, { isCurrent: () => unchanged(false) });
+      if (!unchanged(false)) return;
+      restored = true; accepted = captureFigureContext();
       say('Restored the figure you were saving.');
-    } catch { await clearStash(); }
+    } catch (err) {
+      // Failed receipt is never permission to delete its only original copy or
+      // save the pre-existing sample under the pending cloud target.
+      if (unchanged(false) && err?.code !== 'PROJECT_CHANGED') {
+        if (err?.stateRestored !== true) savePaused = true;
+        say(`The pending figure could not be opened (${err.message}). Its recovery data was kept.`);
+        renderNote();
+      }
+      return;
+    }
   }
-  try { user = await getUser(); } catch { user = null; }
-  renderButtons();
-  if (stash && user && stash.intent === 'save') {
+  const acceptedCurrent = () => location.href === path && accepted.isCurrent();
+  let verifiedUser;
+  try { verifiedUser = await getUser(); } catch { if (!acceptedCurrent()) return; verifiedUser = null; }
+  if (!acceptedCurrent()) return;
+  user = verifiedUser; renderButtons();
+  if (restored && user && stash.intent === 'save') {
     const name = stash.name || 'Untitled 3D map';
+    // This tab owns the stash from here on: any later successful save in it,
+    // not only the one below, clears it (3D-1).
+    pending = { intent: 'save', name, id: stash.id || null, savedAt: stash.savedAt || null, home: stash.home || null };
+    pendingRecord = stash;
     if (stash.id && !stash.savedAt) {
-      // An older stash that does not say which version it was based on: saving
-      // it over the figure could silently undo later saves. Keep it on screen,
-      // unattached, so Save makes it a new figure.
-      await clearStash();
+      // An older stash that does not say which version it was based on:
+      // writing it over the figure could silently undo later saves. It stays
+      // on screen, unattached, and Save makes it a new figure (3D-1).
+      pending.id = null;
       say(`Restored the figure you were saving. Press Save to keep it as a new 3D map, or open “${name}” from My 3D maps for the saved version.`);
       return;
     }
-    // Reattach to the version the copy was taken from: the save below is then
-    // guarded (a later save elsewhere shows the conflict dialog) and goes to
-    // the figure's company home. This tab owns the stash from here on, so any
-    // later successful save — not only this one — clears it.
+    // Reattach to the version and home the copy was taken from, so the save is
+    // guarded (a newer save elsewhere opens the conflict dialog) and its files
+    // go to the figure's company folder (3D-1, 3D-2).
     if (stash.id) current = { id: stash.id, name, savedAt: stash.savedAt, home: stash.home || null };
-    pending = { intent: 'save', name, id: stash.id || null, savedAt: stash.savedAt || null, home: stash.home || null };
-    const ok = await doSave(name, stash.id || null);
-    if (ok) { pending = null; clearTimeout(pendingT); await clearStash(); }
+    const source = sig(), account = authEpoch;
+    await doSave(name, stash.id || null, null, { expectedStash: stash, isCurrent: () => location.href === path && account === authEpoch && source === sig() });
     return;
   }
-  if (stash && !user) { pending = { intent: stash.intent, name: stash.name, id: stash.id || null }; say('Restored the figure you were saving. Sign in to finish saving it.'); return; }
-  if (stash) await clearStash();
-  const q = new URLSearchParams(location.search), wanted = q.get('project'), n = q.get('version');
-  if (wanted && user && /^\d+$/.test(n || '')) {
-    // /3d?project=<id>&version=<n>: that published version, read-only, read on its own: it opens even when
-    // the live figure has been deleted or moved where this reader cannot follow.
-    await openVersion(Number(n), { figure: wanted, force: true }).catch((err) => { setUrlProject(null); say(err.message); });
-  } else if (wanted && user) {
-    try { const res = await openProject(wanted); settle(); say(`Opened “${res.name}”.`); } catch (err) { if (err.code !== 'SUPERSEDED') { setUrlProject(null); say(err.message); } }
+  if (restored && !user) {
+    pending = { intent: stash.intent, name: stash.name, id: stash.id || null }; pendingRecord = stash;
+    say('Restored the figure you were saving. Sign in to finish saving it.'); return;
   }
+  if (restored) { await clearStash(stash, { isCurrent: acceptedCurrent }); return; }
+  if (wanted && user && /^\d+$/.test(n || '')) {
+    await openVersion(Number(n), { figure: wanted, force: true }).catch(err => { if (acceptedCurrent()) say(err.message); });
+  } else if (wanted && user) {
+    try { const res = await openProject(wanted); settle(); say(`Opened “${res.name}”.`); }
+    catch (err) { if (location.href === path && err?.code !== 'PROJECT_CHANGED') say(err.message); }
+  }
+
 }
 
 let started = null;
