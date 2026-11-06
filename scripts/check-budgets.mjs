@@ -326,7 +326,8 @@ const BUDGETS = {
   // plain/configured; retain 0.4 KiB stamp margin. These app totals exclude the
   // separately capped standalone 3D graphs. Editor/claims share the same queue;
   // their increases are not additional copies. Dependencies are unchanged.
-  totalAuthJsGzipKb: 1200.6,
+  // Nov 2026, state-machine fixes merged with main (docs/state-machines.md): measured 1201.3.
+  totalAuthJsGzipKb: 1201.7,
 
   // 1009.4 → 1026.3 (measured 1026.0): lazy XLSX reader (~13.8 KiB), sheet/header preview
   // (~1.1 KiB), import wiring and numeric-format handling. Shared fflate adds ~1.2 KiB
@@ -420,7 +421,8 @@ const BUDGETS = {
   // total stamp margin. No startup, other budget or dependency allowance change.
   // Same combined property-boundary integration: measured 1130.1 KiB plain;
   // preserve the existing 0.5 KiB stamp margin and all non-total allowances.
-  totalJsGzipKb: 1131.7,
+  // Nov 2026, state-machine fixes merged with main (docs/state-machines.md): measured 1132.0.
+  totalJsGzipKb: 1132.4,
 
   // 940.9 → 957.8 (measured 957.5): Excel import, as totalAuthJsGzipKb above.
   // 940.9 → 944.8 (P2-8, measured 944.6): the same lazy property recipe path
@@ -712,7 +714,8 @@ const BUDGETS = {
   // Combined lazy+Tour caps rise only 3.1 KiB (340.8 -> 343.9).
   // Shared account restore-context guards:202.2plain/202.6configured;0.3KiB margin.
   // Shared account safety hooks also reach the lazy Tour graph (205.8KiB).
-  threeDTourJsGzipKb: 206.1,
+  // Nov 2026, state-machine fixes merged with main (docs/state-machines.md): measured 206.1+.
+  threeDTourJsGzipKb: 206.5,
   // 161.2 → 162.7 (P2-8, measured 162.2 plain / 162.4 configured): explicit
   // recipe selection, snapshot ownership, collision/edited-wording guards and
   // recipe-only update notices in property-data. No eager 3D page growth.
@@ -755,7 +758,8 @@ const BUDGETS = {
   // Same explicit template recipe: measured 350.3 configured / 282.1 plain.
   // Context-safe sequential uploads survive the Data-to-Style transition;
   // measured355.7configured/287.6plain,0.3KiB margin. Other routes unchanged.
-  editorAuthJsGzipKb: 356.0,
+  // Nov 2026, state-machine fixes merged with main (docs/state-machines.md): measured 356.5.
+  editorAuthJsGzipKb: 356.9,
   // Excel import: shared fflate's async ZIP worker support adds ~1.2 KiB (342.5 measured).
   // The XLSX parser and sheet picker remain lazy; the homepage does not load compression.
   // 270 → 271.0 (Oct 2026, production errors, measured 270.7, 269.6 on main): the same as editorAuthJsGzipKb above.
@@ -773,7 +777,8 @@ const BUDGETS = {
   // Same chunk split for the live web map; measured 279.5 plain.
   // Same shared error helper: measured 279.8 plain, fractionally over the former cap.
   // Live web map merged with main (Point inspector, numeric classification): measured 280.5.
-  editorJsGzipKb: 287.9,
+  // Nov 2026, state-machine fixes merged with main (docs/state-machines.md): measured 288.2.
+  editorJsGzipKb: 288.6,
   // 355 to 355.3 (Oct 2026): claims shares the editor API bridge/control names; measured 355.0 in CI.
   // Same shared compression increase as above (274.4 measured).
   // Claims also restores drafts through shared compression (355.3 measured).
@@ -787,9 +792,11 @@ const BUDGETS = {
   // Claims shares that editor graph: measured 363.1 configured / 294.8 plain.
   // Claims shares the upload queue and existing accessible Dialog primitive;
   // measured368.9configured/300.6plain,0.3KiB margin.
-  claimsAuthJsGzipKb: 369.2,
+  // Nov 2026, state-machine fixes merged with main (docs/state-machines.md): measured 369.6.
+  claimsAuthJsGzipKb: 370.0,
   // Live web map merged with main (Point inspector, numeric classification): measured 293.2.
-  claimsJsGzipKb: 300.9,
+  // Nov 2026, state-machine fixes merged with main (docs/state-machines.md): measured 301.3.
+  claimsJsGzipKb: 301.7,
   // Live investor web map (/embed/map/<id>): map, legend, layer list, drill-result callouts and the drill plan
   // (its overlay loaded only when published with one), no editor; measured 243.9 configured, 177.5 plain with main.
   // MapCanvas opt-in key/annotation hand-off: measured 244.2 configured;

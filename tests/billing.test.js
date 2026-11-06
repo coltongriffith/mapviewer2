@@ -62,7 +62,9 @@ beforeEach(() => {
   vi.stubEnv('SUPABASE_URL', 'https://test.supabase.co');
   vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'service-key');
   vi.stubEnv('STRIPE_WEBHOOK_SECRET', WH_SECRET);
-  vi.stubEnv('STRIPE_SECRET_KEY', 'sk_test_x');
+  // Webhook tests here exercise the event-snapshot fallback. With a key the
+  // webhook reads the live subscription instead (tests/stripe-webhook-order.test.js).
+  vi.stubEnv('STRIPE_SECRET_KEY', '');
   vi.stubEnv('STRIPE_PRICE_MONTHLY_ID', 'price_m');
   vi.stubEnv('STRIPE_PRICE_YEARLY_ID', 'price_y');
 });
@@ -441,7 +443,8 @@ describe('event ledger and idempotency (P1-08)', () => {
 
   it('acks a REDELIVERED event without reprocessing it', async () => {
     const { default: handler } = await import('../api/stripe-webhook.js');
-    dbResults.stripe_events = { error: { code: '23505', message: 'duplicate key' } };
+    // The claim collides and the earlier delivery finished ('ok').
+    dbResults.stripe_events = [{ error: { code: '23505', message: 'duplicate key' } }, { data: { outcome: 'ok' } }];
     const body = JSON.stringify({
       id: 'evt_1', created: 1780000000, type: 'checkout.session.completed',
       data: { object: { mode: 'subscription', client_reference_id: 'u1', customer: 'cus_1' } },
@@ -479,6 +482,7 @@ describe('event ledger and idempotency (P1-08)', () => {
 });
 
 describe('checkout / portal endpoint guards', () => {
+  beforeEach(() => { vi.stubEnv('STRIPE_SECRET_KEY', 'sk_test_x'); });
   it('checkout 401s without a valid token', async () => {
     const { default: handler } = await import('../api/stripe-checkout.js');
     const res = mockRes();

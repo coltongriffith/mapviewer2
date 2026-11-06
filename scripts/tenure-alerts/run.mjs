@@ -18,11 +18,12 @@
 //
 // Reads SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY and RESEND_API_KEY.
 
+import { pathToFileURL } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
 import { supabaseCredentials } from '../lib/env.mjs';
 import { bcToday } from '../../src/utils/tenureDates.js';
 import {
-  planExpiryAlerts, planChangeAlerts, reconcileAlerts, dueNow, maySend,
+  planExpiryAlerts, planChangeAlerts, reconcileAlerts, dueNow, maySend, limitPortfolio, trustedChanges,
 } from './plan.mjs';
 import { renderAlert } from './templates.mjs';
 import { send } from './send.mjs';
@@ -54,10 +55,14 @@ async function main() {
     return;
   }
 
-  const scheduled = await schedule(sb, { now, alertsSafe });
-  console.log(`[tenure-alerts] scheduled ${scheduled.inserted} new, `
-    + `superseded ${scheduled.superseded} obsolete, `
-    + `requeued ${scheduled.revived} previously held.`);
+  // A dry run renders and sends nothing, so it must not change the queue
+  // either: scheduling inserts, supersedes and revives rows.
+  if (!dryRun) {
+    const scheduled = await schedule(sb, { now, alertsSafe });
+    console.log(`[tenure-alerts] scheduled ${scheduled.inserted} new, `
+      + `superseded ${scheduled.superseded} obsolete, `
+      + `requeued ${scheduled.revived} previously held.`);
+  }
 
   if (scheduleOnly) return;
 
@@ -70,19 +75,36 @@ async function main() {
 
 async function schedule(sb, { now, alertsSafe }) {
   const portfolios = await loadPortfolios(sb);
+  // Per owner, in creation order: the plan's limits and what is used so far.
+  portfolios.sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
+  const limitsByUser = new Map();
+  const usedByUser = new Map();
   let inserted = 0;
   let superseded = 0;
   let revived = 0;
 
   for (const portfolio of portfolios) {
-    const [memberships, recipients, existing] = await Promise.all([
+    const [allMemberships, allRecipients, existing] = await Promise.all([
       loadMemberships(sb, portfolio.id),
       loadRecipients(sb, portfolio.alert_policy_id),
       loadScheduled(sb, portfolio.id),
     ]);
-    if (!memberships.length) continue;
+    // Company workspace portfolios are not capped by a person's plan.
+    const capped = portfolio.user_id && !portfolio.org_id;
+    if (capped && !limitsByUser.has(portfolio.user_id)) {
+      limitsByUser.set(portfolio.user_id, await loadPlanLimits(sb, portfolio.user_id));
+      usedByUser.set(portfolio.user_id, { portfolios: 0, tenures: 0 });
+    }
+    const limited = limitPortfolio({
+      limits: capped ? limitsByUser.get(portfolio.user_id) : null,
+      used: capped ? usedByUser.get(portfolio.user_id) : { portfolios: 0, tenures: 0 },
+      memberships: allMemberships,
+      recipients: allRecipients,
+      offsets: portfolio.policy?.expiry_offsets || [90, 30],
+    });
+    const { memberships, recipients, offsets } = limited;
+    if (!allMemberships.length) continue;
 
-    const offsets = portfolio.policy?.expiry_offsets || [90, 30];
     const planned = [];
     for (const m of memberships) {
       planned.push(...planExpiryAlerts(m, offsets, recipients, now));
@@ -100,7 +122,7 @@ async function schedule(sb, { now, alertsSafe }) {
       }
     }
 
-    const { toInsert, toSupersede, toRevive } = reconcileAlerts(planned, existing);
+    const { toInsert, toSupersede, toRevive } = reconcileAlerts(planned, existing, now, { alertsSafe });
 
     if (toInsert.length) {
       inserted += await insertIgnoringDuplicates(sb, toInsert);
@@ -145,6 +167,7 @@ async function dispatch(sb, { now, alertsSafe, sync, dryRun }) {
   const globalPause = process.env.TENURE_ALERTS_PAUSED === '1';
   if (globalPause) console.log('[tenure-alerts] TENURE_ALERTS_PAUSED=1 — sending nothing.');
 
+  if (!dryRun) await reapStuckSends(sb, now);
   const pending = await loadAllDue(sb, now);
   const due = dueNow(pending, now);
   let sent = 0;
@@ -215,13 +238,21 @@ async function dispatch(sb, { now, alertsSafe, sync, dryRun }) {
 
       const result = await send(alert.recipient.email, email);
       if (result.ok) {
-        await sb.from('tenure_alert_instances').update({
-          status: 'sent',
-          sent_at: new Date().toISOString(),
-          delivery_metadata: { provider: 'resend', message_id: result.id },
-          updated_at: new Date().toISOString(),
-        }).eq('id', alert.id);
         sent += 1;
+        // The email has gone. A failure to record that must never send the
+        // row back to pending (that would send it again): it stays 'sending'
+        // and the reaper retires it as failed with the reason (TEN-10).
+        try {
+          const { error } = await sb.from('tenure_alert_instances').update({
+            status: 'sent',
+            sent_at: new Date().toISOString(),
+            delivery_metadata: { provider: 'resend', message_id: result.id },
+            updated_at: new Date().toISOString(),
+          }).eq('id', alert.id);
+          if (error) console.warn(`[tenure-alerts] sent ${alert.id} but could not record it: ${error.message}`);
+        } catch (e) {
+          console.warn(`[tenure-alerts] sent ${alert.id} but could not record it: ${e?.message || e}`);
+        }
       } else if (result.hardBounce) {
         // A permanently bad address should stop consuming retries for every
         // future alert, not just this one.
@@ -275,6 +306,32 @@ async function claim(sb, alert) {
   return (data || []).length > 0;
 }
 
+/**
+ * Rows left in 'sending' by a killed job, or by a send whose result could not
+ * be recorded. Nothing else ever selects them, so they would sit there for
+ * good (TEN-10). They become 'failed', not 'pending': the email may already
+ * have gone, and an administrator can retry a failed alert deliberately.
+ */
+const STUCK_SENDING_MS = 60 * 60 * 1000;
+export async function reapStuckSends(sb, now = new Date()) {
+  const cutoff = new Date(now.getTime() - STUCK_SENDING_MS).toISOString();
+  const { data, error } = await sb.from('tenure_alert_instances')
+    .update({
+      status: 'failed',
+      delivery_metadata: { error: 'interrupted while sending; it may or may not have been delivered' },
+      updated_at: new Date().toISOString(),
+    })
+    .eq('status', 'sending')
+    .lt('last_attempt_at', cutoff)
+    .select('id');
+  if (error) {
+    console.warn(`[tenure-alerts] could not retire stuck sends: ${error.message}`);
+    return 0;
+  }
+  if (data?.length) console.log(`[tenure-alerts] retired ${data.length} alert(s) stuck in sending.`);
+  return data?.length || 0;
+}
+
 async function markFailed(sb, alert, reason) {
   await sb.from('tenure_alert_instances').update({
     status: 'failed',
@@ -299,7 +356,7 @@ async function lastSuccessfulSync(sb) {
 async function loadPortfolios(sb) {
   const { data, error } = await sb
     .from('monitored_portfolios')
-    .select('id, name, alerts_paused, alert_policy_id, tenure_alert_policies(id, expiry_offsets, change_events_enabled)');
+    .select('id, user_id, org_id, created_at, name, alerts_paused, alert_policy_id, tenure_alert_policies(id, expiry_offsets, change_events_enabled)');
   if (error) throw new Error(`Could not load portfolios: ${error.message}`);
   return (data || []).map((p) => ({ ...p, policy: p.tenure_alert_policies }));
 }
@@ -308,18 +365,30 @@ async function loadMemberships(sb, portfolioId) {
   const { data, error } = await sb
     .from('monitored_portfolio_tenures')
     .select(`id, portfolio_id, monitoring_enabled, maintenance_decision, internal_project_name,
-             tenures!inner(id, tenure_number, tenure_name, status, good_to_date, area_hectares)`)
+             added_at, tenures!inner(id, tenure_number, tenure_name, status, good_to_date, area_hectares)`)
     .eq('portfolio_id', portfolioId)
     .is('removed_at', null);
   if (error) throw new Error(`Could not load memberships: ${error.message}`);
   return (data || []).map((m) => ({ ...m, tenure: m.tenures }));
 }
 
+// The owner's current plan limits. Unknown (null) on a lookup failure: a
+// database blip must not silence real deadline reminders, so they are sent
+// as stored until the next run can check.
+async function loadPlanLimits(sb, userId) {
+  const { data, error } = await sb.rpc('tenure_plan_limits_for', { p_user: userId });
+  if (error) {
+    console.warn(`[tenure-alerts] plan limits unavailable for a portfolio owner: ${error.message}`);
+    return null;
+  }
+  return data || null;
+}
+
 async function loadRecipients(sb, policyId) {
   if (!policyId) return [];
   const { data, error } = await sb
     .from('tenure_alert_recipients')
-    .select('id, email, receives_expiry_alerts, receives_change_alerts, bounced_at')
+    .select('id, email, receives_expiry_alerts, receives_change_alerts, bounced_at, created_at')
     .eq('policy_id', policyId);
   if (error) throw new Error(`Could not load recipients: ${error.message}`);
   return data || [];
@@ -335,7 +404,7 @@ async function loadRecipients(sb, policyId) {
 async function loadScheduled(sb, portfolioId) {
   const { data, error } = await sb
     .from('tenure_alert_instances')
-    .select('id, status, portfolio_id, tenure_id, recipient_id, alert_type, offset_days, source_good_to_date, change_event_id')
+    .select('id, status, portfolio_id, tenure_id, recipient_id, alert_type, offset_days, source_good_to_date, change_event_id, scheduled_for')
     .eq('portfolio_id', portfolioId);
   if (error) throw new Error(`Could not load scheduled alerts: ${error.message}`);
   return data || [];
@@ -368,19 +437,42 @@ async function insertIgnoringDuplicates(sb, rows) {
   return ok;
 }
 
+// PostgREST puts .in() values in the URL; long UUID lists are rejected at the
+// edge, which used to fail the whole job for a large portfolio.
+const IN_CHUNK = 200;
+const chunks = (items, size = IN_CHUNK) => {
+  const out = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+};
+
 async function loadRecentChanges(sb, tenureIds) {
   if (!tenureIds.length) return [];
   const since = new Date(Date.now() - CHANGE_LOOKBACK_DAYS * 86_400_000).toISOString();
-  const { data, error } = await sb
-    .from('tenure_change_events')
-    .select('id, tenure_id, event_type, previous_value, current_value, severity, detected_at')
-    .in('tenure_id', tenureIds)
-    .gte('detected_at', since)
-    // Only material changes reach an inbox. Informational ones (a claim name
-    // tidy-up) live in the change history where somebody can go look for them.
-    .in('severity', ['notable', 'critical']);
-  if (error) throw new Error(`Could not load change events: ${error.message}`);
-  return data || [];
+  const events = [];
+  for (const chunk of chunks(tenureIds)) {
+    const { data, error } = await sb
+      .from('tenure_change_events')
+      .select('id, tenure_id, event_type, previous_value, current_value, severity, detected_at, import_run_id')
+      .in('tenure_id', chunk)
+      .gte('detected_at', since)
+      // Only material changes reach an inbox. Informational ones (a claim name
+      // tidy-up) live in the change history where somebody can go look for them.
+      .in('severity', ['notable', 'critical']);
+    if (error) throw new Error(`Could not load change events: ${error.message}`);
+    events.push(...(data || []));
+  }
+  return trustedChanges(events, await loadRuns(sb, [...new Set(events.map((e) => e.import_run_id).filter(Boolean))]));
+}
+
+async function loadRuns(sb, runIds) {
+  const runs = [];
+  for (const chunk of chunks(runIds)) {
+    const { data, error } = await sb.from('tenure_import_runs').select('id, status, alerts_safe').in('id', chunk);
+    if (error) throw new Error(`Could not load import runs: ${error.message}`);
+    runs.push(...(data || []));
+  }
+  return runs;
 }
 
 /** Everything due, with the joins the templates need. */
@@ -411,11 +503,13 @@ async function loadAllDue(sb, now) {
   // Owners, in one query rather than one per alert.
   const tenureIds = [...new Set(rows.map((r) => r.tenure_id))];
   const ownersByTenure = new Map();
-  if (tenureIds.length) {
-    const { data: owners } = await sb
+  for (const chunk of chunks(tenureIds)) {
+    // An ignored error here made every email say the owner was unpublished.
+    const { data: owners, error } = await sb
       .from('tenure_owners')
       .select('tenure_id, owner_name')
-      .in('tenure_id', tenureIds);
+      .in('tenure_id', chunk);
+    if (error) throw new Error(`Could not load tenure owners: ${error.message}`);
     for (const o of owners || []) {
       if (!ownersByTenure.has(o.tenure_id)) ownersByTenure.set(o.tenure_id, []);
       ownersByTenure.get(o.tenure_id).push(o);
@@ -445,7 +539,12 @@ async function loadAllDue(sb, now) {
     }));
 }
 
-main().catch((err) => {
-  console.error(`\n[tenure-alerts] failed: ${err?.message || err}`);
-  process.exit(1);
-});
+// Run only when invoked as a script, so tests can import its helpers.
+const invokedDirectly = process.argv[1]
+  && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (invokedDirectly) {
+  main().catch((err) => {
+    console.error(`\n[tenure-alerts] failed: ${err?.message || err}`);
+    process.exit(1);
+  });
+}

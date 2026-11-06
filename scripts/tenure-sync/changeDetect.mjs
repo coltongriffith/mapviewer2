@@ -43,7 +43,7 @@ export const SEVERITY = { INFO: 'info', NOTABLE: 'notable', CRITICAL: 'critical'
 export const AREA_TOLERANCE_RATIO = 0.005; // 0.5%
 
 /** Statuses that mean the title is no longer held. Matched case-insensitively. */
-const TERMINAL_STATUS = /(cancel|terminat|forfeit|expire|lapsed|surrender|closed)/i;
+export const TERMINAL_STATUS = /(cancel|terminat|forfeit|expire|lapsed|surrender|closed)/i;
 
 /**
  * Compare a stored tenure against a freshly normalized one.

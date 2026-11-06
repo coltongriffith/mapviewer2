@@ -2,13 +2,14 @@ import React from 'react';
 import { beforeEach, it, expect, vi } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import { AuthProvider, useAuth } from '../src/hooks/useAuth';
-const mock = vi.hoisted(() => ({ authChange: null, sessionResolve: null, requests: [] }));
+const mock = vi.hoisted(() => ({ authChange: null, sessionResolve: null, requests: [], signOuts: [] }));
 vi.mock('../src/utils/attribution', () => ({ getAttribution: () => ({}), recordSignupOnce: () => {} }));
 vi.mock('../src/utils/track', () => ({ trackEvent: () => {} }));
 vi.mock('../src/lib/supabase', () => ({ supabase: {
   auth: {
     getSession: () => new Promise(resolve => { mock.sessionResolve = resolve; }),
     onAuthStateChange: cb => { mock.authChange = cb; return { data: { subscription: { unsubscribe() {} } } }; },
+    signOut: async (opts) => { mock.signOuts.push(opts?.scope || 'global'); return opts?.scope === 'local' ? {} : { error: new Error('Failed to fetch') }; },
   },
   from: () => ({ select: () => ({ eq: (_key, id) => ({ maybeSingle: () => new Promise((resolve, reject) => mock.requests.push({ id, resolve, reject })) }) }) }),
 } }));
@@ -90,5 +91,22 @@ it('does not restore an old session after sign-out wins the initial session race
   const { result } = renderHook(useAuth, { wrapper });
   act(() => mock.authChange('SIGNED_OUT', null));
   await act(async () => mock.sessionResolve({ data: { session: { user: account('old-pro') } } }));
+  expect(result.current.user).toBeNull();
+});
+
+// docs/state-machines.md, WS-6.
+it('signs out on this device when the server cannot be reached', async () => {
+  mock.signOuts = [];
+  const { result } = renderHook(useAuth, { wrapper });
+  await act(async () => mock.sessionResolve({ data: { session: { user: account('a') } } }));
+  await act(async () => { await result.current.signOut(); });
+  expect(mock.signOuts).toEqual(['global', 'local']);
+});
+it('drops a saved invite link when its account signs out', async () => {
+  const { result } = renderHook(useAuth, { wrapper });
+  await act(async () => mock.sessionResolve({ data: { session: { user: account('a') } } }));
+  localStorage.setItem('em.pendingInvite.v1', JSON.stringify({ token: 't', at: Date.now() }));
+  act(() => mock.authChange('SIGNED_OUT', null));
+  expect(localStorage.getItem('em.pendingInvite.v1')).toBeNull();
   expect(result.current.user).toBeNull();
 });

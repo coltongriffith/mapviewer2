@@ -51,7 +51,14 @@ export async function listTrashedProjects() {
 
 export async function restoreCloudProject(id) {
   const { data, error } = await requireSupabase().rpc('restore_cloud_project', { p_id: id });
-  if (error) throw error;
+  if (error) {
+    // Restoring counts against the plan's map limit, like creating.
+    if (/ORG_PROJECT_LIMIT/.test(error.message || '')) {
+      throw Object.assign(new Error('This workspace has reached its map limit on the current plan. Delete a map before restoring this one.'), { code: 'ORG_PROJECT_LIMIT' });
+    }
+    if (/PROJECT_LIMIT/.test(error.message || '')) throw projectLimitError();
+    throw error;
+  }
   return Boolean(data);
 }
 
@@ -117,7 +124,7 @@ export async function saveCloudProject({ id, name, payload, silent = false, expe
         e.code = 'SAVE_CONFLICT';
         throw e;
       }
-      if (/PROJECT_NOT_FOUND/.test(error.message || '')) throw new Error('Project not found in cloud');
+      if (/PROJECT_NOT_FOUND/.test(error.message || '')) throw Object.assign(new Error('Project not found in cloud'), { code: 'PROJECT_NOT_FOUND' });
       if (/ORG_READ_ONLY/.test(error.message || '')) throw readOnlyError();
       throw error;
     }
@@ -170,13 +177,22 @@ export async function deleteCloudProject(id) {
   if (!data) throw new Error('Project not found');
 }
 
+/**
+ * A rename moves the row's revision (ED-7), so it returns the new one: the
+ * tab that renamed its open map adopts it instead of seeing its own rename
+ * as a conflict.
+ */
 export async function renameCloudProject(id, name) {
   await currentUser();
-  const { error } = await requireSupabase()
+  const { data, error } = await requireSupabase()
     .from('projects')
     .update({ name, updated_at: new Date().toISOString() })
-    .eq('id', id);
+    .eq('id', id)
+    .select('revision')
+    .maybeSingle();
   if (error) throw error;
+  if (data?.revision != null) rememberCloudRevision(id, data.revision);
+  return { revision: data?.revision ?? null };
 }
 
 // ── Brand Kits (stored in the `templates` table) ────────────────────────────

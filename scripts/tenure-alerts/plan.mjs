@@ -12,8 +12,11 @@
 //
 // 2. NO SILENT GAPS. A claim added with 20 days left has already passed every
 //    standard threshold, and rule 1 would leave it with no reminder at all.
-//    So it gets one catch-up reminder, dated today, whose offset is the ACTUAL
-//    days remaining — truthful by construction.
+//    So it gets one catch-up reminder, dated today. The email states the
+//    ACTUAL days remaining (templates.mjs computes it at send time), so it is
+//    truthful by construction. Its key is the threshold being caught up — the
+//    smallest policy offset at or above the days left — so the key is stable
+//    from one day to the next and the catch-up is sent once, not daily.
 //
 // 3. NO STALE DEADLINES. Every planned alert records the good-to-date it was
 //    computed from. When the province moves that date, the old plan no longer
@@ -25,6 +28,7 @@
 // invariant this important should not depend on application code being right.
 
 import { bcToday, daysRemaining, alertDateFor, toIsoDate } from '../../src/utils/tenureDates.js';
+import { TERMINAL_STATUS } from '../tenure-sync/changeDetect.mjs';
 
 export const ALERT_TYPE = { EXPIRY: 'EXPIRY', CHANGE: 'CHANGE', NOT_OBSERVED: 'NOT_OBSERVED' };
 
@@ -46,6 +50,12 @@ export function planExpiryAlerts(membership, offsets, recipients, now = new Date
   // missing date would be worse than saying nothing.
   if (!goodTo) return [];
   if (membership.monitoring_enabled === false) return [];
+  // A forfeited or cancelled title has no deadline left to meet, and
+  // TENURE_TERMINATED already told the owner; a countdown email would
+  // contradict it (TEN-9). Only KNOWN terminal wording stops reminders, the
+  // same rule that raises TENURE_TERMINATED: unfamiliar wording must never
+  // silence a real deadline.
+  if (tenure.status && TERMINAL_STATUS.test(tenure.status)) return [];
 
   const days = daysRemaining(goodTo, now);
   // Already past. The dashboard shows it as expired; an email counting down to
@@ -79,11 +89,12 @@ export function planExpiryAlerts(membership, offsets, recipients, now = new Date
   // Property 2: a claim whose thresholds have all gone by still deserves to be
   // heard from once. `offset_days` is the real number of days left, so the
   // email that goes out says something true rather than something convenient.
-  if (scheduledOffsets.length === 0 && days >= 0) {
+  const catchUpOffset = Math.min(...[...new Set(offsets)].filter((o) => o >= days));
+  if (scheduledOffsets.length === 0 && Number.isFinite(catchUpOffset)) {
     for (const r of eligible) {
       rows.push(makeRow(membership, r, {
         alert_type: ALERT_TYPE.EXPIRY,
-        offset_days: days,
+        offset_days: catchUpOffset,
         scheduled_for: today,
         source_good_to_date: goodTo,
       }));
@@ -183,9 +194,31 @@ export function alertKey(row) {
  * @param {object[]} existing  rows already in the database, with `status`
  * @returns {{toInsert: object[], toSupersede: string[], toRevive: string[]}}
  */
-export function reconcileAlerts(planned, existing) {
+const REVIVABLE = new Set(['suppressed', 'cancelled', 'superseded']);
+
+export function reconcileAlerts(planned, existing, now = new Date(), { alertsSafe = true } = {}) {
   const plannedByKey = new Map(planned.map((p) => [alertKey(p), p]));
   const existingKeys = new Set(existing.map(alertKey));
+  const today = bcToday(now);
+
+  // OVERDUE IS NOT OBSOLETE. A threshold whose day passed before it was sent
+  // (a skipped cron day, a provider outage, a pause that lifted) drops out of
+  // the plan, because the planner never schedules into the past. If the
+  // deadline it was computed from is still the planned deadline, the reminder
+  // is late, not wrong: keep it so the dispatcher sends it now, with the real
+  // days remaining. Only the latest overdue threshold per deadline is kept;
+  // one late email is enough.
+  const deadlineOf = (r) => [r.portfolio_id, r.tenure_id, r.recipient_id, r.source_good_to_date].join('|');
+  const liveDeadlines = new Set(planned.filter((p) => p.alert_type === ALERT_TYPE.EXPIRY).map(deadlineOf));
+  const overdue = new Map();
+  for (const e of existing) {
+    if (!['pending', 'suppressed', undefined].includes(e.status)) continue;
+    if (e.alert_type !== ALERT_TYPE.EXPIRY || plannedByKey.has(alertKey(e))) continue;
+    if (!e.scheduled_for || e.scheduled_for > today || !liveDeadlines.has(deadlineOf(e))) continue;
+    const kept = overdue.get(deadlineOf(e));
+    if (!kept || e.offset_days < kept.offset_days) overdue.set(deadlineOf(e), e);
+  }
+  const keptOverdue = new Set([...overdue.values()].map((e) => e.id));
 
   const toInsert = [...plannedByKey.entries()]
     .filter(([key]) => !existingKeys.has(key))
@@ -195,14 +228,23 @@ export function reconcileAlerts(planned, existing) {
   // is almost always a good-to-date that moved: the old rows carry the old
   // source_good_to_date, so their keys stop matching and they are retired
   // instead of being sent with a deadline the province has since changed.
+  // On an untrusted run no change notices are planned at all, which is not a
+  // reason to retire the ones already queued from a trusted run: leave them
+  // for maySend, which holds them until a clean import (TEN-4).
+  const heldChange = (e) => !alertsSafe && (e.alert_type === ALERT_TYPE.CHANGE || e.alert_type === ALERT_TYPE.NOT_OBSERVED);
   const toSupersede = existing
     .filter((e) => (e.status === undefined || e.status === 'pending'))
-    .filter((e) => !plannedByKey.has(alertKey(e)))
+    .filter((e) => !plannedByKey.has(alertKey(e)) && !keptOverdue.has(e.id) && !heldChange(e))
     .map((e) => e.id);
 
+  // Never-sent rows whose key the plan wants again come back to pending.
+  // Without this the unique index (which spans every status) blocks the
+  // re-planned row forever: remove and re-add a claim (cancelled), or a
+  // good-to-date that went null for a night and returned (superseded), and
+  // that claim never got another reminder.
   const toRevive = existing
-    .filter((e) => e.status === 'suppressed')
-    .filter((e) => plannedByKey.has(alertKey(e)))
+    .filter((e) => REVIVABLE.has(e.status))
+    .filter((e) => plannedByKey.has(alertKey(e)) || keptOverdue.has(e.id))
     .map((e) => e.id);
 
   return { toInsert, toSupersede, toRevive };
@@ -249,4 +291,49 @@ export function maySend(alert, { alertsSafe, portfolioPaused, globalPause }) {
     };
   }
   return { send: true };
+}
+
+/**
+ * Keep a portfolio's reminders within the owner's CURRENT plan.
+ *
+ * Limits are checked when tenures, portfolios and recipients are added, but a
+ * downgrade does not remove anything, so the scheduler applies them again
+ * (docs/state-machines.md, BILL-4). Nothing is deleted: the extra rows stay in
+ * the account and their pending reminders are superseded, and an upgrade
+ * plans them again (superseded rows are revived, see reconcileAlerts).
+ *
+ * Oldest first: the portfolios, tenures and recipients the owner had first are
+ * the ones that keep working.
+ *
+ * @param {object|null} limits   tenure_plan_limits_for(owner); null = unknown (unchanged)
+ * @param {{portfolios:number, tenures:number}} used  running totals for the owner
+ */
+export function limitPortfolio({ limits, used, memberships, recipients, offsets }) {
+  if (!limits) return { memberships, recipients, offsets };
+  const byDate = (key) => (a, b) => String(a[key] || '').localeCompare(String(b[key] || ''));
+  if (limits.max_portfolios != null && used.portfolios >= limits.max_portfolios) {
+    return { memberships: [], recipients: [], offsets: [] };
+  }
+  used.portfolios += 1;
+  const room = limits.max_monitored_tenures == null ? Infinity : Math.max(0, limits.max_monitored_tenures - used.tenures);
+  const kept = [...memberships].sort(byDate('added_at')).slice(0, room);
+  used.tenures += kept.length;
+  const maxRecipients = limits.max_alert_recipients == null ? Infinity : limits.max_alert_recipients;
+  const allowed = new Set(limits.alert_offsets || []);
+  return {
+    memberships: kept,
+    recipients: [...recipients].sort(byDate('created_at')).slice(0, maxRecipients),
+    offsets: offsets.filter((o) => allowed.has(o)),
+  };
+}
+
+/**
+ * Change events an inbox may hear about: only those recorded by an import the
+ * guardrails trusted. The alert job used to check only the LATEST run, so
+ * events written by an earlier untrusted run (a schema change, a resume) were
+ * sent once a later run came back clean (TEN-4).
+ */
+export function trustedChanges(events, runs) {
+  const trusted = new Set(runs.filter((r) => r.status === 'succeeded' && r.alerts_safe).map((r) => r.id));
+  return events.filter((e) => e.import_run_id && trusted.has(e.import_run_id));
 }

@@ -86,3 +86,21 @@ it('keeps a base version-list failure actionable instead of treating it as an op
   await expect(versions.list()).rejects.toThrow(/load the published versions/);
   expect(sb.from).not.toHaveBeenCalled();
 });
+
+// docs/state-machines.md, WS-5: a sign-off retracted after the version opened
+// is never written into the PNG.
+it('does not put a sign-off retracted since opening into the PNG', async () => {
+  const live = { id: 's1', version_id: row.id, qp_name: 'A. Person', qp_credentials: 'P.Geo.', signed_on: '2026-10-21' };
+  signoffResult = async () => ({ data: [live] });
+  const v = (await versions.list())[0];
+  expect(v.signoff?.id).toBe('s1');
+  const opened = structuredClone(v);
+  const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+  signoffResult = async () => ({ data: [] }); // retracted in another browser
+  await expect(versions.downloadSignedIfLive(v, true)).rejects.toThrow(/retracted/);
+  expect(click).not.toHaveBeenCalled();
+  signoffResult = async () => ({ data: [live] });
+  globalThis.URL.createObjectURL ||= () => 'blob:x';
+  await versions.downloadSignedIfLive(opened, true);
+  expect(click).toHaveBeenCalledTimes(1);
+});

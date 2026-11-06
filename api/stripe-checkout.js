@@ -11,6 +11,11 @@ const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const SITE_URL = process.env.SITE_URL || 'https://www.explorationmaps.com';
 
+// Stripe subscription states that still bill, or can still be paid back into
+// service. `unpaid` counts: it is stored as canceled but the subscription
+// exists and can resume when the invoice is paid.
+const LIVE_SUBSCRIPTION = new Set(['active', 'trialing', 'past_due', 'unpaid', 'paused']);
+
 async function resolveUser(req, sb) {
   const auth = req.headers?.authorization || '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
@@ -98,6 +103,29 @@ export default async function handler(req, res) {
           user_id: user.id, message: String(upsertErr.message).slice(0, 200),
         }));
         return res.status(503).json({ error: 'Billing is temporarily unavailable. Please try again.' });
+      }
+    }
+
+    // Our row can lag Stripe (a webhook still retrying), and a subscription
+    // that went `unpaid` is stored as canceled while it still exists. Ask
+    // Stripe directly, so a second subscription is never sold (BILL-2b).
+    if (planRow?.stripe_customer_id) {
+      const subs = await stripeRequest(`/subscriptions?customer=${encodeURIComponent(customerId)}&status=all&limit=20`, null, { method: 'GET' });
+      if ((subs?.data || []).some((sub) => LIVE_SUBSCRIPTION.has(sub.status))) {
+        return res.status(409).json({
+          error: 'You already have an active subscription. Manage it in the billing portal.',
+          code: 'ALREADY_SUBSCRIBED',
+        });
+      }
+      // Only the newest checkout stays payable: a monthly tab and a yearly
+      // tab, or two attempts in different 10-minute windows, otherwise leave
+      // two open sessions that could both be paid.
+      const open = await stripeRequest(`/checkout/sessions?customer=${encodeURIComponent(customerId)}&status=open&limit=20`, null, { method: 'GET' });
+      for (const stale of open?.data || []) {
+        if (stale.mode !== 'subscription') continue;
+        try {
+          await stripeRequest(`/checkout/sessions/${encodeURIComponent(stale.id)}/expire`, null, { idempotencyKey: `expire:${stale.id}` });
+        } catch { /* already completed or expired: nothing left to pay */ }
       }
     }
 

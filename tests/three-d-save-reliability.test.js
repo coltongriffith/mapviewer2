@@ -245,3 +245,41 @@ describe('saved figure opening context', () => {
     expect(objects.size).toBe(0);
   });
 });
+
+// docs/state-machines.md, 3D-3 and 3D-4.
+describe('3D open and save races', () => {
+  it('3D-3: a save that lands during a failed Open still records its version', async () => {
+    await core.openProject('a');
+    const gate = deferred(), started = deferred();
+    upload = async () => { started.resolve(); await gate.promise; };
+    const saving = core.save(); await started.promise;
+    rows.delete('b');
+    await expect(core.openProject('b')).rejects.toThrow(/not found/);
+    gate.resolve(); await saving;
+    expect(core.currentProject()).toMatchObject({ id: 'a', savedAt: rows.get('a').updated_at });
+    upload = async () => {};
+    edit('More work');
+    await expect(core.saveProject('Original', 'a')).resolves.toMatchObject({ id: 'a', active: true });
+  });
+
+  it('3D-3: a double-clicked Save uploads once', async () => {
+    await core.openProject('a');
+    let uploads = 0;
+    upload = async () => { uploads += 1; };
+    edit('Changed');
+    await Promise.all([core.save(), core.save()]);
+    expect(uploads).toBe(1);
+  });
+
+  it('3D-4: an older Open that finishes late does not replace the newer figure', async () => {
+    const gate = deferred();
+    beforeRead = async (id) => { if (id === 'a') await gate.promise; };
+    const openingA = core.openProject('a');
+    await core.openProject('b');
+    edit('Edits to b');
+    gate.resolve();
+    await expect(openingA).rejects.toMatchObject({ code: 'PROJECT_CHANGED' });
+    expect(core.currentProject().id).toBe('b');
+    expect(state().brand.title).toBe('Edits to b');
+  });
+});

@@ -268,6 +268,20 @@ function btn(text, fn, primary = false) {
   b.addEventListener('click', () => Promise.resolve().then(fn).catch((err) => host.say(err.message)));
   return b;
 }
+// The sign-off was read when the version opened. Another editor may have
+// retracted it since; a PNG must never carry a withdrawn QP sign-off (WS-5).
+export async function downloadSignedIfLive(v, live) {
+  const [cur] = await withOptionalSignoffs([{ ...v }]);
+  const same = cur?.signoff && (cur.signoff.id && v.signoff?.id ? cur.signoff.id === v.signoff.id : SO.signoffLine(cur.signoff) === SO.signoffLine(v.signoff));
+  if (!same) {
+    v.signoff = cur?.signoff || null;
+    bar(v, live);
+    throw plain(cur?.signoffUnavailable
+      ? 'The sign-off could not be checked, so the PNG was not downloaded. Try again.'
+      : 'This version\u2019s sign-off was retracted, so it was not added to the PNG.');
+  }
+  return SO.downloadSigned(em(), cur);
+}
 function bar(v, live) {
   $('ver-bar')?.remove();
   const box = document.createElement('div');
@@ -278,7 +292,7 @@ function bar(v, live) {
   note.title = `Published ${new Date(v.createdAt).toLocaleString()}${v.publishedBy ? ` by ${v.publishedBy}` : ''} · SHA-256 ${v.contentHash}`;
   box.append(note, ...(v.signoff ? SO.barExtras(note, v) : []),
     // Ticked, the sign-off goes in the PNG's metadata (an iTXt Comment).
-    btn('Download PNG', () => ($('ver-inc-signoff')?.checked ? SO.downloadSigned(em(), v) : em().exportPNG({ view: em().getState().view, download: true })), true),
+    btn('Download PNG', () => ($('ver-inc-signoff')?.checked ? downloadSignedIfLive(v, live) : em().exportPNG({ view: em().getState().view, download: true })), true),
     btn('Start a new figure from this version', startCopy),
     ...(live ? [btn('Back to the current figure', close)] : [])); // no live figure to go back to
   document.querySelector('.toolbar').appendChild(box);

@@ -130,3 +130,40 @@ describe('schema versioning', () => {
     expect(() => migratePayload(payload, -3)).toThrow(/no migration/i);
   });
 });
+
+// docs/state-machines.md, ED-5: a restored draft carries the revision it was
+// edited from, never the browser-wide revision another tab may have moved on.
+describe('draft base revision', () => {
+  it('restores the base revision stored with the draft, not the remembered one', async () => {
+    const storage = await import('../src/utils/projectStorage');
+    storage.saveDraft({ payload: { layers: [], layout: { title: 'B edits' } }, projectId: 'P', projectName: 'P', baseRevision: 5 });
+    // Tab A saved revision 6 after tab B's draft was written.
+    storage.rememberCloudRevision('P', 6);
+    expect(storage.resolveInitialWorkspace({ layers: [] }).baseRevision).toBe(5);
+  });
+
+  it('a draft written before base revisions existed reports none, so the caller falls back', async () => {
+    const storage = await import('../src/utils/projectStorage');
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({ schemaVersion: STORAGE_SCHEMA_VERSION, payload: { layers: [] }, projectId: 'P' }));
+    const ws = storage.resolveInitialWorkspace({ layers: [] });
+    expect(ws.projectId).toBe('P');
+    expect(ws.baseRevision).toBeUndefined();
+  });
+
+  it('a landed save moves the base of that project draft only', async () => {
+    const storage = await import('../src/utils/projectStorage');
+    storage.saveDraft({ payload: { layers: [], layout: { title: 'x' } }, projectId: 'P', projectName: 'P', baseRevision: 5 });
+    storage.updateDraftBaseRevision('Q', 9);
+    expect(storage.resolveInitialWorkspace({ layers: [] }).baseRevision).toBe(5);
+    storage.updateDraftBaseRevision('P', 6);
+    const ws = storage.resolveInitialWorkspace({ layers: [] });
+    expect(ws.baseRevision).toBe(6);
+    expect(ws.project.layout.title).toBe('x');
+  });
+
+  it('a local map has no base revision', async () => {
+    const storage = await import('../src/utils/projectStorage');
+    storage.saveDraft({ payload: { layers: [] }, projectId: null, projectName: 'x', baseRevision: 7 });
+    expect(storage.resolveInitialWorkspace({ layers: [] }).baseRevision).toBeNull();
+  });
+});
