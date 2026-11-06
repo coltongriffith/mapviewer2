@@ -85,7 +85,11 @@ test('a delayed saved B cannot replace edited A or clear A dirty target',async({
   const f=await fixture(page,context);let release;f.delayB={waiting:false,promise:new Promise(resolve=>{release=resolve;})};
   await startOpenB(page);await expect.poll(()=>f.delayB.waiting).toBe(true);
   await page.evaluate(()=>window.EM3D.setBrand({subtitle:'Edit made while B was reading'}));
-  await expect(page.locator('#acct-note')).toHaveText('Unsaved changes');const edited=await snapshot(page);
+  await expect(page.locator('#acct-note')).toHaveText('Unsaved changes');
+  // History records an edit after a 500 ms debounce: wait for it, or a fast run
+  // snapshots A before its own edit is in the history and then sees it appear.
+  await expect.poll(()=>page.evaluate(async()=>(await window.EM3D.history()).entries.at(-1)?.label)).toBe('Subtitle');
+  const edited=await snapshot(page);
   release();const opened=await result(page);expect(opened.ok).toBe(false);expect(opened.message).toMatch(/changed|current figure/i);
   expect(await snapshot(page)).toEqual(edited);expect(edited.target.id).toBe(a);expect(f.writes).toEqual([]);
 });
