@@ -22,7 +22,7 @@ import { createClient } from '@supabase/supabase-js';
 import { supabaseCredentials } from '../lib/env.mjs';
 import { bcToday } from '../../src/utils/tenureDates.js';
 import {
-  planExpiryAlerts, planChangeAlerts, reconcileAlerts, dueNow, maySend,
+  planExpiryAlerts, planChangeAlerts, reconcileAlerts, dueNow, maySend, limitPortfolio,
 } from './plan.mjs';
 import { renderAlert } from './templates.mjs';
 import { send } from './send.mjs';
@@ -70,19 +70,36 @@ async function main() {
 
 async function schedule(sb, { now, alertsSafe }) {
   const portfolios = await loadPortfolios(sb);
+  // Per owner, in creation order: the plan's limits and what is used so far.
+  portfolios.sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
+  const limitsByUser = new Map();
+  const usedByUser = new Map();
   let inserted = 0;
   let superseded = 0;
   let revived = 0;
 
   for (const portfolio of portfolios) {
-    const [memberships, recipients, existing] = await Promise.all([
+    const [allMemberships, allRecipients, existing] = await Promise.all([
       loadMemberships(sb, portfolio.id),
       loadRecipients(sb, portfolio.alert_policy_id),
       loadScheduled(sb, portfolio.id),
     ]);
-    if (!memberships.length) continue;
+    // Company workspace portfolios are not capped by a person's plan.
+    const capped = portfolio.user_id && !portfolio.org_id;
+    if (capped && !limitsByUser.has(portfolio.user_id)) {
+      limitsByUser.set(portfolio.user_id, await loadPlanLimits(sb, portfolio.user_id));
+      usedByUser.set(portfolio.user_id, { portfolios: 0, tenures: 0 });
+    }
+    const limited = limitPortfolio({
+      limits: capped ? limitsByUser.get(portfolio.user_id) : null,
+      used: capped ? usedByUser.get(portfolio.user_id) : { portfolios: 0, tenures: 0 },
+      memberships: allMemberships,
+      recipients: allRecipients,
+      offsets: portfolio.policy?.expiry_offsets || [90, 30],
+    });
+    const { memberships, recipients, offsets } = limited;
+    if (!allMemberships.length) continue;
 
-    const offsets = portfolio.policy?.expiry_offsets || [90, 30];
     const planned = [];
     for (const m of memberships) {
       planned.push(...planExpiryAlerts(m, offsets, recipients, now));
@@ -299,7 +316,7 @@ async function lastSuccessfulSync(sb) {
 async function loadPortfolios(sb) {
   const { data, error } = await sb
     .from('monitored_portfolios')
-    .select('id, name, alerts_paused, alert_policy_id, tenure_alert_policies(id, expiry_offsets, change_events_enabled)');
+    .select('id, user_id, org_id, created_at, name, alerts_paused, alert_policy_id, tenure_alert_policies(id, expiry_offsets, change_events_enabled)');
   if (error) throw new Error(`Could not load portfolios: ${error.message}`);
   return (data || []).map((p) => ({ ...p, policy: p.tenure_alert_policies }));
 }
@@ -308,18 +325,30 @@ async function loadMemberships(sb, portfolioId) {
   const { data, error } = await sb
     .from('monitored_portfolio_tenures')
     .select(`id, portfolio_id, monitoring_enabled, maintenance_decision, internal_project_name,
-             tenures!inner(id, tenure_number, tenure_name, status, good_to_date, area_hectares)`)
+             added_at, tenures!inner(id, tenure_number, tenure_name, status, good_to_date, area_hectares)`)
     .eq('portfolio_id', portfolioId)
     .is('removed_at', null);
   if (error) throw new Error(`Could not load memberships: ${error.message}`);
   return (data || []).map((m) => ({ ...m, tenure: m.tenures }));
 }
 
+// The owner's current plan limits. Unknown (null) on a lookup failure: a
+// database blip must not silence real deadline reminders, so they are sent
+// as stored until the next run can check.
+async function loadPlanLimits(sb, userId) {
+  const { data, error } = await sb.rpc('tenure_plan_limits_for', { p_user: userId });
+  if (error) {
+    console.warn(`[tenure-alerts] plan limits unavailable for a portfolio owner: ${error.message}`);
+    return null;
+  }
+  return data || null;
+}
+
 async function loadRecipients(sb, policyId) {
   if (!policyId) return [];
   const { data, error } = await sb
     .from('tenure_alert_recipients')
-    .select('id, email, receives_expiry_alerts, receives_change_alerts, bounced_at')
+    .select('id, email, receives_expiry_alerts, receives_change_alerts, bounced_at, created_at')
     .eq('policy_id', policyId);
   if (error) throw new Error(`Could not load recipients: ${error.message}`);
   return data || [];

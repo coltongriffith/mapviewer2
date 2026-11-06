@@ -281,3 +281,37 @@ export function maySend(alert, { alertsSafe, portfolioPaused, globalPause }) {
   }
   return { send: true };
 }
+
+/**
+ * Keep a portfolio's reminders within the owner's CURRENT plan.
+ *
+ * Limits are checked when tenures, portfolios and recipients are added, but a
+ * downgrade does not remove anything, so the scheduler applies them again
+ * (docs/state-machines.md, BILL-4). Nothing is deleted: the extra rows stay in
+ * the account and their pending reminders are superseded, and an upgrade
+ * plans them again (superseded rows are revived, see reconcileAlerts).
+ *
+ * Oldest first: the portfolios, tenures and recipients the owner had first are
+ * the ones that keep working.
+ *
+ * @param {object|null} limits   tenure_plan_limits_for(owner); null = unknown (unchanged)
+ * @param {{portfolios:number, tenures:number}} used  running totals for the owner
+ */
+export function limitPortfolio({ limits, used, memberships, recipients, offsets }) {
+  if (!limits) return { memberships, recipients, offsets };
+  const byDate = (key) => (a, b) => String(a[key] || '').localeCompare(String(b[key] || ''));
+  if (limits.max_portfolios != null && used.portfolios >= limits.max_portfolios) {
+    return { memberships: [], recipients: [], offsets: [] };
+  }
+  used.portfolios += 1;
+  const room = limits.max_monitored_tenures == null ? Infinity : Math.max(0, limits.max_monitored_tenures - used.tenures);
+  const kept = [...memberships].sort(byDate('added_at')).slice(0, room);
+  used.tenures += kept.length;
+  const maxRecipients = limits.max_alert_recipients == null ? Infinity : limits.max_alert_recipients;
+  const allowed = new Set(limits.alert_offsets || []);
+  return {
+    memberships: kept,
+    recipients: [...recipients].sort(byDate('created_at')).slice(0, maxRecipients),
+    offsets: offsets.filter((o) => allowed.has(o)),
+  };
+}

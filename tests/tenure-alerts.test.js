@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  planExpiryAlerts, planChangeAlerts, reconcileAlerts, alertKey, dueNow, maySend,
+  planExpiryAlerts, planChangeAlerts, reconcileAlerts, alertKey, dueNow, maySend, limitPortfolio,
   ALERT_TYPE,
 } from '../scripts/tenure-alerts/plan.mjs';
 import { expiryEmail, changeEmail, notObservedEmail, renderAlert } from '../scripts/tenure-alerts/templates.mjs';
@@ -534,5 +534,40 @@ describe('reminders survive missed days, re-adds and date flickers', () => {
     // Night 2: the same date is back.
     const { toRevive } = reconcileAlerts(original, stored(original, 'superseded'), NOW);
     expect(toRevive).toHaveLength(3);
+  });
+});
+
+// docs/state-machines.md, BILL-4: after a downgrade the scheduler keeps a
+// portfolio's reminders within the owner's current plan.
+describe('limitPortfolio', () => {
+  const free = { plan: 'free', max_monitored_tenures: 10, max_portfolios: 1, max_alert_recipients: 1, alert_offsets: [90, 30, 1] };
+  const pro = { plan: 'pro', max_monitored_tenures: 50, max_portfolios: null, max_alert_recipients: 2, alert_offsets: [90, 30, 7, 1] };
+  const members = (n) => Array.from({ length: n }, (_, i) => ({ id: `m${i}`, added_at: `2026-01-${String(i + 1).padStart(2, '0')}`, tenure: { id: `t${i}` } }));
+  const recips = [{ id: 'r2', created_at: '2026-02-01' }, { id: 'r1', created_at: '2026-01-01' }];
+
+  it('a downgraded owner keeps the oldest 10 tenures, one recipient and the free offsets', () => {
+    const out = limitPortfolio({ limits: free, used: { portfolios: 0, tenures: 0 }, memberships: members(30), recipients: recips, offsets: [90, 30, 7, 1] });
+    expect(out.memberships.map((m) => m.id)).toEqual(members(10).map((m) => m.id));
+    expect(out.recipients.map((r) => r.id)).toEqual(['r1']);
+    expect(out.offsets).toEqual([90, 30, 1]);
+  });
+
+  it('a second portfolio beyond the free limit schedules nothing', () => {
+    const used = { portfolios: 0, tenures: 0 };
+    limitPortfolio({ limits: free, used, memberships: members(2), recipients: recips, offsets: [90] });
+    const second = limitPortfolio({ limits: free, used, memberships: members(2), recipients: recips, offsets: [90] });
+    expect(second.memberships).toEqual([]);
+  });
+
+  it('the tenure limit counts across the owner’s portfolios', () => {
+    const used = { portfolios: 0, tenures: 0 };
+    limitPortfolio({ limits: pro, used, memberships: members(40), recipients: recips, offsets: [90] });
+    expect(limitPortfolio({ limits: pro, used, memberships: members(20), recipients: recips, offsets: [90] }).memberships).toHaveLength(10);
+  });
+
+  it('unknown limits leave the portfolio as stored', () => {
+    const out = limitPortfolio({ limits: null, used: { portfolios: 5, tenures: 500 }, memberships: members(3), recipients: recips, offsets: [7] });
+    expect(out.memberships).toHaveLength(3);
+    expect(out.offsets).toEqual([7]);
   });
 });
