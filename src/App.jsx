@@ -1307,7 +1307,10 @@ export default function App({ initialAction = null }) {
   // project uploaded; temporary failures retry on later sessions without
   // duplicating already-migrated projects. Local copies are never deleted.
   useEffect(() => {
-    if (!user || !supabase) return;
+    // Wait for the account's plan before starting. Otherwise a newly upgraded
+    // account can be treated as Free, enter the plan-limit back-off, and never
+    // retry when the Pro/Company entitlement finishes loading (PR #426 review).
+    if (!user || !supabase || !planReady) return;
     const ticket = saveCoordRef.current.begin();
     (async () => {
       const pending = loadAccountSave();
@@ -1341,8 +1344,10 @@ export default function App({ initialAction = null }) {
         setUploadStatus({ type: 'info', message: `${result.failed} local map${result.failed === 1 ? '' : 's'} couldn't be uploaded to your account yet — they're still safe in this browser and will retry next time you sign in.` });
       }
     })();
+  // Re-run when the entitlement resolves or changes so an upgrade bypasses
+  // a Free-plan back-off immediately.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id]);
+  }, [user?.id, planReady, tier]);
 
   // Funnel: editor_opened (once per browser session)
   useEffect(() => {

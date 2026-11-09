@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { runCloudMigration, readMigrationState } from '../src/utils/cloudMigration.js';
 
@@ -166,5 +167,18 @@ describe('the plan limit stops a pass and backs off', () => {
     const upgraded = await runCloudMigration({ userId: 'u-up', localProjects: projects, draft: null, now: t0 + 1000, unlimited: true,
       uploadProject: async () => ({ id: `u${++calls}` }) });
     expect(upgraded.complete).toBe(true);
+  });
+});
+
+
+describe('the editor starts migration with resolved entitlements', () => {
+  it('waits for the plan and reruns when the tier changes', () => {
+    const source = readFileSync('src/App.jsx', 'utf8');
+    const start = source.indexOf('// Local → cloud migration on sign-in');
+    const end = source.indexOf('// Funnel: editor_opened', start);
+    const effect = source.slice(start, end);
+
+    expect(effect).toContain('if (!user || !supabase || !planReady) return;');
+    expect(effect).toContain('}, [user?.id, planReady, tier]);');
   });
 });
