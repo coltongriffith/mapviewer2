@@ -45,6 +45,7 @@ const FigureLayerControls = lazyGuarded(() => import('./components/FigureLayerCo
 const ClassificationPanel = lazyGuarded(() => import('./components/ClassificationPanel'));
 const NumericColumnInspector = lazyGuarded(() => import('./components/NumericColumnInspector'));
 const AddClaimsModal = lazyGuarded(() => import('./components/AddClaimsModal'));
+const ClaimLookupCard = lazyGuarded(() => import('./components/ClaimLookupCard'));
 const UpgradeModal = lazyGuarded(() => import('./components/UpgradeModal'));
 const EmbedCodeDialog = lazyGuarded(() => import('./components/EmbedCodeDialog'));
 const FullResOfferModal = lazyGuarded(() => import('./components/FullResOfferModal'));
@@ -770,6 +771,11 @@ export default function App({ initialAction = null }) {
   const [addClaimsMode, setAddClaimsMode] = useState(null);
   // ?mode=area: the point (or just the province) to open the Nearby Claims search at.
   const [areaDeepLink, setAreaDeepLink] = useState(null);
+  // A visitor who came from an article or company page to look a claim up
+  // (?intent=claims&utm_source=blog|companies): where they came from, and the
+  // result card that answers the lookup on desktop. See ClaimLookupCard.
+  const contentEntryRef = useRef(null);
+  const [lookupCard, setLookupCard] = useState(null); // { layerIds: [] }
   const [hasExported, setHasExported] = useState(false);
   // ── Inspector ─────────────────────────────────────────────────────────────
   // Every editing control lives in one of five groups. The tab is only a view
@@ -2692,14 +2698,51 @@ export default function App({ initialAction = null }) {
     };
   }, [mapReady, areaClaims]);
 
+  // Close the Add-Claims dialog and drop its deep-link prefill, so the next
+  // open starts clean.
+  const closeAddClaimsModal = () => {
+    setShowAddClaimsModal(false); setAddClaimsModalPath(null); setAddClaimsProvince(null);
+    setAddClaimsQuery(''); setAddClaimsAutoSearch(false); setAddClaimsMode(null);
+  };
+
+  // From the registry search: a query that named a place (coordinates, a map
+  // sheet, an Ontario cell ID) runs as a Nearby Claims search on that point.
+  // The point decides the jurisdiction when it falls in one we search, since a
+  // pasted coordinate is often in a different province from the dropdown.
+  const searchClaimsNear = async ({ lat, lng, radiusKm = 25, province, label }) => {
+    const region = await detectRegion({ minLng: lng, maxLng: lng, minLat: lat, maxLat: lat }).catch(() => null);
+    const code = region ? (region.country === 'CA' ? region.abbrev.toLowerCase() : `us-${region.abbrev.toLowerCase()}`) : null;
+    const nearbyCodes = ['bc', 'on', 'qc', 'sk', 'mb', 'nl', 'yt', ...(US_CLAIMS_ENABLED ? US_STATES.map((st) => st.value) : [])];
+    const where = nearbyCodes.includes(code) ? code : province;
+    closeAddClaimsModal();
+    setScreen('editor');
+    setAreaClaimsProvince(where);
+    setCollapsedSections((s) => ({ ...s, areaClaims: false }));
+    setAreaClaimsPickCenter({ lat, lng });
+    setAreaDeepLink({ province: where, point: { lat, lng }, radiusKm });
+    setUploadStatus({ type: 'info', message: `Showing claims within ${radiusKm} km of ${label}. Change the radius or move the pin under Nearby Claims.` });
+  };
+
+  // From an empty holder search that looked like a place name ("Chapel",
+  // "lake temiskaming"): let the visitor point at it on the map.
+  const pickClaimsArea = ({ province, query }) => {
+    closeAddClaimsModal();
+    setScreen('editor');
+    setAreaClaimsProvince(province);
+    setCollapsedSections((s) => ({ ...s, areaClaims: false }));
+    setAreaClaimsPicking(true);
+    setAreaDeepLink({ province, point: null });
+    setUploadStatus({ type: 'info', message: `Click the map where ${query ? `"${query}"` : 'your area'} is, then press Load Claims under Nearby Claims.` });
+  };
+
   // ?mode=area: frame the point (or the province) once the map exists, and run
   // the 25 km search when a point was given.
   useEffect(() => {
     if (!areaDeepLink || !mapReady || !leafletMapRef.current) return;
-    const { point, province } = areaDeepLink;
-    const view = point ? [[point.lat, point.lng], 10] : PROVINCE_VIEWS[province];
+    const { point, province, radiusKm = 25 } = areaDeepLink;
+    const view = point ? [[point.lat, point.lng], radiusKm > 30 ? 8 : 10] : PROVINCE_VIEWS[province];
     if (view) leafletMapRef.current.setView(...view);
-    if (point) loadAreaClaims(25);
+    if (point) loadAreaClaims(radiusKm);
     setAreaDeepLink(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [areaDeepLink, mapReady]);
@@ -3564,6 +3607,16 @@ export default function App({ initialAction = null }) {
         : 'Click the map where you want to see claims, then press Load Claims under Nearby Claims.' });
     } else if (intent === 'claims') {
       const province = REGION_TO_PROVINCE[(params.get('region') || '').toLowerCase()] || null;
+      if (['blog', 'companies'].includes(params.get('utm_source')) && !isPhoneDevice()) {
+        let returnTo = null;
+        try {
+          const ref = document.referrer ? new URL(document.referrer) : null;
+          if (ref && ref.origin === window.location.origin && ref.pathname !== '/') {
+            returnTo = { path: ref.pathname, label: ref.pathname.startsWith('/blog') ? 'Back to the article' : 'Back to the page' };
+          }
+        } catch { /* no usable referrer */ }
+        contentEntryRef.current = { returnTo };
+      }
       // No live registry for this region → open the upload path instead of the
       // registry search silently defaulting to BC.
       if (!province && params.get('region')) {
@@ -7687,6 +7740,23 @@ export default function App({ initialAction = null }) {
             <button type="button" className="ui-btn ui-btn--sm" onClick={() => setExportError(null)}>Dismiss</button>
           </div>
         )}
+        {lookupCard && contentEntryRef.current && !mobileViewer && (
+          <React.Suspense fallback={null}>
+            <ClaimLookupCard
+              project={project}
+              layerIds={lookupCard.layerIds}
+              returnTo={contentEntryRef.current.returnTo}
+              onExport={() => handleExportClick('png')}
+              onSearchAgain={() => {
+                const last = project.layers.find((l) => l.id === lookupCard.layerIds[lookupCard.layerIds.length - 1]);
+                setAddClaimsProvince(last?.provenance?.province || null);
+                setAddClaimsModalPath('registry');
+                setShowAddClaimsModal(true);
+              }}
+              onDismiss={() => { contentEntryRef.current = null; setLookupCard(null); }}
+            />
+          </React.Suspense>
+        )}
         <div ref={mapViewportRef} className={`map-viewport${constrainedStageSize ? ' map-viewport--ratio-active' : ''}`}>
           {constrainedStageSize && (
             <div className="ratio-frame-badge">
@@ -8289,7 +8359,14 @@ export default function App({ initialAction = null }) {
             initialQuery={addClaimsQuery}
             autoSearch={addClaimsAutoSearch}
             initialMode={addClaimsMode}
-            onClose={() => { setShowAddClaimsModal(false); setAddClaimsModalPath(null); setAddClaimsProvince(null); setAddClaimsQuery(''); setAddClaimsAutoSearch(false); setAddClaimsMode(null); }}
+            onSearchNear={searchClaimsNear}
+            onPickArea={pickClaimsArea}
+            onClose={() => {
+              closeAddClaimsModal();
+              // Closed with or without a result: a lookup visitor keeps a card
+              // on the map saying what they found, or how to search.
+              if (contentEntryRef.current) setLookupCard((c) => c || { layerIds: [] });
+            }}
             onCSVFile={(file) => {
               setShowAddClaimsModal(false);
               setAddClaimsModalPath(null);
@@ -8299,6 +8376,8 @@ export default function App({ initialAction = null }) {
               const added = addGeoJSONAsLayer(geojson, `${name}.geojson`, source, provenance, 'claims');
               if (source === 'registry' && !mobileViewerOffRef.current && isPhoneDevice()) {
                 added.then((id) => setMobileViewer((v) => (v ? { ...v, layerIds: [...v.layerIds, id] } : { source: 'search', layerIds: [id] })));
+              } else if (source === 'registry' && contentEntryRef.current) {
+                added.then((id) => { if (id) setLookupCard((c) => ({ layerIds: [...(c?.layerIds || []), id] })); });
               }
               setShowAddClaimsModal(false);
               setAddClaimsModalPath(null);

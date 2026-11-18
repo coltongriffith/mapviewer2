@@ -223,7 +223,7 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
                   type="search"
                   value={lookup}
                   onChange={(e) => setLookup(e.target.value)}
-                  placeholder="Enter a claim number, property name, or owner"
+                  placeholder="Claim number, holder name, map sheet or coordinates"
                   autoComplete="off"
                 />
                 <button className="lm-btn lm-btn-primary" type="submit" data-track="Hero: Search BC Claims">

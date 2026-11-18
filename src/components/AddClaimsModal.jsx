@@ -6,7 +6,7 @@ import Dialog from './Dialog';
 
 const ClaimsFileUpload = lazyGuarded(() => import('./ClaimsFileUpload'));
 
-export default function AddClaimsModal({ onClose, onImport, onCSVFile, defaultPath = null, initialProvince = null, initialQuery = '', autoSearch = false, initialMode = null }) {
+export default function AddClaimsModal({ onClose, onImport, onCSVFile, defaultPath = null, initialProvince = null, initialQuery = '', autoSearch = false, initialMode = null, onSearchNear = null, onPickArea = null }) {
   const [path, setPath] = useState(defaultPath); // null | 'registry' | 'upload'
   const titleId = useId();
   const returnFocus = useRef(document.activeElement);
@@ -59,6 +59,8 @@ export default function AddClaimsModal({ onClose, onImport, onCSVFile, defaultPa
             initialQuery={initialQuery}
             autoSearch={autoSearch}
             initialMode={initialMode}
+            onSearchNear={onSearchNear}
+            onPickArea={onPickArea}
             onImport={(items) => {
               // items is [{geojson, name, provenance}, ...] — one entry per
               // geographic group. provenance carries degraded-scoping and
