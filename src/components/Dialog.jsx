@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useLayoutEffect, useRef, useCallback } from 'react';
 
 /**
  * One accessible dialog primitive (audit P1-19).
@@ -36,7 +36,10 @@ export default function Dialog({
     if (dismissible) onClose?.();
   }, [dismissible, onClose]);
 
-  useEffect(() => {
+  // Layout effect, not a passive one: a passive effect runs after paint, and
+  // while a heavy screen is mounting behind the dialog that can be long enough
+  // for the dialog to be visible but deaf to Escape (and unfocused).
+  useLayoutEffect(() => {
     restoreRef.current = document.activeElement;
 
     // Focus the first meaningful control, or the panel itself.

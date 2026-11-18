@@ -2016,6 +2016,11 @@ export default function App({ initialAction = null }) {
   const prevLayerCountRef = useRef(project.layers.length);
   const prevProjectIdRef = useRef(projectId);
   const skipLayerRevealRef = useRef(false);
+  // The layer a first-map import selected last. Its selection can commit after
+  // the import has finished and the one-tick skip above has expired (a batch
+  // of files commits its final selection late), which pulled the panel from
+  // Style to Customize. Skipping by id instead of by time closes that race.
+  const importRevealSkipIdRef = useRef(null);
   useEffect(() => {
     const prevCount = prevLayerCountRef.current;
     const sameProject = prevProjectIdRef.current === projectId;
@@ -2030,6 +2035,7 @@ export default function App({ initialAction = null }) {
 
   useEffect(() => {
     if (!selectedLayerId) return;
+    if (selectedLayerId === importRevealSkipIdRef.current) { importRevealSkipIdRef.current = null; return; }
     if (skipLayerRevealRef.current || uploadQueueRef.current?.firstMap) return;
     setCustomizeGroup('layers');
     revealSection('customize', layersSectionRef);
@@ -2967,6 +2973,7 @@ export default function App({ initialAction = null }) {
     }).catch(() => {});
 
     setSelectedLayerId(id);
+    if (uploadQueueRef.current?.firstMap) importRevealSkipIdRef.current = id;
     setUploadStatus({
       type: 'success',
       message: `Imported ${fileName} as ${ROLE_LABELS[role] || 'a layer'}${role === 'other' ? ' — set its role in the layer panel' : ''}.${preserveView ? ' The view was kept.' : ''}`,
