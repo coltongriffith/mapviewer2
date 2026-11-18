@@ -327,7 +327,8 @@ const BUDGETS = {
   // separately capped standalone 3D graphs. Editor/claims share the same queue;
   // their increases are not additional copies. Dependencies are unchanged.
   // Nov 2026, state-machine fixes merged with main (docs/state-machines.md): measured 1201.3.
-  totalAuthJsGzipKb: 1201.7,
+  // Place-shaped claim searches + lookup card (#429), as totalJsGzipKb: measured 1205.3.
+  totalAuthJsGzipKb: 1205.7,
 
   // 1009.4 → 1026.3 (measured 1026.0): lazy XLSX reader (~13.8 KiB), sheet/header preview
   // (~1.1 KiB), import wiring and numeric-format handling. Shared fflate adds ~1.2 KiB
@@ -422,7 +423,8 @@ const BUDGETS = {
   // Same combined property-boundary integration: measured 1130.1 KiB plain;
   // preserve the existing 0.5 KiB stamp margin and all non-total allowances.
   // Nov 2026, state-machine fixes merged with main (docs/state-machines.md): measured 1132.0.
-  totalJsGzipKb: 1132.4,
+  // Place-shaped claim searches + lookup card for article visitors (#429): measured 1136.0.
+  totalJsGzipKb: 1136.4,
 
   // 940.9 → 957.8 (measured 957.5): Excel import, as totalAuthJsGzipKb above.
   // 940.9 → 944.8 (P2-8, measured 944.6): the same lazy property recipe path
@@ -759,7 +761,8 @@ const BUDGETS = {
   // Context-safe sequential uploads survive the Data-to-Style transition;
   // measured355.7configured/287.6plain,0.3KiB margin. Other routes unchanged.
   // Nov 2026, state-machine fixes merged with main (docs/state-machines.md): measured 356.5.
-  editorAuthJsGzipKb: 356.9,
+  // Place-search and lookup-card wiring (#429), as editorJsGzipKb: measured 357.1.
+  editorAuthJsGzipKb: 357.5,
   // Excel import: shared fflate's async ZIP worker support adds ~1.2 KiB (342.5 measured).
   // The XLSX parser and sheet picker remain lazy; the homepage does not load compression.
   // 270 → 271.0 (Oct 2026, production errors, measured 270.7, 269.6 on main): the same as editorAuthJsGzipKb above.
@@ -778,7 +781,8 @@ const BUDGETS = {
   // Same shared error helper: measured 279.8 plain, fractionally over the former cap.
   // Live web map merged with main (Point inspector, numeric classification): measured 280.5.
   // Nov 2026, state-machine fixes merged with main (docs/state-machines.md): measured 288.2.
-  editorJsGzipKb: 288.6,
+  // Place-search and lookup-card wiring in App (#429; the card itself is lazy): measured 288.9.
+  editorJsGzipKb: 289.3,
   // 355 to 355.3 (Oct 2026): claims shares the editor API bridge/control names; measured 355.0 in CI.
   // Same shared compression increase as above (274.4 measured).
   // Claims also restores drafts through shared compression (355.3 measured).
@@ -793,10 +797,13 @@ const BUDGETS = {
   // Claims shares the upload queue and existing accessible Dialog primitive;
   // measured368.9configured/300.6plain,0.3KiB margin.
   // Nov 2026, state-machine fixes merged with main (docs/state-machines.md): measured 369.6.
-  claimsAuthJsGzipKb: 370.0,
+  // Registry search reads place-shaped queries (#429), as claimsJsGzipKb: measured 371.8.
+  claimsAuthJsGzipKb: 372.2,
   // Live web map merged with main (Point inspector, numeric classification): measured 293.2.
   // Nov 2026, state-machine fixes merged with main (docs/state-machines.md): measured 301.3.
-  claimsJsGzipKb: 301.7,
+  // Claims opens the registry search, which now reads place-shaped queries
+  // (coordinates, map sheets, cell IDs) before searching (#429): measured 303.5.
+  claimsJsGzipKb: 303.9,
   // Live investor web map (/embed/map/<id>): map, legend, layer list, drill-result callouts and the drill plan
   // (its overlay loaded only when published with one), no editor; measured 243.9 configured, 177.5 plain with main.
   // MapCanvas opt-in key/annotation hand-off: measured 244.2 configured;

@@ -600,6 +600,25 @@ button, input, select, textarea { font: inherit; }
 }
 .ed-banner--error { background: #fbf1f1; border-bottom-color: var(--ui-danger); color: var(--ui-danger); }
 .ed-banner > button { margin-left: auto; }
+/* Lookup result for visitors arriving from an article (ClaimLookupCard): the
+   answer to their question, then the next steps. Sits above the map like the
+   other editor banners, so it never lands in an export. */
+.lookup-card {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-4);
+  flex: 0 0 auto; padding: 10px var(--sp-3);
+  background: var(--ui-surface); border-bottom: 1px solid var(--ui-border);
+  border-left: 3px solid var(--ui-accent);
+}
+.lookup-card-body { display: grid; gap: 1px; flex: 1 1 280px; min-width: 0; }
+.lookup-card-title { font-size: 15px; font-weight: 700; color: var(--ui-text); overflow-wrap: anywhere; }
+.lookup-card-facts { font-size: 13px; color: var(--ui-text-muted); }
+.lookup-card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
+.lookup-card-back { font-size: 13px; color: var(--ui-action); text-underline-offset: 3px; }
+.lookup-card-close {
+  border: 0; background: none; padding: 4px 6px; cursor: pointer;
+  font-size: 14px; line-height: 1; color: var(--ui-text-muted); border-radius: var(--r-sm, 4px);
+}
+.lookup-card-close:hover { color: var(--ui-text); background: var(--ui-surface-subtle); }
 .local-recovery-notice { flex-wrap: wrap; align-items: flex-start; }
 .local-recovery-message { flex: 1 1 260px; min-width: 0; }
 .local-recovery-message p { margin: 0 0 4px; overflow-wrap: anywhere; }
@@ -3449,6 +3468,12 @@ button.claim-notices-chip[aria-expanded="true"] { border-color: var(--ui-border-
 .mobile-editor-banner button{background:none;border:1px solid currentColor;border-radius:4px;color:inherit;font-size:13px;cursor:pointer;padding:6px 8px}
 .mobile-editor-banner button[aria-label='Dismiss']{border:0;margin-left:auto}
 .claims-recovery-actions{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:8px 0 16px}
+/* A query that names a place (coordinates, map sheet, cell ID): offered as a
+   Nearby Claims search. Informational, not a warning — the query was fine,
+   it just wasn't a registry field. */
+.claims-place-offer { margin: 10px 0 0; padding: 10px 12px 2px; border: 1px solid var(--ui-border); border-radius: var(--r-md); background: var(--ui-surface-subtle); }
+.claims-place-offer-text { display: grid; gap: 3px; margin: 0; font-size: 13px; line-height: 1.45; color: var(--ui-text); }
+.claims-place-offer-text span { color: var(--ui-text-muted); font-size: 12.5px; }
 .claims-recovery-actions a{color:var(--ui-action);font-size:13px;text-underline-offset:3px}
 
 /* ══════════════════════════════════════════════════════════════════════════

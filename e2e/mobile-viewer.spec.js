@@ -63,7 +63,7 @@ test('a registry search on a phone opens the claims viewer', async ({ browser })
   ];
   await page.route('**/api/claims?*', (route) => route.fulfill({ json: { type: 'FeatureCollection', features, resolution: { status: 'resolved' }, meta: {} } }));
   await page.goto('/');
-  await page.getByPlaceholder('Enter a claim number, property name, or owner').fill('Example Mining');
+  await page.getByPlaceholder('Claim number, holder name, map sheet or coordinates').fill('Example Mining');
   await page.getByRole('button', { name: 'Search', exact: true }).first().click();
 
   await page.getByText('Select All').first().click();
@@ -94,7 +94,7 @@ test('a long result list on a phone can be added without scrolling or ticking', 
   const features = Array.from({ length: 18 }, (_, i) => claim(String(1000100 + i), `ROW ${i + 1}`, 200, '2031-06-30', -128 + i * 0.021, 56.1));
   await page.route('**/api/claims?*', (route) => route.fulfill({ json: { type: 'FeatureCollection', features, resolution: { status: 'resolved' }, meta: {} } }));
   await page.goto('/');
-  await page.getByPlaceholder('Enter a claim number, property name, or owner').fill('Example Mining');
+  await page.getByPlaceholder('Claim number, holder name, map sheet or coordinates').fill('Example Mining');
   await page.getByRole('button', { name: 'Search', exact: true }).first().click();
 
   const add = page.getByRole('button', { name: /^Add all 18 claims to map|^Add all \d+ areas to map \(18 claims\)/ });
@@ -132,7 +132,7 @@ async function searchOnPhone(browser, { initScript } = {}) {
   ];
   await page.route('**/api/claims?*', (route) => route.fulfill({ json: { type: 'FeatureCollection', features, resolution: { status: 'resolved' }, meta: {} } }));
   await page.goto('/');
-  await page.getByPlaceholder('Enter a claim number, property name, or owner').fill('Example Mining');
+  await page.getByPlaceholder('Claim number, holder name, map sheet or coordinates').fill('Example Mining');
   await page.getByRole('button', { name: 'Search', exact: true }).first().click();
   await page.getByText('Select All').first().click();
   await page.getByRole('button', { name: /^Add .* to map/ }).click();

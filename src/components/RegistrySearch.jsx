@@ -16,6 +16,7 @@ import ClaimNoticeStrip from './ClaimNoticeStrip';
 import ClaimRequestForm from './ClaimRequestForm';
 const ClaimSearchHelp = lazyGuarded(() => import('./FeedbackModal'));
 import { clusterFeatures, clusterLabels } from '../utils/featureClusters.js';
+import { readSearchQuery } from '../utils/searchIntent.js';
 
 // ── Spatial clustering helpers ─────────────────────────────────────────────
 //
@@ -205,7 +206,36 @@ export function planNumberSearch(raw, cfg) {
   return { mode: 'number', query: raw.trim(), notice: null };
 }
 
-export default function RegistrySearch({ onImport, onBack, initialProvince, initialQuery = '', autoSearch = false, initialMode = null }) {
+// The other direction: a claim number typed into the company box. Telemetry
+// had "1019406", "5059672" and "552752" searched as company names, which can
+// only come back empty. Exported for tests.
+//   → { mode: 'number', query, notice }   searched as the number it is
+//   → null                                 search it as typed
+export function planCompanySearch(raw, cfg, previous = null) {
+  const q = raw.trim();
+  if (isUsJurisdiction(cfg.value) || !cfg.modes.includes('number')) return null;
+  if (readSearchQuery(q).type !== 'number') return null;
+  // Somebody who has just searched these digits as a claim number and is now
+  // trying them as a name has already had the number search; don't loop back.
+  if (previous && previous.mode === 'number' && previous.query === q && previous.province === cfg.value) return null;
+  return { mode: 'number', query: q, notice: `"${q}" looks like a claim number, so we searched it as one.` };
+}
+
+// Up to three plain words: the shape of a township, town or lake name ("Chapel",
+// "lake temiskaming"), which a holder search cannot match.
+const looksLikePlaceName = (q) => {
+  const words = String(q || '').trim().split(/\s+/).filter(Boolean);
+  return words.length > 0 && words.length <= 3 && words.every((w) => /^[\p{L}'’.-]+$/u.test(w));
+};
+
+const PLACE_KIND_LABELS = {
+  point: 'coordinates',
+  nts: 'an NTS map sheet',
+  bcgs: 'a BCGS map tile',
+  cell: 'an Ontario cell ID',
+};
+
+export default function RegistrySearch({ onImport, onBack, initialProvince, initialQuery = '', autoSearch = false, initialMode = null, onSearchNear = null, onPickArea = null }) {
   // Default to a deep-link province, else the last province this browser used,
   // else BC — so a repeat visitor isn't reset to BC every time.
   const [province, setProvince] = useState(() => {
@@ -227,6 +257,9 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
   // Why the search that ran is not quite the one typed (a company name in the
   // Claim # box, a list over the cap) — or why nothing ran.
   const [searchNotice, setSearchNotice] = useState(null);
+  // A query that names a place (coordinates, a map sheet, a cell ID) rather
+  // than a holder or a claim: offered as a Nearby Claims search instead.
+  const [placeOffer, setPlaceOffer] = useState(null);
   const [selectedOwner, setSelectedOwner] = useState(null);
   const [selectedGroups, setSelectedGroups] = useState(new Set());
   const [showSearchHelp, setShowSearchHelp] = useState(false);
@@ -542,10 +575,32 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
   // Every search goes through here. A Claim # search is read first
   // (planNumberSearch): a company name typed into that tab is searched as a
   // company, and a pasted list is sent as a capped list.
-  function runSearch(raw, searchMode, { auto = false } = {}) {
+  function runSearch(raw, searchMode, { auto = false, asTyped = false } = {}) {
     let q = raw.trim();
     let m = searchMode;
     let notice = null;
+    setPlaceOffer(null);
+    // Coordinates and map sheets are places, not registry fields: every one of
+    // them searched as a holder or number came back empty. Offer the search
+    // that answers "what is staked there" instead of running one that cannot.
+    const read = readSearchQuery(q);
+    if (!asTyped && onSearchNear && (read.type === 'point' || read.type === 'sheet')) {
+      reset();
+      clearSelections();
+      setSearchNotice(null);
+      setSubmitted(null);
+      setPlaceOffer({ ...read, query: q, province });
+      trackEvent('search_place_offered', { province, kind: read.type === 'point' ? 'point' : read.kind, mode: searchMode });
+      return;
+    }
+    if (m === 'company') {
+      const plan = planCompanySearch(q, provinceCfg, submitted);
+      if (plan) {
+        ({ query: q, mode: m, notice } = plan);
+        setMode(m);
+        setManualMode(true);
+      }
+    }
     if (m === 'number') {
       const plan = planNumberSearch(q, provinceCfg);
       if (plan.blocked) {
@@ -553,7 +608,9 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
         setSearchNotice(plan.blocked);
         return;
       }
-      ({ query: q, mode: m, notice } = plan);
+      // Keep the company-tab redirect's notice unless this plan has its own.
+      ({ query: q, mode: m } = plan);
+      notice = plan.notice || notice;
       if (m !== searchMode) { setMode(m); setManualMode(true); }
     }
     setSearchNotice(notice);
@@ -593,6 +650,7 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
   function handleQueryChange(val) {
     setQuery(val);
     setSearchNotice(null);
+    setPlaceOffer(null);
     if (results || error) {
       reset();
       clearSelections();
@@ -602,6 +660,7 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
   function handleProvinceChange(val) {
     setProvince(val);
     setSearchNotice(null);
+    setPlaceOffer(null);
     setManualMode(false);
     // ALL_JURISDICTIONS, not PROVINCES: a US state must resolve its own modes
     // (name/number), never fall back to BC's (company/number/map).
@@ -841,6 +900,35 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
 
       {searchNotice && <p className="claims-relaxed" role="status">{searchNotice}</p>}
 
+      {placeOffer && (
+        <div className="claims-place-offer" role="status">
+          <p className="claims-place-offer-text">
+            <strong>
+              {placeOffer.type === 'point'
+                ? `That looks like coordinates (${placeOffer.label}).`
+                : `"${placeOffer.query}" looks like ${PLACE_KIND_LABELS[placeOffer.kind] || 'a map sheet'}${placeOffer.kind === 'cell' ? ` on sheet ${placeOffer.label}` : ''}.`}
+            </strong>
+            <span>
+              Registries don't record claims by {placeOffer.type === 'point' ? 'location' : 'map sheet'}, so a
+              holder or number search can't find them. We can show every claim within {placeOffer.radiusKm} km of
+              {placeOffer.type === 'point' ? ' that point' : ' the sheet centre'} instead.
+            </span>
+          </p>
+          <div className="claims-recovery-actions">
+            <button type="button" className="ui-btn ui-btn--primary" onClick={() => {
+              trackEvent('search_place_accepted', { province: placeOffer.province, kind: placeOffer.type === 'point' ? 'point' : placeOffer.kind });
+              onSearchNear({
+                lat: placeOffer.lat, lng: placeOffer.lng, radiusKm: placeOffer.radiusKm,
+                province: placeOffer.province, label: placeOffer.type === 'point' ? placeOffer.label : placeOffer.query,
+              });
+            }}>Show claims within {placeOffer.radiusKm} km</button>
+            <button type="button" className="ui-btn" onClick={() => runSearch(placeOffer.query, mode, { asTyped: true })}>
+              Search it as typed
+            </button>
+          </div>
+        </div>
+      )}
+
       {error && <p className="claims-error">⚠ {error}{error === NETWORK_ERROR && submitted?.query && (
         <> <button type="button" className="claims-error-retry" disabled={loading}
           onClick={retrySearch}>Try again</button></>
@@ -936,6 +1024,13 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
                 trackEvent('search_recovery_clicked', { province: recoverySearch.province, mode: recoverySearch.mode, action: m });
               }}>{m === 'number' ? (recoverySearch.province === 'yt' ? 'Try a grant number' : 'Try a claim number') : m === 'name' ? 'Try a claim name' : 'Try an owner name'}</button>
             ))}
+            {onPickArea && recoverySearch.mode === 'company' && !isUsJurisdiction(recoverySearch.province)
+              && looksLikePlaceName(recoverySearch.query) && (
+              <button type="button" className="ui-btn" onClick={() => {
+                trackEvent('search_recovery_clicked', { province: recoverySearch.province, mode: recoverySearch.mode, action: 'location' });
+                onPickArea({ province: recoverySearch.province, query: recoverySearch.query });
+              }}>Is it a place? Search by location</button>
+            )}
             {recoverySearch.province === 'yt' && <a href="https://yukon.ca/en/mining" target="_blank" rel="noopener noreferrer"
               onClick={() => trackEvent('search_recovery_clicked', { province: recoverySearch.province, mode: recoverySearch.mode, action: 'official_registry' })}>Yukon mining resources ↗</a>}
             <button type="button" className="ui-btn" onClick={() => {

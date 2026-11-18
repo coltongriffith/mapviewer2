@@ -33,9 +33,14 @@ async function open(page, payload) {
     sessionStorage.setItem('technical-report-fixture', '1');
   }, payload);
   await page.goto('/?intent=resume');
+  // isVisible() does not wait: on a slow runner the phone's Edit button can
+  // render a moment after it is checked, leaving the editor closed. Wait for
+  // the editor (desktop tabs or the phone's Edit button) before deciding.
   const edit = page.getByRole('button', { name: 'Edit', exact: true });
+  const styleTab = page.getByRole('tab', { name: 'Style', exact: true });
+  await expect(edit.or(styleTab).first()).toBeVisible();
   if (await edit.isVisible()) await edit.click();
-  await expect(page.getByRole('tab', { name: 'Style', exact: true })).toBeVisible();
+  await expect(styleTab).toBeVisible();
   await page.getByRole('tab', { name: 'Style', exact: true }).click();
   await page.getByRole('radio', { name: 'Technical Report Coordinate frame, supplied metadata', exact: true }).click();
   await expect(page.getByRole('img', { name: 'Technical report title block', exact: true })).toBeVisible();

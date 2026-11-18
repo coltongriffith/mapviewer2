@@ -38,6 +38,14 @@ const EVENT_ALLOWLIST = new Set([
   'onboarding_step',
   'search_recovery_clicked',
   'content_cta_clicked',
+  // A claim search that named a place (coordinates, map sheet, cell ID) and
+  // was offered as a Nearby Claims search; accepted = the visitor took it.
+  'search_place_offered',
+  'search_place_accepted',
+  // Desktop result card for visitors who arrived from an article or company
+  // page (props.state = results|empty; actions carry props.action).
+  'lookup_card_shown',
+  'lookup_card_action',
   'first_map_checklist_shown',
   'mobile_continue_clicked',
   // Phone claims viewer: opened, and what the reader did there (props.action).
