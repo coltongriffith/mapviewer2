@@ -422,7 +422,8 @@ const BUDGETS = {
   // Same combined property-boundary integration: measured 1130.1 KiB plain;
   // preserve the existing 0.5 KiB stamp margin and all non-total allowances.
   // Nov 2026, state-machine fixes merged with main (docs/state-machines.md): measured 1132.0.
-  totalJsGzipKb: 1132.4,
+  // Place-shaped claim searches + lookup card for article visitors (#429): measured 1136.0.
+  totalJsGzipKb: 1136.4,
 
   // 940.9 → 957.8 (measured 957.5): Excel import, as totalAuthJsGzipKb above.
   // 940.9 → 944.8 (P2-8, measured 944.6): the same lazy property recipe path
@@ -778,7 +779,8 @@ const BUDGETS = {
   // Same shared error helper: measured 279.8 plain, fractionally over the former cap.
   // Live web map merged with main (Point inspector, numeric classification): measured 280.5.
   // Nov 2026, state-machine fixes merged with main (docs/state-machines.md): measured 288.2.
-  editorJsGzipKb: 288.6,
+  // Place-search and lookup-card wiring in App (#429; the card itself is lazy): measured 288.9.
+  editorJsGzipKb: 289.3,
   // 355 to 355.3 (Oct 2026): claims shares the editor API bridge/control names; measured 355.0 in CI.
   // Same shared compression increase as above (274.4 measured).
   // Claims also restores drafts through shared compression (355.3 measured).
@@ -796,7 +798,9 @@ const BUDGETS = {
   claimsAuthJsGzipKb: 370.0,
   // Live web map merged with main (Point inspector, numeric classification): measured 293.2.
   // Nov 2026, state-machine fixes merged with main (docs/state-machines.md): measured 301.3.
-  claimsJsGzipKb: 301.7,
+  // Claims opens the registry search, which now reads place-shaped queries
+  // (coordinates, map sheets, cell IDs) before searching (#429): measured 303.5.
+  claimsJsGzipKb: 303.9,
   // Live investor web map (/embed/map/<id>): map, legend, layer list, drill-result callouts and the drill plan
   // (its overlay loaded only when published with one), no editor; measured 243.9 configured, 177.5 plain with main.
   // MapCanvas opt-in key/annotation hand-off: measured 244.2 configured;
