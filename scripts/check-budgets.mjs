@@ -327,7 +327,8 @@ const BUDGETS = {
   // separately capped standalone 3D graphs. Editor/claims share the same queue;
   // their increases are not additional copies. Dependencies are unchanged.
   // Nov 2026, state-machine fixes merged with main (docs/state-machines.md): measured 1201.3.
-  totalAuthJsGzipKb: 1201.7,
+  // Place-shaped claim searches + lookup card (#429), as totalJsGzipKb: measured 1205.3.
+  totalAuthJsGzipKb: 1205.7,
 
   // 1009.4 → 1026.3 (measured 1026.0): lazy XLSX reader (~13.8 KiB), sheet/header preview
   // (~1.1 KiB), import wiring and numeric-format handling. Shared fflate adds ~1.2 KiB
@@ -760,7 +761,8 @@ const BUDGETS = {
   // Context-safe sequential uploads survive the Data-to-Style transition;
   // measured355.7configured/287.6plain,0.3KiB margin. Other routes unchanged.
   // Nov 2026, state-machine fixes merged with main (docs/state-machines.md): measured 356.5.
-  editorAuthJsGzipKb: 356.9,
+  // Place-search and lookup-card wiring (#429), as editorJsGzipKb: measured 357.1.
+  editorAuthJsGzipKb: 357.5,
   // Excel import: shared fflate's async ZIP worker support adds ~1.2 KiB (342.5 measured).
   // The XLSX parser and sheet picker remain lazy; the homepage does not load compression.
   // 270 → 271.0 (Oct 2026, production errors, measured 270.7, 269.6 on main): the same as editorAuthJsGzipKb above.
@@ -795,7 +797,8 @@ const BUDGETS = {
   // Claims shares the upload queue and existing accessible Dialog primitive;
   // measured368.9configured/300.6plain,0.3KiB margin.
   // Nov 2026, state-machine fixes merged with main (docs/state-machines.md): measured 369.6.
-  claimsAuthJsGzipKb: 370.0,
+  // Registry search reads place-shaped queries (#429), as claimsJsGzipKb: measured 371.8.
+  claimsAuthJsGzipKb: 372.2,
   // Live web map merged with main (Point inspector, numeric classification): measured 293.2.
   // Nov 2026, state-machine fixes merged with main (docs/state-machines.md): measured 301.3.
   // Claims opens the registry search, which now reads place-shaped queries
