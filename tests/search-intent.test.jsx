@@ -110,3 +110,15 @@ describe('the search panel', () => {
     expect(onPickArea).toHaveBeenCalledWith({ province: 'on', query: 'Chapel' });
   });
 });
+
+describe('the lookup card summary', () => {
+  it('drops the 100% marker from a sole Ontario holder', async () => {
+    const { lookupSummary } = await import('../src/components/ClaimLookupCard.jsx');
+    const layer = { id: 'l1', provenance: { province: 'on' }, geojson: { features: [{
+      type: 'Feature', geometry: { type: 'Polygon', coordinates: [[[-81, 46], [-80.99, 46], [-80.99, 46.01], [-81, 46]]] },
+      properties: { TENURE_NUMBER_ID: '109399', HOLDER: '(100) AGNICO EAGLE MINES LIMITED', GOOD_TO_DATE: '2029-04-23' },
+    }] } };
+    expect(lookupSummary([layer]).headline).not.toMatch(/^\(100\)/);
+    expect(lookupSummary([layer]).headline).toMatch(/Agnico Eagle Mines Limited/i);
+  });
+});

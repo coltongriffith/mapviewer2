@@ -17,7 +17,9 @@ export function lookupSummary(layers) {
   const claims = normalizeClaims(layers);
   if (!claims.length) return null;
   const s = summarize(claims);
-  const holder = commonHolder(claims);
+  // Ontario records a sole owner as "(100) AGNICO EAGLE MINES LIMITED"; the
+  // percentage says nothing when there is one holder. Shared holdings keep it.
+  const holder = commonHolder(claims)?.replace(/^\(100(?:\.0+)?%?\)\s*/, '') || null;
   const parts = [`${s.count.toLocaleString('en-US')} claim${s.count === 1 ? '' : 's'}`];
   if (s.totalHa > 0) parts.push(fmtHa(s.totalHa));
   if (s.places) parts.push(s.places);
