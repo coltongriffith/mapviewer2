@@ -328,7 +328,9 @@ const BUDGETS = {
   // their increases are not additional copies. Dependencies are unchanged.
   // Nov 2026, state-machine fixes merged with main (docs/state-machines.md): measured 1201.3.
   // Place-shaped claim searches + lookup card (#429), as totalJsGzipKb: measured 1205.3.
-  totalAuthJsGzipKb: 1205.7,
+  // Signed-out map carried across the sign-in link (lazy utils/signupHandoff.js), the export cap
+  // tolerance and the holder spelling notice (#430): measured 1206.7.
+  totalAuthJsGzipKb: 1207.1,
 
   // 1009.4 → 1026.3 (measured 1026.0): lazy XLSX reader (~13.8 KiB), sheet/header preview
   // (~1.1 KiB), import wiring and numeric-format handling. Shared fflate adds ~1.2 KiB
@@ -424,7 +426,8 @@ const BUDGETS = {
   // preserve the existing 0.5 KiB stamp margin and all non-total allowances.
   // Nov 2026, state-machine fixes merged with main (docs/state-machines.md): measured 1132.0.
   // Place-shaped claim searches + lookup card for article visitors (#429): measured 1136.0.
-  totalJsGzipKb: 1136.4,
+  // Sign-in map handoff (lazy helper), export cap tolerance, spelling notice (#430): measured 1136.6.
+  totalJsGzipKb: 1137.0,
 
   // 940.9 → 957.8 (measured 957.5): Excel import, as totalAuthJsGzipKb above.
   // 940.9 → 944.8 (P2-8, measured 944.6): the same lazy property recipe path
@@ -762,7 +765,8 @@ const BUDGETS = {
   // measured355.7configured/287.6plain,0.3KiB margin. Other routes unchanged.
   // Nov 2026, state-machine fixes merged with main (docs/state-machines.md): measured 356.5.
   // Place-search and lookup-card wiring (#429), as editorJsGzipKb: measured 357.1.
-  editorAuthJsGzipKb: 357.5,
+  // Sign-in map handoff claim/stash wiring in App, helper lazy (#430): measured 357.7.
+  editorAuthJsGzipKb: 358.1,
   // Excel import: shared fflate's async ZIP worker support adds ~1.2 KiB (342.5 measured).
   // The XLSX parser and sheet picker remain lazy; the homepage does not load compression.
   // 270 → 271.0 (Oct 2026, production errors, measured 270.7, 269.6 on main): the same as editorAuthJsGzipKb above.
@@ -798,7 +802,8 @@ const BUDGETS = {
   // measured368.9configured/300.6plain,0.3KiB margin.
   // Nov 2026, state-machine fixes merged with main (docs/state-machines.md): measured 369.6.
   // Registry search reads place-shaped queries (#429), as claimsJsGzipKb: measured 371.8.
-  claimsAuthJsGzipKb: 372.2,
+  // Same handoff wiring and the spelling notice (#430): measured 372.5.
+  claimsAuthJsGzipKb: 372.9,
   // Live web map merged with main (Point inspector, numeric classification): measured 293.2.
   // Nov 2026, state-machine fixes merged with main (docs/state-machines.md): measured 301.3.
   // Claims opens the registry search, which now reads place-shaped queries

@@ -104,7 +104,6 @@ import { verifyCheckoutSession } from './utils/billing';
 import { trackVerifiedPurchase } from './utils/purchaseTracking';
 import { queueAccountSave, loadAccountSave, clearAccountSave } from './utils/projectStorage';
 import { queueFullResExport, loadFullResExport, clearFullResExport, fullResCreditUsed, markFullResCreditUsed } from './utils/fullResExport';
-import { stashSignupHandoff, handoffRedirectPath, captureHandoffToken, takePendingHandoff, claimSignupHandoff } from './utils/signupHandoff';
 import { scopingWarning } from './utils/scopingNotice';
 import { CLAIM_NAME_CAVEAT } from './utils/claimProvenance';
 import { OVERLAY_DESCRIPTIONS } from './utils/referenceOverlayCredits.js';
@@ -3592,7 +3591,7 @@ export default function App({ initialAction = null }) {
     const demo = params.get('demo');
     // A sign-in link sent from the export gate carries the map it was sent
     // from (utils/signupHandoff.js); claimed once the account is signed in.
-    captureHandoffToken(params);
+    if (params.get('handoff')) import('./utils/signupHandoff').then((m) => m.captureHandoffToken(params));
     if (!intent && !demo) return;
     try { window.history.replaceState({}, '', '/'); } catch { /* noop */ }
     if (demo) {
@@ -4927,9 +4926,10 @@ export default function App({ initialAction = null }) {
 
   // The map travels with the sign-in link, so it is waiting in the account
   // even when the email opens in a different browser from this one.
-  const linkTarget = async (email, extras = null) => handoffRedirectPath(
-    await stashSignupHandoff({ email, payload: project, projectName, extras }),
-  );
+  const linkTarget = async (email, extras = null) => {
+    const { stashSignupHandoff, handoffRedirectPath } = await import('./utils/signupHandoff');
+    return handoffRedirectPath(await stashSignupHandoff({ email, payload: project, projectName, extras }));
+  };
 
   const sendExportLink = async (email) => {
     setExportLinkStatus({ email, state: 'sending' });
@@ -4983,9 +4983,10 @@ export default function App({ initialAction = null }) {
   // discarded. Opened anywhere else, the map is saved to the account and opened.
   useEffect(() => {
     if (!user || !supabase) return;
-    const pending = takePendingHandoff();
-    if (!pending) return;
     (async () => {
+      const { takePendingHandoff, claimSignupHandoff } = await import('./utils/signupHandoff');
+      const pending = takePendingHandoff();
+      if (!pending) return;
       const claimed = await claimSignupHandoff(pending.token).catch(() => null);
       if (!claimed || pending.sameBrowser) return;
       const name = claimed.projectName || claimed.payload?.layout?.title || 'Untitled map';
