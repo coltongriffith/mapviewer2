@@ -140,3 +140,39 @@ describe('the empty state does not read as "this company owns nothing"', () => {
     expect(emptyResultMessage({ ...base, isUs: false }).kind).toBe('empty');
   });
 });
+
+describe('spelling-tolerant holder rung', async () => {
+  const { oneEditPatterns, spellingRungs, spellingWhere, dominantOwner, bcCqlFilter } = await import('../api/claims.js');
+  const { relaxationNotice } = await import('../src/utils/relaxationNotice.js');
+  const like = (p) => `OWNER_NAME ILIKE '%${p}%'`;
+  const exact = (t) => bcCqlFilter(t, 'company', { tokens: [t] });
+  const sqlLike = (pattern) => new RegExp(`^.*${pattern.replace(/_/g, '.')}.*$`, 'i');
+  const matches = (where, owner) => where.split(' AND ').every((g) => g.split(' OR ')
+    .some((c) => sqlLike(c.match(/%([^%]+)%/)[1]).test(owner)));
+
+  it('finds ZAMIDA from the typo that returned nothing in production', () => {
+    const [rung] = spellingRungs([['Zamita', 'David'], ['Zamita']]);
+    const where = spellingWhere(rung.tokens, like, exact);
+    expect(matches(where, 'ZAMIDA, DAVID')).toBe(true);
+    expect(matches(where, 'SMITH, DAVID')).toBe(false);
+  });
+
+  it('covers a wrong, extra, missing or swapped letter', () => {
+    const p = oneEditPatterns('ZAMIDA');
+    const hit = (typed) => oneEditPatterns(typed).concat(typed.toUpperCase()).some((q) => sqlLike(q).test('ZAMIDA'));
+    expect(p).toContain('ZAM_DA');
+    ['Zamita', 'Zammida', 'Zmida', 'Zaimda'].forEach((t) => expect(hit(t)).toBe(true));
+  });
+
+  it('keeps short words exact and skips names with no long word', () => {
+    expect(spellingRungs([['Teck']])).toEqual([]);
+    const [rung] = spellingRungs([['Zamita', 'Ltd']].map((s) => s));
+    expect(spellingWhere(rung.tokens, like, exact)).toContain("OWNER_NAME ILIKE '%Ltd%'");
+  });
+
+  it('names the holder that was found, not the pattern', () => {
+    expect(dominantOwner([{ properties: { OWNER_NAME: 'ZAMIDA, DAVID' } }])).toBe('ZAMIDA, DAVID');
+    const n = relaxationNotice({ relaxedFrom: 'Zamita, David', relaxedTo: 'ZAMIDA, DAVID', relaxedKind: 'owner', relaxedMatch: 'spelling' }, {});
+    expect(n.headline).toContain('closest spelling: "ZAMIDA, DAVID"');
+  });
+});

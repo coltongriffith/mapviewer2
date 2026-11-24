@@ -2136,7 +2136,16 @@ async function searchArcgis(cfg, term, type, res, { numberList = null } = {}) {
       ? relaxedTokenSetsPreservingSpelling(tokens)
       : (type === 'name' ? claimNameFallbacks(effectiveTerm) : [tokens]);
     steps = sets.map((set) => ({ match: 'tokens', term: set.join(' ') || effectiveTerm, tokens: set }));
-    whereFor = (step) => (step.tokens.length > 1
+    // Holder names only: one typo allowed per long word, after every exact
+    // rung has failed (see spellingRungs). Never for claim names.
+    if (isOwnerSearch && tokens.length) steps.push(...spellingRungs(sets));
+    whereFor = (step) => (step.fuzzy
+      ? spellingWhere(
+        step.tokens,
+        (pat) => (storedUpper ? `${field.name} LIKE '%${pat}%'` : `UPPER(${field.name}) LIKE '%${pat}%'`),
+        (t) => likeClause(field.name, t, { storedUpper }),
+      )
+      : step.tokens.length > 1
       ? `(${step.tokens.map((t) => likeClause(field.name, t, { storedUpper })).join(' AND ')})`
       : likeClause(field.name, step.tokens[0] ?? effectiveTerm, { storedUpper }));
   } else if (/^\d+$/.test(effectiveTerm)) {
@@ -2197,7 +2206,7 @@ async function searchArcgis(cfg, term, type, res, { numberList = null } = {}) {
         kind: type === 'number' ? 'number' : (type === 'name' ? 'name' : 'owner'),
         match: step.match,
         from: term,
-        to: step.term,
+        to: step.fuzzy ? (dominantOwner(features.map((f) => ({ properties: normalizeProps(f.properties || {}, cfg) }))) || step.term) : step.term,
         limited: nearMissLimited,
       }) : {}),
     },
@@ -2454,6 +2463,76 @@ export function relaxedTokenSets(tokens) {
     seen.add(key);
     return true;
   });
+}
+
+// ── Spelling-tolerant holder search ────────────────────────────────────────
+//
+// The last rung of a holder search, run only after every exact rung found
+// nothing. Telemetry had "Zamita, David" return nothing where the registry
+// holds ZAMIDA, DAVID: the visitor retyped it, found the claim, and only then
+// could export. Word order and commas were already handled by the token
+// match; a single wrong letter was not.
+//
+// Each word of five or more letters becomes an OR of the patterns that differ
+// from it by one edit: a wrong letter, an extra letter, a missing letter, or
+// two letters swapped. `_` is the one-character wildcard in both CQL ILIKE and
+// SQL LIKE. Shorter words stay exact: one edit to a four-letter word matches
+// far too much. Words are still ANDed, so "Zamita David" needs both.
+export const SPELLING_MIN_LENGTH = 5;
+
+export function oneEditPatterns(word) {
+  const w = String(word || '').toUpperCase();
+  const out = new Set();
+  for (let i = 0; i < w.length; i += 1) {
+    out.add(w.slice(0, i) + '_' + w.slice(i + 1));       // one letter wrong
+    out.add(w.slice(0, i) + w.slice(i + 1));             // one letter extra
+    if (i < w.length - 1) out.add(w.slice(0, i) + w[i + 1] + w[i] + w.slice(i + 2)); // swapped
+    if (i > 0) out.add(w.slice(0, i) + '_' + w.slice(i)); // one letter missing
+  }
+  out.delete(w);
+  return [...out];
+}
+
+function spellingTolerable(token) {
+  return new RegExp(`^[A-Za-z]{${SPELLING_MIN_LENGTH},}$`).test(token);
+}
+
+/**
+ * The spelling-tolerant rungs for a holder search, or [] when no word is long
+ * enough to tolerate a typo. Each rung is { match: 'spelling', tokens, fuzzy }:
+ * every word as typed, then the single most distinctive word.
+ */
+export function spellingRungs(tokenSets) {
+  const sets = [tokenSets[0], tokenSets[tokenSets.length - 1]].filter(Boolean);
+  const seen = new Set();
+  return sets
+    .filter((set) => set.some(spellingTolerable))
+    .filter((set) => { const k = set.join(' '); if (seen.has(k)) return false; seen.add(k); return true; })
+    .map((set) => ({ match: 'spelling', term: set.join(' '), tokens: set, fuzzy: true }));
+}
+
+/**
+ * WHERE clause for a spelling rung. `like(pattern)` renders one case-insensitive
+ * match of the column against `%pattern%`; patterns hold only A-Z and `_`, so
+ * they need no quoting or escaping.
+ */
+export function spellingWhere(tokens, like, exact) {
+  const groups = tokens.map((t) => (spellingTolerable(t)
+    ? `(${[t.toUpperCase(), ...oneEditPatterns(t)].map(like).join(' OR ')})`
+    : exact(t)));
+  return groups.length > 1 ? `(${groups.join(' AND ')})` : groups[0];
+}
+
+/** The holder name most of the results carry: what a spelling rung actually matched. */
+export function dominantOwner(features, field = 'OWNER_NAME') {
+  const counts = new Map();
+  for (const f of features || []) {
+    const v = f?.properties?.[field];
+    if (v) counts.set(v, (counts.get(v) || 0) + 1);
+  }
+  let best = null;
+  for (const [k, n] of counts) if (!best || n > best[1]) best = [k, n];
+  return best ? best[0] : null;
 }
 
 // ── Near-miss ladders ──────────────────────────────────────────────────────
@@ -3206,18 +3285,30 @@ async function searchBc(term, type, res, { numberList = null } = {}) {
     // relaxation was never province-specific, only the code was.
     const tokens = ownerSearchTokens(term);
     const attempts = tokens.length ? relaxedTokenSetsPreservingSpelling(tokens) : [[]];
+    // Then, only if every exact rung found nothing, the same words with one
+    // typo allowed each (see spellingRungs).
+    const steps = [
+      ...attempts.map((set) => ({ match: 'tokens', term: set.join(' '), tokens: set })),
+      ...(tokens.length ? spellingRungs(attempts) : []),
+    ];
     const { features, meta, step } = await runLadder(
-      attempts.map((set) => ({ match: 'tokens', term: set.join(' '), tokens: set })),
-      (s) => runFilter(bcCqlFilter(term, 'company', { tokens: s.tokens.length ? s.tokens : null })),
+      steps,
+      (s) => runFilter(s.fuzzy
+        ? spellingWhere(s.tokens, (p) => `OWNER_NAME ILIKE '%${p}%'`, (t) => bcCqlFilter(t, 'company', { tokens: [t] }))
+        : bcCqlFilter(term, 'company', { tokens: s.tokens.length ? s.tokens : null })),
     );
-    const widened = step && step.tokens.length !== tokens.length;
+    const widened = step && (step.fuzzy || step.tokens.length !== tokens.length);
     return res.status(200).json({
       type: 'FeatureCollection',
       features,
       meta: {
         ...meta,
         ...(widened ? relaxationMeta({
-          kind: 'owner', match: 'tokens', from: term, to: step.term,
+          kind: 'owner',
+          match: step.match,
+          from: term,
+          // A spelling rung names the holder it found, not the pattern it ran.
+          to: step.fuzzy ? (dominantOwner(features) || step.term) : step.term,
         }) : {}),
       },
     });

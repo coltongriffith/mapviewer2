@@ -100,6 +100,14 @@ describe('export resolution cap (P0-13)', () => {
     expect([width, height]).toEqual([1600, 900]);
   });
 
+  it('lets a free export a few percent over the cap through', () => {
+    // Production: a 1030 px frame at 2x asked for 2060 px and was cut to 2000.
+    expect(clampExportSize(ENTITLEMENTS[TIERS.FREE], 2060, 1400)).toEqual({ width: 2060, height: 1400, clamped: false });
+    expect(clampExportSize(ENTITLEMENTS[TIERS.FREE], 2100, 1400).clamped).toBe(false);
+    expect(clampExportSize(ENTITLEMENTS[TIERS.FREE], 2666, 1500).clamped).toBe(true);
+    expect(maxPixelRatioFor(ENTITLEMENTS[TIERS.FREE], 1030)).toBe(2);
+  });
+
   it('does not clamp Pro below its own ceiling', () => {
     const { clamped } = clampExportSize(ENTITLEMENTS[TIERS.PRO], 8000, 4000);
     expect(clamped).toBe(false);
