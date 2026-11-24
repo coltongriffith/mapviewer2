@@ -63,6 +63,16 @@ export function relaxationNotice(meta, { query, jurisdictionLabel, province, cou
     };
   }
 
+  // One typo allowed per word. Name the holder that was found, so a near
+  // spelling can never pass for the name that was typed.
+  if (meta.relaxedMatch === 'spelling') {
+    return {
+      headline: `No exact match for "${asked}"${where}. Showing the closest spelling: "${ran}".`,
+      detail: 'This holder\'s name differs from what you typed by a letter or two. '
+        + 'Check it is the holder you meant before adding the claims to a map.',
+    };
+  }
+
   // Holder search. Quebec keeps its own sentence: GESTIM is francophone and
   // records the legal name on title, so the reason a looser match was needed
   // there is usually vocabulary rather than spelling, and the user needs to
