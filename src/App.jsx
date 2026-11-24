@@ -104,6 +104,7 @@ import { verifyCheckoutSession } from './utils/billing';
 import { trackVerifiedPurchase } from './utils/purchaseTracking';
 import { queueAccountSave, loadAccountSave, clearAccountSave } from './utils/projectStorage';
 import { queueFullResExport, loadFullResExport, clearFullResExport, fullResCreditUsed, markFullResCreditUsed } from './utils/fullResExport';
+import { stashSignupHandoff, handoffRedirectPath, captureHandoffToken, takePendingHandoff, claimSignupHandoff } from './utils/signupHandoff';
 import { scopingWarning } from './utils/scopingNotice';
 import { CLAIM_NAME_CAVEAT } from './utils/claimProvenance';
 import { OVERLAY_DESCRIPTIONS } from './utils/referenceOverlayCredits.js';
@@ -3589,6 +3590,9 @@ export default function App({ initialAction = null }) {
     const params = new URLSearchParams(window.location.search);
     const intent = params.get('intent');
     const demo = params.get('demo');
+    // A sign-in link sent from the export gate carries the map it was sent
+    // from (utils/signupHandoff.js); claimed once the account is signed in.
+    captureHandoffToken(params);
     if (!intent && !demo) return;
     try { window.history.replaceState({}, '', '/'); } catch { /* noop */ }
     if (demo) {
@@ -4921,10 +4925,16 @@ export default function App({ initialAction = null }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingProGateExport, entitlements]);
 
+  // The map travels with the sign-in link, so it is waiting in the account
+  // even when the email opens in a different browser from this one.
+  const linkTarget = async (email, extras = null) => handoffRedirectPath(
+    await stashSignupHandoff({ email, payload: project, projectName, extras }),
+  );
+
   const sendExportLink = async (email) => {
     setExportLinkStatus({ email, state: 'sending' });
     try {
-      await signInWithMagicLink(email, { resumeEditor: true });
+      await signInWithMagicLink(email, { resumeEditor: true, redirectPath: await linkTarget(email) });
       setExportLinkStatus({ email, state: 'sent' });
     } catch {
       setExportLinkStatus({ email, state: 'failed' });
@@ -4943,7 +4953,8 @@ export default function App({ initialAction = null }) {
     saveLead({ email, projectTitle: project.layout?.title || '' });
     setFullResLink({ email, state: 'sending' });
     try {
-      await signInWithMagicLink(email, { resumeEditor: true, context: 'fullres_export' });
+      const redirectPath = await linkTarget(email, { fullResPx: Math.round(fullResOffer?.requestedPx) || null });
+      await signInWithMagicLink(email, { resumeEditor: true, context: 'fullres_export', redirectPath });
       setFullResLink({ email, state: 'sent' });
     } catch {
       setFullResLink({ email, state: 'failed' });
@@ -4965,6 +4976,44 @@ export default function App({ initialAction = null }) {
     trackEvent('fullres_offer_shown', { mode: 'returning', requested_px: pending.requestedPx }, user.id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, screen]);
+
+  // Back from a sign-in link that carries a map (utils/signupHandoff.js).
+  // Opened in the browser that sent it, the draft is already here and the
+  // local-to-cloud migration saves it, so the copy on the server is only
+  // discarded. Opened anywhere else, the map is saved to the account and opened.
+  useEffect(() => {
+    if (!user || !supabase) return;
+    const pending = takePendingHandoff();
+    if (!pending) return;
+    (async () => {
+      const claimed = await claimSignupHandoff(pending.token).catch(() => null);
+      if (!claimed || pending.sameBrowser) return;
+      const name = claimed.projectName || claimed.payload?.layout?.title || 'Untitled map';
+      trackEvent('signup_handoff_claimed', { layers: claimed.payload?.layers?.length || 0 }, user.id);
+      try {
+        const saved = await saveCloudProject({ id: null, name, payload: claimed.payload, silent: true });
+        await openProjectFromRecent({ id: saved.id, name, payload: claimed.payload, revision: saved.revision ?? null });
+        listCloudProjects().then(setRecentProjects).catch(() => {});
+        setUploadStatus({ type: 'success', message: `Your map from before you signed in is saved to your account: ${name}` });
+      } catch {
+        // Not saved (e.g. the plan's map limit): still open it, unsaved.
+        saveCoordRef.current.switchWorkspace();
+        resetHistory();
+        skipAutoFitRef.current = true;
+        setProject(claimed.payload);
+        setProjectId(null);
+        setProjectName(name);
+        setUploadStatus({ type: 'info', message: 'Your map from before you signed in is open. Save it to keep it in your account.' });
+      }
+      setScreen('editor');
+      const px = claimed.extras?.fullResPx;
+      if (px && !entitlements.clean_export && !fullResCreditUsed(user)) {
+        setFullResOffer({ mode: 'credit', requestedPx: px, allowedPx: entitlements.max_export_pixels, returning: true });
+        trackEvent('fullres_offer_shown', { mode: 'returning', requested_px: px }, user.id);
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   const handleExportModalConfirm = async (email, extraOpts = {}) => {
     setShowExportModal(false);
