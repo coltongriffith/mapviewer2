@@ -169,12 +169,22 @@ export function canExportFormat(ent, format) {
  * Returns { width, height, clamped } — `clamped` drives the upgrade nudge.
  * Aspect ratio is preserved so a clamped export is still the user's framing.
  */
+// A frame a few percent over the cap renders at its own size. Telemetry had a
+// free user's 2060 px export cut to 2000 px, with the upgrade nudge, twice in
+// one session: 3% is a window-width accident, not a request for Pro output.
+export const EXPORT_PIXEL_TOLERANCE = 0.05;
+
+function allowedLongEdge(ent) {
+  const max = ent?.max_export_pixels || FREE_MAX_EXPORT_PIXELS;
+  return Math.floor(max * (1 + EXPORT_PIXEL_TOLERANCE));
+}
+
 export function clampExportSize(ent, width, height) {
   const max = ent?.max_export_pixels || FREE_MAX_EXPORT_PIXELS;
   const w = Math.max(1, Math.round(width || 0));
   const h = Math.max(1, Math.round(height || 0));
   const longEdge = Math.max(w, h);
-  if (longEdge <= max) return { width: w, height: h, clamped: false };
+  if (longEdge <= allowedLongEdge(ent)) return { width: w, height: h, clamped: false };
   const k = max / longEdge;
   return { width: Math.max(1, Math.round(w * k)), height: Math.max(1, Math.round(h * k)), clamped: true };
 }
@@ -184,9 +194,8 @@ export function clampExportSize(ent, width, height) {
  * Scale dropdown can disable (not silently ignore) out-of-plan choices.
  */
 export function maxPixelRatioFor(ent, baseLongEdgePx) {
-  const max = ent?.max_export_pixels || FREE_MAX_EXPORT_PIXELS;
   const base = Math.max(1, baseLongEdgePx || 0);
-  return Math.max(1, Math.floor(max / base));
+  return Math.max(1, Math.floor(allowedLongEdge(ent) / base));
 }
 
 export function canSaveBrandKit(ent, currentKitCount) {
